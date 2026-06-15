@@ -42,6 +42,7 @@ export OPENAI_API_KEY=...
 export ZHIJING_PI_PROVIDER=openai
 export ZHIJING_PI_MODEL=gpt-4o-mini
 export ZHIJING_PI_ENABLED=1
+export ZHIJING_PI_FALLBACK=0  # 可选：关闭 mock fallback，用于验证真实 Pi 调用失败路径
 ```
 
 ## 目录边界

@@ -13,7 +13,7 @@ import {
 } from '@zhijing/shared';
 import {
   createConfiguredPiRuntime,
-  Type,
+  structuredSchemas,
   type PiRuntime,
   type TSchema,
 } from '@zhijing/pi-runtime';
@@ -61,18 +61,6 @@ type GeneratedKnowledgeOutput = {
   artifactTitle?: string;
   artifactBody?: string;
 };
-
-const generationSchema = Type.Object({
-  title: Type.Optional(Type.String()),
-  summary: Type.Optional(Type.String()),
-  cards: Type.Optional(Type.Array(Type.Object({
-    type: Type.Optional(Type.String()),
-    title: Type.Optional(Type.String()),
-    body: Type.Optional(Type.String()),
-  }))),
-  artifactTitle: Type.Optional(Type.String()),
-  artifactBody: Type.Optional(Type.String()),
-});
 
 class MemoryKnowledgeRepository implements KnowledgeRepository {
   private readonly state: StoreState = {
@@ -549,6 +537,14 @@ function createTask(workflow: AgentTask['workflow'], input: Record<string, unkno
 function finishTask(task: AgentTask, output: Record<string, unknown>) {
   task.status = 'succeeded';
   task.output = output;
+  task.error = undefined;
+  task.updatedAt = now();
+  repository.updateTask(task);
+}
+
+function failTask(task: AgentTask, error: unknown) {
+  task.status = 'failed';
+  task.error = error instanceof Error ? error.message : 'Knowledge generation failed.';
   task.updatedAt = now();
   repository.updateTask(task);
 }
@@ -681,10 +677,11 @@ async function generateKnowledge(
   prompt: string,
   context: Record<string, unknown>,
 ) {
-  return piRuntime.completeStructured<GeneratedKnowledgeOutput, typeof generationSchema>({
+  const schema = structuredSchemas[task] as TSchema;
+  return piRuntime.completeStructured<GeneratedKnowledgeOutput, TSchema>({
     task,
     prompt,
-    schema: generationSchema,
+    schema,
     context,
   });
 }
@@ -699,60 +696,65 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
   const workflow = kind === 'question' ? 'answer_question' : kind === 'theme' ? 'create_knowledge_base' : 'ingest_material';
   const task = createTask(workflow, { input: value, knowledgeBaseId: request.knowledgeBaseId });
 
-  let base: KnowledgeBaseSummary | undefined;
-  let material: MaterialRecord | undefined;
-  if (kind !== 'theme') {
-    base = (request.knowledgeBaseId ? repository.findKnowledgeBase(request.knowledgeBaseId) : undefined) ?? upsertDefaultKnowledgeBase(value);
-    material = createMaterial(base, request, kind === 'link' ? 'link' : kind === 'question' ? 'question' : 'text');
-  }
+  try {
+    let base: KnowledgeBaseSummary | undefined;
+    let material: MaterialRecord | undefined;
+    if (kind !== 'theme') {
+      base = (request.knowledgeBaseId ? repository.findKnowledgeBase(request.knowledgeBaseId) : undefined) ?? upsertDefaultKnowledgeBase(value);
+      material = createMaterial(base, request, kind === 'link' ? 'link' : kind === 'question' ? 'question' : 'text');
+    }
 
-  const generation = await generateKnowledge(
-    kind === 'theme' ? 'knowledge_base_skeleton' : kind === 'question' ? 'question_answer' : kind === 'text' ? 'knowledge_cards' : 'material_summary',
-    value,
-    {
+    const generation = await generateKnowledge(
+      kind === 'theme' ? 'knowledge_base_skeleton' : kind === 'question' ? 'question_answer' : 'material_summary',
+      value,
+      {
+        kind,
+        knowledgeBaseId: base?.id,
+        materialId: material?.id,
+        hasSourceMaterial: Boolean(material),
+        parseStatus: material?.parseStatus,
+      },
+    );
+    const generated = generation.output;
+
+    const knowledgeBase = base ?? createKnowledgeBase(
+      compactTitle(generated.title ?? value),
+      generated.summary ?? `围绕「${compactTitle(value)}」生成的知识库骨架。`,
+    );
+
+    const cards = createCards(knowledgeBase, material, value, generated.cards);
+    const artifact = createArtifact(knowledgeBase, material, value, generated);
+
+    finishTask(task, {
       kind,
-      knowledgeBaseId: base?.id,
+      knowledgeBaseId: knowledgeBase.id,
       materialId: material?.id,
-      hasSourceMaterial: Boolean(material),
-      parseStatus: material?.parseStatus,
-    },
-  );
-  const generated = generation.output;
+      cardIds: cards.map((card) => card.id),
+      artifactId: artifact.id,
+      generationProvider: generation.provider,
+      generationModel: generation.model,
+      generationFallbackReason: generation.fallbackReason,
+    });
 
-  const knowledgeBase = base ?? createKnowledgeBase(
-    compactTitle(generated.title ?? value),
-    generated.summary ?? `围绕「${compactTitle(value)}」生成的知识库骨架。`,
-  );
-
-  const cards = createCards(knowledgeBase, material, value, generated.cards);
-  const artifact = createArtifact(knowledgeBase, material, value, generated);
-
-  finishTask(task, {
-    kind,
-    knowledgeBaseId: knowledgeBase.id,
-    materialId: material?.id,
-    cardIds: cards.map((card) => card.id),
-    artifactId: artifact.id,
-    generationProvider: generation.provider,
-    generationModel: generation.model,
-    generationFallbackReason: generation.fallbackReason,
-  });
-
-  return {
-    kind,
-    knowledgeBase,
-    material,
-    cards,
-    task,
-    artifact,
-    message: kind === 'theme'
-      ? '知识库骨架已创建。'
-      : kind === 'link'
-        ? '链接已保存，等待后续解析增强。'
-        : kind === 'question'
-          ? '问题已保存为当前知识库的待回答线索。'
-          : '文本资料已保存并生成初始卡片。',
-  };
+    return {
+      kind,
+      knowledgeBase,
+      material,
+      cards,
+      task,
+      artifact,
+      message: kind === 'theme'
+        ? '知识库骨架已创建。'
+        : kind === 'link'
+          ? '链接已保存，等待后续解析增强。'
+          : kind === 'question'
+            ? '问题已保存为当前知识库的待回答线索。'
+            : '文本资料已保存并生成初始卡片。',
+    };
+  } catch (error) {
+    failTask(task, error);
+    throw error;
+  }
 }
 
 export function listKnowledgeBases() {

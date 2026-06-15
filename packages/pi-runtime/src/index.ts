@@ -2,6 +2,7 @@ import {
   complete,
   getEnvApiKey,
   getModel,
+  stream,
   Type,
   type Api,
   type AssistantMessage,
@@ -9,10 +10,68 @@ import {
   type KnownProvider,
   type Model,
   type TSchema,
+  type Tool,
+  type ToolCall,
 } from '@earendil-works/pi-ai';
 
 export { Type };
-export type { TSchema };
+export type { TSchema, Tool };
+
+export const citationScopeSchema = Type.Object({
+  materialId: Type.Optional(Type.String()),
+  sourceUrl: Type.Optional(Type.String()),
+  quote: Type.Optional(Type.String()),
+  note: Type.Optional(Type.String()),
+});
+
+export const knowledgeCardSchema = Type.Object({
+  type: Type.Optional(Type.Union([
+    Type.Literal('concept'),
+    Type.Literal('method'),
+    Type.Literal('case'),
+    Type.Literal('question'),
+    Type.Literal('step'),
+    Type.Literal('viewpoint'),
+  ])),
+  title: Type.String(),
+  body: Type.String(),
+  citationScope: Type.Optional(citationScopeSchema),
+});
+
+export const knowledgeCardsSchema = Type.Object({
+  cards: Type.Array(knowledgeCardSchema),
+});
+
+export const topicSkeletonSchema = Type.Object({
+  title: Type.String(),
+  summary: Type.String(),
+  cards: Type.Array(knowledgeCardSchema),
+  artifactTitle: Type.Optional(Type.String()),
+  artifactBody: Type.Optional(Type.String()),
+});
+
+export const materialSummarySchema = Type.Object({
+  summary: Type.String(),
+  cards: Type.Array(knowledgeCardSchema),
+  artifactTitle: Type.Optional(Type.String()),
+  artifactBody: Type.Optional(Type.String()),
+  citationScope: Type.Optional(citationScopeSchema),
+});
+
+export const questionAnswerSchema = Type.Object({
+  summary: Type.String(),
+  cards: Type.Array(knowledgeCardSchema),
+  artifactTitle: Type.Optional(Type.String()),
+  artifactBody: Type.Optional(Type.String()),
+  citationScope: Type.Optional(citationScopeSchema),
+});
+
+export const structuredSchemas = {
+  knowledge_base_skeleton: topicSkeletonSchema,
+  material_summary: materialSummarySchema,
+  knowledge_cards: knowledgeCardsSchema,
+  question_answer: questionAnswerSchema,
+} as const;
 
 export interface StructuredGenerationRequest<TSchemaInput = unknown> {
   task: 'knowledge_base_skeleton' | 'material_summary' | 'knowledge_cards' | 'question_answer';
@@ -33,10 +92,40 @@ export interface StructuredGenerationResult<TOutput = unknown> {
   };
 }
 
+export interface TextGenerationResult {
+  text: string;
+  provider: 'mock' | 'pi-ai';
+  model?: string;
+  fallbackReason?: string;
+  usage?: StructuredGenerationResult['usage'];
+}
+
+export interface TextGenerationRequest {
+  prompt: string;
+  context?: Record<string, unknown>;
+}
+
+export interface ToolCallingRequest {
+  prompt: string;
+  tools: Tool[];
+  context?: Record<string, unknown>;
+}
+
+export interface ToolCallingResult {
+  toolCalls: ToolCall[];
+  text: string;
+  provider: 'mock' | 'pi-ai';
+  model?: string;
+  fallbackReason?: string;
+  usage?: StructuredGenerationResult['usage'];
+}
+
 export interface PiRuntime {
   completeStructured<TOutput = unknown, TSchemaInput = unknown>(
     request: StructuredGenerationRequest<TSchemaInput>,
   ): Promise<StructuredGenerationResult<TOutput>>;
+  streamText(request: TextGenerationRequest): AsyncIterable<TextGenerationResult>;
+  runToolCalling(request: ToolCallingRequest): Promise<ToolCallingResult>;
 }
 
 export interface PiAiRuntimeConfig {
@@ -62,6 +151,31 @@ export function createMockPiRuntime(): PiRuntime {
         usage: {
           inputTokens: request.prompt.length,
           outputTokens: 96,
+          costUsd: 0,
+        },
+      };
+    },
+    async *streamText(request: TextGenerationRequest): AsyncIterable<TextGenerationResult> {
+      yield {
+        provider: 'mock',
+        model: 'mock-local',
+        text: `本地 mock 文本生成：${compactTitle(request.prompt)}`,
+        usage: {
+          inputTokens: request.prompt.length,
+          outputTokens: 32,
+          costUsd: 0,
+        },
+      };
+    },
+    async runToolCalling(request: ToolCallingRequest): Promise<ToolCallingResult> {
+      return {
+        provider: 'mock',
+        model: 'mock-local',
+        text: '本地 mock tool calling 未调用外部工具。',
+        toolCalls: [],
+        usage: {
+          inputTokens: request.prompt.length,
+          outputTokens: 24,
           costUsd: 0,
         },
       };
@@ -108,6 +222,76 @@ export function createPiAiRuntime(config: PiAiRuntimeConfig = {}): PiRuntime {
         return withFallbackReason(await fallback.completeStructured<TOutput>(request), error instanceof Error ? error.message : 'Pi runtime failed.');
       }
     },
+    async *streamText(request: TextGenerationRequest): AsyncIterable<TextGenerationResult> {
+      if (!enabled) {
+        for await (const chunk of fallback.streamText(request)) {
+          yield {
+            ...chunk,
+            fallbackReason: 'Pi runtime is not enabled or no provider API key was found.',
+          };
+        }
+        return;
+      }
+
+      try {
+        const model = getConfiguredModel(provider, modelId);
+        const context = buildTextContext(request);
+        const eventStream = stream(model, context, {
+          apiKey,
+          temperature: config.temperature ?? 0.2,
+          maxTokens: config.maxTokens ?? 1200,
+        });
+        for await (const event of eventStream) {
+          if (event.type === 'text_delta') {
+            yield {
+              provider: 'pi-ai',
+              model: `${provider}/${modelId}`,
+              text: event.delta,
+            };
+          }
+          if (event.type === 'done') {
+            yield {
+              provider: 'pi-ai',
+              model: `${provider}/${modelId}`,
+              text: '',
+              usage: usageFromMessage(event.message),
+            };
+          }
+        }
+      } catch (error) {
+        if (!fallbackToMock) throw error;
+        for await (const chunk of fallback.streamText(request)) {
+          yield {
+            ...chunk,
+            fallbackReason: error instanceof Error ? error.message : 'Pi runtime stream failed.',
+          };
+        }
+      }
+    },
+    async runToolCalling(request: ToolCallingRequest): Promise<ToolCallingResult> {
+      if (!enabled) {
+        return withReason(await fallback.runToolCalling(request), 'Pi runtime is not enabled or no provider API key was found.');
+      }
+
+      try {
+        const model = getConfiguredModel(provider, modelId);
+        const response = await complete(model, buildToolContext(request), {
+          apiKey,
+          temperature: config.temperature ?? 0.2,
+          maxTokens: config.maxTokens ?? 1200,
+        });
+        return {
+          provider: 'pi-ai',
+          model: `${provider}/${modelId}`,
+          text: textFromMessage(response),
+          toolCalls: response.content.filter((block): block is ToolCall => block.type === 'toolCall'),
+          usage: usageFromMessage(response),
+        };
+      } catch (error) {
+        if (!fallbackToMock) throw error;
+        return withReason(await fallback.runToolCalling(request), error instanceof Error ? error.message : 'Pi runtime tool calling failed.');
+      }
+    },
   };
 }
 
@@ -150,12 +334,40 @@ function buildContext(request: StructuredGenerationRequest): Context {
   };
 }
 
+function buildTextContext(request: TextGenerationRequest): Context {
+  const extraContext = request.context ? `\nContext:\n${JSON.stringify(request.context, null, 2)}` : '';
+  return {
+    systemPrompt: 'You are the text generation runtime for Zhijing. Keep answers concise and practical.',
+    messages: [
+      {
+        role: 'user',
+        timestamp: Date.now(),
+        content: [`Prompt:\n${request.prompt}`, extraContext].join('\n'),
+      },
+    ],
+  };
+}
+
+function buildToolContext(request: ToolCallingRequest): Context {
+  const extraContext = request.context ? `\nContext:\n${JSON.stringify(request.context, null, 2)}` : '';
+  return {
+    systemPrompt: [
+      'You are the controlled tool-calling runtime for Zhijing.',
+      'Only call the supplied tools when they are necessary. Do not request shell or filesystem access.',
+    ].join('\n'),
+    tools: request.tools,
+    messages: [
+      {
+        role: 'user',
+        timestamp: Date.now(),
+        content: [`Prompt:\n${request.prompt}`, extraContext].join('\n'),
+      },
+    ],
+  };
+}
+
 function parseStructuredJson<TOutput>(response: AssistantMessage): TOutput {
-  const text = response.content
-    .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
-    .map((block) => block.text)
-    .join('\n')
-    .trim();
+  const text = textFromMessage(response);
   const json = extractJson(text);
   return JSON.parse(json) as TOutput;
 }
@@ -170,6 +382,12 @@ function extractJson(text: string) {
     return text.slice(objectStart, objectEnd + 1);
   }
 
+  const arrayStart = text.indexOf('[');
+  const arrayEnd = text.lastIndexOf(']');
+  if (arrayStart >= 0 && arrayEnd > arrayStart) {
+    return text.slice(arrayStart, arrayEnd + 1);
+  }
+
   throw new Error('Pi response did not contain a JSON object.');
 }
 
@@ -177,9 +395,29 @@ function withFallbackReason<TOutput>(
   result: StructuredGenerationResult<TOutput>,
   fallbackReason: string,
 ): StructuredGenerationResult<TOutput> {
+  return withReason(result, fallbackReason);
+}
+
+function withReason<T extends { fallbackReason?: string }>(result: T, fallbackReason: string): T {
   return {
     ...result,
     fallbackReason,
+  };
+}
+
+function textFromMessage(response: AssistantMessage) {
+  return response.content
+    .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+    .map((block) => block.text)
+    .join('\n')
+    .trim();
+}
+
+function usageFromMessage(response: AssistantMessage): StructuredGenerationResult['usage'] {
+  return {
+    inputTokens: response.usage.input,
+    outputTokens: response.usage.output,
+    costUsd: response.usage.cost.total,
   };
 }
 
