@@ -131,12 +131,33 @@ function fallbackDetail() {
   };
 }
 
+function emptyDetail() {
+  return {
+    title: '尚未创建知识库',
+    summary: '从一个主题、链接或问题开始，知径会在这里形成可追溯的知识结构。',
+    sourceCount: 0,
+    cardCount: 0,
+    sourcedRatio: 0,
+    materials: [],
+    cards: [],
+    artifacts: [],
+  };
+}
+
+function workflowFromKind(kind) {
+  if (kind === 'Question') return 'answer_question';
+  if (kind === 'Theme') return 'create_knowledge_base';
+  return 'ingest_material';
+}
+
 function App() {
   const [view, setView] = useState(viewFromHash);
   const [query, setQuery] = useState('');
   const [activity, setActivity] = useState('Ready to organize a theme, link, or question.');
+  const [apiStatus, setApiStatus] = useState('checking');
   const [knowledgeBases, setKnowledgeBases] = useState(seedKnowledgeBases);
   const [materials, setMaterials] = useState(seedMaterials);
+  const [tasks, setTasks] = useState([]);
   const [selectedKnowledgeBaseId, setSelectedKnowledgeBaseId] = useState(null);
   const [knowledgeBaseDetail, setKnowledgeBaseDetail] = useState(fallbackDetail);
   const [latestTaskId, setLatestTaskId] = useState(null);
@@ -155,22 +176,29 @@ function App() {
     async function loadDashboard() {
       try {
         const response = await fetch('/api/dashboard');
-        if (!response.ok) return;
+        if (!response.ok) throw new Error('Dashboard unavailable.');
         const dashboard = await response.json();
         if (ignore) return;
-        if (dashboard.knowledgeBases?.length) {
-          setKnowledgeBases(dashboard.knowledgeBases);
-          setSelectedKnowledgeBaseId((current) => current ?? dashboard.knowledgeBases[0].id);
-        }
-        if (dashboard.materials?.length) {
-          setMaterials(dashboard.materials.map(materialFromApi));
-        }
-        if (dashboard.tasks?.length) {
-          setLatestTaskId(dashboard.tasks[0].id);
-          setLatestTask(dashboard.tasks[0]);
+        const nextKnowledgeBases = dashboard.knowledgeBases ?? [];
+        const nextMaterials = dashboard.materials ?? [];
+        const nextTasks = dashboard.tasks ?? [];
+        setApiStatus('online');
+        setKnowledgeBases(nextKnowledgeBases);
+        setMaterials(nextMaterials.map(materialFromApi));
+        setTasks(nextTasks);
+        setSelectedKnowledgeBaseId((current) => {
+          if (current && nextKnowledgeBases.some((base) => base.id === current)) return current;
+          return nextKnowledgeBases[0]?.id ?? null;
+        });
+        if (nextTasks.length) {
+          setLatestTaskId(nextTasks[0].id);
+          setLatestTask(nextTasks[0]);
+        } else {
+          setLatestTaskId(null);
+          setLatestTask(null);
         }
       } catch {
-        // The prototype keeps its Stitch-aligned seed content when the API is not running.
+        if (!ignore) setApiStatus('offline');
       }
     }
     loadDashboard();
@@ -181,7 +209,7 @@ function App() {
 
   useEffect(() => {
     if (!selectedKnowledgeBaseId) {
-      setKnowledgeBaseDetail(fallbackDetail());
+      setKnowledgeBaseDetail(apiStatus === 'online' ? emptyDetail() : fallbackDetail());
       return;
     }
 
@@ -255,6 +283,7 @@ function App() {
       setActivity(`${result.message} Task ${result.task.id} finished.`);
       setLatestTaskId(result.task.id);
       setLatestTask(result.task);
+      setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
       setSelectedKnowledgeBaseId(result.knowledgeBase.id);
       setKnowledgeBases((current) => {
         const withoutDuplicate = current.filter((base) => base.id !== result.knowledgeBase.id && base.title !== result.knowledgeBase.title);
@@ -265,6 +294,20 @@ function App() {
       }
       setQuery('');
     } catch {
+      const timestamp = new Date().toISOString();
+      const failedTask = {
+        id: `local_failed_${Date.now()}`,
+        workflow: workflowFromKind(kind),
+        status: 'failed',
+        input: { input: value },
+        error: 'API unavailable',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      setApiStatus('offline');
+      setLatestTaskId(null);
+      setLatestTask(failedTask);
+      setTasks((current) => [failedTask, ...current].slice(0, 8));
       setActivity('API is not ready. Keep the idea here and start dev:api to run the real intake loop.');
     } finally {
       setIsSubmitting(false);
@@ -309,6 +352,7 @@ function App() {
 
         <section className="kb-stack" aria-label="知识库列表">
           <p>Knowledge Bases</p>
+          {knowledgeBases.length === 0 && <span className="nav-empty">No knowledge bases yet</span>}
           {knowledgeBases.map((base, index) => (
             <button
               className={base.id === selectedKnowledgeBaseId || (!selectedKnowledgeBaseId && (base.active || index === 0)) ? 'selected' : ''}
@@ -351,7 +395,9 @@ function App() {
         </header>
 
         <div className="canvas">
+          {apiStatus === 'offline' && <SystemNotice status="offline" />}
           {view === 'workspace' && <WorkspaceView activity={activity} isSubmitting={isSubmitting} latestTask={latestTask} materials={materials} query={query} setQuery={setQuery} submit={submit} />}
+          {view === 'workspace' && <TaskList tasks={tasks} />}
           {view === 'detail' && <DetailView detail={knowledgeBaseDetail} latestTask={latestTask} setView={go} />}
           {view === 'library' && <LibraryView />}
           {view === 'search' && <SearchView />}
@@ -363,6 +409,18 @@ function App() {
         </div>
       </section>
     </main>
+  );
+}
+
+function SystemNotice() {
+  return (
+    <section className="system-notice">
+      <CircleX size={21} />
+      <div>
+        <strong>API 未连接</strong>
+        <p>当前页面保留本地演示内容；启动 API 后会自动读取真实知识库、任务和资料。</p>
+      </div>
+    </section>
   );
 }
 
@@ -403,6 +461,33 @@ function WorkspaceView({ activity, isSubmitting, latestTask, materials, query, s
   );
 }
 
+function TaskList({ tasks }) {
+  return (
+    <section className="task-panel">
+      <div className="section-title">
+        <ClipboardList size={22} />
+        <h3>Task Queue</h3>
+      </div>
+      {tasks.length === 0 ? (
+        <EmptyState title="暂无任务" body="提交主题、链接或问题后，任务会显示在这里。" />
+      ) : (
+        <div className="task-list">
+          {tasks.slice(0, 6).map((task) => (
+            <article className={`task-row ${task.status}`} key={task.id}>
+              <span>{task.status}</span>
+              <div>
+                <strong>{task.workflow}</strong>
+                <small>{task.error ?? task.id}</small>
+              </div>
+              <time>{task.updatedAt ? new Date(task.updatedAt).toLocaleTimeString() : 'now'}</time>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function TaskStatus({ task }) {
   if (!task) return null;
   return (
@@ -411,6 +496,18 @@ function TaskStatus({ task }) {
       <strong>{task.workflow}</strong>
       <small>{task.id}</small>
     </div>
+  );
+}
+
+function EmptyState({ title, body }) {
+  return (
+    <article className="empty-state">
+      <Sparkles size={22} />
+      <div>
+        <strong>{title}</strong>
+        <p>{body}</p>
+      </div>
+    </article>
   );
 }
 
@@ -423,7 +520,9 @@ function RecentImports({ materials }) {
         <button type="button">View All</button>
       </div>
       <div className="material-list">
-        {materials.map((item) => (
+        {materials.length === 0 ? (
+          <EmptyState title="暂无导入资料" body="导入链接或文本后，最近资料会出现在这里。" />
+        ) : materials.map((item) => (
           <article className={`material-card ${item.state}`} key={item.title}>
             <div className="material-meta">
               <span>{item.source}</span>
@@ -493,7 +592,9 @@ function DetailView({ detail, latestTask, setView }) {
           </aside>
           <section className="feed">
             <div className="tabs"><button className="active">Structured Feed</button><button>All Materials</button></div>
-            {cards.map((card) => (
+            {cards.length === 0 ? (
+              <EmptyState title="暂无知识卡片" body="创建主题或导入资料后，这里会生成结构化卡片。" />
+            ) : cards.map((card) => (
               <article className="knowledge-card" key={card.id ?? card.title}>
                 <span>{card.type}</span>
                 <h3>{card.title}</h3>
@@ -501,6 +602,7 @@ function DetailView({ detail, latestTask, setView }) {
                 <footer>{card.claimStatus} · Updated {card.updatedAt ? new Date(card.updatedAt).toLocaleDateString() : 'today'}</footer>
               </article>
             ))}
+            {materials.length === 0 && <EmptyState title="暂无来源资料" body="保存链接后，来源会作为可追溯依据显示在这里。" />}
             {materials.map((material) => (
               <article className="source-strip" key={material.id ?? material.title}>
                 <BookOpen size={22} />
