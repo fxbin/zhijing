@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Local OS/editor/runtime noise
+.DS_Store
+*.log
+.playwright-mcp/
+
+# Local research, generated docs, and process artifacts
+docs/
+stitch_/
+.lazyweb/
+.skill-*/
+
+# Copied Stitch references must not become runtime assets
+public/stitch/
