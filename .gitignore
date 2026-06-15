@@ -4,6 +4,12 @@ node_modules/
 # Build output
 dist/
 
+# Local app data
+.data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
 # Local OS/editor/runtime noise
 .DS_Store
 *.log

@@ -11,6 +11,9 @@ import {
   detectPlatform,
 } from '@zhijing/shared';
 import { randomUUID } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 type StoreState = {
   knowledgeBases: KnowledgeBaseSummary[];
@@ -20,13 +23,452 @@ type StoreState = {
   artifacts: ArtifactRecord[];
 };
 
-const state: StoreState = {
-  knowledgeBases: [],
-  materials: [],
-  cards: [],
-  tasks: [],
-  artifacts: [],
+type KnowledgeRepository = {
+  insertKnowledgeBase(base: KnowledgeBaseSummary): void;
+  updateKnowledgeBase(base: KnowledgeBaseSummary): void;
+  listKnowledgeBases(): KnowledgeBaseSummary[];
+  findKnowledgeBase(id: string): KnowledgeBaseSummary | undefined;
+  insertMaterial(material: MaterialRecord): void;
+  listMaterials(knowledgeBaseId?: string, limit?: number): MaterialRecord[];
+  insertCards(cards: KnowledgeCard[]): void;
+  listCards(knowledgeBaseId?: string): KnowledgeCard[];
+  insertTask(task: AgentTask): void;
+  updateTask(task: AgentTask): void;
+  listTasks(limit?: number): AgentTask[];
+  findTask(id: string): AgentTask | undefined;
+  insertArtifact(artifact: ArtifactRecord): void;
+  listArtifacts(knowledgeBaseId?: string, limit?: number): ArtifactRecord[];
 };
+
+class MemoryKnowledgeRepository implements KnowledgeRepository {
+  private readonly state: StoreState = {
+    knowledgeBases: [],
+    materials: [],
+    cards: [],
+    tasks: [],
+    artifacts: [],
+  };
+
+  insertKnowledgeBase(base: KnowledgeBaseSummary) {
+    this.state.knowledgeBases.unshift(base);
+  }
+
+  updateKnowledgeBase(base: KnowledgeBaseSummary) {
+    const index = this.state.knowledgeBases.findIndex((item) => item.id === base.id);
+    if (index >= 0) this.state.knowledgeBases[index] = base;
+  }
+
+  listKnowledgeBases() {
+    return this.state.knowledgeBases;
+  }
+
+  findKnowledgeBase(id: string) {
+    return this.state.knowledgeBases.find((item) => item.id === id);
+  }
+
+  insertMaterial(material: MaterialRecord) {
+    this.state.materials.unshift(material);
+  }
+
+  listMaterials(knowledgeBaseId?: string, limit?: number) {
+    const materials = knowledgeBaseId
+      ? this.state.materials.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
+      : this.state.materials;
+    return typeof limit === 'number' ? materials.slice(0, limit) : materials;
+  }
+
+  insertCards(cards: KnowledgeCard[]) {
+    this.state.cards.unshift(...cards);
+  }
+
+  listCards(knowledgeBaseId?: string) {
+    return knowledgeBaseId
+      ? this.state.cards.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
+      : this.state.cards;
+  }
+
+  insertTask(task: AgentTask) {
+    this.state.tasks.unshift(task);
+  }
+
+  updateTask(task: AgentTask) {
+    const index = this.state.tasks.findIndex((item) => item.id === task.id);
+    if (index >= 0) this.state.tasks[index] = task;
+  }
+
+  listTasks(limit?: number) {
+    return typeof limit === 'number' ? this.state.tasks.slice(0, limit) : this.state.tasks;
+  }
+
+  findTask(id: string) {
+    return this.state.tasks.find((item) => item.id === id);
+  }
+
+  insertArtifact(artifact: ArtifactRecord) {
+    this.state.artifacts.unshift(artifact);
+  }
+
+  listArtifacts(knowledgeBaseId?: string, limit?: number) {
+    const artifacts = knowledgeBaseId
+      ? this.state.artifacts.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
+      : this.state.artifacts;
+    return typeof limit === 'number' ? artifacts.slice(0, limit) : artifacts;
+  }
+}
+
+type KnowledgeBaseRow = {
+  id: string;
+  title: string;
+  summary: string;
+  stage: KnowledgeBaseSummary['stage'];
+  source_count: number;
+  card_count: number;
+  sourced_ratio: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type MaterialRow = {
+  id: string;
+  knowledge_base_id: string;
+  type: MaterialRecord['type'];
+  raw_input: string;
+  source_url: string | null;
+  platform: string | null;
+  title: string;
+  content_text: string | null;
+  parse_status: MaterialRecord['parseStatus'];
+  parse_error: string | null;
+  created_at: string;
+};
+
+type CardRow = {
+  id: string;
+  knowledge_base_id: string;
+  material_id: string | null;
+  type: KnowledgeCard['type'];
+  title: string;
+  body: string;
+  claim_status: KnowledgeCard['claimStatus'];
+  created_at: string;
+  updated_at: string;
+};
+
+type TaskRow = {
+  id: string;
+  workflow: AgentTask['workflow'];
+  status: AgentTask['status'];
+  input_json: string;
+  output_json: string | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type ArtifactRow = {
+  id: string;
+  knowledge_base_id: string;
+  artifact_type: ArtifactRecord['artifactType'];
+  title: string;
+  body: string;
+  source_material_ids_json: string;
+  created_at: string;
+};
+
+class SqliteKnowledgeRepository implements KnowledgeRepository {
+  private readonly db: DatabaseSync;
+
+  constructor(private readonly path: string) {
+    mkdirSync(dirname(path), { recursive: true });
+    this.db = new DatabaseSync(path);
+    this.db.exec('PRAGMA journal_mode = WAL;');
+    this.db.exec('PRAGMA foreign_keys = ON;');
+    this.migrate();
+  }
+
+  insertKnowledgeBase(base: KnowledgeBaseSummary) {
+    this.db.prepare(`
+      INSERT INTO knowledge_bases (
+        id, title, summary, stage, source_count, card_count, sourced_ratio, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(base.id, base.title, base.summary, base.stage, base.sourceCount, base.cardCount, base.sourcedRatio, base.createdAt, base.updatedAt);
+  }
+
+  updateKnowledgeBase(base: KnowledgeBaseSummary) {
+    this.db.prepare(`
+      UPDATE knowledge_bases
+      SET title = ?, summary = ?, stage = ?, source_count = ?, card_count = ?, sourced_ratio = ?, updated_at = ?
+      WHERE id = ?
+    `).run(base.title, base.summary, base.stage, base.sourceCount, base.cardCount, base.sourcedRatio, base.updatedAt, base.id);
+  }
+
+  listKnowledgeBases() {
+    return (this.db.prepare('SELECT * FROM knowledge_bases ORDER BY updated_at DESC, created_at DESC').all() as KnowledgeBaseRow[]).map(mapKnowledgeBase);
+  }
+
+  findKnowledgeBase(id: string) {
+    const row = this.db.prepare('SELECT * FROM knowledge_bases WHERE id = ?').get(id) as KnowledgeBaseRow | undefined;
+    return row ? mapKnowledgeBase(row) : undefined;
+  }
+
+  insertMaterial(material: MaterialRecord) {
+    this.db.prepare(`
+      INSERT INTO materials (
+        id, knowledge_base_id, type, raw_input, source_url, platform, title, content_text, parse_status, parse_error, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      material.id,
+      material.knowledgeBaseId,
+      material.type,
+      material.rawInput,
+      material.sourceUrl ?? null,
+      material.platform ?? null,
+      material.title,
+      material.contentText ?? null,
+      material.parseStatus,
+      material.parseError ?? null,
+      material.createdAt,
+    );
+  }
+
+  listMaterials(knowledgeBaseId?: string, limit?: number) {
+    const rows = knowledgeBaseId
+      ? this.db.prepare('SELECT * FROM materials WHERE knowledge_base_id = ? ORDER BY created_at DESC').all(knowledgeBaseId)
+      : this.db.prepare(`SELECT * FROM materials ORDER BY created_at DESC${limit ? ` LIMIT ${limit}` : ''}`).all();
+    return (rows as MaterialRow[]).map(mapMaterial);
+  }
+
+  insertCards(cards: KnowledgeCard[]) {
+    const insert = this.db.prepare(`
+      INSERT INTO cards (
+        id, knowledge_base_id, material_id, type, title, body, claim_status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    this.db.exec('BEGIN');
+    try {
+      for (const card of cards) {
+        insert.run(card.id, card.knowledgeBaseId, card.materialId ?? null, card.type, card.title, card.body, card.claimStatus, card.createdAt, card.updatedAt);
+      }
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  listCards(knowledgeBaseId?: string) {
+    const rows = knowledgeBaseId
+      ? this.db.prepare('SELECT * FROM cards WHERE knowledge_base_id = ? ORDER BY updated_at DESC, created_at DESC').all(knowledgeBaseId)
+      : this.db.prepare('SELECT * FROM cards ORDER BY updated_at DESC, created_at DESC').all();
+    return (rows as CardRow[]).map(mapCard);
+  }
+
+  insertTask(task: AgentTask) {
+    this.db.prepare(`
+      INSERT INTO tasks (
+        id, workflow, status, input_json, output_json, error, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(task.id, task.workflow, task.status, JSON.stringify(task.input), task.output ? JSON.stringify(task.output) : null, task.error ?? null, task.createdAt, task.updatedAt);
+  }
+
+  updateTask(task: AgentTask) {
+    this.db.prepare(`
+      UPDATE tasks
+      SET workflow = ?, status = ?, input_json = ?, output_json = ?, error = ?, updated_at = ?
+      WHERE id = ?
+    `).run(task.workflow, task.status, JSON.stringify(task.input), task.output ? JSON.stringify(task.output) : null, task.error ?? null, task.updatedAt, task.id);
+  }
+
+  listTasks(limit?: number) {
+    const rows = this.db.prepare(`SELECT * FROM tasks ORDER BY updated_at DESC, created_at DESC${limit ? ` LIMIT ${limit}` : ''}`).all();
+    return (rows as TaskRow[]).map(mapTask);
+  }
+
+  findTask(id: string) {
+    const row = this.db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as TaskRow | undefined;
+    return row ? mapTask(row) : undefined;
+  }
+
+  insertArtifact(artifact: ArtifactRecord) {
+    this.db.prepare(`
+      INSERT INTO artifacts (
+        id, knowledge_base_id, artifact_type, title, body, source_material_ids_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      artifact.id,
+      artifact.knowledgeBaseId,
+      artifact.artifactType,
+      artifact.title,
+      artifact.body,
+      JSON.stringify(artifact.sourceMaterialIds),
+      artifact.createdAt,
+    );
+  }
+
+  listArtifacts(knowledgeBaseId?: string, limit?: number) {
+    const rows = knowledgeBaseId
+      ? this.db.prepare('SELECT * FROM artifacts WHERE knowledge_base_id = ? ORDER BY created_at DESC').all(knowledgeBaseId)
+      : this.db.prepare(`SELECT * FROM artifacts ORDER BY created_at DESC${limit ? ` LIMIT ${limit}` : ''}`).all();
+    return (rows as ArtifactRow[]).map(mapArtifact);
+  }
+
+  private migrate() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS knowledge_bases (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        stage TEXT NOT NULL,
+        source_count INTEGER NOT NULL DEFAULT 0,
+        card_count INTEGER NOT NULL DEFAULT 0,
+        sourced_ratio REAL NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS materials (
+        id TEXT PRIMARY KEY,
+        knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        raw_input TEXT NOT NULL,
+        source_url TEXT,
+        platform TEXT,
+        title TEXT NOT NULL,
+        content_text TEXT,
+        parse_status TEXT NOT NULL,
+        parse_error TEXT,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS cards (
+        id TEXT PRIMARY KEY,
+        knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+        material_id TEXT REFERENCES materials(id) ON DELETE SET NULL,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        claim_status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        workflow TEXT NOT NULL,
+        status TEXT NOT NULL,
+        input_json TEXT NOT NULL,
+        output_json TEXT,
+        error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS artifacts (
+        id TEXT PRIMARY KEY,
+        knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+        artifact_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        source_material_ids_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_materials_knowledge_base_id ON materials(knowledge_base_id);
+      CREATE INDEX IF NOT EXISTS idx_cards_knowledge_base_id ON cards(knowledge_base_id);
+      CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at);
+      CREATE INDEX IF NOT EXISTS idx_artifacts_knowledge_base_id ON artifacts(knowledge_base_id);
+    `);
+  }
+}
+
+function mapKnowledgeBase(row: KnowledgeBaseRow): KnowledgeBaseSummary {
+  return {
+    id: row.id,
+    title: row.title,
+    summary: row.summary,
+    stage: row.stage,
+    sourceCount: row.source_count,
+    cardCount: row.card_count,
+    sourcedRatio: row.sourced_ratio,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapMaterial(row: MaterialRow): MaterialRecord {
+  return {
+    id: row.id,
+    knowledgeBaseId: row.knowledge_base_id,
+    type: row.type,
+    rawInput: row.raw_input,
+    sourceUrl: row.source_url ?? undefined,
+    platform: row.platform ?? undefined,
+    title: row.title,
+    contentText: row.content_text ?? undefined,
+    parseStatus: row.parse_status,
+    parseError: row.parse_error ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+function mapCard(row: CardRow): KnowledgeCard {
+  return {
+    id: row.id,
+    knowledgeBaseId: row.knowledge_base_id,
+    materialId: row.material_id ?? undefined,
+    type: row.type,
+    title: row.title,
+    body: row.body,
+    claimStatus: row.claim_status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapTask(row: TaskRow): AgentTask {
+  return {
+    id: row.id,
+    workflow: row.workflow,
+    status: row.status,
+    input: JSON.parse(row.input_json) as Record<string, unknown>,
+    output: row.output_json ? JSON.parse(row.output_json) as Record<string, unknown> : undefined,
+    error: row.error ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapArtifact(row: ArtifactRow): ArtifactRecord {
+  return {
+    id: row.id,
+    knowledgeBaseId: row.knowledge_base_id,
+    artifactType: row.artifact_type,
+    title: row.title,
+    body: row.body,
+    sourceMaterialIds: JSON.parse(row.source_material_ids_json) as string[],
+    createdAt: row.created_at,
+  };
+}
+
+function defaultSqlitePath() {
+  return process.env.ZHIJING_DB_PATH ?? join(process.cwd(), '.data', 'zhijing.sqlite');
+}
+
+export function createMemoryKnowledgeRepository(): KnowledgeRepository {
+  return new MemoryKnowledgeRepository();
+}
+
+export function createSqliteKnowledgeRepository(path = defaultSqlitePath()): KnowledgeRepository {
+  return new SqliteKnowledgeRepository(path);
+}
+
+let repository: KnowledgeRepository = process.env.ZHIJING_STORAGE === 'memory'
+  ? createMemoryKnowledgeRepository()
+  : createSqliteKnowledgeRepository();
+
+export function configureKnowledgeRepository(nextRepository: KnowledgeRepository) {
+  repository = nextRepository;
+}
 
 function now() {
   return new Date().toISOString();
@@ -61,7 +503,7 @@ function createTask(workflow: AgentTask['workflow'], input: Record<string, unkno
     createdAt: timestamp,
     updatedAt: timestamp,
   };
-  state.tasks.unshift(task);
+  repository.insertTask(task);
   return task;
 }
 
@@ -69,6 +511,7 @@ function finishTask(task: AgentTask, output: Record<string, unknown>) {
   task.status = 'succeeded';
   task.output = output;
   task.updatedAt = now();
+  repository.updateTask(task);
 }
 
 function createKnowledgeBase(title: string, summary: string): KnowledgeBaseSummary {
@@ -84,12 +527,13 @@ function createKnowledgeBase(title: string, summary: string): KnowledgeBaseSumma
     createdAt: timestamp,
     updatedAt: timestamp,
   };
-  state.knowledgeBases.unshift(base);
+  repository.insertKnowledgeBase(base);
   return base;
 }
 
 function upsertDefaultKnowledgeBase(input: string) {
-  if (state.knowledgeBases.length > 0) return state.knowledgeBases[0];
+  const bases = repository.listKnowledgeBases();
+  if (bases.length > 0) return bases[0];
   return createKnowledgeBase(compactTitle(input), `围绕「${compactTitle(input)}」生成的知识库骨架。`);
 }
 
@@ -108,9 +552,10 @@ function createMaterial(base: KnowledgeBaseSummary, request: IntakeRequest, type
     parseStatus: type === 'link' ? 'saved' : 'ingested',
     createdAt: timestamp,
   };
-  state.materials.unshift(material);
   base.sourceCount += 1;
   base.updatedAt = timestamp;
+  repository.insertMaterial(material);
+  repository.updateKnowledgeBase(base);
   return material;
 }
 
@@ -143,10 +588,13 @@ function createCards(base: KnowledgeBaseSummary, material: MaterialRecord | unde
       updatedAt: timestamp,
     },
   ];
-  state.cards.unshift(...cards);
   base.cardCount += cards.length;
-  base.sourcedRatio = state.cards.filter((card) => card.knowledgeBaseId === base.id && card.claimStatus === 'sourced').length / base.cardCount;
+  const existingCards = repository.listCards(base.id);
+  const sourcedCount = [...existingCards, ...cards].filter((card) => card.claimStatus === 'sourced').length;
+  base.sourcedRatio = base.cardCount > 0 ? sourcedCount / base.cardCount : 0;
   base.updatedAt = timestamp;
+  repository.insertCards(cards);
+  repository.updateKnowledgeBase(base);
   return cards;
 }
 
@@ -163,7 +611,7 @@ function createArtifact(base: KnowledgeBaseSummary, material: MaterialRecord | u
     sourceMaterialIds: material ? [material.id] : [],
     createdAt: timestamp,
   };
-  state.artifacts.unshift(artifact);
+  repository.insertArtifact(artifact);
   return artifact;
 }
 
@@ -179,7 +627,7 @@ export function intakeKnowledge(request: IntakeRequest): IntakeResult {
 
   const base = kind === 'theme'
     ? createKnowledgeBase(compactTitle(value), `围绕「${compactTitle(value)}」生成的知识库骨架。`)
-    : state.knowledgeBases.find((item) => item.id === request.knowledgeBaseId) ?? upsertDefaultKnowledgeBase(value);
+    : (request.knowledgeBaseId ? repository.findKnowledgeBase(request.knowledgeBaseId) : undefined) ?? upsertDefaultKnowledgeBase(value);
 
   const material = kind === 'theme'
     ? undefined
@@ -214,29 +662,29 @@ export function intakeKnowledge(request: IntakeRequest): IntakeResult {
 }
 
 export function listKnowledgeBases() {
-  return state.knowledgeBases;
+  return repository.listKnowledgeBases();
 }
 
 export function getKnowledgeBase(id: string): KnowledgeBaseDetail | undefined {
-  const base = state.knowledgeBases.find((item) => item.id === id);
+  const base = repository.findKnowledgeBase(id);
   if (!base) return undefined;
   return {
     ...base,
-    materials: state.materials.filter((item) => item.knowledgeBaseId === id),
-    cards: state.cards.filter((item) => item.knowledgeBaseId === id),
-    artifacts: state.artifacts.filter((item) => item.knowledgeBaseId === id),
+    materials: repository.listMaterials(id),
+    cards: repository.listCards(id),
+    artifacts: repository.listArtifacts(id),
   };
 }
 
 export function getTask(id: string) {
-  return state.tasks.find((item) => item.id === id);
+  return repository.findTask(id);
 }
 
 export function getDashboard() {
   return {
-    knowledgeBases: state.knowledgeBases,
-    materials: state.materials.slice(0, 6),
-    tasks: state.tasks.slice(0, 6),
-    artifacts: state.artifacts.slice(0, 6),
+    knowledgeBases: repository.listKnowledgeBases(),
+    materials: repository.listMaterials(undefined, 6),
+    tasks: repository.listTasks(6),
+    artifacts: repository.listArtifacts(undefined, 6),
   };
 }
