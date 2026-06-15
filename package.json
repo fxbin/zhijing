@@ -11,8 +11,8 @@
     "dev": "npm run dev:web",
     "dev:web": "npm run dev -w @zhijing/web",
     "dev:api": "npm run dev -w @zhijing/api",
-    "build": "npm run build -w @zhijing/shared && npm run build -w @zhijing/core && npm run build -w @zhijing/api && npm run build -w @zhijing/web",
-    "typecheck": "npm run typecheck -w @zhijing/shared && npm run typecheck -w @zhijing/core && npm run typecheck -w @zhijing/api",
+    "build": "npm run build -w @zhijing/shared && npm run build -w @zhijing/core && npm run build -w @zhijing/pi-runtime && npm run build -w @zhijing/api && npm run build -w @zhijing/web",
+    "typecheck": "npm run typecheck -w @zhijing/shared && npm run typecheck -w @zhijing/core && npm run typecheck -w @zhijing/pi-runtime && npm run typecheck -w @zhijing/api",
     "preview": "npm run preview -w @zhijing/web"
   },
   "devDependencies": {

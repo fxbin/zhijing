@@ -101,12 +101,46 @@ function materialFromApi(item) {
   };
 }
 
+function fallbackDetail() {
+  return {
+    title: 'AI Agent 学习',
+    summary: 'Exploring the fundamentals, tools, memory systems, and multi-agent collaborative frameworks.',
+    sourceCount: 12,
+    cardCount: 42,
+    sourcedRatio: 0.62,
+    materials: [
+      {
+        id: 'seed-material',
+        title: "Beginner's Guide to AI Agents",
+        platform: 'xiaohongshu',
+        parseStatus: 'ingested',
+        createdAt: new Date().toISOString(),
+      },
+    ],
+    cards: [
+      {
+        id: 'seed-card',
+        type: 'concept',
+        title: 'ReAct Framework',
+        body: 'Reasoning + Acting. Forces the LLM to generate a reasoning trace before taking an action, improving transparency and success rate in complex tasks.',
+        claimStatus: 'sourced',
+        updatedAt: new Date().toISOString(),
+      },
+    ],
+    artifacts: [],
+  };
+}
+
 function App() {
   const [view, setView] = useState(viewFromHash);
   const [query, setQuery] = useState('');
   const [activity, setActivity] = useState('Ready to organize a theme, link, or question.');
   const [knowledgeBases, setKnowledgeBases] = useState(seedKnowledgeBases);
   const [materials, setMaterials] = useState(seedMaterials);
+  const [selectedKnowledgeBaseId, setSelectedKnowledgeBaseId] = useState(null);
+  const [knowledgeBaseDetail, setKnowledgeBaseDetail] = useState(fallbackDetail);
+  const [latestTaskId, setLatestTaskId] = useState(null);
+  const [latestTask, setLatestTask] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const kind = useMemo(() => (query.trim() ? classifyInput(query.trim()) : 'Theme, Link, or Question'), [query]);
 
@@ -126,9 +160,14 @@ function App() {
         if (ignore) return;
         if (dashboard.knowledgeBases?.length) {
           setKnowledgeBases(dashboard.knowledgeBases);
+          setSelectedKnowledgeBaseId((current) => current ?? dashboard.knowledgeBases[0].id);
         }
         if (dashboard.materials?.length) {
           setMaterials(dashboard.materials.map(materialFromApi));
+        }
+        if (dashboard.tasks?.length) {
+          setLatestTaskId(dashboard.tasks[0].id);
+          setLatestTask(dashboard.tasks[0]);
         }
       } catch {
         // The prototype keeps its Stitch-aligned seed content when the API is not running.
@@ -139,6 +178,52 @@ function App() {
       ignore = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!selectedKnowledgeBaseId) {
+      setKnowledgeBaseDetail(fallbackDetail());
+      return;
+    }
+
+    let ignore = false;
+    async function loadDetail() {
+      try {
+        const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}`);
+        if (!response.ok) return;
+        const detail = await response.json();
+        if (!ignore) setKnowledgeBaseDetail(detail);
+      } catch {
+        if (!ignore) setKnowledgeBaseDetail(fallbackDetail());
+      }
+    }
+    loadDetail();
+    return () => {
+      ignore = true;
+    };
+  }, [selectedKnowledgeBaseId]);
+
+  useEffect(() => {
+    if (!latestTaskId) return undefined;
+    let cancelled = false;
+
+    async function loadTask() {
+      try {
+        const response = await fetch(`/api/tasks/${latestTaskId}`);
+        if (!response.ok) return;
+        const task = await response.json();
+        if (!cancelled) setLatestTask(task);
+      } catch {
+        // Keep the last task status when the API is not available.
+      }
+    }
+
+    loadTask();
+    const timer = window.setInterval(loadTask, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [latestTaskId]);
 
   const go = (nextView) => {
     setView(nextView);
@@ -168,6 +253,9 @@ function App() {
 
       const result = await response.json();
       setActivity(`${result.message} Task ${result.task.id} finished.`);
+      setLatestTaskId(result.task.id);
+      setLatestTask(result.task);
+      setSelectedKnowledgeBaseId(result.knowledgeBase.id);
       setKnowledgeBases((current) => {
         const withoutDuplicate = current.filter((base) => base.id !== result.knowledgeBase.id && base.title !== result.knowledgeBase.title);
         return [result.knowledgeBase, ...withoutDuplicate];
@@ -222,7 +310,15 @@ function App() {
         <section className="kb-stack" aria-label="知识库列表">
           <p>Knowledge Bases</p>
           {knowledgeBases.map((base, index) => (
-            <button className={base.active || index === 0 ? 'selected' : ''} key={base.id ?? base.title} onClick={() => go('detail')} type="button">
+            <button
+              className={base.id === selectedKnowledgeBaseId || (!selectedKnowledgeBaseId && (base.active || index === 0)) ? 'selected' : ''}
+              key={base.id ?? base.title}
+              onClick={() => {
+                if (base.id) setSelectedKnowledgeBaseId(base.id);
+                go('detail');
+              }}
+              type="button"
+            >
               <strong>{base.title}</strong>
               <span>{formatBaseMeta(base)}</span>
             </button>
@@ -255,8 +351,8 @@ function App() {
         </header>
 
         <div className="canvas">
-          {view === 'workspace' && <WorkspaceView activity={activity} isSubmitting={isSubmitting} materials={materials} query={query} setQuery={setQuery} submit={submit} />}
-          {view === 'detail' && <DetailView setView={go} />}
+          {view === 'workspace' && <WorkspaceView activity={activity} isSubmitting={isSubmitting} latestTask={latestTask} materials={materials} query={query} setQuery={setQuery} submit={submit} />}
+          {view === 'detail' && <DetailView detail={knowledgeBaseDetail} latestTask={latestTask} setView={go} />}
           {view === 'library' && <LibraryView />}
           {view === 'search' && <SearchView />}
           {view === 'kits' && <KitView setView={go} />}
@@ -270,7 +366,7 @@ function App() {
   );
 }
 
-function WorkspaceView({ activity, isSubmitting, materials, query, setQuery, submit }) {
+function WorkspaceView({ activity, isSubmitting, latestTask, materials, query, setQuery, submit }) {
   return (
     <>
       <section className="hero">
@@ -296,6 +392,7 @@ function WorkspaceView({ activity, isSubmitting, materials, query, setQuery, sub
           <button type="button">+ More</button>
         </div>
         <p className="activity">{activity}</p>
+        <TaskStatus task={latestTask} />
       </section>
 
       <section className="lower-grid">
@@ -303,6 +400,17 @@ function WorkspaceView({ activity, isSubmitting, materials, query, setQuery, sub
         <KnowledgeMapPanel />
       </section>
     </>
+  );
+}
+
+function TaskStatus({ task }) {
+  if (!task) return null;
+  return (
+    <div className={`task-status ${task.status}`}>
+      <span>{task.status}</span>
+      <strong>{task.workflow}</strong>
+      <small>{task.id}</small>
+    </div>
   );
 }
 
@@ -354,47 +462,63 @@ function KnowledgeMapPanel() {
   );
 }
 
-function DetailView({ setView }) {
+function DetailView({ detail, latestTask, setView }) {
+  const cards = detail.cards?.length ? detail.cards : fallbackDetail().cards;
+  const materials = detail.materials?.length ? detail.materials : fallbackDetail().materials;
+  const artifacts = detail.artifacts ?? [];
+  const roadmapCards = cards.slice(0, 4);
+
   return (
     <section className="page-grid">
       <div className="page-main">
-        <p className="breadcrumb">Workspace / AI Agent</p>
+        <p className="breadcrumb">Workspace / {detail.title}</p>
         <div className="page-title-row">
           <div>
             <span className="status-chip">In Progress</span>
-            <h2>AI Agent 学习</h2>
-            <p>Exploring the fundamentals, tools, memory systems, and multi-agent collaborative frameworks.</p>
+            <h2>{detail.title}</h2>
+            <p>{detail.summary}</p>
           </div>
           <button onClick={() => setView('workflow')} type="button">Run Kit</button>
         </div>
         <div className="detail-layout">
           <aside className="roadmap">
             <h3>Roadmap</h3>
-            {['Introduction to Agents', 'Tool Use & Planning', 'Memory Systems', 'Multi-Agent Collab'].map((step, index) => (
-              <div className={index === 1 ? 'active' : ''} key={step}>
+            {roadmapCards.map((card, index) => (
+              <div className={index === 0 ? 'active' : ''} key={card.id ?? card.title}>
                 <span>{index + 1}</span>
-                <strong>{step}</strong>
-                <small>{index === 0 ? 'Basic concepts, LLM as core.' : index === 1 ? 'ReAct, function calling.' : 'Needs more sources.'}</small>
+                <strong>{card.title}</strong>
+                <small>{card.claimStatus === 'sourced' ? 'Sourced from imported material.' : 'AI skeleton, needs sources.'}</small>
               </div>
             ))}
           </aside>
           <section className="feed">
             <div className="tabs"><button className="active">Structured Feed</button><button>All Materials</button></div>
-            <article className="knowledge-card">
-              <span>Concept</span>
-              <h3>ReAct Framework</h3>
-              <p>Reasoning + Acting. Forces the LLM to generate a reasoning trace before taking an action, improving transparency and success rate in complex tasks.</p>
-              <footer>3 sources · 2 refs · Updated 2d ago</footer>
-            </article>
-            <article className="source-strip"><BookOpen size={22} /><div><strong>Beginner's Guide to AI Agents</strong><span>Xiaohongshu · 2 days ago</span></div></article>
+            {cards.map((card) => (
+              <article className="knowledge-card" key={card.id ?? card.title}>
+                <span>{card.type}</span>
+                <h3>{card.title}</h3>
+                <p>{card.body}</p>
+                <footer>{card.claimStatus} · Updated {card.updatedAt ? new Date(card.updatedAt).toLocaleDateString() : 'today'}</footer>
+              </article>
+            ))}
+            {materials.map((material) => (
+              <article className="source-strip" key={material.id ?? material.title}>
+                <BookOpen size={22} />
+                <div>
+                  <strong>{material.title}</strong>
+                  <span>{material.platform ?? material.type ?? 'material'} · {material.parseStatus ?? 'saved'}</span>
+                </div>
+              </article>
+            ))}
           </section>
         </div>
       </div>
       <aside className="assistant-panel">
         <h3>AI Assistant</h3>
-        <p>Hello, I've analyzed your materials on AI Agents. What would you like to know?</p>
-        <div className="chat-user">Can you summarize the difference between ReAct and standard prompting?</div>
-        <p>Based on your knowledge cards: standard prompting asks for output. ReAct adds a reasoning-action loop.</p>
+        <p>当前知识库有 {detail.sourceCount ?? materials.length} 条资料、{detail.cardCount ?? cards.length} 张卡片。</p>
+        <TaskStatus task={latestTask} />
+        <div className="chat-user">下一步应该补充哪些来源？</div>
+        <p>{artifacts[0]?.body ?? '目前是本地 mock generation 结果，Phase 2 会切换到 Pi 结构化生成。'}</p>
       </aside>
     </section>
   );
