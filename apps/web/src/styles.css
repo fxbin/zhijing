@@ -1085,6 +1085,53 @@ button { cursor: pointer; }
   line-height: 1.35;
 }
 
+.assistant-link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  background: var(--primary);
+  color: white;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.question-history {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 14px;
+}
+
+.question-history-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.question-history button {
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--primary);
+  padding: 9px 10px;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.question-history button:hover {
+  border-color: var(--line);
+  background: var(--surface-low);
+}
+
 .assistant-input {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 42px;

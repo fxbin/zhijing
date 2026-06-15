@@ -167,6 +167,7 @@ function App() {
   const [assistantQuestion, setAssistantQuestion] = useState('');
   const [assistantAnswer, setAssistantAnswer] = useState(null);
   const [isAsking, setIsAsking] = useState(false);
+  const [selectedArtifact, setSelectedArtifact] = useState(null);
   const kind = useMemo(() => (query.trim() ? classifyInput(query.trim()) : 'Theme, Link, or Question'), [query]);
 
   useEffect(() => {
@@ -239,6 +240,7 @@ function App() {
   useEffect(() => {
     setAssistantAnswer(null);
     setAssistantQuestion('');
+    setSelectedArtifact(null);
   }, [selectedKnowledgeBaseId]);
 
   useEffect(() => {
@@ -370,6 +372,7 @@ function App() {
         artifact: result.artifact,
         task: result.task,
       });
+      if (result.artifact) setSelectedArtifact(result.artifact);
       setAssistantQuestion('');
     } catch {
       setAssistantAnswer({
@@ -379,6 +382,11 @@ function App() {
     } finally {
       setIsAsking(false);
     }
+  };
+
+  const openArtifact = (artifact) => {
+    if (artifact) setSelectedArtifact(artifact);
+    go('artifact');
   };
 
   const navItems = [
@@ -474,6 +482,7 @@ function App() {
               isAsking={isAsking}
               latestTask={latestTask}
               onAsk={askKnowledgeBase}
+              onOpenArtifact={openArtifact}
               selectedKnowledgeBaseId={selectedKnowledgeBaseId}
               setAssistantQuestion={setAssistantQuestion}
               setView={go}
@@ -483,7 +492,7 @@ function App() {
           {view === 'search' && <SearchView />}
           {view === 'kits' && <KitView setView={go} />}
           {view === 'workflow' && <WorkflowView setView={go} />}
-          {view === 'artifact' && <ArtifactView />}
+          {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={knowledgeBaseDetail} setView={go} />}
           {view === 'maps' && <MapsView />}
           {view === 'settings' && <SettingsView />}
         </div>
@@ -649,6 +658,7 @@ function DetailView({
   isAsking,
   latestTask,
   onAsk,
+  onOpenArtifact,
   selectedKnowledgeBaseId,
   setAssistantQuestion,
   setView,
@@ -659,6 +669,7 @@ function DetailView({
   const roadmapCards = cards.slice(0, 4);
   const canAsk = apiStatus === 'online' && Boolean(selectedKnowledgeBaseId) && !isAsking;
   const latestAnswerCards = assistantAnswer?.cards?.slice(0, 2) ?? [];
+  const questionHistory = materials.filter((material) => material.type === 'question').slice(0, 3);
 
   return (
     <section className="page-grid">
@@ -735,10 +746,29 @@ function DetailView({
                     ))}
                   </div>
                 )}
+                {assistantAnswer.artifact && (
+                  <button className="assistant-link-button" onClick={() => onOpenArtifact(assistantAnswer.artifact)} type="button">
+                    Open Artifact
+                    <SquareArrowOutUpRight size={15} />
+                  </button>
+                )}
               </div>
             </div>
           )}
         </div>
+        {questionHistory.length > 0 && (
+          <section className="question-history" aria-label="最近问题">
+            <div className="question-history-head">
+              <History size={16} />
+              <strong>Recent Questions</strong>
+            </div>
+            {questionHistory.map((material) => (
+              <button key={material.id ?? material.title} onClick={() => setAssistantQuestion(material.rawInput ?? material.title)} type="button">
+                {material.rawInput ?? material.title}
+              </button>
+            ))}
+          </section>
+        )}
         <div className="assistant-input">
           <input
             aria-label="向当前知识库提问"
@@ -841,26 +871,44 @@ function WorkflowView({ setView }) {
   );
 }
 
-function ArtifactView() {
+function ArtifactView({ artifact, detail, setView }) {
+  const fallbackArtifact = detail.artifacts?.[0];
+  const activeArtifact = artifact ?? fallbackArtifact;
+  const bodyBlocks = activeArtifact?.body
+    ? activeArtifact.body.split(/\n+/).map((block) => block.trim()).filter(Boolean)
+    : [];
+
+  if (!activeArtifact) {
+    return (
+      <section className="artifact-page">
+        <div className="page-title-row">
+          <div><h2>Artifact Archive</h2><p>问答或 Kit 生成产物后，会在这里打开完整内容。</p></div>
+          <div className="button-row"><button onClick={() => setView('detail')} type="button">回到知识库</button></div>
+        </div>
+        <EmptyState title="暂无可打开产物" body="在知识库详情页提问，或运行 Kit 后，可以从助手面板打开产物。" />
+      </section>
+    );
+  }
+
   return (
     <section className="artifact-page">
       <div className="page-title-row">
-        <div><h2>AI Agent 主题研究摘要</h2><p>Generated from 15 nodes · includes citations and gaps.</p></div>
-        <div className="button-row"><button>保存为知识卡片</button><button>导出 Markdown</button><button>重新生成</button></div>
+        <div>
+          <h2>{activeArtifact.title}</h2>
+          <p>{detail.title} · {activeArtifact.artifactType ?? 'summary'} · {new Date(activeArtifact.createdAt).toLocaleString()}</p>
+        </div>
+        <div className="button-row"><button onClick={() => setView('detail')} type="button">回到知识库</button><button type="button">导出 Markdown</button></div>
       </div>
       <div className="artifact-grid">
         <article className="document-card">
           <h3>摘要正文</h3>
-          <p>AI Agent 代表了人工智能发展的一个重要阶段，从单纯的预测与响应模型转向具有感知、规划、执行能力的自主系统。</p>
-          <p>当前研究焦点集中在如何提升 Agent 在复杂环境下的推理能力和可靠性，包括记忆机制、工具使用和多智能体协作。</p>
-          <h3>核心概念</h3>
-          <ul><li>LLM as Core Brain</li><li>Tool Use</li><li>Memory Architecture</li><li>Multi-Agent Collaboration</li></ul>
+          {bodyBlocks.length > 0 ? bodyBlocks.map((block) => <p key={block}>{block}</p>) : <p>这个产物暂时没有正文。</p>}
         </article>
         <aside className="citation-card">
-          <h3>引用来源</h3>
-          <p>15 selected source nodes</p>
-          <p>3 high-confidence citations</p>
-          <p>2 gaps marked for follow-up</p>
+          <h3>来源边界</h3>
+          <p>{activeArtifact.sourceMaterialIds?.length ?? 0} source material links</p>
+          <p>{detail.cardCount ?? detail.cards?.length ?? 0} cards in current knowledge base</p>
+          <p>{activeArtifact.sourceMaterialIds?.length ? 'This artifact references saved source material.' : 'This artifact is an AI skeleton and needs source review.'}</p>
         </aside>
       </div>
     </section>
