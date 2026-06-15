@@ -1,6 +1,7 @@
 import cors from '@fastify/cors';
 import Fastify from 'fastify';
 import {
+  answerKnowledgeBaseQuestion,
   getDashboard,
   getKnowledgeBaseAnalytics,
   getKnowledgeBase,
@@ -56,6 +57,23 @@ export function buildApi() {
       return reply.code(404).send({ error: 'Knowledge base not found.' });
     }
     return analytics;
+  });
+
+  app.post<{ Params: { id: string }; Body: { question?: string } }>('/api/knowledge-bases/:id/ask', async (request, reply) => {
+    const question = typeof request.body?.question === 'string' ? request.body.question.trim() : '';
+    if (!question) {
+      return reply.code(400).send({ error: 'Question is required.' });
+    }
+
+    try {
+      return await answerKnowledgeBaseQuestion(request.params.id, question);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'knowledge base ask failed');
+      return reply.code(500).send({ error: 'Knowledge base ask failed.' });
+    }
   });
 
   app.get<{ Params: { id: string } }>('/api/tasks/:id', async (request, reply) => {

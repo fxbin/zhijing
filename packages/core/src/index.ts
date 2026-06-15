@@ -649,7 +649,7 @@ function createCards(
   generatedCards: GeneratedCard[] | undefined,
 ) {
   const timestamp = now();
-  const sourceStatus = material ? 'sourced' : 'ai_skeleton';
+  const sourceStatus = material && material.type !== 'question' ? 'sourced' : 'ai_skeleton';
   const generated = normalizeGeneratedCards(generatedCards);
   const fallbackCards: GeneratedCard[] = [
     {
@@ -693,6 +693,7 @@ function createArtifact(
   generated: GeneratedKnowledgeOutput,
 ) {
   const timestamp = now();
+  const sourceMaterialIds = material && material.type !== 'question' ? [material.id] : [];
   const artifact: ArtifactRecord = {
     id: id('art'),
     knowledgeBaseId: base.id,
@@ -701,7 +702,7 @@ function createArtifact(
     body: generated.artifactBody ?? generated.summary ?? (material
       ? `已保存资料「${material.title}」，并生成可继续整理的摘要占位。`
       : `已创建「${base.title}」主题骨架，下一步可以继续导入来源资料。`),
-    sourceMaterialIds: material ? [material.id] : [],
+    sourceMaterialIds,
     createdAt: timestamp,
   };
   repository.insertArtifact(artifact);
@@ -823,6 +824,91 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
     failTask(task, error);
     throw error;
   }
+}
+
+export async function answerKnowledgeBaseQuestion(knowledgeBaseId: string, question: string): Promise<IntakeResult> {
+  const value = question.trim();
+  if (!value) {
+    throw new KnowledgeCoreError('Question is required.', 400);
+  }
+
+  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  if (!base) {
+    throw new KnowledgeCoreError('Knowledge base not found.', 404);
+  }
+
+  const task = createTask('answer_question', { input: value, knowledgeBaseId });
+
+  try {
+    const material = createMaterial(base, { input: value, knowledgeBaseId }, 'question');
+    const generationContext = buildQuestionContext(base.id, material.id);
+    const generation = await generateKnowledge('question_answer', value, {
+      kind: 'question',
+      knowledgeBaseId: base.id,
+      materialId: material.id,
+      hasSourceMaterial: generationContext.materials.length > 0,
+      parseStatus: material.parseStatus,
+      ...generationContext,
+    });
+    const generated = generation.output;
+    const cards = createCards(base, material, value, generated.cards);
+    const artifact = createArtifact(base, material, value, generated);
+
+    finishTask(task, {
+      kind: 'question',
+      knowledgeBaseId: base.id,
+      materialId: material.id,
+      cardIds: cards.map((card) => card.id),
+      artifactId: artifact.id,
+      generationProvider: generation.provider,
+      generationModel: generation.model,
+      generationFallbackReason: generation.fallbackReason,
+      contextMaterialCount: generationContext.materials.length,
+      contextCardCount: generationContext.cards.length,
+    });
+
+    return {
+      kind: 'question',
+      knowledgeBase: base,
+      material,
+      cards,
+      task,
+      artifact,
+      message: '问题已基于当前知识库生成回答线索。',
+    };
+  } catch (error) {
+    failTask(task, error);
+    throw error;
+  }
+}
+
+function buildQuestionContext(knowledgeBaseId: string, questionMaterialId: string) {
+  const materials = repository.listMaterials(knowledgeBaseId)
+    .filter((material) => material.id !== questionMaterialId)
+    .slice(0, 8)
+    .map((material) => ({
+      id: material.id,
+      type: material.type,
+      title: material.title,
+      platform: material.platform,
+      parseStatus: material.parseStatus,
+      contentPreview: compactPreview(material.contentText ?? material.rawInput),
+    }));
+  const cards = repository.listCards(knowledgeBaseId)
+    .slice(0, 8)
+    .map((card) => ({
+      id: card.id,
+      type: card.type,
+      title: card.title,
+      bodyPreview: compactPreview(card.body),
+      claimStatus: card.claimStatus,
+    }));
+  return { materials, cards };
+}
+
+function compactPreview(input: string) {
+  const cleaned = input.replace(/\s+/g, ' ').trim();
+  return cleaned.length > 160 ? `${cleaned.slice(0, 160)}...` : cleaned;
 }
 
 export function requestMaterialParsing(materialId: string): MaterialParseQueueResult {
