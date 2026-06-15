@@ -92,6 +92,36 @@ export interface KnowledgeBaseDetail extends KnowledgeBaseSummary {
   artifacts: ArtifactRecord[];
 }
 
+export interface AnalyticsDistributionItem {
+  name: string;
+  count: number;
+}
+
+export interface AnalyticsExportRow {
+  section: string;
+  label: string;
+  value: string;
+}
+
+export interface KnowledgeBaseAnalytics {
+  knowledgeBaseId: string;
+  generatedAt: string;
+  totals: {
+    materials: number;
+    cards: number;
+    sourcedCards: number;
+    aiSkeletonCards: number;
+    artifacts: number;
+    tasks: number;
+  };
+  sourcedRatio: number;
+  platformDistribution: AnalyticsDistributionItem[];
+  materialStatusDistribution: AnalyticsDistributionItem[];
+  cardTypeDistribution: AnalyticsDistributionItem[];
+  taskStatusDistribution: AnalyticsDistributionItem[];
+  exportRows: AnalyticsExportRow[];
+}
+
 export function classifyInput(input: string): IntakeKind {
   const value = input.trim();
   if (/https?:\/\//i.test(value)) return 'link';

@@ -2,6 +2,7 @@ import cors from '@fastify/cors';
 import Fastify from 'fastify';
 import {
   getDashboard,
+  getKnowledgeBaseAnalytics,
   getKnowledgeBase,
   getTask,
   intakeKnowledge,
@@ -44,6 +45,14 @@ export function buildApi() {
       return reply.code(404).send({ error: 'Knowledge base not found.' });
     }
     return base;
+  });
+
+  app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/analytics', async (request, reply) => {
+    const analytics = await getKnowledgeBaseAnalytics(request.params.id);
+    if (!analytics) {
+      return reply.code(404).send({ error: 'Knowledge base not found.' });
+    }
+    return analytics;
   });
 
   app.get<{ Params: { id: string } }>('/api/tasks/:id', async (request, reply) => {

@@ -4,12 +4,14 @@ import {
   classifyInput,
   type IntakeRequest,
   type IntakeResult,
+  type KnowledgeBaseAnalytics,
   type KnowledgeBaseDetail,
   type KnowledgeBaseSummary,
   type KnowledgeCard,
   type MaterialRecord,
   detectPlatform,
 } from '@zhijing/shared';
+import { DuckDBConnection } from '@duckdb/node-api';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -687,4 +689,142 @@ export function getDashboard() {
     tasks: repository.listTasks(6),
     artifacts: repository.listArtifacts(undefined, 6),
   };
+}
+
+export async function getKnowledgeBaseAnalytics(id: string): Promise<KnowledgeBaseAnalytics | undefined> {
+  const base = repository.findKnowledgeBase(id);
+  if (!base) return undefined;
+
+  const materials = repository.listMaterials(id);
+  const cards = repository.listCards(id);
+  const artifacts = repository.listArtifacts(id);
+  const tasks = repository.listTasks().filter((task) => {
+    const inputKnowledgeBaseId = typeof task.input.knowledgeBaseId === 'string' ? task.input.knowledgeBaseId : undefined;
+    const outputKnowledgeBaseId = typeof task.output?.knowledgeBaseId === 'string' ? task.output.knowledgeBaseId : undefined;
+    return inputKnowledgeBaseId === id || outputKnowledgeBaseId === id;
+  });
+
+  const connection = await DuckDBConnection.create();
+  try {
+    await connection.run('CREATE TEMP TABLE materials(id VARCHAR, platform VARCHAR, parse_status VARCHAR, type VARCHAR)');
+    await connection.run('CREATE TEMP TABLE cards(id VARCHAR, type VARCHAR, claim_status VARCHAR)');
+    await connection.run('CREATE TEMP TABLE artifacts(id VARCHAR, artifact_type VARCHAR)');
+    await connection.run('CREATE TEMP TABLE tasks(id VARCHAR, workflow VARCHAR, status VARCHAR)');
+
+    for (const material of materials) {
+      await connection.run(
+        'INSERT INTO materials VALUES ($id, $platform, $parse_status, $type)',
+        {
+          id: material.id,
+          platform: material.platform ?? 'unknown',
+          parse_status: material.parseStatus,
+          type: material.type,
+        },
+      );
+    }
+
+    for (const card of cards) {
+      await connection.run(
+        'INSERT INTO cards VALUES ($id, $type, $claim_status)',
+        {
+          id: card.id,
+          type: card.type,
+          claim_status: card.claimStatus,
+        },
+      );
+    }
+
+    for (const artifact of artifacts) {
+      await connection.run(
+        'INSERT INTO artifacts VALUES ($id, $artifact_type)',
+        {
+          id: artifact.id,
+          artifact_type: artifact.artifactType,
+        },
+      );
+    }
+
+    for (const task of tasks) {
+      await connection.run(
+        'INSERT INTO tasks VALUES ($id, $workflow, $status)',
+        {
+          id: task.id,
+          workflow: task.workflow,
+          status: task.status,
+        },
+      );
+    }
+
+    const totals = singleRow(await connection.runAndReadAll(`
+      SELECT
+        (SELECT count(*) FROM materials)::INTEGER AS materials,
+        (SELECT count(*) FROM cards)::INTEGER AS cards,
+        (SELECT count(*) FROM cards WHERE claim_status = 'sourced')::INTEGER AS sourcedCards,
+        (SELECT count(*) FROM cards WHERE claim_status = 'ai_skeleton')::INTEGER AS aiSkeletonCards,
+        (SELECT count(*) FROM artifacts)::INTEGER AS artifacts,
+        (SELECT count(*) FROM tasks)::INTEGER AS tasks
+    `));
+
+    const exportRows = rows(await connection.runAndReadAll(`
+      SELECT 'materials' AS section, 'total' AS label, count(*)::VARCHAR AS value FROM materials
+      UNION ALL
+      SELECT 'cards', 'total', count(*)::VARCHAR FROM cards
+      UNION ALL
+      SELECT 'cards', 'sourced', count(*)::VARCHAR FROM cards WHERE claim_status = 'sourced'
+      UNION ALL
+      SELECT 'artifacts', 'total', count(*)::VARCHAR FROM artifacts
+      UNION ALL
+      SELECT 'tasks', 'total', count(*)::VARCHAR FROM tasks
+    `)).map((row) => ({
+      section: String(row.section),
+      label: String(row.label),
+      value: String(row.value),
+    }));
+
+    const cardTotal = Number(totals.cards ?? 0);
+    const sourcedCards = Number(totals.sourcedCards ?? 0);
+
+    return {
+      knowledgeBaseId: id,
+      generatedAt: now(),
+      totals: {
+        materials: Number(totals.materials ?? 0),
+        cards: cardTotal,
+        sourcedCards,
+        aiSkeletonCards: Number(totals.aiSkeletonCards ?? 0),
+        artifacts: Number(totals.artifacts ?? 0),
+        tasks: Number(totals.tasks ?? 0),
+      },
+      sourcedRatio: cardTotal > 0 ? sourcedCards / cardTotal : 0,
+      platformDistribution: await distribution(connection, 'materials', 'platform'),
+      materialStatusDistribution: await distribution(connection, 'materials', 'parse_status'),
+      cardTypeDistribution: await distribution(connection, 'cards', 'type'),
+      taskStatusDistribution: await distribution(connection, 'tasks', 'status'),
+      exportRows,
+    };
+  } finally {
+    connection.disconnectSync();
+  }
+}
+
+async function distribution(connection: Awaited<ReturnType<typeof DuckDBConnection.create>>, table: string, column: string) {
+  const reader = await connection.runAndReadAll(`
+    SELECT coalesce(nullif(${column}, ''), 'unknown') AS name, count(*)::INTEGER AS count
+    FROM ${table}
+    GROUP BY 1
+    ORDER BY count DESC, name ASC
+  `);
+
+  return rows(reader).map((row) => ({
+    name: String(row.name),
+    count: Number(row.count),
+  }));
+}
+
+function rows(reader: { getRowObjectsJson(): Record<string, unknown>[] }) {
+  return reader.getRowObjectsJson();
+}
+
+function singleRow(reader: { getRowObjectsJson(): Record<string, unknown>[] }) {
+  return rows(reader)[0] ?? {};
 }
