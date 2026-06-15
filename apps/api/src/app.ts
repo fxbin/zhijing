@@ -70,7 +70,7 @@ export function buildApi() {
     }
 
     try {
-      return intakeKnowledge({
+      return await intakeKnowledge({
         input,
         knowledgeBaseId: request.body.knowledgeBaseId,
       });

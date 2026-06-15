@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@duckdb/node-api": "^1.5.3-r.3",
+    "@zhijing/pi-runtime": "0.1.0",
     "@zhijing/shared": "0.1.0"
   }
 }

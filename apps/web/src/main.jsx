@@ -228,7 +228,7 @@ function App() {
     return () => {
       ignore = true;
     };
-  }, [selectedKnowledgeBaseId]);
+  }, [apiStatus, selectedKnowledgeBaseId]);
 
   useEffect(() => {
     if (!latestTaskId) return undefined;
@@ -562,8 +562,8 @@ function KnowledgeMapPanel() {
 }
 
 function DetailView({ detail, latestTask, setView }) {
-  const cards = detail.cards?.length ? detail.cards : fallbackDetail().cards;
-  const materials = detail.materials?.length ? detail.materials : fallbackDetail().materials;
+  const cards = detail.cards ?? [];
+  const materials = detail.materials ?? [];
   const artifacts = detail.artifacts ?? [];
   const roadmapCards = cards.slice(0, 4);
 

@@ -11,6 +11,12 @@ import {
   type MaterialRecord,
   detectPlatform,
 } from '@zhijing/shared';
+import {
+  createConfiguredPiRuntime,
+  Type,
+  type PiRuntime,
+  type TSchema,
+} from '@zhijing/pi-runtime';
 import { DuckDBConnection } from '@duckdb/node-api';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
@@ -41,6 +47,32 @@ type KnowledgeRepository = {
   insertArtifact(artifact: ArtifactRecord): void;
   listArtifacts(knowledgeBaseId?: string, limit?: number): ArtifactRecord[];
 };
+
+type GeneratedCard = {
+  type?: KnowledgeCard['type'];
+  title?: string;
+  body?: string;
+};
+
+type GeneratedKnowledgeOutput = {
+  title?: string;
+  summary?: string;
+  cards?: GeneratedCard[];
+  artifactTitle?: string;
+  artifactBody?: string;
+};
+
+const generationSchema = Type.Object({
+  title: Type.Optional(Type.String()),
+  summary: Type.Optional(Type.String()),
+  cards: Type.Optional(Type.Array(Type.Object({
+    type: Type.Optional(Type.String()),
+    title: Type.Optional(Type.String()),
+    body: Type.Optional(Type.String()),
+  }))),
+  artifactTitle: Type.Optional(Type.String()),
+  artifactBody: Type.Optional(Type.String()),
+});
 
 class MemoryKnowledgeRepository implements KnowledgeRepository {
   private readonly state: StoreState = {
@@ -467,9 +499,14 @@ export function createSqliteKnowledgeRepository(path = defaultSqlitePath()): Kno
 let repository: KnowledgeRepository = process.env.ZHIJING_STORAGE === 'memory'
   ? createMemoryKnowledgeRepository()
   : createSqliteKnowledgeRepository();
+let piRuntime: PiRuntime = createConfiguredPiRuntime();
 
 export function configureKnowledgeRepository(nextRepository: KnowledgeRepository) {
   repository = nextRepository;
+}
+
+export function configurePiRuntime(nextRuntime: PiRuntime) {
+  piRuntime = nextRuntime;
 }
 
 function now() {
@@ -561,35 +598,40 @@ function createMaterial(base: KnowledgeBaseSummary, request: IntakeRequest, type
   return material;
 }
 
-function createCards(base: KnowledgeBaseSummary, material: MaterialRecord | undefined, seed: string) {
+function createCards(
+  base: KnowledgeBaseSummary,
+  material: MaterialRecord | undefined,
+  seed: string,
+  generatedCards: GeneratedCard[] | undefined,
+) {
   const timestamp = now();
   const sourceStatus = material ? 'sourced' : 'ai_skeleton';
-  const cards: KnowledgeCard[] = [
+  const generated = normalizeGeneratedCards(generatedCards);
+  const fallbackCards: GeneratedCard[] = [
     {
-      id: id('card'),
-      knowledgeBaseId: base.id,
-      materialId: material?.id,
       type: 'concept',
       title: `${compactTitle(seed)} 的核心概念`,
       body: material
         ? '从导入资料中提取出的第一张知识卡片，后续会由 Pi 替换为结构化生成。'
         : '根据主题先生成的 AI 骨架卡片，等待资料导入后补充来源。',
-      claimStatus: sourceStatus,
-      createdAt: timestamp,
-      updatedAt: timestamp,
     },
     {
-      id: id('card'),
-      knowledgeBaseId: base.id,
-      materialId: material?.id,
       type: 'question',
       title: '下一步要回答的问题',
       body: '这个主题还需要补充哪些高质量来源、案例和可验证证据？',
+    },
+  ];
+  const cards: KnowledgeCard[] = (generated.length ? generated : fallbackCards).map((card) => ({
+      id: id('card'),
+      knowledgeBaseId: base.id,
+      materialId: material?.id,
+      type: normalizeCardType(card.type),
+      title: compactTitle(card.title ?? `${compactTitle(seed)} 的知识卡片`),
+      body: card.body?.trim() || '这张知识卡片还需要补充内容。',
       claimStatus: sourceStatus,
       createdAt: timestamp,
       updatedAt: timestamp,
-    },
-  ];
+  }));
   base.cardCount += cards.length;
   const existingCards = repository.listCards(base.id);
   const sourcedCount = [...existingCards, ...cards].filter((card) => card.claimStatus === 'sourced').length;
@@ -600,16 +642,21 @@ function createCards(base: KnowledgeBaseSummary, material: MaterialRecord | unde
   return cards;
 }
 
-function createArtifact(base: KnowledgeBaseSummary, material: MaterialRecord | undefined, seed: string) {
+function createArtifact(
+  base: KnowledgeBaseSummary,
+  material: MaterialRecord | undefined,
+  seed: string,
+  generated: GeneratedKnowledgeOutput,
+) {
   const timestamp = now();
   const artifact: ArtifactRecord = {
     id: id('art'),
     knowledgeBaseId: base.id,
     artifactType: 'summary',
-    title: `${compactTitle(seed)} 摘要`,
-    body: material
+    title: compactTitle(generated.artifactTitle ?? `${compactTitle(seed)} 摘要`),
+    body: generated.artifactBody ?? generated.summary ?? (material
       ? `已保存资料「${material.title}」，并生成可继续整理的摘要占位。`
-      : `已创建「${base.title}」主题骨架，下一步可以继续导入来源资料。`,
+      : `已创建「${base.title}」主题骨架，下一步可以继续导入来源资料。`),
     sourceMaterialIds: material ? [material.id] : [],
     createdAt: timestamp,
   };
@@ -617,7 +664,32 @@ function createArtifact(base: KnowledgeBaseSummary, material: MaterialRecord | u
   return artifact;
 }
 
-export function intakeKnowledge(request: IntakeRequest): IntakeResult {
+function normalizeGeneratedCards(cards: GeneratedCard[] | undefined) {
+  if (!cards?.length) return [];
+  return cards
+    .filter((card) => card.title?.trim() || card.body?.trim())
+    .slice(0, 6);
+}
+
+function normalizeCardType(type: GeneratedCard['type']): KnowledgeCard['type'] {
+  const allowed = new Set<KnowledgeCard['type']>(['concept', 'method', 'case', 'question', 'step', 'viewpoint']);
+  return type && allowed.has(type) ? type : 'concept';
+}
+
+async function generateKnowledge(
+  task: 'knowledge_base_skeleton' | 'material_summary' | 'knowledge_cards' | 'question_answer',
+  prompt: string,
+  context: Record<string, unknown>,
+) {
+  return piRuntime.completeStructured<GeneratedKnowledgeOutput, typeof generationSchema>({
+    task,
+    prompt,
+    schema: generationSchema,
+    context,
+  });
+}
+
+export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeResult> {
   const value = request.input.trim();
   if (!value) {
     throw new Error('Input is required.');
@@ -627,28 +699,48 @@ export function intakeKnowledge(request: IntakeRequest): IntakeResult {
   const workflow = kind === 'question' ? 'answer_question' : kind === 'theme' ? 'create_knowledge_base' : 'ingest_material';
   const task = createTask(workflow, { input: value, knowledgeBaseId: request.knowledgeBaseId });
 
-  const base = kind === 'theme'
-    ? createKnowledgeBase(compactTitle(value), `围绕「${compactTitle(value)}」生成的知识库骨架。`)
-    : (request.knowledgeBaseId ? repository.findKnowledgeBase(request.knowledgeBaseId) : undefined) ?? upsertDefaultKnowledgeBase(value);
+  let base: KnowledgeBaseSummary | undefined;
+  let material: MaterialRecord | undefined;
+  if (kind !== 'theme') {
+    base = (request.knowledgeBaseId ? repository.findKnowledgeBase(request.knowledgeBaseId) : undefined) ?? upsertDefaultKnowledgeBase(value);
+    material = createMaterial(base, request, kind === 'link' ? 'link' : kind === 'question' ? 'question' : 'text');
+  }
 
-  const material = kind === 'theme'
-    ? undefined
-    : createMaterial(base, request, kind === 'link' ? 'link' : kind === 'question' ? 'question' : 'text');
+  const generation = await generateKnowledge(
+    kind === 'theme' ? 'knowledge_base_skeleton' : kind === 'question' ? 'question_answer' : kind === 'text' ? 'knowledge_cards' : 'material_summary',
+    value,
+    {
+      kind,
+      knowledgeBaseId: base?.id,
+      materialId: material?.id,
+      hasSourceMaterial: Boolean(material),
+      parseStatus: material?.parseStatus,
+    },
+  );
+  const generated = generation.output;
 
-  const cards = createCards(base, material, value);
-  const artifact = createArtifact(base, material, value);
+  const knowledgeBase = base ?? createKnowledgeBase(
+    compactTitle(generated.title ?? value),
+    generated.summary ?? `围绕「${compactTitle(value)}」生成的知识库骨架。`,
+  );
+
+  const cards = createCards(knowledgeBase, material, value, generated.cards);
+  const artifact = createArtifact(knowledgeBase, material, value, generated);
 
   finishTask(task, {
     kind,
-    knowledgeBaseId: base.id,
+    knowledgeBaseId: knowledgeBase.id,
     materialId: material?.id,
     cardIds: cards.map((card) => card.id),
     artifactId: artifact.id,
+    generationProvider: generation.provider,
+    generationModel: generation.model,
+    generationFallbackReason: generation.fallbackReason,
   });
 
   return {
     kind,
-    knowledgeBase: base,
+    knowledgeBase,
     material,
     cards,
     task,
