@@ -80,6 +80,8 @@ export interface StructuredGenerationRequest<TSchemaInput = unknown> {
   context?: Record<string, unknown>;
 }
 
+type StructuredGenerationTask = StructuredGenerationRequest['task'];
+
 export interface StructuredGenerationResult<TOutput = unknown> {
   output: TOutput;
   provider: 'mock' | 'pi-ai';
@@ -144,10 +146,12 @@ const defaultModel = 'gpt-4o-mini';
 export function createMockPiRuntime(): PiRuntime {
   return {
     async completeStructured<TOutput>(request: StructuredGenerationRequest): Promise<StructuredGenerationResult<TOutput>> {
+      const output = mockOutputFor(request);
+      validateStructuredOutput(request.task, output);
       return {
         provider: 'mock',
         model: 'mock-local',
-        output: mockOutputFor(request) as TOutput,
+        output: output as TOutput,
         usage: {
           inputTokens: request.prompt.length,
           outputTokens: 96,
@@ -207,6 +211,7 @@ export function createPiAiRuntime(config: PiAiRuntimeConfig = {}): PiRuntime {
           maxTokens: config.maxTokens ?? 1200,
         });
         const output = parseStructuredJson<TOutput>(response);
+        validateStructuredOutput(request.task, output);
         return {
           provider: 'pi-ai',
           model: `${provider}/${modelId}`,
@@ -370,6 +375,83 @@ function parseStructuredJson<TOutput>(response: AssistantMessage): TOutput {
   const text = textFromMessage(response);
   const json = extractJson(text);
   return JSON.parse(json) as TOutput;
+}
+
+export class StructuredOutputValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StructuredOutputValidationError';
+  }
+}
+
+export function validateStructuredOutput(task: StructuredGenerationTask, output: unknown): void {
+  const value = requirePlainObject(output, task);
+
+  if (task === 'knowledge_base_skeleton') {
+    requireNonEmptyString(value.title, `${task}.title`);
+    requireNonEmptyString(value.summary, `${task}.summary`);
+    validateCards(value.cards, `${task}.cards`);
+    validateOptionalString(value.artifactTitle, `${task}.artifactTitle`);
+    validateOptionalString(value.artifactBody, `${task}.artifactBody`);
+    return;
+  }
+
+  if (task === 'material_summary' || task === 'question_answer') {
+    requireNonEmptyString(value.summary, `${task}.summary`);
+    validateCards(value.cards, `${task}.cards`);
+    validateOptionalString(value.artifactTitle, `${task}.artifactTitle`);
+    validateOptionalString(value.artifactBody, `${task}.artifactBody`);
+    validateOptionalCitationScope(value.citationScope, `${task}.citationScope`);
+    return;
+  }
+
+  validateCards(value.cards, `${task}.cards`);
+}
+
+const allowedCardTypes = new Set(['concept', 'method', 'case', 'question', 'step', 'viewpoint']);
+
+function requirePlainObject(value: unknown, path: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new StructuredOutputValidationError(`${path} must be a JSON object.`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function validateCards(value: unknown, path: string): void {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new StructuredOutputValidationError(`${path} must contain at least one card.`);
+  }
+  value.forEach((card, index) => validateCard(card, `${path}[${index}]`));
+}
+
+function validateCard(value: unknown, path: string): void {
+  const card = requirePlainObject(value, path);
+  requireNonEmptyString(card.title, `${path}.title`);
+  requireNonEmptyString(card.body, `${path}.body`);
+  if (card.type !== undefined && (typeof card.type !== 'string' || !allowedCardTypes.has(card.type))) {
+    throw new StructuredOutputValidationError(`${path}.type must be one of the supported card types.`);
+  }
+  validateOptionalCitationScope(card.citationScope, `${path}.citationScope`);
+}
+
+function validateOptionalCitationScope(value: unknown, path: string): void {
+  if (value === undefined) return;
+  const citation = requirePlainObject(value, path);
+  validateOptionalString(citation.materialId, `${path}.materialId`);
+  validateOptionalString(citation.sourceUrl, `${path}.sourceUrl`);
+  validateOptionalString(citation.quote, `${path}.quote`);
+  validateOptionalString(citation.note, `${path}.note`);
+}
+
+function validateOptionalString(value: unknown, path: string): void {
+  if (value === undefined) return;
+  requireNonEmptyString(value, path);
+}
+
+function requireNonEmptyString(value: unknown, path: string): void {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new StructuredOutputValidationError(`${path} must be a non-empty string.`);
+  }
 }
 
 function extractJson(text: string) {
