@@ -8,7 +8,9 @@ import {
   type KnowledgeBaseDetail,
   type KnowledgeBaseSummary,
   type KnowledgeCard,
+  type MaterialParseQueueResult,
   type MaterialRecord,
+  type TaskStatus,
   detectPlatform,
 } from '@zhijing/shared';
 import {
@@ -37,6 +39,8 @@ type KnowledgeRepository = {
   listKnowledgeBases(): KnowledgeBaseSummary[];
   findKnowledgeBase(id: string): KnowledgeBaseSummary | undefined;
   insertMaterial(material: MaterialRecord): void;
+  updateMaterial(material: MaterialRecord): void;
+  findMaterial(id: string): MaterialRecord | undefined;
   listMaterials(knowledgeBaseId?: string, limit?: number): MaterialRecord[];
   insertCards(cards: KnowledgeCard[]): void;
   listCards(knowledgeBaseId?: string): KnowledgeCard[];
@@ -90,6 +94,15 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
 
   insertMaterial(material: MaterialRecord) {
     this.state.materials.unshift(material);
+  }
+
+  updateMaterial(material: MaterialRecord) {
+    const index = this.state.materials.findIndex((item) => item.id === material.id);
+    if (index >= 0) this.state.materials[index] = material;
+  }
+
+  findMaterial(id: string) {
+    return this.state.materials.find((item) => item.id === id);
   }
 
   listMaterials(knowledgeBaseId?: string, limit?: number) {
@@ -251,6 +264,31 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       material.parseError ?? null,
       material.createdAt,
     );
+  }
+
+  updateMaterial(material: MaterialRecord) {
+    this.db.prepare(`
+      UPDATE materials
+      SET knowledge_base_id = ?, type = ?, raw_input = ?, source_url = ?, platform = ?, title = ?, content_text = ?, parse_status = ?, parse_error = ?, created_at = ?
+      WHERE id = ?
+    `).run(
+      material.knowledgeBaseId,
+      material.type,
+      material.rawInput,
+      material.sourceUrl ?? null,
+      material.platform ?? null,
+      material.title,
+      material.contentText ?? null,
+      material.parseStatus,
+      material.parseError ?? null,
+      material.createdAt,
+      material.id,
+    );
+  }
+
+  findMaterial(id: string) {
+    const row = this.db.prepare('SELECT * FROM materials WHERE id = ?').get(id) as MaterialRow | undefined;
+    return row ? mapMaterial(row) : undefined;
   }
 
   listMaterials(knowledgeBaseId?: string, limit?: number) {
@@ -497,6 +535,16 @@ export function configurePiRuntime(nextRuntime: PiRuntime) {
   piRuntime = nextRuntime;
 }
 
+export class KnowledgeCoreError extends Error {
+  constructor(
+    message: string,
+    readonly statusCode: number,
+  ) {
+    super(message);
+    this.name = 'KnowledgeCoreError';
+  }
+}
+
 function now() {
   return new Date().toISOString();
 }
@@ -520,12 +568,12 @@ function titleFromLink(input: string) {
   }
 }
 
-function createTask(workflow: AgentTask['workflow'], input: Record<string, unknown>) {
+function createTask(workflow: AgentTask['workflow'], input: Record<string, unknown>, status: TaskStatus = 'running') {
   const timestamp = now();
   const task: AgentTask = {
     id: id('task'),
     workflow,
-    status: 'running',
+    status,
     input,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -775,6 +823,147 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
     failTask(task, error);
     throw error;
   }
+}
+
+export function requestMaterialParsing(materialId: string): MaterialParseQueueResult {
+  const material = requireLinkMaterial(materialId);
+  const activeTask = findActiveParseTask(material.id);
+  if (activeTask) {
+    if (material.parseStatus !== 'parsing') {
+      material.parseStatus = 'parsing';
+      material.parseError = undefined;
+      repository.updateMaterial(material);
+      touchKnowledgeBase(material.knowledgeBaseId);
+    }
+    return {
+      material,
+      task: activeTask,
+      queued: false,
+      retry: false,
+      message: '链接解析已在队列中。',
+    };
+  }
+
+  const previousStatus = material.parseStatus;
+  material.parseStatus = 'parsing';
+  material.parseError = undefined;
+  repository.updateMaterial(material);
+  touchKnowledgeBase(material.knowledgeBaseId);
+
+  const retry = previousStatus === 'failed' || previousStatus === 'needs_review';
+  const task = createTask(
+    'parse_material',
+    {
+      materialId: material.id,
+      knowledgeBaseId: material.knowledgeBaseId,
+      sourceUrl: material.sourceUrl,
+      platform: material.platform,
+      previousParseStatus: previousStatus,
+    },
+    'queued',
+  );
+  task.output = {
+    materialId: material.id,
+    parseStatus: material.parseStatus,
+    queueState: 'queued',
+    retry,
+  };
+  repository.updateTask(task);
+
+  return {
+    material,
+    task,
+    queued: true,
+    retry,
+    message: retry ? '链接解析已重新加入队列。' : '链接解析已加入队列。',
+  };
+}
+
+export function recordMaterialParsingFailure(
+  materialId: string,
+  errorMessage: string,
+  taskId?: string,
+): MaterialParseQueueResult {
+  const material = requireLinkMaterial(materialId);
+  const task = taskId ? requireParseTask(taskId, material.id) : findActiveParseTask(material.id) ?? createTask(
+    'parse_material',
+    {
+      materialId: material.id,
+      knowledgeBaseId: material.knowledgeBaseId,
+      sourceUrl: material.sourceUrl,
+      platform: material.platform,
+      previousParseStatus: material.parseStatus,
+    },
+  );
+  const parseError = cleanParseError(errorMessage);
+
+  material.parseStatus = 'failed';
+  material.parseError = parseError;
+  repository.updateMaterial(material);
+  touchKnowledgeBase(material.knowledgeBaseId);
+
+  task.status = 'failed';
+  task.error = parseError;
+  task.output = {
+    materialId: material.id,
+    parseStatus: material.parseStatus,
+    queueState: 'failed',
+  };
+  task.updatedAt = now();
+  repository.updateTask(task);
+
+  return {
+    material,
+    task,
+    queued: false,
+    retry: false,
+    message: '解析失败已记录，可稍后重试。',
+  };
+}
+
+function requireLinkMaterial(materialId: string) {
+  const material = repository.findMaterial(materialId);
+  if (!material) {
+    throw new KnowledgeCoreError('Material not found.', 404);
+  }
+  if (material.type !== 'link') {
+    throw new KnowledgeCoreError('Only link materials can be parsed through this endpoint.', 400);
+  }
+  return material;
+}
+
+function requireParseTask(taskId: string, materialId: string) {
+  const task = repository.findTask(taskId);
+  if (!task) {
+    throw new KnowledgeCoreError('Parse task not found.', 404);
+  }
+  if (!isParseTaskForMaterial(task, materialId)) {
+    throw new KnowledgeCoreError('Parse task does not belong to this material.', 400);
+  }
+  return task;
+}
+
+function findActiveParseTask(materialId: string) {
+  return repository.listTasks().find((task) => (
+    isParseTaskForMaterial(task, materialId)
+    && (task.status === 'queued' || task.status === 'running')
+  ));
+}
+
+function isParseTaskForMaterial(task: AgentTask, materialId: string) {
+  return task.workflow === 'parse_material' && task.input.materialId === materialId;
+}
+
+function cleanParseError(errorMessage: string) {
+  const trimmed = errorMessage.trim();
+  return (trimmed || 'Material parsing failed.').slice(0, 500);
+}
+
+function touchKnowledgeBase(knowledgeBaseId: string) {
+  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  if (!base) return;
+  base.updatedAt = now();
+  repository.updateKnowledgeBase(base);
 }
 
 export function listKnowledgeBases() {

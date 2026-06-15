@@ -57,7 +57,7 @@ export interface KnowledgeCard {
 
 export interface AgentTask {
   id: string;
-  workflow: 'create_knowledge_base' | 'ingest_material' | 'answer_question';
+  workflow: 'create_knowledge_base' | 'ingest_material' | 'answer_question' | 'parse_material';
   status: TaskStatus;
   input: Record<string, unknown>;
   output?: Record<string, unknown>;
@@ -83,6 +83,14 @@ export interface IntakeResult {
   cards: KnowledgeCard[];
   task: AgentTask;
   artifact?: ArtifactRecord;
+  message: string;
+}
+
+export interface MaterialParseQueueResult {
+  material: MaterialRecord;
+  task: AgentTask;
+  queued: boolean;
+  retry: boolean;
   message: string;
 }
 

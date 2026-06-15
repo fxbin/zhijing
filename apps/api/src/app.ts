@@ -6,7 +6,10 @@ import {
   getKnowledgeBase,
   getTask,
   intakeKnowledge,
+  KnowledgeCoreError,
   listKnowledgeBases,
+  recordMaterialParsingFailure,
+  requestMaterialParsing,
 } from '@zhijing/core';
 import type { IntakeRequest } from '@zhijing/shared';
 
@@ -61,6 +64,34 @@ export function buildApi() {
       return reply.code(404).send({ error: 'Task not found.' });
     }
     return task;
+  });
+
+  app.post<{ Params: { id: string } }>('/api/materials/:id/parse', async (request, reply) => {
+    try {
+      return requestMaterialParsing(request.params.id);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'material parse queue failed');
+      return reply.code(500).send({ error: 'Material parse queue failed.' });
+    }
+  });
+
+  app.post<{ Params: { id: string }; Body: { taskId?: string; error?: string } }>('/api/materials/:id/parse/failure', async (request, reply) => {
+    try {
+      return recordMaterialParsingFailure(
+        request.params.id,
+        typeof request.body?.error === 'string' ? request.body.error : 'Material parsing failed.',
+        typeof request.body?.taskId === 'string' ? request.body.taskId : undefined,
+      );
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'material parse failure report failed');
+      return reply.code(500).send({ error: 'Material parse failure report failed.' });
+    }
   });
 
   app.post<{ Body: Partial<IntakeRequest> }>('/api/intake', async (request, reply) => {
