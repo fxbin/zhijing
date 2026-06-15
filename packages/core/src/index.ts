@@ -704,6 +704,26 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
       material = createMaterial(base, request, kind === 'link' ? 'link' : kind === 'question' ? 'question' : 'text');
     }
 
+    if (kind === 'link' && base && material) {
+      finishTask(task, {
+        kind,
+        knowledgeBaseId: base.id,
+        materialId: material.id,
+        parseStatus: material.parseStatus,
+        platform: material.platform,
+        sourceUrl: material.sourceUrl,
+      });
+
+      return {
+        kind,
+        knowledgeBase: base,
+        material,
+        cards: [],
+        task,
+        message: '链接已保存，等待正文补充或后续解析。',
+      };
+    }
+
     const generation = await generateKnowledge(
       kind === 'theme' ? 'knowledge_base_skeleton' : kind === 'question' ? 'question_answer' : 'material_summary',
       value,
