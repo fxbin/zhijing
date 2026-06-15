@@ -998,21 +998,135 @@ button { cursor: pointer; }
 .assistant-panel {
   position: sticky;
   top: 88px;
+  display: grid;
+  gap: 16px;
   align-self: start;
   padding: 24px;
 }
 
 .assistant-panel h3 {
-  margin-top: 0;
+  margin: 0;
 }
 
 .chat-user {
-  margin: 18px 0;
-  border-radius: 12px;
+  justify-self: end;
+  max-width: 92%;
+  margin: 0;
+  border-radius: 12px 12px 3px 12px;
   background: var(--primary);
   color: white;
   padding: 14px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.assistant-thread {
+  display: grid;
+  gap: 12px;
+}
+
+.assistant-message {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px 12px 12px 3px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 14px;
+}
+
+.assistant-message svg {
+  margin-top: 2px;
+  color: var(--sage-text);
+}
+
+.assistant-message p {
+  margin: 0;
+}
+
+.assistant-message.pending svg {
+  color: var(--muted);
+}
+
+.assistant-message.failed {
+  border-color: #f3aaa3;
+  background: rgba(255, 218, 214, 0.42);
+}
+
+.assistant-message.failed svg {
+  color: var(--error);
+}
+
+.answer-card-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.answer-card-list article {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 10px;
+}
+
+.answer-card-list span {
+  color: var(--sage-text);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.answer-card-list strong {
+  color: var(--primary);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.assistant-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 7px;
+}
+
+.assistant-input:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(216, 227, 251, 0.72);
+}
+
+.assistant-input input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--primary);
+  padding: 0 8px;
+}
+
+.assistant-input input:disabled {
+  color: var(--muted);
+}
+
+.assistant-input button {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--primary);
+  color: white;
+}
+
+.assistant-input button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .filter-bar {

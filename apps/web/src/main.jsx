@@ -15,6 +15,7 @@ import {
   Network,
   Plus,
   Search,
+  Send,
   Settings,
   Sparkles,
   SquareArrowOutUpRight,
@@ -163,6 +164,9 @@ function App() {
   const [latestTaskId, setLatestTaskId] = useState(null);
   const [latestTask, setLatestTask] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [assistantQuestion, setAssistantQuestion] = useState('');
+  const [assistantAnswer, setAssistantAnswer] = useState(null);
+  const [isAsking, setIsAsking] = useState(false);
   const kind = useMemo(() => (query.trim() ? classifyInput(query.trim()) : 'Theme, Link, or Question'), [query]);
 
   useEffect(() => {
@@ -210,6 +214,8 @@ function App() {
   useEffect(() => {
     if (!selectedKnowledgeBaseId) {
       setKnowledgeBaseDetail(apiStatus === 'online' ? emptyDetail() : fallbackDetail());
+      setAssistantAnswer(null);
+      setAssistantQuestion('');
       return;
     }
 
@@ -229,6 +235,11 @@ function App() {
       ignore = true;
     };
   }, [apiStatus, selectedKnowledgeBaseId]);
+
+  useEffect(() => {
+    setAssistantAnswer(null);
+    setAssistantQuestion('');
+  }, [selectedKnowledgeBaseId]);
 
   useEffect(() => {
     if (!latestTaskId) return undefined;
@@ -311,6 +322,62 @@ function App() {
       setActivity('API is not ready. Keep the idea here and start dev:api to run the real intake loop.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const askKnowledgeBase = async () => {
+    const value = assistantQuestion.trim();
+    if (!value || !selectedKnowledgeBaseId || apiStatus !== 'online' || isAsking) return;
+    setIsAsking(true);
+    setAssistantAnswer({ question: value, loading: true });
+    setActivity('Asking current knowledge base...');
+
+    try {
+      const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: value }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Knowledge base ask failed.');
+      }
+
+      const result = await response.json();
+      setActivity(`${result.message} Task ${result.task.id} finished.`);
+      setLatestTaskId(result.task.id);
+      setLatestTask(result.task);
+      setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
+      setKnowledgeBases((current) => {
+        const withoutDuplicate = current.filter((base) => base.id !== result.knowledgeBase.id);
+        return [result.knowledgeBase, ...withoutDuplicate];
+      });
+      setKnowledgeBaseDetail((current) => ({
+        ...current,
+        ...result.knowledgeBase,
+        materials: result.material
+          ? [result.material, ...(current.materials ?? []).filter((material) => material.id !== result.material.id)]
+          : current.materials ?? [],
+        cards: [...(result.cards ?? []), ...(current.cards ?? []).filter((card) => !(result.cards ?? []).some((item) => item.id === card.id))],
+        artifacts: result.artifact
+          ? [result.artifact, ...(current.artifacts ?? []).filter((artifact) => artifact.id !== result.artifact.id)]
+          : current.artifacts ?? [],
+      }));
+      setAssistantAnswer({
+        question: value,
+        message: result.message,
+        cards: result.cards ?? [],
+        artifact: result.artifact,
+        task: result.task,
+      });
+      setAssistantQuestion('');
+    } catch {
+      setAssistantAnswer({
+        question: value,
+        error: '当前无法完成提问，请确认 API 已启动且知识库可用。',
+      });
+    } finally {
+      setIsAsking(false);
     }
   };
 
@@ -398,7 +465,20 @@ function App() {
           {apiStatus === 'offline' && <SystemNotice status="offline" />}
           {view === 'workspace' && <WorkspaceView activity={activity} isSubmitting={isSubmitting} latestTask={latestTask} materials={materials} query={query} setQuery={setQuery} submit={submit} />}
           {view === 'workspace' && <TaskList tasks={tasks} />}
-          {view === 'detail' && <DetailView detail={knowledgeBaseDetail} latestTask={latestTask} setView={go} />}
+          {view === 'detail' && (
+            <DetailView
+              apiStatus={apiStatus}
+              assistantAnswer={assistantAnswer}
+              assistantQuestion={assistantQuestion}
+              detail={knowledgeBaseDetail}
+              isAsking={isAsking}
+              latestTask={latestTask}
+              onAsk={askKnowledgeBase}
+              selectedKnowledgeBaseId={selectedKnowledgeBaseId}
+              setAssistantQuestion={setAssistantQuestion}
+              setView={go}
+            />
+          )}
           {view === 'library' && <LibraryView />}
           {view === 'search' && <SearchView />}
           {view === 'kits' && <KitView setView={go} />}
@@ -561,11 +641,24 @@ function KnowledgeMapPanel() {
   );
 }
 
-function DetailView({ detail, latestTask, setView }) {
+function DetailView({
+  apiStatus,
+  assistantAnswer,
+  assistantQuestion,
+  detail,
+  isAsking,
+  latestTask,
+  onAsk,
+  selectedKnowledgeBaseId,
+  setAssistantQuestion,
+  setView,
+}) {
   const cards = detail.cards ?? [];
   const materials = detail.materials ?? [];
   const artifacts = detail.artifacts ?? [];
   const roadmapCards = cards.slice(0, 4);
+  const canAsk = apiStatus === 'online' && Boolean(selectedKnowledgeBaseId) && !isAsking;
+  const latestAnswerCards = assistantAnswer?.cards?.slice(0, 2) ?? [];
 
   return (
     <section className="page-grid">
@@ -619,8 +712,48 @@ function DetailView({ detail, latestTask, setView }) {
         <h3>AI Assistant</h3>
         <p>当前知识库有 {detail.sourceCount ?? materials.length} 条资料、{detail.cardCount ?? cards.length} 张卡片。</p>
         <TaskStatus task={latestTask} />
-        <div className="chat-user">下一步应该补充哪些来源？</div>
-        <p>{artifacts[0]?.body ?? '目前是本地 mock generation 结果，Phase 2 会切换到 Pi 结构化生成。'}</p>
+        <div className="assistant-thread">
+          <div className="assistant-message">
+            <Sparkles size={19} />
+            <p>{artifacts[0]?.body ?? '我会基于当前知识库里的资料和卡片回答问题。'}</p>
+          </div>
+          {assistantAnswer?.question && <div className="chat-user">{assistantAnswer.question}</div>}
+          {assistantAnswer?.loading && <div className="assistant-message pending"><Clock3 size={19} /><p>正在整理当前知识库里的资料和卡片...</p></div>}
+          {assistantAnswer?.error && <div className="assistant-message failed"><CircleX size={19} /><p>{assistantAnswer.error}</p></div>}
+          {assistantAnswer?.message && (
+            <div className="assistant-message">
+              <Sparkles size={19} />
+              <div>
+                <p>{assistantAnswer.artifact?.body ?? assistantAnswer.message}</p>
+                {latestAnswerCards.length > 0 && (
+                  <div className="answer-card-list">
+                    {latestAnswerCards.map((card) => (
+                      <article key={card.id ?? card.title}>
+                        <span>{card.type}</span>
+                        <strong>{card.title}</strong>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="assistant-input">
+          <input
+            aria-label="向当前知识库提问"
+            disabled={!canAsk}
+            onChange={(event) => setAssistantQuestion(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') onAsk();
+            }}
+            placeholder={apiStatus === 'online' && selectedKnowledgeBaseId ? 'Ask this knowledge base...' : 'Select a synced knowledge base first'}
+            value={assistantQuestion}
+          />
+          <button disabled={!canAsk || !assistantQuestion.trim()} onClick={onAsk} title="Ask" type="button">
+            <Send size={18} />
+          </button>
+        </div>
       </aside>
     </section>
   );
