@@ -171,6 +171,7 @@ function App() {
   const [assistantAnswer, setAssistantAnswer] = useState(null);
   const [isAsking, setIsAsking] = useState(false);
   const [selectedArtifact, setSelectedArtifact] = useState(null);
+  const [parsingMaterialId, setParsingMaterialId] = useState(null);
   const kind = useMemo(() => (query.trim() ? classifyInput(query.trim()) : 'Theme, Link, or Question'), [query]);
 
   useEffect(() => {
@@ -392,6 +393,43 @@ function App() {
     go('artifact');
   };
 
+  const parseMaterial = async (materialId) => {
+    if (!materialId || parsingMaterialId) return;
+    setParsingMaterialId(materialId);
+    setActivity('Parsing saved source material...');
+
+    try {
+      const response = await fetch(`/api/materials/${materialId}/parse`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        throw new Error('Material parsing failed.');
+      }
+      const result = await response.json();
+      setActivity(result.message);
+      setLatestTaskId(result.task.id);
+      setLatestTask(result.task);
+      setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
+      setKnowledgeBaseDetail((current) => ({
+        ...current,
+        ...(result.knowledgeBase ?? {}),
+        materials: [result.material, ...(current.materials ?? []).filter((material) => material.id !== result.material.id)],
+        cards: [...(result.cards ?? []), ...(current.cards ?? []).filter((card) => !(result.cards ?? []).some((item) => item.id === card.id))],
+        artifacts: result.artifact
+          ? [result.artifact, ...(current.artifacts ?? []).filter((artifact) => artifact.id !== result.artifact.id)]
+          : current.artifacts ?? [],
+      }));
+      setKnowledgeBases((current) => result.knowledgeBase
+        ? [result.knowledgeBase, ...current.filter((base) => base.id !== result.knowledgeBase.id)]
+        : current);
+      if (result.artifact) setSelectedArtifact(result.artifact);
+    } catch {
+      setActivity('解析失败，原链接仍已保留，可稍后重试或手动补充正文。');
+    } finally {
+      setParsingMaterialId(null);
+    }
+  };
+
   const navItems = [
     { key: 'detail', label: 'Knowledge Base', icon: Database },
     { key: 'library', label: 'Library', icon: FolderOpen },
@@ -486,6 +524,8 @@ function App() {
               latestTask={latestTask}
               onAsk={askKnowledgeBase}
               onOpenArtifact={openArtifact}
+              onParseMaterial={parseMaterial}
+              parsingMaterialId={parsingMaterialId}
               selectedKnowledgeBaseId={selectedKnowledgeBaseId}
               setAssistantQuestion={setAssistantQuestion}
               setView={go}
@@ -662,6 +702,8 @@ function DetailView({
   latestTask,
   onAsk,
   onOpenArtifact,
+  onParseMaterial,
+  parsingMaterialId,
   selectedKnowledgeBaseId,
   setAssistantQuestion,
   setView,
@@ -717,6 +759,15 @@ function DetailView({
                   <strong>{material.title}</strong>
                   <span>{material.platform ?? material.type ?? 'material'} · {material.parseStatus ?? 'saved'}</span>
                 </div>
+                {material.type === 'link' && (
+                  <button
+                    disabled={parsingMaterialId === material.id || material.parseStatus === 'parsing' || material.parseStatus === 'ingested'}
+                    onClick={() => onParseMaterial(material.id)}
+                    type="button"
+                  >
+                    {material.parseStatus === 'failed' ? 'Retry' : material.parseStatus === 'ingested' ? 'Parsed' : 'Parse'}
+                  </button>
+                )}
               </article>
             ))}
           </section>

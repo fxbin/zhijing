@@ -137,6 +137,9 @@ export interface IntakeResult {
 export interface MaterialParseQueueResult {
   material: MaterialRecord;
   task: AgentTask;
+  knowledgeBase?: KnowledgeBaseSummary;
+  cards?: KnowledgeCard[];
+  artifact?: ArtifactRecord;
   queued: boolean;
   retry: boolean;
   message: string;

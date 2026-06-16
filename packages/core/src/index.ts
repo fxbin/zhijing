@@ -1175,8 +1175,131 @@ function compactPreview(input: string) {
   return cleaned.length > 160 ? `${cleaned.slice(0, 160)}...` : cleaned;
 }
 
-export function requestMaterialParsing(materialId: string): MaterialParseQueueResult {
+export async function requestMaterialParsing(materialId: string): Promise<MaterialParseQueueResult> {
   const material = requireLinkMaterial(materialId);
+  if (!canParseAsOrdinaryWeb(material)) {
+    return queueMaterialParsing(material);
+  }
+
+  const activeTask = findActiveParseTask(material.id);
+  if (activeTask) {
+    if (material.parseStatus !== 'parsing') {
+      material.parseStatus = 'parsing';
+      material.parseError = undefined;
+      repository.updateMaterial(material);
+      touchKnowledgeBase(material.knowledgeBaseId);
+    }
+    return {
+      material,
+      task: activeTask,
+      queued: false,
+      retry: false,
+      message: '链接解析已在队列中。',
+    };
+  }
+
+  if (material.parseStatus === 'ingested' && material.contentText) {
+    const task = createTask(
+      'parse_material',
+      {
+        materialId: material.id,
+        knowledgeBaseId: material.knowledgeBaseId,
+        sourceUrl: material.sourceUrl,
+        platform: material.platform,
+        previousParseStatus: material.parseStatus,
+      },
+      'succeeded',
+    );
+    finishTask(task, {
+      materialId: material.id,
+      parseStatus: material.parseStatus,
+      queueState: 'already_ingested',
+      contentLength: material.contentText.length,
+    });
+    return {
+      material,
+      task,
+      queued: false,
+      retry: false,
+      message: '链接资料已解析，无需重复处理。',
+    };
+  }
+
+  const previousStatus = material.parseStatus;
+  material.parseStatus = 'parsing';
+  material.parseError = undefined;
+  repository.updateMaterial(material);
+  touchKnowledgeBase(material.knowledgeBaseId);
+
+  const retry = previousStatus === 'failed' || previousStatus === 'needs_review';
+  const task = createTask(
+    'parse_material',
+    {
+      materialId: material.id,
+      knowledgeBaseId: material.knowledgeBaseId,
+      sourceUrl: material.sourceUrl,
+      platform: material.platform,
+      previousParseStatus: previousStatus,
+    },
+    'running',
+  );
+
+  try {
+    const parsed = await parseOrdinaryWebMaterial(material);
+    material.title = parsed.title ? compactTitle(parsed.title) : material.title;
+    material.contentText = parsed.text;
+    material.parseStatus = 'ingested';
+    material.parseError = undefined;
+    repository.updateMaterial(material);
+
+    const base = repository.findKnowledgeBase(material.knowledgeBaseId);
+    if (!base) {
+      throw new KnowledgeCoreError('Knowledge base not found.', 404);
+    }
+
+    const generation = await generateKnowledge('material_summary', parsed.text, {
+      kind: 'link',
+      knowledgeBaseId: base.id,
+      materialId: material.id,
+      hasSourceMaterial: true,
+      parseStatus: material.parseStatus,
+      sourceUrl: material.sourceUrl,
+      parsedTitle: parsed.title,
+      contentLength: parsed.text.length,
+    });
+    const generated = generation.output;
+    const cards = createCards(base, material, parsed.text, generated.cards);
+    const artifact = createArtifact(base, material, parsed.text, generated);
+
+    finishTask(task, {
+      materialId: material.id,
+      parseStatus: material.parseStatus,
+      queueState: 'completed',
+      retry,
+      contentLength: parsed.text.length,
+      cardIds: cards.map((card) => card.id),
+      artifactId: artifact.id,
+      generationProvider: generation.provider,
+      generationModel: generation.model,
+      generationFallbackReason: generation.fallbackReason,
+    });
+
+    return {
+      material,
+      task,
+      knowledgeBase: base,
+      cards,
+      artifact,
+      queued: false,
+      retry,
+      message: '普通网页已解析并生成知识卡片。',
+    };
+  } catch (error) {
+    return failMaterialParsingTask(material, task, error);
+  }
+}
+
+function queueMaterialParsing(material: MaterialRecord): MaterialParseQueueResult {
   const activeTask = findActiveParseTask(material.id);
   if (activeTask) {
     if (material.parseStatus !== 'parsing') {
@@ -1268,6 +1391,192 @@ export function recordMaterialParsingFailure(
     queued: false,
     retry: false,
     message: '解析失败已记录，可稍后重试。',
+  };
+}
+
+function canParseAsOrdinaryWeb(material: MaterialRecord) {
+  return material.platform === 'web' || material.platform === undefined;
+}
+
+async function parseOrdinaryWebMaterial(material: MaterialRecord) {
+  const sourceUrl = material.sourceUrl;
+  if (!sourceUrl) {
+    throw new KnowledgeCoreError('Material source URL is required for parsing.', 400);
+  }
+
+  const url = new URL(sourceUrl);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new KnowledgeCoreError('Only http and https URLs can be parsed.', 400);
+  }
+
+  const jinaParsed = await tryParseWithJinaReader(sourceUrl);
+  if (jinaParsed) return jinaParsed;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      redirect: 'follow',
+      headers: {
+        accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8',
+        'user-agent': 'ZhijingBot/0.1 (+https://local.zhijing.app)',
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Web parser received HTTP ${response.status}.`);
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    const raw = await response.text();
+    const limited = raw.slice(0, 500_000);
+    const parsed = contentType.includes('text/plain')
+      ? { title: titleFromLink(sourceUrl), text: cleanText(decodeHtmlEntities(limited)) }
+      : extractReadableText(limited, titleFromLink(sourceUrl));
+
+    if (parsed.text.length < 120) {
+      throw new Error('Parsed web content is too short for a reliable summary.');
+    }
+
+    return {
+      title: parsed.title,
+      text: parsed.text.slice(0, 18_000),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function tryParseWithJinaReader(sourceUrl: string) {
+  const readerUrl = `${jinaReaderBaseUrl()}${sourceUrl}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const headers: Record<string, string> = {
+      accept: 'text/plain;charset=utf-8',
+    };
+    if (process.env.JINA_API_KEY) {
+      headers.authorization = `Bearer ${process.env.JINA_API_KEY}`;
+    }
+
+    const response = await fetch(readerUrl, {
+      signal: controller.signal,
+      redirect: 'follow',
+      headers,
+    });
+    if (!response.ok) return undefined;
+
+    const markdown = cleanText(await response.text());
+    const title = extractJinaMarkdownTitle(markdown) || titleFromLink(sourceUrl);
+    const text = stripJinaMarkdownMetadata(markdown);
+    if (text.length < 120) return undefined;
+
+    return {
+      title,
+      text: text.slice(0, 18_000),
+    };
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function jinaReaderBaseUrl() {
+  const baseUrl = process.env.JINA_READER_BASE_URL ?? 'https://r.jina.ai/';
+  return baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+}
+
+function extractJinaMarkdownTitle(markdown: string) {
+  const explicitTitle = markdown.match(/^Title:\s*(.+)$/im)?.[1];
+  const headingTitle = markdown.match(/^#\s+(.+)$/m)?.[1];
+  return cleanText(explicitTitle ?? headingTitle ?? '');
+}
+
+function stripJinaMarkdownMetadata(markdown: string) {
+  const withoutMetadata = markdown
+    .replace(/^Title:\s*.+$/gim, '')
+    .replace(/^URL Source:\s*.+$/gim, '')
+    .replace(/^Markdown Content:\s*$/gim, '');
+  return cleanText(withoutMetadata);
+}
+
+function extractReadableText(html: string, fallbackTitle: string) {
+  const title = extractHtmlTitle(html) ?? fallbackTitle;
+  const body = html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<svg\b[\s\S]*?<\/svg>/gi, ' ')
+    .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<\/(p|div|section|article|header|footer|li|ul|ol|h[1-6]|blockquote|br)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ');
+  return {
+    title,
+    text: cleanText(decodeHtmlEntities(body)),
+  };
+}
+
+function extractHtmlTitle(html: string) {
+  const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["'][^>]*>/i)?.[1]
+    ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["'][^>]*>/i)?.[1];
+  const title = ogTitle
+    ?? html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]
+    ?? html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1];
+  return title ? cleanText(decodeHtmlEntities(title)) : undefined;
+}
+
+function decodeHtmlEntities(input: string) {
+  return input
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([a-f0-9]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+}
+
+function cleanText(input: string) {
+  return input
+    .replace(/\r/g, '\n')
+    .replace(/[ \t\f\v]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+function failMaterialParsingTask(
+  material: MaterialRecord,
+  task: AgentTask,
+  error: unknown,
+): MaterialParseQueueResult {
+  const parseError = cleanParseError(error instanceof Error ? error.message : 'Material parsing failed.');
+  material.parseStatus = 'failed';
+  material.parseError = parseError;
+  repository.updateMaterial(material);
+  touchKnowledgeBase(material.knowledgeBaseId);
+
+  task.status = 'failed';
+  task.error = parseError;
+  task.output = {
+    materialId: material.id,
+    parseStatus: material.parseStatus,
+    queueState: 'failed',
+  };
+  task.updatedAt = now();
+  repository.updateTask(task);
+
+  return {
+    material,
+    task,
+    queued: false,
+    retry: false,
+    message: '网页解析失败，已保留原链接，可稍后重试或手动补充正文。',
   };
 }
 

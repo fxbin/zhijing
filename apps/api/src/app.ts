@@ -123,7 +123,7 @@ export function buildApi() {
 
   app.post<{ Params: { id: string } }>('/api/materials/:id/parse', async (request, reply) => {
     try {
-      return requestMaterialParsing(request.params.id);
+      return await requestMaterialParsing(request.params.id);
     } catch (error) {
       if (error instanceof KnowledgeCoreError) {
         return reply.code(error.statusCode).send({ error: error.message });
