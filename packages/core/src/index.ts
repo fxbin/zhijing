@@ -8,6 +8,8 @@ import {
   type KnowledgeBaseDetail,
   type KnowledgeBaseSummary,
   type KnowledgeCard,
+  type KnowledgeKitId,
+  type KnowledgeKitRunResult,
   type MaterialParseQueueResult,
   type MaterialRecord,
   type ModelProviderSettings,
@@ -978,6 +980,51 @@ function createArtifact(
   return artifact;
 }
 
+function createKitArtifact(
+  base: KnowledgeBaseSummary,
+  kitId: KnowledgeKitId,
+  sourceMaterialIds: string[],
+  generated: GeneratedKnowledgeOutput,
+) {
+  const timestamp = now();
+  const artifact: ArtifactRecord = {
+    id: id('art'),
+    knowledgeBaseId: base.id,
+    artifactType: 'kit_report',
+    title: compactTitle(generated.artifactTitle ?? `${base.title} ${kitLabel(kitId)}`),
+    body: generated.artifactBody ?? generated.summary ?? buildFallbackKitBody(base, kitId),
+    sourceMaterialIds,
+    createdAt: timestamp,
+  };
+  repository.insertArtifact(artifact);
+  base.stage = sourceMaterialIds.length > 0 ? 'grounded' : 'organizing';
+  base.updatedAt = timestamp;
+  repository.updateKnowledgeBase(base);
+  return artifact;
+}
+
+function kitLabel(kitId: KnowledgeKitId) {
+  if (kitId === 'content_creation') return '内容创作产物';
+  if (kitId === 'product_research') return '产品调研产物';
+  return '学习研究摘要';
+}
+
+function buildFallbackKitBody(base: KnowledgeBaseSummary, kitId: KnowledgeKitId) {
+  return [
+    `# ${base.title}`,
+    '',
+    `已运行「${kitLabel(kitId)}」。`,
+    '',
+    '## 核心摘要',
+    base.summary,
+    '',
+    '## 下一步',
+    '- 补充更多可追溯来源',
+    '- 将核心卡片整理成问题与方法',
+    '- 对低置信内容进行人工复核',
+  ].join('\n');
+}
+
 function normalizeGeneratedCards(cards: GeneratedCard[] | undefined) {
   if (!cards?.length) return [];
   return cards
@@ -1149,6 +1196,95 @@ export async function answerKnowledgeBaseQuestion(knowledgeBaseId: string, quest
     failTask(task, error);
     throw error;
   }
+}
+
+export async function runKnowledgeKit(
+  knowledgeBaseId: string,
+  kitId: KnowledgeKitId = 'learning_research',
+): Promise<KnowledgeKitRunResult> {
+  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  if (!base) {
+    throw new KnowledgeCoreError('Knowledge base not found.', 404);
+  }
+
+  const task = createTask('run_kit', { knowledgeBaseId, kitId });
+
+  try {
+    const context = buildKitContext(base.id);
+    const prompt = [
+      `请基于知识库「${base.title}」运行「${kitLabel(kitId)}」。`,
+      '生成一个可以直接保存为 Markdown 的中文知识管理产物。',
+      '产物需要包含：核心摘要、关键概念、行动步骤、待补证据或待回答问题。',
+      '如果来源不足，请明确标注哪些内容仍是 AI 骨架。',
+    ].join('\n');
+    const generation = await generateKnowledge('question_answer', prompt, {
+      kind: 'kit_run',
+      kitId,
+      knowledgeBaseId: base.id,
+      knowledgeBaseTitle: base.title,
+      knowledgeBaseSummary: base.summary,
+      ...context,
+    });
+    const artifact = createKitArtifact(
+      base,
+      kitId,
+      context.materials.map((material) => material.id),
+      generation.output,
+    );
+
+    finishTask(task, {
+      kind: 'kit_run',
+      kitId,
+      knowledgeBaseId: base.id,
+      artifactId: artifact.id,
+      sourceMaterialCount: context.materials.length,
+      cardCount: context.cards.length,
+      generationProvider: generation.provider,
+      generationModel: generation.model,
+      generationFallbackReason: generation.fallbackReason,
+    });
+
+    return {
+      knowledgeBase: base,
+      artifact,
+      task,
+      message: `${kitLabel(kitId)}已生成。`,
+    };
+  } catch (error) {
+    failTask(task, error);
+    throw error;
+  }
+}
+
+function buildKitContext(knowledgeBaseId: string) {
+  const materials = repository.listMaterials(knowledgeBaseId)
+    .slice(0, 12)
+    .map((material) => ({
+      id: material.id,
+      type: material.type,
+      title: material.title,
+      platform: material.platform,
+      parseStatus: material.parseStatus,
+      sourceUrl: material.sourceUrl,
+      contentPreview: compactPreview(material.contentText ?? material.rawInput),
+    }));
+  const cards = repository.listCards(knowledgeBaseId)
+    .slice(0, 16)
+    .map((card) => ({
+      id: card.id,
+      type: card.type,
+      title: card.title,
+      bodyPreview: compactPreview(card.body),
+      claimStatus: card.claimStatus,
+    }));
+  const artifacts = repository.listArtifacts(knowledgeBaseId, 4)
+    .map((artifact) => ({
+      id: artifact.id,
+      type: artifact.artifactType,
+      title: artifact.title,
+      bodyPreview: compactPreview(artifact.body),
+    }));
+  return { materials, cards, artifacts };
 }
 
 function buildQuestionContext(knowledgeBaseId: string, questionMaterialId: string) {

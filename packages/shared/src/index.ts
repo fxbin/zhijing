@@ -12,6 +12,8 @@ export type CardType = 'concept' | 'method' | 'case' | 'question' | 'step' | 'vi
 
 export type ClaimStatus = 'ai_skeleton' | 'sourced' | 'user_confirmed' | 'unsupported';
 
+export type KnowledgeKitId = 'learning_research' | 'content_creation' | 'product_research';
+
 export interface IntakeRequest {
   input: string;
   knowledgeBaseId?: string;
@@ -105,7 +107,7 @@ export interface KnowledgeCard {
 
 export interface AgentTask {
   id: string;
-  workflow: 'create_knowledge_base' | 'ingest_material' | 'answer_question' | 'parse_material';
+  workflow: 'create_knowledge_base' | 'ingest_material' | 'answer_question' | 'parse_material' | 'run_kit';
   status: TaskStatus;
   input: Record<string, unknown>;
   output?: Record<string, unknown>;
@@ -117,7 +119,7 @@ export interface AgentTask {
 export interface ArtifactRecord {
   id: string;
   knowledgeBaseId: string;
-  artifactType: 'summary' | 'research_report' | 'cards';
+  artifactType: 'summary' | 'research_report' | 'cards' | 'kit_report';
   title: string;
   body: string;
   sourceMaterialIds: string[];
@@ -142,6 +144,17 @@ export interface MaterialParseQueueResult {
   artifact?: ArtifactRecord;
   queued: boolean;
   retry: boolean;
+  message: string;
+}
+
+export interface RunKnowledgeKitRequest {
+  kitId?: KnowledgeKitId;
+}
+
+export interface KnowledgeKitRunResult {
+  knowledgeBase: KnowledgeBaseSummary;
+  artifact: ArtifactRecord;
+  task: AgentTask;
   message: string;
 }
 

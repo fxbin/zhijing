@@ -13,14 +13,17 @@ import {
   listMaterials,
   recordMaterialParsingFailure,
   requestMaterialParsing,
+  runKnowledgeKit,
   saveModelProviderSettings,
   searchKnowledgeAssets,
   testModelProviderSettings,
 } from '@zhijing/core';
 import type {
   IntakeRequest,
+  KnowledgeKitId,
   MaterialType,
   ParseStatus,
+  RunKnowledgeKitRequest,
   SaveModelProviderSettingsRequest,
   TestModelProviderSettingsRequest,
 } from '@zhijing/shared';
@@ -143,6 +146,21 @@ export function buildApi() {
     }
   });
 
+  app.post<{ Params: { id: string }; Body: Partial<RunKnowledgeKitRequest> }>('/api/knowledge-bases/:id/kits/run', async (request, reply) => {
+    try {
+      return await runKnowledgeKit(
+        request.params.id,
+        parseKitId(request.body?.kitId),
+      );
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'knowledge kit run failed');
+      return reply.code(500).send({ error: 'Knowledge kit run failed.' });
+    }
+  });
+
   app.get<{ Params: { id: string } }>('/api/tasks/:id', async (request, reply) => {
     const task = getTask(request.params.id);
     if (!task) {
@@ -201,6 +219,7 @@ export function buildApi() {
 
 const materialTypes = new Set<MaterialType>(['link', 'text', 'question', 'topic']);
 const parseStatuses = new Set<ParseStatus>(['saved', 'parsing', 'needs_review', 'ingested', 'failed']);
+const knowledgeKitIds = new Set<KnowledgeKitId>(['learning_research', 'content_creation', 'product_research']);
 
 function parseMaterialType(value: string | undefined) {
   return value && materialTypes.has(value as MaterialType) ? value as MaterialType : undefined;
@@ -208,6 +227,10 @@ function parseMaterialType(value: string | undefined) {
 
 function parseStatus(value: string | undefined) {
   return value && parseStatuses.has(value as ParseStatus) ? value as ParseStatus : undefined;
+}
+
+function parseKitId(value: string | undefined) {
+  return value && knowledgeKitIds.has(value as KnowledgeKitId) ? value as KnowledgeKitId : 'learning_research';
 }
 
 function parseLimit(value: string | undefined) {

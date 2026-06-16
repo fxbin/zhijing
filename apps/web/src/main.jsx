@@ -57,16 +57,9 @@ const seedMaterials = [
 ];
 
 const kitCards = [
-  { title: '学习研究 Kit', body: '把一个知识库整理成主题研究摘要、核心概念表和待补资料清单。', status: 'Ready', icon: BookOpen },
-  { title: '内容创作 Kit', body: '从资料和卡片生成选题库、标题方向、内容结构和风险提示。', status: 'Prototype', icon: Sparkles },
-  { title: '产品调研 Kit', body: '提炼竞品对比、用户痛点、功能机会点和下一步验证问题。', status: 'Prototype', icon: ClipboardList },
-];
-
-const runSteps = [
-  ['整理核心概念', 'Extracted and normalized 42 concepts from 15 source documents.', 'done'],
-  ['合并重复观点', 'Semantic deduplication condensed concepts into 12 thematic clusters.', 'done'],
-  ['生成研究摘要', 'Synthesizing clusters into a cohesive narrative structure.', 'active'],
-  ['标记待补证据', 'Waiting to identify missing citations and logical gaps.', 'waiting'],
+  { id: 'learning_research', title: '学习研究 Kit', body: '把一个知识库整理成主题研究摘要、核心概念表和待补资料清单。', status: 'Ready', icon: BookOpen },
+  { id: 'content_creation', title: '内容创作 Kit', body: '从资料和卡片生成选题库、标题方向、内容结构和风险提示。', status: 'Ready', icon: Sparkles },
+  { id: 'product_research', title: '产品调研 Kit', body: '提炼竞品对比、用户痛点、功能机会点和下一步验证问题。', status: 'Ready', icon: ClipboardList },
 ];
 
 const knownViews = new Set(['workspace', 'detail', 'library', 'search', 'kits', 'workflow', 'artifact', 'maps', 'settings']);
@@ -178,6 +171,40 @@ function formatPercent(value) {
   return `${Math.round((value ?? 0) * 100)}%`;
 }
 
+function safeFilename(value) {
+  const cleaned = value.replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
+  return cleaned || 'zhijing-artifact';
+}
+
+function artifactMarkdown(artifact, detail) {
+  const sourceCount = artifact.sourceMaterialIds?.length ?? 0;
+  return [
+    `# ${artifact.title}`,
+    '',
+    `- 知识库：${detail.title}`,
+    `- 类型：${artifact.artifactType ?? 'summary'}`,
+    `- 生成时间：${new Date(artifact.createdAt).toLocaleString()}`,
+    `- 来源资料：${sourceCount}`,
+    '',
+    '---',
+    '',
+    artifact.body,
+    '',
+  ].join('\n');
+}
+
+function downloadArtifactMarkdown(artifact, detail) {
+  const blob = new Blob([artifactMarkdown(artifact, detail)], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${safeFilename(artifact.title)}.md`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function fallbackDetail() {
   return {
     title: 'AI Agent 学习',
@@ -246,6 +273,8 @@ function App() {
   const [isAsking, setIsAsking] = useState(false);
   const [selectedArtifact, setSelectedArtifact] = useState(null);
   const [parsingMaterialId, setParsingMaterialId] = useState(null);
+  const [isRunningKit, setIsRunningKit] = useState(false);
+  const [kitRunResult, setKitRunResult] = useState(null);
   const kind = useMemo(() => (query.trim() ? classifyInput(query.trim()) : 'Theme, Link, or Question'), [query]);
 
   useEffect(() => {
@@ -343,6 +372,7 @@ function App() {
     setAssistantAnswer(null);
     setAssistantQuestion('');
     setSelectedArtifact(null);
+    setKitRunResult(null);
   }, [selectedKnowledgeBaseId]);
 
   useEffect(() => {
@@ -504,6 +534,40 @@ function App() {
     go('artifact');
   };
 
+  const runKnowledgeKit = async (kitId = 'learning_research') => {
+    if (!selectedKnowledgeBaseId || apiStatus !== 'online' || isRunningKit) return null;
+    setIsRunningKit(true);
+    setActivity('Running knowledge kit...');
+
+    try {
+      const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/kits/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kitId }),
+      });
+      if (!response.ok) throw new Error('Kit run failed.');
+      const result = await response.json();
+      setActivity(`${result.message} Task ${result.task.id} finished.`);
+      setLatestTaskId(result.task.id);
+      setLatestTask(result.task);
+      setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
+      setKnowledgeBases((current) => [result.knowledgeBase, ...current.filter((base) => base.id !== result.knowledgeBase.id)]);
+      setKnowledgeBaseDetail((current) => ({
+        ...current,
+        ...result.knowledgeBase,
+        artifacts: [result.artifact, ...(current.artifacts ?? []).filter((artifact) => artifact.id !== result.artifact.id)],
+      }));
+      setSelectedArtifact(result.artifact);
+      setKitRunResult(result);
+      return result;
+    } catch {
+      setActivity('Kit 运行失败，请确认 API 已启动且当前知识库可用。');
+      return null;
+    } finally {
+      setIsRunningKit(false);
+    }
+  };
+
   const parseMaterial = async (materialId) => {
     if (!materialId || parsingMaterialId) return;
     setParsingMaterialId(materialId);
@@ -654,8 +718,27 @@ function App() {
             />
           )}
           {view === 'search' && <SearchView />}
-          {view === 'kits' && <KitView setView={go} />}
-          {view === 'workflow' && <WorkflowView setView={go} />}
+          {view === 'kits' && (
+            <KitView
+              apiStatus={apiStatus}
+              isRunningKit={isRunningKit}
+              onRunKit={runKnowledgeKit}
+              selectedKnowledgeBaseId={selectedKnowledgeBaseId}
+              setView={go}
+            />
+          )}
+          {view === 'workflow' && (
+            <WorkflowView
+              detail={knowledgeBaseDetail}
+              isRunningKit={isRunningKit}
+              kitRunResult={kitRunResult}
+              latestTask={latestTask}
+              onOpenArtifact={openArtifact}
+              onRunKit={runKnowledgeKit}
+              selectedKnowledgeBaseId={selectedKnowledgeBaseId}
+              setView={go}
+            />
+          )}
           {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={knowledgeBaseDetail} setView={go} />}
           {view === 'maps' && <MapsView />}
           {view === 'settings' && <SettingsView />}
@@ -1210,13 +1293,20 @@ function LibraryView({ apiStatus, onCaptureResult, onParseMaterial, parsingMater
   );
 }
 
-function KitView({ setView }) {
+function KitView({ apiStatus, isRunningKit, onRunKit, selectedKnowledgeBaseId, setView }) {
+  const canRun = apiStatus === 'online' && Boolean(selectedKnowledgeBaseId) && !isRunningKit;
+
+  async function startKit(kitId) {
+    const result = await onRunKit(kitId);
+    setView(result ? 'workflow' : 'detail');
+  }
+
   return (
     <section className="page-main full">
       <div className="page-title-row">
         <div>
           <h2>Workflow Kits</h2>
-          <p>Turn a knowledge base into a repeatable outcome without leaving the structured workspace.</p>
+          <p>选择一个当前知识库的整理方式，生成可保存和导出的产物。</p>
         </div>
       </div>
       <div className="kit-grid">
@@ -1228,39 +1318,71 @@ function KitView({ setView }) {
               <span>{kit.status}</span>
               <h3>{kit.title}</h3>
               <p>{kit.body}</p>
-              <button onClick={() => setView('workflow')} type="button">Start Kit</button>
+              <button disabled={!canRun} onClick={() => startKit(kit.id)} type="button">
+                {isRunningKit ? 'Running...' : 'Run Kit'}
+              </button>
             </article>
           );
         })}
       </div>
+      {!selectedKnowledgeBaseId && <p className="kit-hint">先创建或选择一个知识库，再运行 Kit。</p>}
     </section>
   );
 }
 
-function WorkflowView({ setView }) {
+function WorkflowView({ detail, isRunningKit, kitRunResult, latestTask, onOpenArtifact, onRunKit, selectedKnowledgeBaseId, setView }) {
+  const activeArtifact = kitRunResult?.artifact ?? detail.artifacts?.[0];
+  const activeTask = kitRunResult?.task ?? latestTask;
+  const hasKnowledgeBase = Boolean(selectedKnowledgeBaseId);
+  const dynamicSteps = [
+    ['读取知识库', `${detail.materials?.length ?? 0} materials · ${detail.cards?.length ?? 0} cards`, hasKnowledgeBase ? 'done' : 'waiting'],
+    ['整理上下文', '合并资料、卡片和最近产物作为 Kit 输入。', hasKnowledgeBase ? 'done' : 'waiting'],
+    ['生成产物', activeTask?.workflow === 'run_kit' ? activeTask.status : 'waiting', isRunningKit ? 'active' : activeArtifact ? 'done' : 'waiting'],
+    ['导出归档', activeArtifact ? '产物已可打开和导出 Markdown。' : '等待 Kit 生成产物。', activeArtifact ? 'done' : 'waiting'],
+  ];
+
   return (
     <section className="workflow-page">
       <header className="run-header">
         <button onClick={() => setView('kits')} type="button"><CircleX size={22} /></button>
-        <div><h2>生成 AI Agent 研究摘要</h2><p>KIT RUN #8492-AX · Started 2 mins ago</p></div>
-        <span>Executing</span>
+        <div><h2>{detail.title || 'Knowledge Kit'}</h2><p>{activeTask?.id ?? 'Ready to run a minimal knowledge loop'}</p></div>
+        <span>{isRunningKit ? 'Executing' : activeArtifact ? 'Ready' : 'Idle'}</span>
       </header>
       <div className="run-grid">
         <aside className="run-steps">
-          <div className="section-title"><h3>Execution Flow</h3><button>3 of 4 Steps</button></div>
-          {runSteps.map(([title, body, state], index) => (
+          <div className="section-title"><h3>Execution Flow</h3><button type="button">{activeArtifact ? '4 of 4 Steps' : 'Ready'}</button></div>
+          {dynamicSteps.map(([title, body, state], index) => (
             <article className={state} key={title}>
               {state === 'done' ? <CheckCircle2 size={22} /> : <Clock3 size={22} />}
               <div><h3>{index + 1}. {title}</h3><p>{body}</p>{state === 'active' && <div className="progress"><span /></div>}</div>
             </article>
           ))}
+          <button
+            className="run-kit-button"
+            disabled={!hasKnowledgeBase || isRunningKit}
+            onClick={() => onRunKit('learning_research')}
+            type="button"
+          >
+            {isRunningKit ? 'Running Kit...' : activeArtifact ? 'Run Again' : 'Run Learning Kit'}
+          </button>
         </aside>
         <article className="artifact-preview">
-          <div className="section-title"><h3>Live Artifact Preview</h3><button onClick={() => setView('artifact')} type="button">Open</button></div>
-          <h1>The Evolution of Autonomous AI Agents</h1>
-          <p>Artificial Intelligence agents operate autonomously to achieve specific goals, utilizing LLMs as cognitive engines.</p>
-          <p>Current research emphasizes memory architectures, tool use, and robust error recovery mechanisms.</p>
-          <div className="skeleton" />
+          <div className="section-title">
+            <h3>Live Artifact Preview</h3>
+            <button disabled={!activeArtifact} onClick={() => onOpenArtifact(activeArtifact)} type="button">Open</button>
+          </div>
+          {activeArtifact ? (
+            <>
+              <h1>{activeArtifact.title}</h1>
+              {activeArtifact.body.split(/\n+/).slice(0, 3).map((block) => <p key={block}>{block}</p>)}
+            </>
+          ) : (
+            <>
+              <h1>Run a Kit to create an artifact</h1>
+              <p>当前知识库会被整理成一份可保存、可打开、可导出的 Markdown 产物。</p>
+              <div className="skeleton" />
+            </>
+          )}
         </article>
       </div>
     </section>
@@ -1293,7 +1415,10 @@ function ArtifactView({ artifact, detail, setView }) {
           <h2>{activeArtifact.title}</h2>
           <p>{detail.title} · {activeArtifact.artifactType ?? 'summary'} · {new Date(activeArtifact.createdAt).toLocaleString()}</p>
         </div>
-        <div className="button-row"><button onClick={() => setView('detail')} type="button">回到知识库</button><button type="button">导出 Markdown</button></div>
+        <div className="button-row">
+          <button onClick={() => setView('detail')} type="button">回到知识库</button>
+          <button onClick={() => downloadArtifactMarkdown(activeArtifact, detail)} type="button">导出 Markdown</button>
+        </div>
       </div>
       <div className="artifact-grid">
         <article className="document-card">
