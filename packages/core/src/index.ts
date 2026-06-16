@@ -1642,6 +1642,16 @@ type ListMaterialsOptions = {
   limit?: number;
 };
 
+type KnowledgeSearchResult = {
+  id: string;
+  kind: 'knowledge_base' | 'material' | 'card' | 'artifact';
+  title: string;
+  preview: string;
+  knowledgeBaseId?: string;
+  metadata: Record<string, string | number | boolean | undefined>;
+  score: number;
+};
+
 export function listMaterials(options: ListMaterialsOptions = {}) {
   const query = options.query?.trim().toLowerCase();
   const materials = repository.listMaterials(options.knowledgeBaseId);
@@ -1662,6 +1672,121 @@ export function listMaterials(options: ListMaterialsOptions = {}) {
   });
 
   return typeof options.limit === 'number' ? filtered.slice(0, options.limit) : filtered;
+}
+
+export function searchKnowledgeAssets(input: { query?: string; limit?: number } = {}) {
+  const query = input.query?.trim();
+  if (!query) {
+    return {
+      query: '',
+      results: [] as KnowledgeSearchResult[],
+      counts: {},
+    };
+  }
+
+  const limit = Math.max(1, Math.min(input.limit ?? 60, 120));
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const results: KnowledgeSearchResult[] = [];
+
+  for (const base of repository.listKnowledgeBases()) {
+    addSearchResult(results, {
+      id: base.id,
+      kind: 'knowledge_base',
+      title: base.title,
+      preview: base.summary,
+      knowledgeBaseId: base.id,
+      metadata: {
+        stage: base.stage,
+        sourceCount: base.sourceCount,
+        cardCount: base.cardCount,
+      },
+      score: scoreSearchText(terms, base.title, base.summary),
+    });
+  }
+
+  for (const material of repository.listMaterials()) {
+    addSearchResult(results, {
+      id: material.id,
+      kind: 'material',
+      title: material.title,
+      preview: compactPreview(material.contentText ?? material.rawInput),
+      knowledgeBaseId: material.knowledgeBaseId,
+      metadata: {
+        type: material.type,
+        platform: material.platform ?? 'local',
+        parseStatus: material.parseStatus,
+      },
+      score: scoreSearchText(
+        terms,
+        material.title,
+        material.rawInput,
+        material.contentText,
+        material.platform,
+        material.sourceUrl,
+        material.parseError,
+      ),
+    });
+  }
+
+  for (const card of repository.listCards()) {
+    addSearchResult(results, {
+      id: card.id,
+      kind: 'card',
+      title: card.title,
+      preview: compactPreview(card.body),
+      knowledgeBaseId: card.knowledgeBaseId,
+      metadata: {
+        type: card.type,
+        claimStatus: card.claimStatus,
+      },
+      score: scoreSearchText(terms, card.title, card.body, card.type, card.claimStatus),
+    });
+  }
+
+  for (const artifact of repository.listArtifacts()) {
+    addSearchResult(results, {
+      id: artifact.id,
+      kind: 'artifact',
+      title: artifact.title,
+      preview: compactPreview(artifact.body),
+      knowledgeBaseId: artifact.knowledgeBaseId,
+      metadata: {
+        artifactType: artifact.artifactType,
+        sourceMaterialCount: artifact.sourceMaterialIds.length,
+      },
+      score: scoreSearchText(terms, artifact.title, artifact.body, artifact.artifactType),
+    });
+  }
+
+  const sorted = results
+    .sort((left, right) => right.score - left.score || left.title.localeCompare(right.title))
+    .slice(0, limit);
+  const counts = sorted.reduce<Record<string, number>>((acc, result) => {
+    acc[result.kind] = (acc[result.kind] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return {
+    query,
+    results: sorted,
+    counts,
+  };
+}
+
+function addSearchResult(results: KnowledgeSearchResult[], result: KnowledgeSearchResult) {
+  if (result.score > 0) {
+    results.push(result);
+  }
+}
+
+function scoreSearchText(terms: string[], title: string | undefined, ...fields: Array<string | undefined>) {
+  const titleText = title?.toLowerCase() ?? '';
+  const bodyText = fields.filter(Boolean).join(' ').toLowerCase();
+  return terms.reduce((score, term) => {
+    if (titleText.includes(term)) return score + 4;
+    if (bodyText.includes(term)) return score + 1;
+    return score;
+  }, 0);
 }
 
 export function getKnowledgeBase(id: string): KnowledgeBaseDetail | undefined {

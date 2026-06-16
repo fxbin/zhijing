@@ -14,6 +14,7 @@ import {
   recordMaterialParsingFailure,
   requestMaterialParsing,
   saveModelProviderSettings,
+  searchKnowledgeAssets,
   testModelProviderSettings,
 } from '@zhijing/core';
 import type {
@@ -81,6 +82,16 @@ export function buildApi() {
 
   app.get('/api/knowledge-bases', async () => ({
     knowledgeBases: listKnowledgeBases(),
+  }));
+
+  app.get<{
+    Querystring: {
+      q?: string;
+      limit?: string;
+    };
+  }>('/api/search', async (request) => searchKnowledgeAssets({
+    query: request.query.q,
+    limit: parseLimit(request.query.limit),
   }));
 
   app.get<{

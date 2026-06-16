@@ -110,6 +110,14 @@ const materialFilterOptions = [
   { key: 'parsing', label: 'Parsing' },
 ];
 
+const searchScopeOptions = [
+  { key: 'all', label: 'All' },
+  { key: 'knowledge_base', label: 'Knowledge Bases' },
+  { key: 'material', label: 'Materials' },
+  { key: 'card', label: 'Cards' },
+  { key: 'artifact', label: 'Artifacts' },
+];
+
 const typeLabels = {
   link: 'Link',
   text: 'Text',
@@ -144,6 +152,13 @@ function materialState(status) {
 
 function materialIcon(type) {
   return type === 'link' ? Link2 : FileText;
+}
+
+function resultIcon(kind) {
+  if (kind === 'knowledge_base') return Database;
+  if (kind === 'material') return FolderOpen;
+  if (kind === 'artifact') return ClipboardList;
+  return BookOpen;
 }
 
 function canParseMaterial(item) {
@@ -1229,7 +1244,101 @@ function MapsView() {
 }
 
 function SearchView() {
-  return <section className="page-main full"><div className="page-title-row"><div><h2>Semantic Search</h2><p>Search across materials, cards, artifacts, and conversation memories.</p></div></div><div className="large-search"><Search size={24} /><input placeholder="Search knowledge assets..." /></div></section>;
+  const [query, setQuery] = useState('');
+  const [scope, setScope] = useState('all');
+  const [results, setResults] = useState([]);
+  const [counts, setCounts] = useState({});
+  const [status, setStatus] = useState('输入关键词后搜索当前知识库资产。');
+  const [isSearching, setIsSearching] = useState(false);
+
+  const visibleResults = results.filter((result) => scope === 'all' || result.kind === scope);
+
+  async function runSearch(nextQuery = query) {
+    const value = nextQuery.trim();
+    if (!value || isSearching) return;
+    setIsSearching(true);
+    setStatus('Searching...');
+    try {
+      const params = new URLSearchParams({ q: value, limit: '80' });
+      const response = await fetch(`/api/search?${params.toString()}`);
+      if (!response.ok) throw new Error('Search failed.');
+      const body = await response.json();
+      setResults(body.results ?? []);
+      setCounts(body.counts ?? {});
+      setStatus((body.results ?? []).length ? `${body.results.length} results found.` : '没有找到匹配结果。');
+    } catch {
+      setStatus('搜索失败，请确认 API 正在运行。');
+      setResults([]);
+      setCounts({});
+    } finally {
+      setIsSearching(false);
+    }
+  }
+
+  return (
+    <section className="page-main full">
+      <div className="page-title-row">
+        <div>
+          <h2>Semantic Search</h2>
+          <p>从知识库、资料、卡片和产物里快速定位线索。</p>
+        </div>
+      </div>
+
+      <div className="search-workbench">
+        <div className="large-search">
+          <Search size={24} />
+          <input
+            aria-label="搜索知识资产"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') runSearch();
+            }}
+            placeholder="Search knowledge assets..."
+          />
+          <button disabled={isSearching || !query.trim()} onClick={() => runSearch()} type="button">
+            {isSearching ? 'Searching' : 'Search'}
+          </button>
+        </div>
+
+        <div className="search-scope-bar">
+          {searchScopeOptions.map((option) => (
+            <button className={scope === option.key ? 'active' : ''} key={option.key} onClick={() => setScope(option.key)} type="button">
+              {option.label}
+              {option.key !== 'all' && <span>{counts[option.key] ?? 0}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <p className="search-status">{status}</p>
+
+      {visibleResults.length === 0 ? (
+        <EmptyState title="暂无搜索结果" body="可以搜索主题名、资料内容、卡片标题或产物正文。" />
+      ) : (
+        <div className="search-results">
+          {visibleResults.map((result) => {
+            const Icon = resultIcon(result.kind);
+            return (
+              <article className="search-result-card" key={`${result.kind}-${result.id}`}>
+                <Icon size={23} />
+                <div>
+                  <div className="search-result-meta">
+                    <span>{result.kind.replace('_', ' ')}</span>
+                    {Object.entries(result.metadata ?? {}).slice(0, 3).map(([key, value]) => (
+                      <span key={key}>{String(value)}</span>
+                    ))}
+                  </div>
+                  <h3>{result.title}</h3>
+                  <p>{result.preview}</p>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function SettingsView() {
