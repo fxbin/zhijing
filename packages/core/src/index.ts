@@ -832,6 +832,10 @@ function titleFromLink(input: string) {
   }
 }
 
+function extractFirstUrl(input: string) {
+  return input.match(/https?:\/\/[^\s"'<>]+/i)?.[0];
+}
+
 function createTask(workflow: AgentTask['workflow'], input: Record<string, unknown>, status: TaskStatus = 'running') {
   const timestamp = now();
   const task: AgentTask = {
@@ -887,14 +891,15 @@ function upsertDefaultKnowledgeBase(input: string) {
 function createMaterial(base: KnowledgeBaseSummary, request: IntakeRequest, type: MaterialRecord['type']) {
   const timestamp = now();
   const platform = detectPlatform(request.input);
+  const sourceUrl = type === 'link' ? extractFirstUrl(request.input) ?? request.input.trim() : undefined;
   const material: MaterialRecord = {
     id: id('mat'),
     knowledgeBaseId: base.id,
     type,
     rawInput: request.input.trim(),
-    sourceUrl: type === 'link' ? request.input.trim() : undefined,
+    sourceUrl,
     platform,
-    title: type === 'link' ? titleFromLink(request.input) : compactTitle(request.input),
+    title: type === 'link' ? titleFromLink(sourceUrl ?? request.input) : compactTitle(request.input),
     contentText: type === 'text' ? request.input.trim() : undefined,
     parseStatus: type === 'link' ? 'saved' : 'ingested',
     createdAt: timestamp,
@@ -1627,6 +1632,36 @@ function touchKnowledgeBase(knowledgeBaseId: string) {
 
 export function listKnowledgeBases() {
   return repository.listKnowledgeBases();
+}
+
+type ListMaterialsOptions = {
+  knowledgeBaseId?: string;
+  type?: MaterialRecord['type'];
+  status?: MaterialRecord['parseStatus'];
+  query?: string;
+  limit?: number;
+};
+
+export function listMaterials(options: ListMaterialsOptions = {}) {
+  const query = options.query?.trim().toLowerCase();
+  const materials = repository.listMaterials(options.knowledgeBaseId);
+  const filtered = materials.filter((material) => {
+    if (options.type && material.type !== options.type) return false;
+    if (options.status && material.parseStatus !== options.status) return false;
+    if (!query) return true;
+
+    const searchable = [
+      material.title,
+      material.rawInput,
+      material.contentText,
+      material.platform,
+      material.sourceUrl,
+      material.parseError,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return searchable.includes(query);
+  });
+
+  return typeof options.limit === 'number' ? filtered.slice(0, options.limit) : filtered;
 }
 
 export function getKnowledgeBase(id: string): KnowledgeBaseDetail | undefined {

@@ -10,6 +10,7 @@ import {
   intakeKnowledge,
   KnowledgeCoreError,
   listKnowledgeBases,
+  listMaterials,
   recordMaterialParsingFailure,
   requestMaterialParsing,
   saveModelProviderSettings,
@@ -17,6 +18,8 @@ import {
 } from '@zhijing/core';
 import type {
   IntakeRequest,
+  MaterialType,
+  ParseStatus,
   SaveModelProviderSettingsRequest,
   TestModelProviderSettingsRequest,
 } from '@zhijing/shared';
@@ -78,6 +81,22 @@ export function buildApi() {
 
   app.get('/api/knowledge-bases', async () => ({
     knowledgeBases: listKnowledgeBases(),
+  }));
+
+  app.get<{
+    Querystring: {
+      type?: string;
+      status?: string;
+      q?: string;
+      limit?: string;
+    };
+  }>('/api/materials', async (request) => ({
+    materials: listMaterials({
+      type: parseMaterialType(request.query.type),
+      status: parseStatus(request.query.status),
+      query: request.query.q,
+      limit: parseLimit(request.query.limit),
+    }),
   }));
 
   app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id', async (request, reply) => {
@@ -167,4 +186,22 @@ export function buildApi() {
   });
 
   return app;
+}
+
+const materialTypes = new Set<MaterialType>(['link', 'text', 'question', 'topic']);
+const parseStatuses = new Set<ParseStatus>(['saved', 'parsing', 'needs_review', 'ingested', 'failed']);
+
+function parseMaterialType(value: string | undefined) {
+  return value && materialTypes.has(value as MaterialType) ? value as MaterialType : undefined;
+}
+
+function parseStatus(value: string | undefined) {
+  return value && parseStatuses.has(value as ParseStatus) ? value as ParseStatus : undefined;
+}
+
+function parseLimit(value: string | undefined) {
+  if (!value) return 120;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return 120;
+  return Math.max(1, Math.min(parsed, 300));
 }

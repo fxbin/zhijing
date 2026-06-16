@@ -9,13 +9,16 @@ import {
   ClipboardList,
   Clock3,
   Database,
+  FileText,
   FolderOpen,
   History,
   KeyRound,
+  Link2,
   LogOut,
   Network,
   PlugZap,
   Plus,
+  RefreshCw,
   Search,
   Send,
   Settings,
@@ -51,13 +54,6 @@ const seedMaterials = [
     time: '5h ago',
     state: 'processing',
   },
-];
-
-const libraryItems = [
-  { type: 'Web Article', status: 'Parsed', title: 'The Architecture of Modern Information Retrieval', body: 'An in-depth look at vector databases and embeddings.', tags: ['architecture', 'search'] },
-  { type: 'Social Media', status: 'Processing', title: 'Minimalist Workspace Setup Ideas', body: 'Extracting text and identifying objects from image reference.', tags: ['workspace'] },
-  { type: 'Raw Text', status: 'Failed', title: 'Context window exceeded', body: 'The transcript spans over 45,000 tokens. Retry with chunking.', tags: ['retry'] },
-  { type: 'Short Video', status: 'Parsed', title: '3 Habits of Highly Focused Builders', body: 'Transcript extracted and summarized.', tags: ['habits'] },
 ];
 
 const kitCards = [
@@ -103,6 +99,64 @@ function materialFromApi(item) {
     time: 'just now',
     state: status === 'failed' ? 'failed' : status === 'parsing' ? 'processing' : 'ready',
   };
+}
+
+const materialFilterOptions = [
+  { key: 'all', label: 'All Materials' },
+  { key: 'link', label: 'Links' },
+  { key: 'text', label: 'Text' },
+  { key: 'question', label: 'Questions' },
+  { key: 'failed', label: 'Failed' },
+  { key: 'parsing', label: 'Parsing' },
+];
+
+const typeLabels = {
+  link: 'Link',
+  text: 'Text',
+  question: 'Question',
+  topic: 'Topic',
+};
+
+const statusLabels = {
+  saved: 'Saved',
+  parsing: 'Parsing',
+  needs_review: 'Review',
+  ingested: 'Ingested',
+  failed: 'Failed',
+};
+
+function materialPreview(item) {
+  const text = item.contentText || item.rawInput || item.sourceUrl || 'Saved source material.';
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  return cleaned.length > 180 ? `${cleaned.slice(0, 180)}...` : cleaned;
+}
+
+function materialSourceUrl(item) {
+  return item.sourceUrl?.match(/https?:\/\/[^\s"'<>]+/i)?.[0]
+    ?? item.rawInput?.match(/https?:\/\/[^\s"'<>]+/i)?.[0];
+}
+
+function materialState(status) {
+  if (status === 'failed') return 'failed';
+  if (status === 'parsing' || status === 'saved' || status === 'needs_review') return 'processing';
+  return 'ready';
+}
+
+function materialIcon(type) {
+  return type === 'link' ? Link2 : FileText;
+}
+
+function canParseMaterial(item) {
+  return item.type === 'link' && item.parseStatus !== 'ingested' && item.parseStatus !== 'parsing';
+}
+
+function formatMaterialTime(value) {
+  if (!value) return 'just now';
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return 'just now';
+  }
 }
 
 function fallbackDetail() {
@@ -279,6 +333,29 @@ function App() {
     window.location.hash = nextView;
   };
 
+  const applyIntakeResult = (result) => {
+    setLatestTaskId(result.task.id);
+    setLatestTask(result.task);
+    setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
+    setSelectedKnowledgeBaseId(result.knowledgeBase.id);
+    setKnowledgeBases((current) => {
+      const withoutDuplicate = current.filter((base) => base.id !== result.knowledgeBase.id && base.title !== result.knowledgeBase.title);
+      return [result.knowledgeBase, ...withoutDuplicate];
+    });
+    if (result.material) {
+      setMaterials((current) => [materialFromApi(result.material), ...current].slice(0, 6));
+      setKnowledgeBaseDetail((current) => current.id === result.knowledgeBase.id ? ({
+        ...current,
+        ...result.knowledgeBase,
+        materials: [result.material, ...(current.materials ?? []).filter((material) => material.id !== result.material.id)],
+        cards: [...(result.cards ?? []), ...(current.cards ?? []).filter((card) => !(result.cards ?? []).some((item) => item.id === card.id))],
+        artifacts: result.artifact
+          ? [result.artifact, ...(current.artifacts ?? []).filter((artifact) => artifact.id !== result.artifact.id)]
+          : current.artifacts ?? [],
+      }) : current);
+    }
+  };
+
   const submit = async () => {
     const value = query.trim();
     if (!value || isSubmitting) return;
@@ -298,17 +375,7 @@ function App() {
 
       const result = await response.json();
       setActivity(`${result.message} Task ${result.task.id} finished.`);
-      setLatestTaskId(result.task.id);
-      setLatestTask(result.task);
-      setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
-      setSelectedKnowledgeBaseId(result.knowledgeBase.id);
-      setKnowledgeBases((current) => {
-        const withoutDuplicate = current.filter((base) => base.id !== result.knowledgeBase.id && base.title !== result.knowledgeBase.title);
-        return [result.knowledgeBase, ...withoutDuplicate];
-      });
-      if (result.material) {
-        setMaterials((current) => [materialFromApi(result.material), ...current]);
-      }
+      applyIntakeResult(result);
       setQuery('');
     } catch {
       const timestamp = new Date().toISOString();
@@ -423,8 +490,10 @@ function App() {
         ? [result.knowledgeBase, ...current.filter((base) => base.id !== result.knowledgeBase.id)]
         : current);
       if (result.artifact) setSelectedArtifact(result.artifact);
+      return result;
     } catch {
       setActivity('解析失败，原链接仍已保留，可稍后重试或手动补充正文。');
+      return null;
     } finally {
       setParsingMaterialId(null);
     }
@@ -531,7 +600,14 @@ function App() {
               setView={go}
             />
           )}
-          {view === 'library' && <LibraryView />}
+          {view === 'library' && (
+            <LibraryView
+              apiStatus={apiStatus}
+              onCaptureResult={applyIntakeResult}
+              onParseMaterial={parseMaterial}
+              parsingMaterialId={parsingMaterialId}
+            />
+          )}
           {view === 'search' && <SearchView />}
           {view === 'kits' && <KitView setView={go} />}
           {view === 'workflow' && <WorkflowView setView={go} />}
@@ -843,27 +919,206 @@ function DetailView({
   );
 }
 
-function LibraryView() {
+function LibraryView({ apiStatus, onCaptureResult, onParseMaterial, parsingMaterialId }) {
+  const [items, setItems] = useState([]);
+  const [filter, setFilter] = useState('all');
+  const [searchValue, setSearchValue] = useState('');
+  const [captureValue, setCaptureValue] = useState('');
+  const [captureMode, setCaptureMode] = useState('auto');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [status, setStatus] = useState('Loading materials...');
+
+  async function loadMaterials() {
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: '180' });
+      if (searchValue.trim()) params.set('q', searchValue.trim());
+      const response = await fetch(`/api/materials?${params.toString()}`);
+      if (!response.ok) throw new Error('Material list unavailable.');
+      const result = await response.json();
+      setItems(result.materials ?? []);
+      setStatus('Materials synced.');
+    } catch {
+      setStatus('API 未连接，暂时无法读取真实资料库。');
+      setItems([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    async function run() {
+      setIsLoading(true);
+      try {
+        const params = new URLSearchParams({ limit: '180' });
+        if (searchValue.trim()) params.set('q', searchValue.trim());
+        const response = await fetch(`/api/materials?${params.toString()}`);
+        if (!response.ok) throw new Error('Material list unavailable.');
+        const result = await response.json();
+        if (!cancelled) {
+          setItems(result.materials ?? []);
+          setStatus('Materials synced.');
+        }
+      } catch {
+        if (!cancelled) {
+          setStatus('API 未连接，暂时无法读取真实资料库。');
+          setItems([]);
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [searchValue]);
+
+  const filteredItems = items.filter((item) => {
+    if (filter === 'all') return true;
+    if (filter === 'failed' || filter === 'parsing') return item.parseStatus === filter;
+    return item.type === filter;
+  });
+
+  const counts = items.reduce((acc, item) => {
+    acc.total += 1;
+    acc[item.type] = (acc[item.type] ?? 0) + 1;
+    acc[item.parseStatus] = (acc[item.parseStatus] ?? 0) + 1;
+    return acc;
+  }, { total: 0 });
+
+  async function capture() {
+    const value = captureValue.trim();
+    if (!value || isCapturing || apiStatus !== 'online') return;
+    setIsCapturing(true);
+    setStatus('Capturing material...');
+    try {
+      const response = await fetch('/api/intake', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: value }),
+      });
+      if (!response.ok) throw new Error('Capture failed.');
+      const result = await response.json();
+      onCaptureResult(result);
+      setCaptureValue('');
+      setStatus(result.message);
+      await loadMaterials();
+    } catch {
+      setStatus('收集失败，请确认 API 正在运行。');
+    } finally {
+      setIsCapturing(false);
+    }
+  }
+
+  async function parseFromLibrary(materialId) {
+    if (!onParseMaterial) return;
+    await onParseMaterial(materialId);
+    await loadMaterials();
+  }
+
   return (
     <section className="page-main full">
       <div className="page-title-row">
         <div>
           <h2>Material Repository</h2>
-          <p>Manage, categorize, and process your imported knowledge fragments.</p>
+          <p>把链接、文本和问题都收进同一个资料库，再按状态继续解析和整理。</p>
         </div>
-        <div className="button-row"><button type="button">Bulk Categorize</button><button type="button">Import Material</button></div>
+        <div className="library-stats">
+          <span>{counts.total} items</span>
+          <span>{counts.ingested ?? 0} ingested</span>
+          <span>{counts.failed ?? 0} failed</span>
+        </div>
       </div>
-      <div className="filter-bar"><button className="active">All Materials</button><button>Links</button><button>Text Fragments</button><button>Images</button><button>Filter</button></div>
+
+      <section className="quick-capture-panel">
+        <div className="capture-head">
+          <div>
+            <span>Quick Capture</span>
+            <h3>Inbox</h3>
+          </div>
+          <div className="capture-mode">
+            {['auto', 'link', 'text'].map((mode) => (
+              <button className={captureMode === mode ? 'active' : ''} key={mode} onClick={() => setCaptureMode(mode)} type="button">
+                {mode}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="capture-box">
+          <textarea
+            aria-label="快速收集资料"
+            value={captureValue}
+            onChange={(event) => setCaptureValue(event.target.value)}
+            placeholder={captureMode === 'link' ? 'Paste a source link...' : 'Paste a note, question, or topic...'}
+          />
+          <button disabled={apiStatus !== 'online' || isCapturing || !captureValue.trim()} onClick={capture} type="button">
+            {isCapturing ? <Clock3 size={18} /> : <Send size={18} />}
+            Capture
+          </button>
+        </div>
+        <p>{status}</p>
+      </section>
+
+      <div className="library-toolbar">
+        <div className="filter-bar">
+          {materialFilterOptions.map((option) => (
+            <button className={filter === option.key ? 'active' : ''} key={option.key} onClick={() => setFilter(option.key)} type="button">
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <label className="library-search">
+          <Search size={18} />
+          <input aria-label="搜索资料" value={searchValue} onChange={(event) => setSearchValue(event.target.value)} placeholder="Search materials..." />
+        </label>
+      </div>
+
+      {isLoading ? (
+        <EmptyState title="正在同步资料库" body="稍等一下，正在读取本地 API 里的资料。" />
+      ) : filteredItems.length === 0 ? (
+        <EmptyState title="暂无匹配资料" body="换一个筛选条件，或先从上方收集一条链接/文本。" />
+      ) : (
       <div className="library-grid">
-        {libraryItems.map((item) => (
-          <article className={`library-card ${item.status.toLowerCase()}`} key={item.title}>
-            <div className="material-meta"><span>{item.type}</span><span>{item.status}</span></div>
+        {filteredItems.map((item) => {
+          const Icon = materialIcon(item.type);
+          return (
+          <article className={`library-card ${materialState(item.parseStatus)}`} key={item.id}>
+            <div className="library-card-head">
+              <Icon size={22} />
+              <div className="material-meta">
+                <span>{typeLabels[item.type] ?? item.type}</span>
+                <span>{statusLabels[item.parseStatus] ?? item.parseStatus}</span>
+              </div>
+            </div>
             <h3>{item.title}</h3>
-            <p>{item.body}</p>
-            <div className="tag-row">{item.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div>
+            <p>{materialPreview(item)}</p>
+            {item.parseError && <p className="library-error">{item.parseError}</p>}
+            <div className="tag-row">
+              <span>{item.platform ?? 'local'}</span>
+              <span>{formatMaterialTime(item.createdAt)}</span>
+            </div>
+            <div className="library-card-actions">
+              {materialSourceUrl(item) && (
+                <a href={materialSourceUrl(item)} target="_blank" rel="noreferrer">
+                  Open
+                  <SquareArrowOutUpRight size={14} />
+                </a>
+              )}
+              {canParseMaterial(item) && (
+                <button disabled={parsingMaterialId === item.id} onClick={() => parseFromLibrary(item.id)} type="button">
+                  <RefreshCw size={14} />
+                  {item.parseStatus === 'failed' ? 'Retry Parse' : 'Parse'}
+                </button>
+              )}
+            </div>
           </article>
-        ))}
+          );
+        })}
       </div>
+      )}
     </section>
   );
 }
