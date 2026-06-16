@@ -738,6 +738,14 @@ export function configurePiRuntime(nextRuntime: PiRuntime) {
   piRuntime = nextRuntime;
 }
 
+export function resetKnowledgeCoreForTests() {
+  repository = createMemoryKnowledgeRepository();
+  parserResultCache.clear();
+  platformParseTimestamps.clear();
+  modelProviderConfig = initialModelProviderConfig();
+  applyModelProviderConfig();
+}
+
 function initialModelProviderConfig(): RuntimeModelProviderConfig {
   const persisted = repository.readModelProviderConfig();
   const provider = normalizeProvider(process.env.ZHIJING_PI_PROVIDER ?? persisted?.provider);
