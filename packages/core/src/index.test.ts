@@ -7,6 +7,7 @@ import {
   normalizeXiaohongshuInitialStateHtml,
   requestMaterialParsing,
   resetKnowledgeCoreForTests,
+  searchKnowledgeAssets,
   suggestMaterialAssignments,
 } from './index.js';
 
@@ -133,6 +134,20 @@ describe('question citations', () => {
     const answer = await answerKnowledgeBaseQuestion(topic.knowledgeBase.id, '问答应该如何展示来源？');
     assert.ok(answer.citations?.some((citation) => citation.kind === 'material'));
     assert.ok(answer.citations?.some((citation) => citation.kind === 'card'));
+  });
+});
+
+describe('semantic search', () => {
+  test('recalls related learning concepts without exact query terms', async () => {
+    const base = await intakeKnowledge({ input: '长期记忆学习法' });
+    await intakeKnowledge({
+      input: '间隔重复会把练习拆到不同日期，主动回忆要求先尝试提取答案，再回看资料修正。\n这类方法适合语言、概念和考试内容的长期保持。',
+      knowledgeBaseId: base.knowledgeBase.id,
+    });
+
+    const results = searchKnowledgeAssets({ query: '复习策略', limit: 10 });
+    assert.ok(results.results.some((result) => result.kind === 'material'));
+    assert.ok(results.results.some((result) => result.metadata.match === 'semantic'));
   });
 });
 

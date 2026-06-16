@@ -2745,6 +2745,41 @@ type KnowledgeSearchResult = {
   score: number;
 };
 
+type SearchTerm = {
+  value: string;
+  weight: number;
+  semantic: boolean;
+};
+
+type SearchScore = {
+  score: number;
+  matchedTerms: string[];
+  semantic: boolean;
+};
+
+const semanticSearchLexicon = [
+  {
+    triggers: ['复习', '记忆', '遗忘', 'review', 'memory', 'memorize'],
+    expansions: ['间隔重复', '主动回忆', '检索练习', '遗忘曲线', 'anki', 'spaced repetition', 'retrieval practice'],
+  },
+  {
+    triggers: ['理解', '解释', '讲清楚', 'teach', 'explain'],
+    expansions: ['费曼', '费曼学习法', '概念压缩', '用自己的话', 'feynman'],
+  },
+  {
+    triggers: ['内容', '选题', '创作', '小红书', '运营', 'post', 'content'],
+    expansions: ['标题', '封面', '话题', '爆款', '笔记', '账号', '转化'],
+  },
+  {
+    triggers: ['产品', '调研', '竞品', '用户', 'product', 'research'],
+    expansions: ['痛点', '机会点', '竞品分析', '用户反馈', '需求', '验证'],
+  },
+  {
+    triggers: ['知识库', '整理', '卡片', 'knowledge', 'note'],
+    expansions: ['知识卡片', '知识地图', '资料', '来源', '引用', 'artifact'],
+  },
+];
+
 export function listMaterials(options: ListMaterialsOptions = {}) {
   const query = options.query?.trim().toLowerCase();
   const materials = repository.listMaterials(options.knowledgeBaseId);
@@ -2779,78 +2814,82 @@ export function searchKnowledgeAssets(input: { query?: string; limit?: number } 
   }
 
   const limit = Math.max(1, Math.min(input.limit ?? 60, 120));
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const terms = buildSearchTerms(query);
   const results: KnowledgeSearchResult[] = [];
 
   for (const base of repository.listKnowledgeBases()) {
+    const match = scoreSearchText(terms, base.title, base.summary);
     addSearchResult(results, {
       id: base.id,
       kind: 'knowledge_base',
       title: base.title,
       preview: base.summary,
       knowledgeBaseId: base.id,
-      metadata: {
+      metadata: withSearchMetadata(match, {
         stage: base.stage,
         sourceCount: base.sourceCount,
         cardCount: base.cardCount,
-      },
-      score: scoreSearchText(terms, base.title, base.summary),
+      }),
+      score: match.score,
     });
   }
 
   for (const material of repository.listMaterials()) {
+    const match = scoreSearchText(
+      terms,
+      material.title,
+      material.rawInput,
+      material.contentText,
+      ...(material.mediaUrls ?? []),
+      material.platform,
+      material.sourceUrl,
+      material.parseError,
+    );
     addSearchResult(results, {
       id: material.id,
       kind: 'material',
       title: material.title,
       preview: compactPreview(material.contentText ?? material.rawInput),
       knowledgeBaseId: material.knowledgeBaseId,
-      metadata: {
+      metadata: withSearchMetadata(match, {
         type: material.type,
         platform: material.platform ?? 'local',
         parseStatus: material.parseStatus,
         mediaCount: material.mediaUrls?.length ?? 0,
-      },
-      score: scoreSearchText(
-        terms,
-        material.title,
-        material.rawInput,
-        material.contentText,
-        ...(material.mediaUrls ?? []),
-        material.platform,
-        material.sourceUrl,
-        material.parseError,
-      ),
+      }),
+      score: match.score,
     });
   }
 
   for (const card of repository.listCards()) {
+    const match = scoreSearchText(terms, card.title, card.body, card.type, card.claimStatus);
     addSearchResult(results, {
       id: card.id,
       kind: 'card',
       title: card.title,
       preview: compactPreview(card.body),
       knowledgeBaseId: card.knowledgeBaseId,
-      metadata: {
+      metadata: withSearchMetadata(match, {
         type: card.type,
         claimStatus: card.claimStatus,
-      },
-      score: scoreSearchText(terms, card.title, card.body, card.type, card.claimStatus),
+      }),
+      score: match.score,
     });
   }
 
   for (const artifact of repository.listArtifacts()) {
+    const match = scoreSearchText(terms, artifact.title, artifact.body, artifact.artifactType);
     addSearchResult(results, {
       id: artifact.id,
       kind: 'artifact',
       title: artifact.title,
       preview: compactPreview(artifact.body),
       knowledgeBaseId: artifact.knowledgeBaseId,
-      metadata: {
+      metadata: withSearchMetadata(match, {
         artifactType: artifact.artifactType,
         sourceMaterialCount: artifact.sourceMaterialIds.length,
-      },
-      score: scoreSearchText(terms, artifact.title, artifact.body, artifact.artifactType),
+      }),
+      score: match.score,
     });
   }
 
@@ -2875,14 +2914,61 @@ function addSearchResult(results: KnowledgeSearchResult[], result: KnowledgeSear
   }
 }
 
-function scoreSearchText(terms: string[], title: string | undefined, ...fields: Array<string | undefined>) {
+function buildSearchTerms(query: string) {
+  const normalized = query.toLowerCase();
+  const terms = new Map<string, SearchTerm>();
+  for (const term of normalized.split(/\s+/).filter(Boolean)) {
+    addSearchTerm(terms, term, 1, false);
+  }
+  for (const entry of semanticSearchLexicon) {
+    if (!entry.triggers.some((trigger) => normalized.includes(trigger))) continue;
+    for (const expansion of entry.expansions) {
+      addSearchTerm(terms, expansion.toLowerCase(), 0.65, true);
+    }
+  }
+  return [...terms.values()];
+}
+
+function addSearchTerm(terms: Map<string, SearchTerm>, value: string, weight: number, semantic: boolean) {
+  const normalized = value.trim();
+  if (!normalized) return;
+  const current = terms.get(normalized);
+  if (!current || current.weight < weight) {
+    terms.set(normalized, { value: normalized, weight, semantic });
+  }
+}
+
+function scoreSearchText(terms: SearchTerm[], title: string | undefined, ...fields: Array<string | undefined>): SearchScore {
   const titleText = title?.toLowerCase() ?? '';
   const bodyText = fields.filter(Boolean).join(' ').toLowerCase();
-  return terms.reduce((score, term) => {
-    if (titleText.includes(term)) return score + 4;
-    if (bodyText.includes(term)) return score + 1;
-    return score;
+  const matchedTerms: string[] = [];
+  let semantic = false;
+  const score = terms.reduce((currentScore, term) => {
+    if (titleText.includes(term.value)) {
+      matchedTerms.push(term.value);
+      semantic ||= term.semantic;
+      return currentScore + 4 * term.weight;
+    }
+    if (bodyText.includes(term.value)) {
+      matchedTerms.push(term.value);
+      semantic ||= term.semantic;
+      return currentScore + term.weight;
+    }
+    return currentScore;
   }, 0);
+  return {
+    score,
+    matchedTerms: [...new Set(matchedTerms)].slice(0, 4),
+    semantic,
+  };
+}
+
+function withSearchMetadata(match: SearchScore, metadata: KnowledgeSearchResult['metadata']) {
+  return {
+    match: match.semantic ? 'semantic' : 'exact',
+    matched: match.matchedTerms.join(', '),
+    ...metadata,
+  };
 }
 
 export function getKnowledgeBase(id: string): KnowledgeBaseDetail | undefined {
