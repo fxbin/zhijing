@@ -95,6 +95,8 @@ type ParsedMaterialContent = {
   title?: string;
   text: string;
   mediaUrls?: string[];
+  needsReview?: boolean;
+  reviewReason?: string;
 };
 
 type XiaohongshuShareInfo = {
@@ -956,7 +958,7 @@ function createCards(
   generatedCards: GeneratedCard[] | undefined,
 ) {
   const timestamp = now();
-  const sourceStatus = material && material.type !== 'question' ? 'sourced' : 'ai_skeleton';
+  const sourceStatus = material && material.type !== 'question' && material.parseStatus === 'ingested' ? 'sourced' : 'ai_skeleton';
   const generated = normalizeGeneratedCards(generatedCards);
   const fallbackCards: GeneratedCard[] = [
     {
@@ -1430,8 +1432,8 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
     material.title = parsed.title ? compactTitle(parsed.title) : material.title;
     material.contentText = parsed.text;
     material.mediaUrls = parsed.mediaUrls ?? [];
-    material.parseStatus = 'ingested';
-    material.parseError = undefined;
+    material.parseStatus = parsed.needsReview ? 'needs_review' : 'ingested';
+    material.parseError = parsed.reviewReason;
     repository.updateMaterial(material);
 
     const base = repository.findKnowledgeBase(material.knowledgeBaseId);
@@ -1450,6 +1452,7 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
       contentLength: parsed.text.length,
       mediaUrls: material.mediaUrls,
       mediaCount: material.mediaUrls.length,
+      needsReview: parsed.needsReview,
     });
     const generated = generation.output;
     const cards = createCards(base, material, parsed.text, generated.cards);
@@ -1458,7 +1461,7 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
     finishTask(task, {
       materialId: material.id,
       parseStatus: material.parseStatus,
-      queueState: 'completed',
+      queueState: parsed.needsReview ? 'needs_review' : 'completed',
       retry,
       contentLength: parsed.text.length,
       mediaCount: material.mediaUrls.length,
@@ -1477,8 +1480,10 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
       artifact,
       queued: false,
       retry,
-      message: material.platform === 'xiaohongshu'
-        ? '小红书笔记已解析并生成知识卡片。'
+      message: parsed.needsReview
+        ? '小红书链接已保存，当前缺少深度解析连接器，需要补充正文或配置连接器后重试。'
+        : material.platform === 'xiaohongshu'
+          ? '小红书笔记已解析并生成知识卡片。'
         : '普通网页已解析并生成知识卡片。',
     };
   } catch (error) {
@@ -1641,11 +1646,17 @@ async function parseXiaohongshuMaterial(material: MaterialRecord): Promise<Parse
     throw new KnowledgeCoreError('Xiaohongshu note id and xsec_token are required for parsing.', 400);
   }
 
-  const detail = await callXiaohongshuMcpTool('get_feed_detail', {
-    feed_id: shareInfo.noteId,
-    xsec_token: shareInfo.xsecToken,
-  });
-  const parsed = normalizeXiaohongshuFeedDetail(detail);
+  let parsed: { title?: string; text: string; mediaUrls: string[] } | undefined;
+  if (isXiaohongshuConnectorConfigured()) {
+    const detail = await callXiaohongshuMcpTool('get_feed_detail', {
+      feed_id: shareInfo.noteId,
+      xsec_token: shareInfo.xsecToken,
+    });
+    parsed = normalizeXiaohongshuFeedDetail(detail);
+  } else {
+    parsed = await tryParseXiaohongshuPublicShare(material, shareInfo);
+  }
+
   if (parsed.text.length < 4 && parsed.mediaUrls.length === 0) {
     throw new Error('Xiaohongshu parser returned no usable note text or media.');
   }
@@ -1654,7 +1665,71 @@ async function parseXiaohongshuMaterial(material: MaterialRecord): Promise<Parse
     title: parsed.title,
     text: parsed.text.slice(0, 18_000),
     mediaUrls: parsed.mediaUrls,
+    needsReview: !isXiaohongshuConnectorConfigured(),
+    reviewReason: !isXiaohongshuConnectorConfigured()
+      ? '未配置小红书深度解析连接器；已保留分享标题/链接，需要手动补充正文媒体或配置 XHS_MCP_URL 后重试。'
+      : undefined,
   };
+}
+
+function isXiaohongshuConnectorConfigured() {
+  return Boolean(xiaohongshuMcpUrl());
+}
+
+async function tryParseXiaohongshuPublicShare(
+  material: MaterialRecord,
+  shareInfo: XiaohongshuShareInfo,
+): Promise<{ title?: string; text: string; mediaUrls: string[] }> {
+  const titleFromShare = extractXiaohongshuShareTitle(material.rawInput);
+  const publicParsed = await tryParseXiaohongshuPublicPage(shareInfo.sourceUrl);
+  const title = publicParsed?.title ?? titleFromShare ?? titleFromLink(shareInfo.sourceUrl);
+  const text = cleanText([
+    title,
+    publicParsed?.text,
+    `来源链接：${shareInfo.sourceUrl}`,
+  ].filter(Boolean).join('\n\n'));
+  return {
+    title,
+    text,
+    mediaUrls: publicParsed?.mediaUrls ?? [],
+  };
+}
+
+function extractXiaohongshuShareTitle(input: string | undefined) {
+  if (!input) return undefined;
+  const bracketTitle = input.match(/【(.+?)(?:\s+-\s+[^】]+)?】/)?.[1];
+  if (bracketTitle) return cleanText(bracketTitle);
+  const beforeUrl = input.split(/https?:\/\//i)[0]?.trim();
+  return beforeUrl ? compactTitle(beforeUrl.replace(/^\d+\s*/, '')) : undefined;
+}
+
+async function tryParseXiaohongshuPublicPage(sourceUrl: string) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8_000);
+  try {
+    const response = await fetch(sourceUrl, {
+      signal: controller.signal,
+      redirect: 'follow',
+      headers: {
+        accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8',
+        'user-agent': 'Mozilla/5.0 (compatible; ZhijingBot/0.1)',
+      },
+    });
+    if (!response.ok) return undefined;
+    const html = (await response.text()).slice(0, 800_000);
+    const extracted = extractReadableText(html, titleFromLink(sourceUrl));
+    const mediaUrls = uniqueStrings(collectMediaUrls(html));
+    if (extracted.text.length < 20 && mediaUrls.length === 0) return undefined;
+    return {
+      title: extracted.title,
+      text: extracted.text.slice(0, 4000),
+      mediaUrls,
+    };
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function parseXiaohongshuShareInput(input: string | undefined): XiaohongshuShareInfo | undefined {
@@ -1698,7 +1773,10 @@ function extractXiaohongshuNoteId(url: URL) {
 }
 
 async function callXiaohongshuMcpTool(toolName: string, args: Record<string, unknown>) {
-  const mcpUrl = process.env.XHS_MCP_URL ?? process.env.MCP_URL ?? 'http://localhost:18060/mcp';
+  const mcpUrl = xiaohongshuMcpUrl();
+  if (!mcpUrl) {
+    throw new Error('Xiaohongshu connector is not configured. Set XHS_MCP_URL to enable deep parsing.');
+  }
   const timeoutMs = Number.parseInt(process.env.XHS_MCP_TIMEOUT_MS ?? '120000', 10);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 120_000);
@@ -1774,6 +1852,12 @@ async function callXiaohongshuMcpTool(toolName: string, args: Record<string, unk
   } finally {
     clearTimeout(timer);
   }
+}
+
+function xiaohongshuMcpUrl() {
+  return process.env.XHS_MCP_URL
+    ?? process.env.XIAOHONGSHU_MCP_URL
+    ?? (process.env.XHS_MCP_ENABLED === '1' ? process.env.MCP_URL : undefined);
 }
 
 export function normalizeXiaohongshuFeedDetail(input: unknown): { title?: string; text: string; mediaUrls: string[] } {
