@@ -1194,6 +1194,7 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
   const [reviewDraft, setReviewDraft] = useState({ title: '', contentText: '', mediaUrls: '' });
   const [assignDrafts, setAssignDrafts] = useState({});
   const [newBaseTitles, setNewBaseTitles] = useState({});
+  const [assignmentHints, setAssignmentHints] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [isCapturing, setIsCapturing] = useState(false);
   const [mutatingMaterialId, setMutatingMaterialId] = useState(null);
@@ -1354,6 +1355,33 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
     }
   }
 
+  async function suggestAssignment(item) {
+    if (!item?.id || apiStatus !== 'online' || mutatingMaterialId) return;
+    setMutatingMaterialId(item.id);
+    setStatus('Finding assignment suggestion...');
+    try {
+      const response = await fetch(`/api/materials/${item.id}/assignment-suggestions`);
+      if (!response.ok) throw new Error('Suggestion failed.');
+      const result = await response.json();
+      const suggestion = result.suggestions?.[0];
+      if (suggestion?.isNew) {
+        setAssignDrafts((current) => ({ ...current, [item.id]: '__new' }));
+        setNewBaseTitles((current) => ({ ...current, [item.id]: suggestion.title }));
+      } else if (suggestion?.knowledgeBaseId) {
+        setAssignDrafts((current) => ({ ...current, [item.id]: suggestion.knowledgeBaseId }));
+      }
+      setAssignmentHints((current) => ({
+        ...current,
+        [item.id]: suggestion ? `${suggestion.title} · ${suggestion.reason}` : result.message,
+      }));
+      setStatus(result.message);
+    } catch {
+      setStatus('生成归属建议失败，请稍后重试。');
+    } finally {
+      setMutatingMaterialId(null);
+    }
+  }
+
   return (
     <section className="page-main full">
       <div className="page-title-row">
@@ -1459,7 +1487,11 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
               <button disabled={apiStatus !== 'online' || mutatingMaterialId === item.id} onClick={() => assignMaterial(item)} type="button">
                 Assign
               </button>
+              <button disabled={apiStatus !== 'online' || mutatingMaterialId === item.id} onClick={() => suggestAssignment(item)} type="button">
+                Suggest
+              </button>
             </div>
+            {assignmentHints[item.id] && <p className="assignment-hint">{assignmentHints[item.id]}</p>}
             {reviewingId === item.id && (
               <div className="review-box">
                 <input

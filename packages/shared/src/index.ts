@@ -178,6 +178,20 @@ export interface MaterialAssignmentResult {
   message: string;
 }
 
+export interface MaterialAssignmentSuggestion {
+  knowledgeBaseId?: string;
+  title: string;
+  score: number;
+  reason: string;
+  isNew?: boolean;
+}
+
+export interface MaterialAssignmentSuggestionsResult {
+  material: MaterialRecord;
+  suggestions: MaterialAssignmentSuggestion[];
+  message: string;
+}
+
 export interface MaterialReviewResult {
   material: MaterialRecord;
   knowledgeBase: KnowledgeBaseSummary;

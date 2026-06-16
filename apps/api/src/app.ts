@@ -19,6 +19,7 @@ import {
   runKnowledgeKit,
   saveModelProviderSettings,
   searchKnowledgeAssets,
+  suggestMaterialAssignments,
   testModelProviderSettings,
 } from '@zhijing/core';
 import type {
@@ -222,6 +223,18 @@ export function buildApi() {
       }
       request.log.error({ error }, 'material assignment failed');
       return reply.code(500).send({ error: 'Material assignment failed.' });
+    }
+  });
+
+  app.get<{ Params: { id: string } }>('/api/materials/:id/assignment-suggestions', async (request, reply) => {
+    try {
+      return suggestMaterialAssignments(request.params.id);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'material assignment suggestions failed');
+      return reply.code(500).send({ error: 'Material assignment suggestions failed.' });
     }
   });
 

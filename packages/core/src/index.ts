@@ -15,6 +15,8 @@ import {
   type KnowledgeKitId,
   type KnowledgeKitRunResult,
   type MaterialAssignmentResult,
+  type MaterialAssignmentSuggestion,
+  type MaterialAssignmentSuggestionsResult,
   type MaterialParseQueueResult,
   type MaterialRecord,
   type MaterialReviewResult,
@@ -1371,6 +1373,94 @@ export function assignMaterialToKnowledgeBase(
       ? '资料已在当前知识库中。'
       : `资料已移动到「${knowledgeBase.title}」。`,
   };
+}
+
+export function suggestMaterialAssignments(materialId: string): MaterialAssignmentSuggestionsResult {
+  const material = requireMaterial(materialId);
+  const materialText = [
+    material.title,
+    material.rawInput,
+    material.contentText,
+    material.platform,
+  ].filter(Boolean).join(' ');
+  const terms = tokenizeSuggestionText(materialText);
+  const scored = repository.listKnowledgeBases()
+    .map((base) => scoreKnowledgeBaseSuggestion(base, material, terms))
+    .filter((suggestion) => suggestion.score > 0)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 4);
+  const currentBase = repository.findKnowledgeBase(material.knowledgeBaseId);
+  const currentSuggestion: MaterialAssignmentSuggestion[] = currentBase && !scored.some((item) => item.knowledgeBaseId === currentBase.id)
+    ? [{
+        knowledgeBaseId: currentBase.id,
+        title: currentBase.title,
+        score: 1,
+        reason: '当前资料已归属这个知识库。',
+      }]
+    : [];
+  const suggestions = [
+    ...scored,
+    ...currentSuggestion,
+    {
+      title: compactTitle(material.title || material.rawInput),
+      score: 0,
+      reason: '没有合适归属时，可以用资料标题新建知识库。',
+      isNew: true,
+    },
+  ].slice(0, 5);
+
+  return {
+    material,
+    suggestions,
+    message: suggestions[0]?.isNew
+      ? '建议新建知识库承接这条资料。'
+      : `建议归属到「${suggestions[0]?.title ?? currentBase?.title ?? '当前知识库'}」。`,
+  };
+}
+
+function scoreKnowledgeBaseSuggestion(
+  base: KnowledgeBaseSummary,
+  material: MaterialRecord,
+  terms: Set<string>,
+): MaterialAssignmentSuggestion {
+  const cards = repository.listCards(base.id)
+    .filter((card) => card.materialId !== material.id)
+    .slice(0, 8);
+  const haystack = [
+    base.title,
+    base.summary,
+    ...cards.flatMap((card) => [card.title, card.body]),
+  ].join(' ');
+  const baseTerms = tokenizeSuggestionText(haystack);
+  let score = 0;
+  for (const term of terms) {
+    if (baseTerms.has(term)) score += term.length > 1 ? 2 : 1;
+  }
+  if (material.knowledgeBaseId === base.id) score += 3;
+  const matched = [...terms].filter((term) => baseTerms.has(term)).slice(0, 3);
+  return {
+    knowledgeBaseId: base.id,
+    title: base.title,
+    score,
+    reason: matched.length
+      ? `匹配关键词：${matched.join('、')}`
+      : material.knowledgeBaseId === base.id
+        ? '当前资料已归属这个知识库。'
+        : '与知识库标题或卡片内容相近。',
+  };
+}
+
+function tokenizeSuggestionText(input: string) {
+  const normalized = input.toLowerCase();
+  const asciiTerms = normalized.match(/[a-z0-9]{2,}/g) ?? [];
+  const cjkTerms = normalized.match(/[\u4e00-\u9fa5]{2,}/g)?.flatMap((chunk) => {
+    const terms = [chunk];
+    for (let index = 0; index < chunk.length - 1; index += 1) {
+      terms.push(chunk.slice(index, index + 2));
+    }
+    return terms;
+  }) ?? [];
+  return new Set([...asciiTerms, ...cjkTerms].filter((term) => term.length >= 2));
 }
 
 export async function completeMaterialReview(

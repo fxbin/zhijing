@@ -1835,6 +1835,14 @@ button { cursor: pointer; }
   opacity: 0.5;
 }
 
+.assignment-hint {
+  margin: 8px 0 0;
+  color: var(--sage-text);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
 .review-box {
   display: grid;
   gap: 10px;
