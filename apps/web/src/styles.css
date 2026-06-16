@@ -1816,6 +1816,125 @@ button { cursor: pointer; }
   color: white;
 }
 
+.real-map-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 24px;
+}
+
+.real-map-canvas {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  min-height: 560px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background:
+    linear-gradient(rgba(30, 45, 70, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30, 45, 70, 0.05) 1px, transparent 1px),
+    rgba(255, 255, 255, 0.72);
+  background-size: 32px 32px;
+  padding: 22px;
+}
+
+.real-map-node {
+  min-height: 150px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 2px 8px rgba(9, 20, 38, 0.05);
+  padding: 16px;
+}
+
+.real-map-node.knowledge_base {
+  grid-column: span 3;
+  min-height: 128px;
+  border-color: var(--primary);
+  background: rgba(232, 239, 252, 0.82);
+}
+
+.real-map-node.material {
+  border-left: 4px solid var(--sage);
+}
+
+.real-map-node.card {
+  border-left: 4px solid #7f95d1;
+}
+
+.real-map-node span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.real-map-node strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--primary);
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.real-map-node p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.map-inspector {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 20px;
+}
+
+.map-inspector h3 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.map-inspector > p {
+  margin: 0 0 18px;
+  color: var(--muted);
+}
+
+.relation-list {
+  display: grid;
+  gap: 10px;
+}
+
+.relation-list article {
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  background: var(--surface-low);
+  padding: 12px;
+}
+
+.relation-list span {
+  color: var(--sage-text);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.relation-list strong,
+.relation-list p {
+  display: block;
+  margin: 5px 0 0;
+}
+
+.relation-list strong {
+  color: var(--primary);
+}
+
+.relation-list p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .library-card p {
   min-height: 76px;
 }
@@ -2195,8 +2314,15 @@ button { cursor: pointer; }
   .detail-layout,
   .run-grid,
   .artifact-grid,
-  .settings-grid {
+  .settings-grid,
+  .real-map-layout {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .real-map-canvas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .real-map-node.knowledge_base {
+    grid-column: span 2;
   }
   .library-toolbar {
     align-items: stretch;
@@ -2312,5 +2438,11 @@ button { cursor: pointer; }
   }
   .large-search button {
     flex: 1 1 100%;
+  }
+  .real-map-canvas {
+    grid-template-columns: 1fr;
+  }
+  .real-map-node.knowledge_base {
+    grid-column: span 1;
   }
 }

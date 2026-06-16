@@ -223,6 +223,36 @@ export interface KnowledgeBaseAnalytics {
   exportRows: AnalyticsExportRow[];
 }
 
+export type KnowledgeMapNodeKind = 'knowledge_base' | 'material' | 'card';
+
+export interface KnowledgeMapNode {
+  id: string;
+  kind: KnowledgeMapNodeKind;
+  label: string;
+  summary?: string;
+  status?: string;
+  metadata?: Record<string, string | number | boolean | undefined>;
+}
+
+export interface KnowledgeMapEdge {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  relation: 'contains' | 'source' | 'supports';
+}
+
+export interface KnowledgeMapResult {
+  knowledgeBaseId: string;
+  generatedAt: string;
+  nodes: KnowledgeMapNode[];
+  edges: KnowledgeMapEdge[];
+  stats: {
+    materials: number;
+    cards: number;
+    sourcedCards: number;
+  };
+}
+
 export function classifyInput(input: string): IntakeKind {
   const value = input.trim();
   if (/https?:\/\//i.test(value)) return 'link';

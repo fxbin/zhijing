@@ -8,6 +8,7 @@ import {
   type IntakeResult,
   type KnowledgeBaseAnalytics,
   type KnowledgeBaseDetail,
+  type KnowledgeMapResult,
   type KnowledgeBaseSummary,
   type KnowledgeCard,
   type KnowledgeKitId,
@@ -2589,6 +2590,86 @@ export function getKnowledgeBase(id: string): KnowledgeBaseDetail | undefined {
     materials: repository.listMaterials(id),
     cards: repository.listCards(id),
     artifacts: repository.listArtifacts(id),
+  };
+}
+
+export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {
+  const base = repository.findKnowledgeBase(id);
+  if (!base) return undefined;
+
+  const materials = repository.listMaterials(id);
+  const cards = repository.listCards(id);
+  const materialNodes = materials.slice(0, 18).map((material) => ({
+    id: `material:${material.id}`,
+    kind: 'material' as const,
+    label: material.title,
+    summary: compactPreview(material.contentText ?? material.rawInput),
+    status: material.parseStatus,
+    metadata: {
+      platform: material.platform,
+      type: material.type,
+      mediaCount: material.mediaUrls?.length ?? 0,
+    },
+  }));
+  const cardNodes = cards.slice(0, 28).map((card) => ({
+    id: `card:${card.id}`,
+    kind: 'card' as const,
+    label: card.title,
+    summary: compactPreview(card.body),
+    status: card.claimStatus,
+    metadata: {
+      type: card.type,
+      materialId: card.materialId,
+    },
+  }));
+  const nodes = [
+    {
+      id: `knowledge_base:${base.id}`,
+      kind: 'knowledge_base' as const,
+      label: base.title,
+      summary: base.summary,
+      status: base.stage,
+      metadata: {
+        sourceCount: base.sourceCount,
+        cardCount: base.cardCount,
+      },
+    },
+    ...materialNodes,
+    ...cardNodes,
+  ];
+
+  const visibleMaterialIds = new Set(materialNodes.map((node) => node.id.replace('material:', '')));
+  const edges = [
+    ...materialNodes.map((node) => ({
+      id: `edge:${base.id}:${node.id}`,
+      sourceId: `knowledge_base:${base.id}`,
+      targetId: node.id,
+      relation: 'contains' as const,
+    })),
+    ...cardNodes.map((node) => {
+      const materialId = typeof node.metadata?.materialId === 'string' ? node.metadata.materialId : undefined;
+      const sourceId = materialId && visibleMaterialIds.has(materialId)
+        ? `material:${materialId}`
+        : `knowledge_base:${base.id}`;
+      return {
+        id: `edge:${sourceId}:${node.id}`,
+        sourceId,
+        targetId: node.id,
+        relation: materialId && visibleMaterialIds.has(materialId) ? 'source' as const : 'supports' as const,
+      };
+    }),
+  ];
+
+  return {
+    knowledgeBaseId: id,
+    generatedAt: now(),
+    nodes,
+    edges,
+    stats: {
+      materials: materials.length,
+      cards: cards.length,
+      sourcedCards: cards.filter((card) => card.claimStatus === 'sourced').length,
+    },
   };
 }
 

@@ -797,7 +797,7 @@ function App() {
             />
           )}
           {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={knowledgeBaseDetail} setView={go} />}
-          {view === 'maps' && <MapsView />}
+          {view === 'maps' && <MapsView apiStatus={apiStatus} selectedKnowledgeBaseId={selectedKnowledgeBaseId} />}
           {view === 'settings' && <SettingsView />}
         </div>
       </section>
@@ -1637,8 +1637,102 @@ function ArtifactView({ artifact, detail, setView }) {
   );
 }
 
-function MapsView() {
-  return <section className="page-main full"><div className="page-title-row"><div><h2>Knowledge Maps</h2><p>Explore relations across themes, cards, and source clusters.</p></div></div><KnowledgeMapPanel /></section>;
+function MapsView({ apiStatus, selectedKnowledgeBaseId }) {
+  const [map, setMap] = useState(null);
+  const [status, setStatus] = useState('选择一个知识库后生成地图。');
+
+  useEffect(() => {
+    if (!selectedKnowledgeBaseId || apiStatus !== 'online') {
+      setMap(null);
+      setStatus(apiStatus === 'online' ? '选择一个知识库后生成地图。' : 'API 未连接，暂时无法生成知识地图。');
+      return;
+    }
+
+    let ignore = false;
+    async function loadMap() {
+      setStatus('Loading knowledge map...');
+      try {
+        const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/map`);
+        if (!response.ok) throw new Error('Map unavailable.');
+        const result = await response.json();
+        if (!ignore) {
+          setMap(result);
+          setStatus(result.nodes?.length ? 'Knowledge map synced.' : '当前知识库还没有可生成地图的节点。');
+        }
+      } catch {
+        if (!ignore) {
+          setMap(null);
+          setStatus('知识地图读取失败，请确认 API 正在运行。');
+        }
+      }
+    }
+    loadMap();
+    return () => {
+      ignore = true;
+    };
+  }, [apiStatus, selectedKnowledgeBaseId]);
+
+  const nodes = map?.nodes ?? [];
+  const edges = map?.edges ?? [];
+  const primaryNodes = nodes.slice(0, 12);
+
+  return (
+    <section className="page-main full">
+      <div className="page-title-row">
+        <div>
+          <h2>Knowledge Maps</h2>
+          <p>从当前知识库的资料、卡片和来源关系生成结构化地图。</p>
+        </div>
+        {map && (
+          <div className="library-stats">
+            <span>{nodes.length} nodes</span>
+            <span>{edges.length} edges</span>
+            <span>{map.stats?.sourcedCards ?? 0} sourced</span>
+          </div>
+        )}
+      </div>
+
+      {!map ? (
+        <EmptyState title="暂无知识地图" body={status} />
+      ) : (
+        <div className="real-map-layout">
+          <section className="real-map-canvas" aria-label="知识地图节点">
+            {primaryNodes.map((node, index) => (
+              <article className={`real-map-node ${node.kind}`} key={node.id} style={{ '--node-index': index }}>
+                <span>{mapKindLabel(node.kind)}</span>
+                <strong>{node.label}</strong>
+                <p>{node.summary}</p>
+              </article>
+            ))}
+          </section>
+          <aside className="map-inspector">
+            <h3>Relations</h3>
+            <p>{status} Updated {map.generatedAt ? new Date(map.generatedAt).toLocaleTimeString() : 'now'}.</p>
+            <div className="relation-list">
+              {edges.slice(0, 12).map((edge) => {
+                const source = nodes.find((node) => node.id === edge.sourceId);
+                const target = nodes.find((node) => node.id === edge.targetId);
+                return (
+                  <article key={edge.id}>
+                    <span>{edge.relation}</span>
+                    <strong>{source?.label ?? edge.sourceId}</strong>
+                    <p>{target?.label ?? edge.targetId}</p>
+                  </article>
+                );
+              })}
+              {edges.length === 0 && <EmptyState title="暂无关系" body="导入资料并生成卡片后，会出现来源关系。" />}
+            </div>
+          </aside>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function mapKindLabel(kind) {
+  if (kind === 'knowledge_base') return 'Knowledge Base';
+  if (kind === 'material') return 'Material';
+  return 'Card';
 }
 
 function SearchView() {

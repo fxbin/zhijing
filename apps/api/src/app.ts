@@ -7,6 +7,7 @@ import {
   getDashboard,
   getKnowledgeBaseAnalytics,
   getKnowledgeBase,
+  getKnowledgeMap,
   getTask,
   getModelProviderSettings,
   intakeKnowledge,
@@ -131,6 +132,14 @@ export function buildApi() {
       return reply.code(404).send({ error: 'Knowledge base not found.' });
     }
     return analytics;
+  });
+
+  app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/map', async (request, reply) => {
+    const map = getKnowledgeMap(request.params.id);
+    if (!map) {
+      return reply.code(404).send({ error: 'Knowledge base not found.' });
+    }
+    return map;
   });
 
   app.post<{ Params: { id: string }; Body: { question?: string } }>('/api/knowledge-bases/:id/ask', async (request, reply) => {
