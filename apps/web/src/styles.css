@@ -1607,12 +1607,14 @@ button { cursor: pointer; }
 .capture-head,
 .capture-mode,
 .capture-box,
+.capture-actions,
 .library-toolbar,
 .library-search,
 .library-card-head,
 .library-card-actions,
 .library-card-actions a,
 .library-card-actions button,
+.file-import-button,
 .assignment-row,
 .review-actions {
   display: flex;
@@ -1667,6 +1669,12 @@ button { cursor: pointer; }
   align-items: stretch;
 }
 
+.capture-actions {
+  flex: 0 0 128px;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .capture-box textarea {
   width: 100%;
   min-height: 78px;
@@ -1686,21 +1694,38 @@ button { cursor: pointer; }
   box-shadow: 0 0 0 3px rgba(216, 227, 251, 0.72);
 }
 
-.capture-box button {
+.capture-box button,
+.file-import-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   min-width: 128px;
+  min-height: 44px;
   border: 1px solid var(--primary);
   border-radius: 9px;
   background: var(--primary);
   color: white;
-  padding: 0 16px;
+  padding: 0 14px;
   font-weight: 850;
 }
 
-.capture-box button:disabled {
+.file-import-button {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--primary);
+}
+
+.file-import-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.capture-box button:disabled,
+.file-import-button.disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -2449,7 +2474,11 @@ button { cursor: pointer; }
     align-items: stretch;
     flex-direction: column;
   }
-  .capture-box button {
+  .capture-actions {
+    flex: none;
+  }
+  .capture-box button,
+  .file-import-button {
     min-height: 46px;
     width: 100%;
   }

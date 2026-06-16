@@ -104,6 +104,9 @@ const materialFilterOptions = [
   { key: 'parsing', label: 'Parsing' },
 ];
 
+const supportedImportExtensions = ['.md', '.markdown', '.txt'];
+const maxImportedFileSize = 2 * 1024 * 1024;
+
 const searchScopeOptions = [
   { key: 'all', label: 'All' },
   { key: 'knowledge_base', label: 'Knowledge Bases' },
@@ -1197,6 +1200,7 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
   const [assignmentHints, setAssignmentHints] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isImportingFile, setIsImportingFile] = useState(false);
   const [mutatingMaterialId, setMutatingMaterialId] = useState(null);
   const [status, setStatus] = useState('Loading materials...');
 
@@ -1281,6 +1285,46 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
       setStatus('收集失败，请确认 API 正在运行。');
     } finally {
       setIsCapturing(false);
+    }
+  }
+
+  async function importTextFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || isImportingFile) return;
+    if (apiStatus !== 'online') {
+      setStatus('API 未连接，暂时无法导入本地文档。');
+      return;
+    }
+    const lowerName = file.name.toLowerCase();
+    const isSupported = supportedImportExtensions.some((extension) => lowerName.endsWith(extension));
+    if (!isSupported) {
+      setStatus('目前仅支持 Markdown / TXT 文本文档导入。');
+      return;
+    }
+    if (file.size > maxImportedFileSize) {
+      setStatus('文档过大，请先拆分到 2MB 以内再导入。');
+      return;
+    }
+    setIsImportingFile(true);
+    setStatus('Importing local document...');
+    try {
+      const text = (await file.text()).trim();
+      if (!text) throw new Error('Empty file.');
+      const response = await fetch('/api/intake', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: `本地文档：${file.name}\n\n${text}` }),
+      });
+      if (!response.ok) throw new Error('File import failed.');
+      const result = await response.json();
+      onCaptureResult(result);
+      setStatus(result.message);
+      await loadMaterials();
+    } catch {
+      setStatus('导入本地文档失败，请确认文件内容可读取。');
+    } finally {
+      setIsImportingFile(false);
     }
   }
 
@@ -1417,10 +1461,23 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
             onChange={(event) => setCaptureValue(event.target.value)}
             placeholder={captureMode === 'link' ? 'Paste a source link...' : 'Paste a note, question, or topic...'}
           />
-          <button disabled={apiStatus !== 'online' || isCapturing || !captureValue.trim()} onClick={capture} type="button">
-            {isCapturing ? <Clock3 size={18} /> : <Send size={18} />}
-            Capture
-          </button>
+          <div className="capture-actions">
+            <button disabled={apiStatus !== 'online' || isCapturing || !captureValue.trim()} onClick={capture} type="button">
+              {isCapturing ? <Clock3 size={18} /> : <Send size={18} />}
+              Capture
+            </button>
+            <label className={`file-import-button ${apiStatus !== 'online' || isImportingFile ? 'disabled' : ''}`}>
+              {isImportingFile ? <Clock3 size={18} /> : <Upload size={18} />}
+              Import
+              <input
+                accept=".md,.markdown,.txt,text/markdown,text/plain"
+                aria-label="导入本地文档"
+                disabled={apiStatus !== 'online' || isImportingFile}
+                onChange={importTextFile}
+                type="file"
+              />
+            </label>
+          </div>
         </div>
         <p>{status}</p>
       </section>
