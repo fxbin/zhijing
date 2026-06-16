@@ -174,6 +174,10 @@ function formatMaterialTime(value) {
   }
 }
 
+function formatPercent(value) {
+  return `${Math.round((value ?? 0) * 100)}%`;
+}
+
 function fallbackDetail() {
   return {
     title: 'AI Agent 学习',
@@ -233,6 +237,7 @@ function App() {
   const [tasks, setTasks] = useState([]);
   const [selectedKnowledgeBaseId, setSelectedKnowledgeBaseId] = useState(null);
   const [knowledgeBaseDetail, setKnowledgeBaseDetail] = useState(fallbackDetail);
+  const [knowledgeBaseAnalytics, setKnowledgeBaseAnalytics] = useState(null);
   const [latestTaskId, setLatestTaskId] = useState(null);
   const [latestTask, setLatestTask] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -288,6 +293,7 @@ function App() {
   useEffect(() => {
     if (!selectedKnowledgeBaseId) {
       setKnowledgeBaseDetail(apiStatus === 'online' ? emptyDetail() : fallbackDetail());
+      setKnowledgeBaseAnalytics(null);
       setAssistantAnswer(null);
       setAssistantQuestion('');
       return;
@@ -309,6 +315,29 @@ function App() {
       ignore = true;
     };
   }, [apiStatus, selectedKnowledgeBaseId]);
+
+  useEffect(() => {
+    if (!selectedKnowledgeBaseId || apiStatus !== 'online') {
+      setKnowledgeBaseAnalytics(null);
+      return;
+    }
+
+    let ignore = false;
+    async function loadAnalytics() {
+      try {
+        const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/analytics`);
+        if (!response.ok) return;
+        const analytics = await response.json();
+        if (!ignore) setKnowledgeBaseAnalytics(analytics);
+      } catch {
+        if (!ignore) setKnowledgeBaseAnalytics(null);
+      }
+    }
+    loadAnalytics();
+    return () => {
+      ignore = true;
+    };
+  }, [apiStatus, selectedKnowledgeBaseId, latestTask?.updatedAt]);
 
   useEffect(() => {
     setAssistantAnswer(null);
@@ -601,6 +630,7 @@ function App() {
           {view === 'detail' && (
             <DetailView
               apiStatus={apiStatus}
+              analytics={knowledgeBaseAnalytics}
               assistantAnswer={assistantAnswer}
               assistantQuestion={assistantQuestion}
               detail={knowledgeBaseDetail}
@@ -786,6 +816,7 @@ function KnowledgeMapPanel() {
 
 function DetailView({
   apiStatus,
+  analytics,
   assistantAnswer,
   assistantQuestion,
   detail,
@@ -806,6 +837,9 @@ function DetailView({
   const canAsk = apiStatus === 'online' && Boolean(selectedKnowledgeBaseId) && !isAsking;
   const latestAnswerCards = assistantAnswer?.cards?.slice(0, 2) ?? [];
   const questionHistory = materials.filter((material) => material.type === 'question').slice(0, 3);
+  const totals = analytics?.totals;
+  const statusDistribution = analytics?.materialStatusDistribution?.slice(0, 4) ?? [];
+  const platformDistribution = analytics?.platformDistribution?.slice(0, 4) ?? [];
 
   return (
     <section className="page-grid">
@@ -819,6 +853,26 @@ function DetailView({
           </div>
           <button onClick={() => setView('workflow')} type="button">Run Kit</button>
         </div>
+        {analytics && (
+          <section className="detail-metrics" aria-label="知识库指标">
+            <article>
+              <span>Sources</span>
+              <strong>{totals?.materials ?? materials.length}</strong>
+            </article>
+            <article>
+              <span>Cards</span>
+              <strong>{totals?.cards ?? cards.length}</strong>
+            </article>
+            <article>
+              <span>Sourced</span>
+              <strong>{formatPercent(analytics.sourcedRatio)}</strong>
+            </article>
+            <article>
+              <span>Tasks</span>
+              <strong>{totals?.tasks ?? 0}</strong>
+            </article>
+          </section>
+        )}
         <div className="detail-layout">
           <aside className="roadmap">
             <h3>Roadmap</h3>
@@ -867,6 +921,24 @@ function DetailView({
       <aside className="assistant-panel">
         <h3>AI Assistant</h3>
         <p>当前知识库有 {detail.sourceCount ?? materials.length} 条资料、{detail.cardCount ?? cards.length} 张卡片。</p>
+        {analytics && (
+          <section className="source-health">
+            <div>
+              <strong>Source Health</strong>
+              <span>{analytics.generatedAt ? new Date(analytics.generatedAt).toLocaleTimeString() : 'now'}</span>
+            </div>
+            <div className="health-list">
+              {statusDistribution.map((item) => (
+                <p key={item.name}><span>{item.name}</span><strong>{item.count}</strong></p>
+              ))}
+            </div>
+            <div className="health-list muted">
+              {platformDistribution.map((item) => (
+                <p key={item.name}><span>{item.name}</span><strong>{item.count}</strong></p>
+              ))}
+            </div>
+          </section>
+        )}
         <TaskStatus task={latestTask} />
         <div className="assistant-thread">
           <div className="assistant-message">
