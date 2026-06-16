@@ -6,13 +6,20 @@ import {
   getKnowledgeBaseAnalytics,
   getKnowledgeBase,
   getTask,
+  getModelProviderSettings,
   intakeKnowledge,
   KnowledgeCoreError,
   listKnowledgeBases,
   recordMaterialParsingFailure,
   requestMaterialParsing,
+  saveModelProviderSettings,
+  testModelProviderSettings,
 } from '@zhijing/core';
-import type { IntakeRequest } from '@zhijing/shared';
+import type {
+  IntakeRequest,
+  SaveModelProviderSettingsRequest,
+  TestModelProviderSettingsRequest,
+} from '@zhijing/shared';
 
 export function buildApi() {
   const app = Fastify({
@@ -38,6 +45,36 @@ export function buildApi() {
   }));
 
   app.get('/api/dashboard', async () => getDashboard());
+
+  app.get('/api/settings/model-provider', async () => getModelProviderSettings());
+
+  app.put<{ Body: Partial<SaveModelProviderSettingsRequest> }>('/api/settings/model-provider', async (request, reply) => {
+    const provider = typeof request.body?.provider === 'string' ? request.body.provider.trim() : '';
+    const model = typeof request.body?.model === 'string' ? request.body.model.trim() : '';
+    if (!provider || !model) {
+      return reply.code(400).send({ error: 'Provider and model are required.' });
+    }
+
+    try {
+      return saveModelProviderSettings({
+        provider,
+        model,
+        apiKey: typeof request.body?.apiKey === 'string' ? request.body.apiKey : undefined,
+        enabled: typeof request.body?.enabled === 'boolean' ? request.body.enabled : undefined,
+        fallbackToMock: typeof request.body?.fallbackToMock === 'boolean' ? request.body.fallbackToMock : undefined,
+        clearApiKey: request.body?.clearApiKey === true,
+      });
+    } catch (error) {
+      request.log.error({ error }, 'model provider settings save failed');
+      return reply.code(500).send({ error: 'Model provider settings save failed.' });
+    }
+  });
+
+  app.post<{ Body: Partial<TestModelProviderSettingsRequest> }>('/api/settings/model-provider/test', async (request) => testModelProviderSettings({
+    provider: typeof request.body?.provider === 'string' ? request.body.provider.trim() : undefined,
+    model: typeof request.body?.model === 'string' ? request.body.model.trim() : undefined,
+    apiKey: typeof request.body?.apiKey === 'string' ? request.body.apiKey : undefined,
+  }));
 
   app.get('/api/knowledge-bases', async () => ({
     knowledgeBases: listKnowledgeBases(),

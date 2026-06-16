@@ -17,6 +17,54 @@ export interface IntakeRequest {
   knowledgeBaseId?: string;
 }
 
+export interface ModelProviderModel {
+  id: string;
+}
+
+export interface ModelProviderOption {
+  id: string;
+  models: ModelProviderModel[];
+}
+
+export interface ModelProviderSettings {
+  provider: string;
+  model: string;
+  enabled: boolean;
+  fallbackToMock: boolean;
+  hasApiKey: boolean;
+  keySource: 'none' | 'env' | 'runtime';
+  updatedAt?: string;
+  providers: ModelProviderOption[];
+}
+
+export interface SaveModelProviderSettingsRequest {
+  provider: string;
+  model: string;
+  apiKey?: string;
+  enabled?: boolean;
+  fallbackToMock?: boolean;
+  clearApiKey?: boolean;
+}
+
+export interface TestModelProviderSettingsRequest {
+  provider?: string;
+  model?: string;
+  apiKey?: string;
+}
+
+export interface ModelProviderTestResult {
+  ok: boolean;
+  provider: string;
+  model: string;
+  message: string;
+  sampleTitle?: string;
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    costUsd?: number;
+  };
+}
+
 export interface KnowledgeBaseSummary {
   id: string;
   title: string;

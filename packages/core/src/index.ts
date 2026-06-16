@@ -10,12 +10,24 @@ import {
   type KnowledgeCard,
   type MaterialParseQueueResult,
   type MaterialRecord,
+  type ModelProviderSettings,
+  type ModelProviderTestResult,
+  type SaveModelProviderSettingsRequest,
   type TaskStatus,
+  type TestModelProviderSettingsRequest,
   detectPlatform,
 } from '@zhijing/shared';
 import {
+  createPiAiRuntime,
   createConfiguredPiRuntime,
+  getDefaultPiModel,
+  getDefaultPiProvider,
+  getKnownPiModels,
+  getKnownPiProviders,
+  getPiEnvApiKey,
+  isKnownPiProvider,
   structuredSchemas,
+  type KnownProvider,
   type PiRuntime,
   type TSchema,
 } from '@zhijing/pi-runtime';
@@ -527,12 +539,164 @@ let repository: KnowledgeRepository = process.env.ZHIJING_STORAGE === 'memory'
   : createSqliteKnowledgeRepository();
 let piRuntime: PiRuntime = createConfiguredPiRuntime();
 
+type RuntimeModelProviderConfig = {
+  provider: KnownProvider;
+  model: string;
+  apiKey?: string;
+  enabled: boolean;
+  fallbackToMock: boolean;
+  keySource: ModelProviderSettings['keySource'];
+  updatedAt?: string;
+};
+
+let modelProviderConfig: RuntimeModelProviderConfig = initialModelProviderConfig();
+
 export function configureKnowledgeRepository(nextRepository: KnowledgeRepository) {
   repository = nextRepository;
 }
 
 export function configurePiRuntime(nextRuntime: PiRuntime) {
   piRuntime = nextRuntime;
+}
+
+function initialModelProviderConfig(): RuntimeModelProviderConfig {
+  const provider = normalizeProvider(process.env.ZHIJING_PI_PROVIDER);
+  const envApiKey = process.env.ZHIJING_PI_API_KEY ?? getPiEnvApiKey(provider);
+  return {
+    provider,
+    model: process.env.ZHIJING_PI_MODEL ?? (provider === getDefaultPiProvider() ? getDefaultPiModel() : defaultModelForProvider(provider)),
+    apiKey: envApiKey,
+    enabled: process.env.ZHIJING_PI_ENABLED === '1' || Boolean(envApiKey),
+    fallbackToMock: process.env.ZHIJING_PI_FALLBACK === '0' ? false : true,
+    keySource: envApiKey ? 'env' : 'none',
+  };
+}
+
+function normalizeProvider(provider: string | undefined): KnownProvider {
+  if (provider && isKnownPiProvider(provider)) return provider;
+  return getDefaultPiProvider();
+}
+
+function defaultModelForProvider(provider: KnownProvider) {
+  const models = getKnownPiModels(provider);
+  return models[0]?.id ?? getDefaultPiModel();
+}
+
+function providerOptions(): ModelProviderSettings['providers'] {
+  return getKnownPiProviders().map((provider) => ({
+    id: provider,
+    models: getKnownPiModels(provider),
+  }));
+}
+
+function currentApiKey() {
+  return modelProviderConfig.apiKey ?? getPiEnvApiKey(modelProviderConfig.provider);
+}
+
+function applyModelProviderConfig() {
+  piRuntime = createPiAiRuntime({
+    provider: modelProviderConfig.provider,
+    model: modelProviderConfig.model,
+    apiKey: modelProviderConfig.apiKey,
+    enabled: modelProviderConfig.enabled,
+    fallbackToMock: modelProviderConfig.fallbackToMock,
+  });
+}
+
+function modelSettingsSnapshot(): ModelProviderSettings {
+  return {
+    provider: modelProviderConfig.provider,
+    model: modelProviderConfig.model,
+    enabled: modelProviderConfig.enabled,
+    fallbackToMock: modelProviderConfig.fallbackToMock,
+    hasApiKey: Boolean(currentApiKey()),
+    keySource: modelProviderConfig.apiKey ? modelProviderConfig.keySource : getPiEnvApiKey(modelProviderConfig.provider) ? 'env' : 'none',
+    updatedAt: modelProviderConfig.updatedAt,
+    providers: providerOptions(),
+  };
+}
+
+export function getModelProviderSettings(): ModelProviderSettings {
+  return modelSettingsSnapshot();
+}
+
+export function saveModelProviderSettings(input: SaveModelProviderSettingsRequest): ModelProviderSettings {
+  const provider = normalizeProvider(input.provider);
+  const availableModels = getKnownPiModels(provider);
+  const model = availableModels.some((item) => item.id === input.model)
+    ? input.model
+    : defaultModelForProvider(provider);
+  const providerScopedExistingKey = modelProviderConfig.provider === provider
+    ? currentApiKey()
+    : getPiEnvApiKey(provider);
+  const apiKey = input.clearApiKey
+    ? undefined
+    : input.apiKey?.trim() || providerScopedExistingKey;
+
+  modelProviderConfig = {
+    provider,
+    model,
+    apiKey,
+    enabled: input.enabled ?? Boolean(apiKey),
+    fallbackToMock: input.fallbackToMock ?? true,
+    keySource: apiKey ? input.apiKey?.trim() ? 'runtime' : getPiEnvApiKey(provider) ? 'env' : modelProviderConfig.keySource : 'none',
+    updatedAt: now(),
+  };
+  applyModelProviderConfig();
+  return modelSettingsSnapshot();
+}
+
+export async function testModelProviderSettings(input: TestModelProviderSettingsRequest = {}): Promise<ModelProviderTestResult> {
+  const provider = normalizeProvider(input.provider ?? modelProviderConfig.provider);
+  const requestedModel = input.model ?? modelProviderConfig.model;
+  const model = getKnownPiModels(provider).some((item) => item.id === requestedModel)
+    ? requestedModel
+    : defaultModelForProvider(provider);
+  const apiKey = input.apiKey?.trim() || currentApiKey();
+
+  if (!apiKey) {
+    return {
+      ok: false,
+      provider,
+      model,
+      message: '请先填写 Provider API Key。',
+    };
+  }
+
+  try {
+    const runtime = createPiAiRuntime({
+      provider,
+      model,
+      apiKey,
+      enabled: true,
+      fallbackToMock: false,
+      maxTokens: 700,
+    });
+    const result = await runtime.completeStructured<{ cards: { title: string }[] }, TSchema>({
+      task: 'knowledge_cards',
+      prompt: '用中文生成一张用于验证模型设置的知识卡片，主题是「知径模型设置」。',
+      schema: structuredSchemas.knowledge_cards as TSchema,
+      context: {
+        verification: true,
+        expectedLanguage: 'zh-CN',
+      },
+    });
+    return {
+      ok: true,
+      provider,
+      model,
+      message: '模型连接正常，已返回真实结构化 JSON。',
+      sampleTitle: result.output.cards[0]?.title,
+      usage: result.usage,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      provider,
+      model,
+      message: error instanceof Error ? error.message : '模型测试失败。',
+    };
+  }
 }
 
 export class KnowledgeCoreError extends Error {

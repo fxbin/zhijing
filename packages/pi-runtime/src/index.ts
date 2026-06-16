@@ -2,6 +2,8 @@ import {
   complete,
   getEnvApiKey,
   getModel,
+  getModels,
+  getProviders,
   stream,
   Type,
   type Api,
@@ -15,7 +17,7 @@ import {
 } from '@earendil-works/pi-ai';
 
 export { Type };
-export type { TSchema, Tool };
+export type { KnownProvider, TSchema, Tool };
 
 export const citationScopeSchema = Type.Object({
   materialId: Type.Optional(Type.String()),
@@ -142,6 +144,32 @@ export interface PiAiRuntimeConfig {
 
 const defaultProvider: KnownProvider = 'openai';
 const defaultModel = 'gpt-4o-mini';
+
+export function getDefaultPiProvider() {
+  return defaultProvider;
+}
+
+export function getDefaultPiModel() {
+  return defaultModel;
+}
+
+export function getKnownPiProviders() {
+  return getProviders();
+}
+
+export function getKnownPiModels(provider: KnownProvider) {
+  return getModels(provider).map((model) => ({
+    id: model.id,
+  }));
+}
+
+export function getPiEnvApiKey(provider: KnownProvider) {
+  return getEnvApiKey(provider);
+}
+
+export function isKnownPiProvider(provider: string): provider is KnownProvider {
+  return getKnownPiProviders().includes(provider as KnownProvider);
+}
 
 export function createMockPiRuntime(): PiRuntime {
   return {
