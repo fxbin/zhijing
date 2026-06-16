@@ -100,8 +100,8 @@ type ParsedMaterialContent = {
 };
 
 type XiaohongshuShareInfo = {
-  noteId: string;
-  xsecToken: string;
+  noteId?: string;
+  xsecToken?: string;
   sourceUrl: string;
 };
 
@@ -1481,7 +1481,7 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
       queued: false,
       retry,
       message: parsed.needsReview
-        ? '小红书链接已保存，当前缺少深度解析连接器，需要补充正文或配置连接器后重试。'
+        ? '小红书链接已保存，公开页面暂未暴露完整正文或媒体，需要稍后重试或手动补充。'
         : material.platform === 'xiaohongshu'
           ? '小红书笔记已解析并生成知识卡片。'
         : '普通网页已解析并生成知识卡片。',
@@ -1643,21 +1643,12 @@ async function parseOrdinaryWebMaterial(material: MaterialRecord): Promise<Parse
 async function parseXiaohongshuMaterial(material: MaterialRecord): Promise<ParsedMaterialContent> {
   const shareInfo = parseXiaohongshuShareInput(material.rawInput) ?? parseXiaohongshuShareInput(material.sourceUrl ?? '');
   if (!shareInfo) {
-    throw new KnowledgeCoreError('Xiaohongshu note id and xsec_token are required for parsing.', 400);
+    throw new KnowledgeCoreError('Xiaohongshu source URL is required for parsing.', 400);
   }
 
-  let parsed: { title?: string; text: string; mediaUrls: string[] } | undefined;
-  if (isXiaohongshuConnectorConfigured()) {
-    const detail = await callXiaohongshuMcpTool('get_feed_detail', {
-      feed_id: shareInfo.noteId,
-      xsec_token: shareInfo.xsecToken,
-    });
-    parsed = normalizeXiaohongshuFeedDetail(detail);
-  } else {
-    parsed = await tryParseXiaohongshuPublicShare(material, shareInfo);
-  }
+  const parsed = await tryParseXiaohongshuPublicShare(material, shareInfo);
 
-  if (parsed.text.length < 4 && parsed.mediaUrls.length === 0) {
+  if (!parsed.needsReview && parsed.text.length < 4 && (parsed.mediaUrls?.length ?? 0) === 0) {
     throw new Error('Xiaohongshu parser returned no usable note text or media.');
   }
 
@@ -1665,33 +1656,32 @@ async function parseXiaohongshuMaterial(material: MaterialRecord): Promise<Parse
     title: parsed.title,
     text: parsed.text.slice(0, 18_000),
     mediaUrls: parsed.mediaUrls,
-    needsReview: !isXiaohongshuConnectorConfigured(),
-    reviewReason: !isXiaohongshuConnectorConfigured()
-      ? '未配置小红书深度解析连接器；已保留分享标题/链接，需要手动补充正文媒体或配置 XHS_MCP_URL 后重试。'
-      : undefined,
+    needsReview: parsed.needsReview,
+    reviewReason: parsed.reviewReason,
   };
-}
-
-function isXiaohongshuConnectorConfigured() {
-  return Boolean(xiaohongshuMcpUrl());
 }
 
 async function tryParseXiaohongshuPublicShare(
   material: MaterialRecord,
   shareInfo: XiaohongshuShareInfo,
-): Promise<{ title?: string; text: string; mediaUrls: string[] }> {
+): Promise<ParsedMaterialContent> {
   const titleFromShare = extractXiaohongshuShareTitle(material.rawInput);
   const publicParsed = await tryParseXiaohongshuPublicPage(shareInfo.sourceUrl);
-  const title = publicParsed?.title ?? titleFromShare ?? titleFromLink(shareInfo.sourceUrl);
-  const text = cleanText([
-    title,
-    publicParsed?.text,
-    `来源链接：${shareInfo.sourceUrl}`,
-  ].filter(Boolean).join('\n\n'));
+  if (publicParsed && (publicParsed.text.length >= 4 || (publicParsed.mediaUrls?.length ?? 0) > 0)) {
+    return {
+      title: publicParsed.title ?? titleFromShare,
+      text: publicParsed.text,
+      mediaUrls: publicParsed.mediaUrls,
+    };
+  }
+
+  const title = titleFromShare ?? titleFromLink(shareInfo.sourceUrl);
   return {
     title,
-    text,
-    mediaUrls: publicParsed?.mediaUrls ?? [],
+    text: cleanText([title, `来源链接：${shareInfo.sourceUrl}`].filter(Boolean).join('\n\n')),
+    mediaUrls: [],
+    needsReview: true,
+    reviewReason: '公开页面没有暴露可解析的笔记状态，可能需要登录、稍后重试或手动补充正文媒体。',
   };
 }
 
@@ -1705,26 +1695,15 @@ function extractXiaohongshuShareTitle(input: string | undefined) {
 
 async function tryParseXiaohongshuPublicPage(sourceUrl: string) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8_000);
+  const timer = setTimeout(() => controller.abort(), 12_000);
   try {
     const response = await fetch(sourceUrl, {
       signal: controller.signal,
       redirect: 'follow',
-      headers: {
-        accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8',
-        'user-agent': 'Mozilla/5.0 (compatible; ZhijingBot/0.1)',
-      },
+      headers: xiaohongshuRequestHeaders(),
     });
     if (!response.ok) return undefined;
-    const html = (await response.text()).slice(0, 800_000);
-    const extracted = extractReadableText(html, titleFromLink(sourceUrl));
-    const mediaUrls = uniqueStrings(collectMediaUrls(html));
-    if (extracted.text.length < 20 && mediaUrls.length === 0) return undefined;
-    return {
-      title: extracted.title,
-      text: extracted.text.slice(0, 4000),
-      mediaUrls,
-    };
+    return normalizeXiaohongshuInitialStateHtml(await response.text());
   } catch {
     return undefined;
   } finally {
@@ -1741,10 +1720,10 @@ export function parseXiaohongshuShareInput(input: string | undefined): Xiaohongs
       if (!/xiaohongshu\.com|xhslink\.com/i.test(url.hostname)) continue;
       const noteId = extractXiaohongshuNoteId(url);
       const xsecToken = url.searchParams.get('xsec_token') ?? url.searchParams.get('xsecToken');
-      if (noteId && xsecToken) {
+      if (noteId || /xhslink\.com/i.test(url.hostname)) {
         return {
-          noteId,
-          xsecToken,
+          noteId: noteId ?? undefined,
+          xsecToken: xsecToken ?? undefined,
           sourceUrl: url.toString(),
         };
       }
@@ -1772,92 +1751,174 @@ function extractXiaohongshuNoteId(url: URL) {
   return url.searchParams.get('note_id') ?? url.searchParams.get('noteId') ?? undefined;
 }
 
-async function callXiaohongshuMcpTool(toolName: string, args: Record<string, unknown>) {
-  const mcpUrl = xiaohongshuMcpUrl();
-  if (!mcpUrl) {
-    throw new Error('Xiaohongshu connector is not configured. Set XHS_MCP_URL to enable deep parsing.');
-  }
-  const timeoutMs = Number.parseInt(process.env.XHS_MCP_TIMEOUT_MS ?? '120000', 10);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 120_000);
+function xiaohongshuRequestHeaders() {
+  const headers: Record<string, string> = {
+    accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'accept-language': 'zh-CN,zh;q=0.9,en;q=0.6',
+    referer: 'https://www.xiaohongshu.com/',
+    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+  };
+  const cookie = normalizeSecret(process.env.XHS_COOKIE ?? process.env.XIAOHONGSHU_COOKIE);
+  if (cookie) headers.cookie = cookie;
+  return headers;
+}
 
+export function normalizeXiaohongshuInitialStateHtml(html: string): { title?: string; text: string; mediaUrls: string[] } | undefined {
+  const state = parseXiaohongshuInitialState(html);
+  if (!state) return undefined;
+  const note = selectXiaohongshuNoteState(state);
+  return note ? normalizeXiaohongshuNoteState(note) : undefined;
+}
+
+function parseXiaohongshuInitialState(html: string): unknown {
+  const script = html.match(/<script[^>]*>\s*window\.__INITIAL_STATE__\s*=\s*([\s\S]*?)<\/script>/i)?.[1];
+  if (!script) return undefined;
+  const raw = script.trim().replace(/;\s*$/, '');
+  const jsonLike = raw
+    .replace(/:\s*undefined(?=\s*[,}])/g, ':null')
+    .replace(/\[\s*undefined(?=\s*[,\]])/g, '[null')
+    .replace(/,\s*undefined(?=\s*[,\]])/g, ',null')
+    .replace(/:\s*NaN(?=\s*[,}])/g, ':null')
+    .replace(/:\s*Infinity(?=\s*[,}])/g, ':null')
+    .replace(/:\s*-Infinity(?=\s*[,}])/g, ':null');
   try {
-    const initResponse = await fetch(mcpUrl, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2024-11-05',
-          capabilities: {},
-          clientInfo: { name: 'zhijing-api', version: '0.1.0' },
-        },
-      }),
-    });
-    const sessionId = initResponse.headers.get('mcp-session-id');
-    if (!initResponse.ok || !sessionId) {
-      throw new Error('Xiaohongshu MCP is unavailable. Start the MCP service and login before parsing.');
-    }
-
-    await fetch(mcpUrl, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        'Mcp-Session-Id': sessionId,
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'notifications/initialized',
-      }),
-    });
-
-    const callResponse = await fetch(mcpUrl, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        'Mcp-Session-Id': sessionId,
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 2,
-        method: 'tools/call',
-        params: {
-          name: toolName,
-          arguments: args,
-        },
-      }),
-    });
-    if (!callResponse.ok) {
-      throw new Error(`Xiaohongshu MCP request failed with HTTP ${callResponse.status}.`);
-    }
-
-    const result = await callResponse.json() as {
-      error?: { message?: string };
-      result?: unknown;
-    };
-    if (result.error) {
-      throw new Error(result.error.message ?? 'Xiaohongshu MCP returned an error.');
-    }
-    return result.result;
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Xiaohongshu MCP request timed out.');
-    }
-    throw error;
-  } finally {
-    clearTimeout(timer);
+    return JSON.parse(jsonLike) as unknown;
+  } catch {
+    return undefined;
   }
 }
 
-function xiaohongshuMcpUrl() {
-  return process.env.XHS_MCP_URL
-    ?? process.env.XIAOHONGSHU_MCP_URL
-    ?? (process.env.XHS_MCP_ENABLED === '1' ? process.env.MCP_URL : undefined);
+function selectXiaohongshuNoteState(state: unknown): Record<string, unknown> | undefined {
+  const root = asRecord(state);
+  if (!root) return undefined;
+  const mobileNote = asRecord(asRecord(asRecord(root.noteData)?.data)?.noteData);
+  if (mobileNote) return mobileNote;
+
+  const map = asRecord(asRecord(root.note)?.noteDetailMap);
+  if (!map) return undefined;
+  const explicit = asRecord(asRecord(map['-1'])?.note);
+  if (explicit) return explicit;
+
+  for (const item of Object.values(map)) {
+    const note = asRecord(asRecord(item)?.note);
+    if (note) return note;
+  }
+  return undefined;
+}
+
+function normalizeXiaohongshuNoteState(note: Record<string, unknown>): { title?: string; text: string; mediaUrls: string[] } {
+  const title = noteTitle(note);
+  const desc = stringValue(note.desc) ?? stringValue(note.description) ?? stringValue(note.content);
+  const tags = extractXiaohongshuTags(note);
+  const tagLine = tags.length ? tags.map((tag) => `#${tag}[话题]#`).join(' ') : undefined;
+  const body = [
+    desc?.startsWith(title ?? '') ? undefined : title,
+    desc,
+    tagLine && !desc?.includes(tags[0] ?? '') ? tagLine : undefined,
+  ].filter(Boolean).join('\n\n');
+  const mediaUrls = extractXiaohongshuMediaUrls(note);
+  return {
+    title,
+    text: cleanText(body),
+    mediaUrls,
+  };
+}
+
+function noteTitle(note: Record<string, unknown>) {
+  const direct = stringValue(note.title) ?? stringValue(note.displayTitle) ?? stringValue(note.noteTitle);
+  if (direct) return cleanText(direct);
+  const desc = stringValue(note.desc) ?? stringValue(note.description) ?? stringValue(note.content);
+  return desc ? compactTitle(desc.split('\n')[0] ?? desc) : '小红书笔记';
+}
+
+function extractXiaohongshuTags(note: Record<string, unknown>) {
+  return uniqueStrings(arrayValue(note.tagList)
+    .map((tag) => stringValue(asRecord(tag)?.name))
+    .filter((tag): tag is string => Boolean(tag)));
+}
+
+function extractXiaohongshuMediaUrls(note: Record<string, unknown>) {
+  const imageUrls = arrayValue(note.imageList).flatMap(xiaohongshuImageUrls);
+  const videoUrls = xiaohongshuVideoUrls(note.video);
+  const mediaUrls = uniqueStrings([...imageUrls, ...videoUrls]);
+  return mediaUrls.length ? mediaUrls : uniqueStrings(collectMediaUrls(note));
+}
+
+function xiaohongshuImageUrls(image: unknown) {
+  const record = asRecord(image);
+  if (!record) return [];
+  const candidates = [
+    stringValue(record.urlDefault),
+    stringValue(record.url),
+    stringValue(record.urlPre),
+    ...arrayValue(record.infoList).map((item) => stringValue(asRecord(item)?.url)),
+  ].filter((url): url is string => Boolean(url));
+
+  for (const candidate of candidates) {
+    const tokenPath = extractXiaohongshuImageTokenPath(candidate);
+    if (tokenPath) {
+      return [`https://sns-img-hw.xhscdn.com/${tokenPath}?imageView2/2/w/0/format/jpg`];
+    }
+  }
+  return candidates.map(normalizeHttpUrl).filter((url): url is string => Boolean(url)).slice(0, 1);
+}
+
+function extractXiaohongshuImageTokenPath(imageUrl: string) {
+  try {
+    const url = new URL(imageUrl);
+    const segments = url.pathname.split('/').filter(Boolean);
+    const markerIndex = segments.findIndex((segment) => /^(notes|notes_pre_post|notes_pre_upload|spectrum)/i.test(segment));
+    const tokenPath = markerIndex >= 0
+      ? segments.slice(markerIndex).join('/')
+      : segments.length > 2
+        ? segments.slice(2).join('/')
+        : segments.join('/');
+    return tokenPath.split('!')[0]?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function xiaohongshuVideoUrls(video: unknown) {
+  const record = asRecord(video);
+  if (!record) return [];
+  const originVideoKey = stringValue(asRecord(record.consumer)?.originVideoKey);
+  const generated = originVideoKey ? [`https://sns-video-bd.xhscdn.com/${originVideoKey}`] : [];
+  const stream = asRecord(asRecord(record.media)?.stream);
+  const streamUrls = ['h264', 'h265', 'h266']
+    .flatMap((key) => arrayValue(stream?.[key]))
+    .flatMap((item) => {
+      const itemRecord = asRecord(item);
+      return [
+        stringValue(itemRecord?.masterUrl),
+        ...arrayValue(itemRecord?.backupUrls).map(stringValue),
+      ];
+    })
+    .filter((url): url is string => Boolean(url))
+    .map(normalizeHttpUrl)
+    .filter((url): url is string => Boolean(url));
+  return uniqueStrings([...generated, ...streamUrls]);
+}
+
+function normalizeHttpUrl(value: string | undefined) {
+  if (!value) return undefined;
+  if (value.startsWith('//')) return `https:${value}`;
+  if (value.startsWith('http://')) return `https://${value.slice('http://'.length)}`;
+  return value;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function arrayValue(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
 export function normalizeXiaohongshuFeedDetail(input: unknown): { title?: string; text: string; mediaUrls: string[] } {
