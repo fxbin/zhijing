@@ -10,6 +10,7 @@ import {
   type KnowledgeBaseDetail,
   type KnowledgeMapResult,
   type KnowledgeBaseSummary,
+  type KnowledgeCitation,
   type KnowledgeCard,
   type KnowledgeKitId,
   type KnowledgeKitRunResult,
@@ -1256,6 +1257,7 @@ export async function answerKnowledgeBaseQuestion(knowledgeBaseId: string, quest
       ...generationContext,
     });
     const generated = generation.output;
+    const citations = buildQuestionCitations(generationContext);
     const cards = createCards(base, material, value, generated.cards);
     const artifact = createArtifact(base, material, value, generated);
 
@@ -1270,6 +1272,7 @@ export async function answerKnowledgeBaseQuestion(knowledgeBaseId: string, quest
       generationFallbackReason: generation.fallbackReason,
       contextMaterialCount: generationContext.materials.length,
       contextCardCount: generationContext.cards.length,
+      citationCount: citations.length,
     });
 
     return {
@@ -1279,6 +1282,7 @@ export async function answerKnowledgeBaseQuestion(knowledgeBaseId: string, quest
       cards,
       task,
       artifact,
+      citations,
       message: '问题已基于当前知识库生成回答线索。',
     };
   } catch (error) {
@@ -1559,6 +1563,7 @@ function buildQuestionContext(knowledgeBaseId: string, questionMaterialId: strin
       title: material.title,
       platform: material.platform,
       parseStatus: material.parseStatus,
+      sourceUrl: material.sourceUrl,
       mediaUrls: material.mediaUrls ?? [],
       contentPreview: compactPreview(material.contentText ?? material.rawInput),
     }));
@@ -1572,6 +1577,25 @@ function buildQuestionContext(knowledgeBaseId: string, questionMaterialId: strin
       claimStatus: card.claimStatus,
     }));
   return { materials, cards };
+}
+
+function buildQuestionCitations(context: ReturnType<typeof buildQuestionContext>): KnowledgeCitation[] {
+  const materialCitations: KnowledgeCitation[] = context.materials.slice(0, 5).map((material) => ({
+    id: `citation:material:${material.id}`,
+    kind: 'material',
+    materialId: material.id,
+    title: material.title,
+    preview: material.contentPreview,
+    sourceUrl: material.sourceUrl,
+  }));
+  const cardCitations: KnowledgeCitation[] = context.cards.slice(0, 5).map((card) => ({
+    id: `citation:card:${card.id}`,
+    kind: 'card',
+    cardId: card.id,
+    title: card.title,
+    preview: card.bodyPreview,
+  }));
+  return [...materialCitations, ...cardCitations];
 }
 
 function compactPreview(input: string) {

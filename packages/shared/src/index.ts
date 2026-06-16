@@ -139,6 +139,16 @@ export interface ArtifactRecord {
   createdAt: string;
 }
 
+export interface KnowledgeCitation {
+  id: string;
+  kind: 'material' | 'card';
+  title: string;
+  preview: string;
+  sourceUrl?: string;
+  materialId?: string;
+  cardId?: string;
+}
+
 export interface IntakeResult {
   kind: IntakeKind;
   knowledgeBase: KnowledgeBaseSummary;
@@ -146,6 +156,7 @@ export interface IntakeResult {
   cards: KnowledgeCard[];
   task: AgentTask;
   artifact?: ArtifactRecord;
+  citations?: KnowledgeCitation[];
   message: string;
 }
 

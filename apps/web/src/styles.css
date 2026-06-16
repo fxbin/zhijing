@@ -1406,6 +1406,59 @@ button { cursor: pointer; }
   line-height: 1.35;
 }
 
+.citation-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.citation-list > strong {
+  color: var(--primary);
+  font-size: 13px;
+}
+
+.citation-list > p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.citation-list article {
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr);
+  gap: 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(247, 249, 252, 0.82);
+  padding: 10px;
+}
+
+.citation-list article > span {
+  color: var(--sage-text);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.citation-list article strong {
+  color: var(--primary);
+  font-size: 13px;
+}
+
+.citation-list article p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.citation-list article a {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .assistant-link-button {
   display: inline-flex;
   align-items: center;

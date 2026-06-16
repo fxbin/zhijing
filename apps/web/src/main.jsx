@@ -570,6 +570,7 @@ function App() {
         message: result.message,
         cards: result.cards ?? [],
         artifact: result.artifact,
+        citations: result.citations ?? [],
         task: result.task,
       });
       if (result.artifact) setSelectedArtifact(result.artifact);
@@ -991,6 +992,7 @@ function DetailView({
   const roadmapCards = cards.slice(0, 4);
   const canAsk = apiStatus === 'online' && Boolean(selectedKnowledgeBaseId) && !isAsking;
   const latestAnswerCards = assistantAnswer?.cards?.slice(0, 2) ?? [];
+  const latestCitations = assistantAnswer?.citations ?? [];
   const questionHistory = materials.filter((material) => material.type === 'question').slice(0, 3);
   const totals = analytics?.totals;
   const statusDistribution = analytics?.materialStatusDistribution?.slice(0, 4) ?? [];
@@ -1118,6 +1120,23 @@ function DetailView({
                       <article key={card.id ?? card.title}>
                         <span>{card.type}</span>
                         <strong>{card.title}</strong>
+                      </article>
+                    ))}
+                  </div>
+                )}
+                {assistantAnswer.citations && (
+                  <div className="citation-list">
+                    <strong>引用来源</strong>
+                    {latestCitations.length === 0 ? (
+                      <p>当前回答没有可用来源，属于 AI 骨架内容。</p>
+                    ) : latestCitations.slice(0, 6).map((citation) => (
+                      <article key={citation.id}>
+                        <span>{citation.kind}</span>
+                        <div>
+                          <strong>{citation.title}</strong>
+                          <p>{citation.preview}</p>
+                          {citation.sourceUrl && <a href={citation.sourceUrl} target="_blank" rel="noreferrer">Open source</a>}
+                        </div>
                       </article>
                     ))}
                   </div>
