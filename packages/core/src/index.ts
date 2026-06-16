@@ -109,6 +109,14 @@ type ParsedMaterialContent = {
   reviewReason?: string;
 };
 
+type ParseFailureCategory = 'network' | 'blocked' | 'timeout' | 'too_short' | 'unsupported' | 'unknown';
+
+type ParserCacheEntry = {
+  parsed: ParsedMaterialContent;
+  platform: string;
+  cachedAt: number;
+};
+
 type XiaohongshuShareInfo = {
   noteId?: string;
   xsecToken?: string;
@@ -705,6 +713,9 @@ export function createSqliteKnowledgeRepository(path = defaultSqlitePath()): Kno
 let repository: KnowledgeRepository = process.env.ZHIJING_STORAGE === 'memory'
   ? createMemoryKnowledgeRepository()
   : createSqliteKnowledgeRepository();
+
+const parserResultCache = new Map<string, ParserCacheEntry>();
+const platformParseTimestamps = new Map<string, number>();
 
 type RuntimeModelProviderConfig = {
   provider: KnownProvider;
@@ -1743,6 +1754,64 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
     };
   }
 
+  const cached = readParserCache(material);
+  if (cached) {
+    const retry = material.parseStatus === 'failed' || material.parseStatus === 'needs_review';
+    const task = createTask(
+      'parse_material',
+      {
+        materialId: material.id,
+        knowledgeBaseId: material.knowledgeBaseId,
+        sourceUrl: material.sourceUrl,
+        platform: material.platform,
+        previousParseStatus: material.parseStatus,
+        governance: 'cache_hit',
+      },
+      'running',
+    );
+    return applyParsedMaterialResult(material, task, cached.parsed, retry, {
+      queueState: 'cache_hit',
+      cacheHit: true,
+      message: '链接解析已从本地缓存复用，并生成知识卡片。',
+    });
+  }
+
+  const throttle = checkParseThrottle(material);
+  if (throttle.blocked) {
+    const task = createTask(
+      'parse_material',
+      {
+        materialId: material.id,
+        knowledgeBaseId: material.knowledgeBaseId,
+        sourceUrl: material.sourceUrl,
+        platform: material.platform,
+        previousParseStatus: material.parseStatus,
+        governance: 'throttled',
+      },
+      'needs_user_action',
+    );
+    material.parseStatus = 'needs_review';
+    material.parseError = throttle.message;
+    repository.updateMaterial(material);
+    touchKnowledgeBase(material.knowledgeBaseId);
+    task.output = {
+      materialId: material.id,
+      parseStatus: material.parseStatus,
+      queueState: 'throttled',
+      retryAfterMs: throttle.retryAfterMs,
+      classification: 'blocked',
+    };
+    task.updatedAt = now();
+    repository.updateTask(task);
+    return {
+      material,
+      task,
+      queued: false,
+      retry: true,
+      message: throttle.message ?? '解析请求过于频繁，请稍后重试或手动补充正文。',
+    };
+  }
+
   const previousStatus = material.parseStatus;
   material.parseStatus = 'parsing';
   material.parseError = undefined;
@@ -1763,69 +1832,153 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
   );
 
   try {
+    recordParseAttempt(material);
     const parsed = material.platform === 'xiaohongshu'
       ? await parseXiaohongshuMaterial(material)
       : await parseOrdinaryWebMaterial(material);
-    material.title = parsed.title ? compactTitle(parsed.title) : material.title;
-    material.contentText = parsed.text;
-    material.mediaUrls = parsed.mediaUrls ?? [];
-    material.parseStatus = parsed.needsReview ? 'needs_review' : 'ingested';
-    material.parseError = parsed.reviewReason;
-    repository.updateMaterial(material);
-
-    const base = repository.findKnowledgeBase(material.knowledgeBaseId);
-    if (!base) {
-      throw new KnowledgeCoreError('Knowledge base not found.', 404);
-    }
-
-    const generation = await generateKnowledge('material_summary', parsed.text, {
-      kind: 'link',
-      knowledgeBaseId: base.id,
-      materialId: material.id,
-      hasSourceMaterial: true,
-      parseStatus: material.parseStatus,
-      sourceUrl: material.sourceUrl,
-      parsedTitle: parsed.title,
-      contentLength: parsed.text.length,
-      mediaUrls: material.mediaUrls,
-      mediaCount: material.mediaUrls.length,
-      needsReview: parsed.needsReview,
-    });
-    const generated = generation.output;
-    const cards = createCards(base, material, parsed.text, generated.cards);
-    const artifact = createArtifact(base, material, parsed.text, generated);
-
-    finishTask(task, {
-      materialId: material.id,
-      parseStatus: material.parseStatus,
-      queueState: parsed.needsReview ? 'needs_review' : 'completed',
-      retry,
-      contentLength: parsed.text.length,
-      mediaCount: material.mediaUrls.length,
-      cardIds: cards.map((card) => card.id),
-      artifactId: artifact.id,
-      generationProvider: generation.provider,
-      generationModel: generation.model,
-      generationFallbackReason: generation.fallbackReason,
-    });
-
-    return {
-      material,
-      task,
-      knowledgeBase: base,
-      cards,
-      artifact,
-      queued: false,
-      retry,
-      message: parsed.needsReview
-        ? '小红书链接已保存，公开页面暂未暴露完整正文或媒体，需要稍后重试或手动补充。'
-        : material.platform === 'xiaohongshu'
-          ? '小红书笔记已解析并生成知识卡片。'
-        : '普通网页已解析并生成知识卡片。',
-    };
+    rememberParserCache(material, parsed);
+    return applyParsedMaterialResult(material, task, parsed, retry);
   } catch (error) {
     return failMaterialParsingTask(material, task, error);
   }
+}
+
+async function applyParsedMaterialResult(
+  material: MaterialRecord,
+  task: AgentTask,
+  parsed: ParsedMaterialContent,
+  retry: boolean,
+  governance: {
+    queueState?: string;
+    cacheHit?: boolean;
+    message?: string;
+  } = {},
+): Promise<MaterialParseQueueResult> {
+  material.title = parsed.title ? compactTitle(parsed.title) : material.title;
+  material.contentText = parsed.text;
+  material.mediaUrls = parsed.mediaUrls ?? [];
+  material.parseStatus = parsed.needsReview ? 'needs_review' : 'ingested';
+  material.parseError = parsed.reviewReason;
+  repository.updateMaterial(material);
+
+  const base = repository.findKnowledgeBase(material.knowledgeBaseId);
+  if (!base) {
+    throw new KnowledgeCoreError('Knowledge base not found.', 404);
+  }
+
+  const generation = await generateKnowledge('material_summary', parsed.text, {
+    kind: 'link',
+    knowledgeBaseId: base.id,
+    materialId: material.id,
+    hasSourceMaterial: true,
+    parseStatus: material.parseStatus,
+    sourceUrl: material.sourceUrl,
+    parsedTitle: parsed.title,
+    contentLength: parsed.text.length,
+    mediaUrls: material.mediaUrls,
+    mediaCount: material.mediaUrls.length,
+    needsReview: parsed.needsReview,
+    cacheHit: governance.cacheHit,
+  });
+  const generated = generation.output;
+  const cards = createCards(base, material, parsed.text, generated.cards);
+  const artifact = createArtifact(base, material, parsed.text, generated);
+
+  finishTask(task, {
+    materialId: material.id,
+    parseStatus: material.parseStatus,
+    queueState: governance.queueState ?? (parsed.needsReview ? 'needs_review' : 'completed'),
+    retry,
+    cacheHit: governance.cacheHit,
+    contentLength: parsed.text.length,
+    mediaCount: material.mediaUrls.length,
+    cardIds: cards.map((card) => card.id),
+    artifactId: artifact.id,
+    generationProvider: generation.provider,
+    generationModel: generation.model,
+    generationFallbackReason: generation.fallbackReason,
+  });
+
+  return {
+    material,
+    task,
+    knowledgeBase: base,
+    cards,
+    artifact,
+    queued: false,
+    retry,
+    message: governance.message ?? (parsed.needsReview
+      ? '链接已保存，公开页面暂未暴露完整正文或媒体，需要稍后重试或手动补充。'
+      : material.platform === 'xiaohongshu'
+        ? '小红书笔记已解析并生成知识卡片。'
+        : '普通网页已解析并生成知识卡片。'),
+  };
+}
+
+function readParserCache(material: MaterialRecord) {
+  const key = parserCacheKey(material);
+  if (!key) return undefined;
+  const cached = parserResultCache.get(key);
+  if (!cached) return undefined;
+  if (Date.now() - cached.cachedAt > parserCacheTtlMs()) {
+    parserResultCache.delete(key);
+    return undefined;
+  }
+  return cached;
+}
+
+function rememberParserCache(material: MaterialRecord, parsed: ParsedMaterialContent) {
+  const key = parserCacheKey(material);
+  const hasUsableContent = parsed.text.length >= 4 || (parsed.mediaUrls?.length ?? 0) > 0;
+  if (!key || parsed.needsReview || !hasUsableContent) return;
+  parserResultCache.set(key, {
+    parsed,
+    platform: material.platform ?? 'web',
+    cachedAt: Date.now(),
+  });
+}
+
+function parserCacheKey(material: MaterialRecord) {
+  const sourceUrl = material.sourceUrl ?? extractFirstUrl(material.rawInput);
+  if (!sourceUrl) return undefined;
+  try {
+    const url = new URL(sourceUrl);
+    url.hash = '';
+    return `${material.platform ?? 'web'}:${url.toString()}`;
+  } catch {
+    return `${material.platform ?? 'web'}:${sourceUrl.trim()}`;
+  }
+}
+
+function parserCacheTtlMs() {
+  const value = Number.parseInt(process.env.ZHIJING_PARSE_CACHE_TTL_MS ?? '', 10);
+  return Number.isFinite(value) && value >= 0 ? value : 6 * 60 * 60 * 1000;
+}
+
+function checkParseThrottle(material: MaterialRecord) {
+  const intervalMs = parseThrottleMs(material.platform);
+  if (intervalMs <= 0) return { blocked: false };
+  const platform = material.platform ?? 'web';
+  const lastParsedAt = platformParseTimestamps.get(platform) ?? 0;
+  const elapsed = Date.now() - lastParsedAt;
+  if (elapsed >= intervalMs) return { blocked: false };
+  const retryAfterMs = intervalMs - elapsed;
+  return {
+    blocked: true,
+    retryAfterMs,
+    message: `${platform} 解析请求过于频繁，建议 ${Math.ceil(retryAfterMs / 1000)} 秒后重试，或先手动补充正文。`,
+  };
+}
+
+function recordParseAttempt(material: MaterialRecord) {
+  platformParseTimestamps.set(material.platform ?? 'web', Date.now());
+}
+
+function parseThrottleMs(platform: string | undefined) {
+  const envKey = platform === 'xiaohongshu' ? 'ZHIJING_XHS_PARSE_THROTTLE_MS' : 'ZHIJING_WEB_PARSE_THROTTLE_MS';
+  const explicit = Number.parseInt(process.env[envKey] ?? process.env.ZHIJING_PARSE_THROTTLE_MS ?? '', 10);
+  if (Number.isFinite(explicit)) return Math.max(0, explicit);
+  return platform === 'xiaohongshu' ? 3000 : 1000;
 }
 
 function queueMaterialParsing(material: MaterialRecord): MaterialParseQueueResult {
@@ -2459,18 +2612,21 @@ function failMaterialParsingTask(
   task: AgentTask,
   error: unknown,
 ): MaterialParseQueueResult {
-  const parseError = cleanParseError(error instanceof Error ? error.message : 'Material parsing failed.');
-  material.parseStatus = 'failed';
+  const failure = classifyParseFailure(error);
+  const parseError = cleanParseError(`[${failure.category}] ${failure.message}`);
+  material.parseStatus = failure.recoverable ? 'needs_review' : 'failed';
   material.parseError = parseError;
   repository.updateMaterial(material);
   touchKnowledgeBase(material.knowledgeBaseId);
 
-  task.status = 'failed';
+  task.status = failure.recoverable ? 'needs_user_action' : 'failed';
   task.error = parseError;
   task.output = {
     materialId: material.id,
     parseStatus: material.parseStatus,
-    queueState: 'failed',
+    queueState: failure.recoverable ? 'needs_review' : 'failed',
+    classification: failure.category,
+    recoverable: failure.recoverable,
   };
   task.updatedAt = now();
   repository.updateTask(task);
@@ -2479,9 +2635,34 @@ function failMaterialParsingTask(
     material,
     task,
     queued: false,
-    retry: false,
+    retry: failure.recoverable,
     message: '网页解析失败，已保留原链接，可稍后重试或手动补充正文。',
   };
+}
+
+function classifyParseFailure(error: unknown): {
+  category: ParseFailureCategory;
+  message: string;
+  recoverable: boolean;
+} {
+  const message = error instanceof Error ? error.message : 'Material parsing failed.';
+  const lower = message.toLowerCase();
+  if (/abort|timeout|timed out/.test(lower)) {
+    return { category: 'timeout', message, recoverable: false };
+  }
+  if (/login|blocked|forbidden|captcha|verify|风控|登录|403|401/.test(lower)) {
+    return { category: 'blocked', message, recoverable: true };
+  }
+  if (/too short|short|no usable|没有暴露|正文|media/.test(lower)) {
+    return { category: 'too_short', message, recoverable: true };
+  }
+  if (/unsupported|only http|source url is required|not supported/.test(lower)) {
+    return { category: 'unsupported', message, recoverable: true };
+  }
+  if (/fetch|network|econn|enotfound|http 5|http 4/.test(lower)) {
+    return { category: 'network', message, recoverable: false };
+  }
+  return { category: 'unknown', message, recoverable: false };
 }
 
 function requireLinkMaterial(materialId: string) {
