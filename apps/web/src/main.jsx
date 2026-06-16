@@ -137,6 +137,14 @@ function materialSourceUrl(item) {
     ?? item.rawInput?.match(/https?:\/\/[^\s"'<>]+/i)?.[0];
 }
 
+function materialMediaUrls(item) {
+  return Array.isArray(item.mediaUrls) ? item.mediaUrls.filter(Boolean) : [];
+}
+
+function isImageUrl(url) {
+  return /xhscdn\.com|sns-img|image|format\/jpg|format\/png|\.jpe?g|\.png|\.webp/i.test(url);
+}
+
 function materialState(status) {
   if (status === 'failed') return 'failed';
   if (status === 'parsing' || status === 'saved' || status === 'needs_review') return 'processing';
@@ -847,6 +855,21 @@ function EmptyState({ title, body }) {
   );
 }
 
+function MediaPreview({ urls, compact = false }) {
+  const mediaUrls = (urls ?? []).filter(Boolean).slice(0, compact ? 4 : 6);
+  if (mediaUrls.length === 0) return null;
+
+  return (
+    <div className={`media-preview ${compact ? 'compact' : ''}`}>
+      {mediaUrls.map((url, index) => (
+        <a href={url} key={url} target="_blank" rel="noreferrer" title={`Open media ${index + 1}`}>
+          {isImageUrl(url) ? <img alt={`media ${index + 1}`} src={url} loading="lazy" /> : <span>Media {index + 1}</span>}
+        </a>
+      ))}
+    </div>
+  );
+}
+
 function RecentImports({ materials }) {
   return (
     <article className="recent-panel">
@@ -985,7 +1008,11 @@ function DetailView({
                 <BookOpen size={22} />
                 <div>
                   <strong>{material.title}</strong>
-                  <span>{material.platform ?? material.type ?? 'material'} · {material.parseStatus ?? 'saved'}</span>
+                  <span>
+                    {material.platform ?? material.type ?? 'material'} · {material.parseStatus ?? 'saved'}
+                    {materialMediaUrls(material).length > 0 ? ` · ${materialMediaUrls(material).length} media` : ''}
+                  </span>
+                  <MediaPreview urls={materialMediaUrls(material)} compact />
                 </div>
                 {material.type === 'link' && (
                   <button
@@ -1269,7 +1296,9 @@ function LibraryView({ apiStatus, onCaptureResult, onParseMaterial, parsingMater
             <div className="tag-row">
               <span>{item.platform ?? 'local'}</span>
               <span>{formatMaterialTime(item.createdAt)}</span>
+              {materialMediaUrls(item).length > 0 && <span>{materialMediaUrls(item).length} media</span>}
             </div>
+            <MediaPreview urls={materialMediaUrls(item)} compact />
             <div className="library-card-actions">
               {materialSourceUrl(item) && (
                 <a href={materialSourceUrl(item)} target="_blank" rel="noreferrer">

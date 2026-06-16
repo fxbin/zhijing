@@ -657,6 +657,37 @@ button { cursor: pointer; }
   font-size: 13px;
 }
 
+.media-preview {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.media-preview.compact {
+  grid-template-columns: repeat(4, 56px);
+}
+
+.media-preview a {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface-low);
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.media-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .map-head {
   justify-content: space-between;
   margin-bottom: 26px;

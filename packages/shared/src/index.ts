@@ -88,6 +88,7 @@ export interface MaterialRecord {
   platform?: string;
   title: string;
   contentText?: string;
+  mediaUrls?: string[];
   parseStatus: ParseStatus;
   parseError?: string;
   createdAt: string;

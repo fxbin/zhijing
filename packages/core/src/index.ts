@@ -91,6 +91,18 @@ type GeneratedKnowledgeOutput = {
   artifactBody?: string;
 };
 
+type ParsedMaterialContent = {
+  title?: string;
+  text: string;
+  mediaUrls?: string[];
+};
+
+type XiaohongshuShareInfo = {
+  noteId: string;
+  xsecToken: string;
+  sourceUrl: string;
+};
+
 class MemoryKnowledgeRepository implements KnowledgeRepository {
   private readonly state: StoreState = {
     knowledgeBases: [],
@@ -205,6 +217,7 @@ type MaterialRow = {
   platform: string | null;
   title: string;
   content_text: string | null;
+  media_urls_json: string | null;
   parse_status: MaterialRecord['parseStatus'];
   parse_error: string | null;
   created_at: string;
@@ -292,8 +305,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   insertMaterial(material: MaterialRecord) {
     this.db.prepare(`
       INSERT INTO materials (
-        id, knowledge_base_id, type, raw_input, source_url, platform, title, content_text, parse_status, parse_error, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, knowledge_base_id, type, raw_input, source_url, platform, title, content_text, media_urls_json, parse_status, parse_error, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       material.id,
       material.knowledgeBaseId,
@@ -303,6 +316,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       material.platform ?? null,
       material.title,
       material.contentText ?? null,
+      JSON.stringify(material.mediaUrls ?? []),
       material.parseStatus,
       material.parseError ?? null,
       material.createdAt,
@@ -312,7 +326,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   updateMaterial(material: MaterialRecord) {
     this.db.prepare(`
       UPDATE materials
-      SET knowledge_base_id = ?, type = ?, raw_input = ?, source_url = ?, platform = ?, title = ?, content_text = ?, parse_status = ?, parse_error = ?, created_at = ?
+      SET knowledge_base_id = ?, type = ?, raw_input = ?, source_url = ?, platform = ?, title = ?, content_text = ?, media_urls_json = ?, parse_status = ?, parse_error = ?, created_at = ?
       WHERE id = ?
     `).run(
       material.knowledgeBaseId,
@@ -322,6 +336,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       material.platform ?? null,
       material.title,
       material.contentText ?? null,
+      JSON.stringify(material.mediaUrls ?? []),
       material.parseStatus,
       material.parseError ?? null,
       material.createdAt,
@@ -474,6 +489,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         platform TEXT,
         title TEXT NOT NULL,
         content_text TEXT,
+        media_urls_json TEXT NOT NULL DEFAULT '[]',
         parse_status TEXT NOT NULL,
         parse_error TEXT,
         created_at TEXT NOT NULL
@@ -527,6 +543,14 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at);
       CREATE INDEX IF NOT EXISTS idx_artifacts_knowledge_base_id ON artifacts(knowledge_base_id);
     `);
+    this.ensureMaterialMediaColumn();
+  }
+
+  private ensureMaterialMediaColumn() {
+    const columns = this.db.prepare('PRAGMA table_info(materials)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'media_urls_json')) {
+      this.db.exec("ALTER TABLE materials ADD COLUMN media_urls_json TEXT NOT NULL DEFAULT '[]';");
+    }
   }
 }
 
@@ -554,10 +578,21 @@ function mapMaterial(row: MaterialRow): MaterialRecord {
     platform: row.platform ?? undefined,
     title: row.title,
     contentText: row.content_text ?? undefined,
+    mediaUrls: parseJsonStringArray(row.media_urls_json),
     parseStatus: row.parse_status,
     parseError: row.parse_error ?? undefined,
     createdAt: row.created_at,
   };
+}
+
+function parseJsonStringArray(value: string | null | undefined) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
 }
 
 function mapCard(row: CardRow): KnowledgeCard {
@@ -903,6 +938,7 @@ function createMaterial(base: KnowledgeBaseSummary, request: IntakeRequest, type
     platform,
     title: type === 'link' ? titleFromLink(sourceUrl ?? request.input) : compactTitle(request.input),
     contentText: type === 'text' ? request.input.trim() : undefined,
+    mediaUrls: [],
     parseStatus: type === 'link' ? 'saved' : 'ingested',
     createdAt: timestamp,
   };
@@ -1266,6 +1302,7 @@ function buildKitContext(knowledgeBaseId: string) {
       platform: material.platform,
       parseStatus: material.parseStatus,
       sourceUrl: material.sourceUrl,
+      mediaUrls: material.mediaUrls ?? [],
       contentPreview: compactPreview(material.contentText ?? material.rawInput),
     }));
   const cards = repository.listCards(knowledgeBaseId)
@@ -1297,6 +1334,7 @@ function buildQuestionContext(knowledgeBaseId: string, questionMaterialId: strin
       title: material.title,
       platform: material.platform,
       parseStatus: material.parseStatus,
+      mediaUrls: material.mediaUrls ?? [],
       contentPreview: compactPreview(material.contentText ?? material.rawInput),
     }));
   const cards = repository.listCards(knowledgeBaseId)
@@ -1318,7 +1356,7 @@ function compactPreview(input: string) {
 
 export async function requestMaterialParsing(materialId: string): Promise<MaterialParseQueueResult> {
   const material = requireLinkMaterial(materialId);
-  if (!canParseAsOrdinaryWeb(material)) {
+  if (!canParseWithServerParser(material)) {
     return queueMaterialParsing(material);
   }
 
@@ -1386,9 +1424,12 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
   );
 
   try {
-    const parsed = await parseOrdinaryWebMaterial(material);
+    const parsed = material.platform === 'xiaohongshu'
+      ? await parseXiaohongshuMaterial(material)
+      : await parseOrdinaryWebMaterial(material);
     material.title = parsed.title ? compactTitle(parsed.title) : material.title;
     material.contentText = parsed.text;
+    material.mediaUrls = parsed.mediaUrls ?? [];
     material.parseStatus = 'ingested';
     material.parseError = undefined;
     repository.updateMaterial(material);
@@ -1407,6 +1448,8 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
       sourceUrl: material.sourceUrl,
       parsedTitle: parsed.title,
       contentLength: parsed.text.length,
+      mediaUrls: material.mediaUrls,
+      mediaCount: material.mediaUrls.length,
     });
     const generated = generation.output;
     const cards = createCards(base, material, parsed.text, generated.cards);
@@ -1418,6 +1461,7 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
       queueState: 'completed',
       retry,
       contentLength: parsed.text.length,
+      mediaCount: material.mediaUrls.length,
       cardIds: cards.map((card) => card.id),
       artifactId: artifact.id,
       generationProvider: generation.provider,
@@ -1433,7 +1477,9 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
       artifact,
       queued: false,
       retry,
-      message: '普通网页已解析并生成知识卡片。',
+      message: material.platform === 'xiaohongshu'
+        ? '小红书笔记已解析并生成知识卡片。'
+        : '普通网页已解析并生成知识卡片。',
     };
   } catch (error) {
     return failMaterialParsingTask(material, task, error);
@@ -1535,11 +1581,11 @@ export function recordMaterialParsingFailure(
   };
 }
 
-function canParseAsOrdinaryWeb(material: MaterialRecord) {
-  return material.platform === 'web' || material.platform === undefined;
+function canParseWithServerParser(material: MaterialRecord) {
+  return material.platform === 'xiaohongshu' || material.platform === 'web' || material.platform === undefined;
 }
 
-async function parseOrdinaryWebMaterial(material: MaterialRecord) {
+async function parseOrdinaryWebMaterial(material: MaterialRecord): Promise<ParsedMaterialContent> {
   const sourceUrl = material.sourceUrl;
   if (!sourceUrl) {
     throw new KnowledgeCoreError('Material source URL is required for parsing.', 400);
@@ -1582,10 +1628,244 @@ async function parseOrdinaryWebMaterial(material: MaterialRecord) {
     return {
       title: parsed.title,
       text: parsed.text.slice(0, 18_000),
+      mediaUrls: [],
     };
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function parseXiaohongshuMaterial(material: MaterialRecord): Promise<ParsedMaterialContent> {
+  const shareInfo = parseXiaohongshuShareInput(material.rawInput) ?? parseXiaohongshuShareInput(material.sourceUrl ?? '');
+  if (!shareInfo) {
+    throw new KnowledgeCoreError('Xiaohongshu note id and xsec_token are required for parsing.', 400);
+  }
+
+  const detail = await callXiaohongshuMcpTool('get_feed_detail', {
+    feed_id: shareInfo.noteId,
+    xsec_token: shareInfo.xsecToken,
+  });
+  const parsed = normalizeXiaohongshuFeedDetail(detail);
+  if (parsed.text.length < 4 && parsed.mediaUrls.length === 0) {
+    throw new Error('Xiaohongshu parser returned no usable note text or media.');
+  }
+
+  return {
+    title: parsed.title,
+    text: parsed.text.slice(0, 18_000),
+    mediaUrls: parsed.mediaUrls,
+  };
+}
+
+export function parseXiaohongshuShareInput(input: string | undefined): XiaohongshuShareInfo | undefined {
+  if (!input) return undefined;
+  const urls = extractUrls(input).filter((url) => /xiaohongshu\.com|xhslink\.com/i.test(url));
+  for (const candidate of urls.length ? urls : [input]) {
+    try {
+      const url = new URL(candidate);
+      if (!/xiaohongshu\.com|xhslink\.com/i.test(url.hostname)) continue;
+      const noteId = extractXiaohongshuNoteId(url);
+      const xsecToken = url.searchParams.get('xsec_token') ?? url.searchParams.get('xsecToken');
+      if (noteId && xsecToken) {
+        return {
+          noteId,
+          xsecToken,
+          sourceUrl: url.toString(),
+        };
+      }
+    } catch {
+      // Ignore non-URL fragments in mixed share text.
+    }
+  }
+  return undefined;
+}
+
+function extractUrls(input: string) {
+  return input.match(/https?:\/\/[^\s"'<>]+/gi) ?? [];
+}
+
+function extractXiaohongshuNoteId(url: URL) {
+  const patterns = [
+    /^\/explore\/([^/?#]+)/,
+    /^\/discovery\/item\/([^/?#]+)/,
+    /^\/search_result\/([^/?#]+)/,
+  ];
+  for (const pattern of patterns) {
+    const matched = url.pathname.match(pattern)?.[1];
+    if (matched) return matched;
+  }
+  return url.searchParams.get('note_id') ?? url.searchParams.get('noteId') ?? undefined;
+}
+
+async function callXiaohongshuMcpTool(toolName: string, args: Record<string, unknown>) {
+  const mcpUrl = process.env.XHS_MCP_URL ?? process.env.MCP_URL ?? 'http://localhost:18060/mcp';
+  const timeoutMs = Number.parseInt(process.env.XHS_MCP_TIMEOUT_MS ?? '120000', 10);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 120_000);
+
+  try {
+    const initResponse = await fetch(mcpUrl, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'zhijing-api', version: '0.1.0' },
+        },
+      }),
+    });
+    const sessionId = initResponse.headers.get('mcp-session-id');
+    if (!initResponse.ok || !sessionId) {
+      throw new Error('Xiaohongshu MCP is unavailable. Start the MCP service and login before parsing.');
+    }
+
+    await fetch(mcpUrl, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Mcp-Session-Id': sessionId,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'notifications/initialized',
+      }),
+    });
+
+    const callResponse = await fetch(mcpUrl, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Mcp-Session-Id': sessionId,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: {
+          name: toolName,
+          arguments: args,
+        },
+      }),
+    });
+    if (!callResponse.ok) {
+      throw new Error(`Xiaohongshu MCP request failed with HTTP ${callResponse.status}.`);
+    }
+
+    const result = await callResponse.json() as {
+      error?: { message?: string };
+      result?: unknown;
+    };
+    if (result.error) {
+      throw new Error(result.error.message ?? 'Xiaohongshu MCP returned an error.');
+    }
+    return result.result;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Xiaohongshu MCP request timed out.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export function normalizeXiaohongshuFeedDetail(input: unknown): { title?: string; text: string; mediaUrls: string[] } {
+  const expanded = expandJsonLikeValues(input);
+  const title = findFirstStringByKey(expanded, ['title', 'displayTitle', 'noteTitle']) ?? '小红书笔记';
+  const desc = findFirstStringByKey(expanded, ['desc', 'description', 'content', 'text', 'noteContent']);
+  const mediaUrls = uniqueStrings(collectMediaUrls(expanded));
+  const text = cleanText([title, desc].filter(Boolean).join('\n\n'));
+  return {
+    title: cleanText(title),
+    text,
+    mediaUrls,
+  };
+}
+
+function expandJsonLikeValues(value: unknown): unknown {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        return expandJsonLikeValues(JSON.parse(trimmed) as unknown);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(expandJsonLikeValues);
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, expandJsonLikeValues(item)]);
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
+
+function findFirstStringByKey(value: unknown, keys: string[]): string | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findFirstStringByKey(item, keys);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    const direct = record[key];
+    if (typeof direct === 'string' && direct.trim()) return direct.trim();
+  }
+  for (const item of Object.values(record)) {
+    const found = findFirstStringByKey(item, keys);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function collectMediaUrls(value: unknown, parentKey = ''): string[] {
+  if (typeof value === 'string') {
+    return isLikelyMediaUrl(value, parentKey) ? [value] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectMediaUrls(item, parentKey));
+  }
+  if (!value || typeof value !== 'object') return [];
+
+  return Object.entries(value as Record<string, unknown>).flatMap(([key, item]) => collectMediaUrls(item, key));
+}
+
+function isLikelyMediaUrl(value: string, key: string) {
+  if (!/^https?:\/\//i.test(value)) return false;
+  const lowerValue = value.toLowerCase();
+  const lowerKey = key.toLowerCase();
+  const mediaKey = /image|img|photo|picture|video|media|cover|stream|master/.test(lowerKey);
+  return (
+    /xhscdn\.com|sns-img|sns-video|\.(jpe?g|png|webp|gif|mp4|mov)(\?|$)/.test(lowerValue)
+    || (mediaKey && !/xiaohongshu\.com|xhslink\.com/.test(lowerValue))
+  );
+}
+
+function uniqueStrings(values: string[]) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values.map((item) => item.trim()).filter(Boolean)) {
+    if (!seen.has(value)) {
+      seen.add(value);
+      result.push(value);
+    }
+  }
+  return result;
 }
 
 async function tryParseWithJinaReader(sourceUrl: string) {
@@ -1615,6 +1895,7 @@ async function tryParseWithJinaReader(sourceUrl: string) {
     return {
       title,
       text: text.slice(0, 18_000),
+      mediaUrls: [],
     };
   } catch {
     return undefined;
@@ -1800,6 +2081,7 @@ export function listMaterials(options: ListMaterialsOptions = {}) {
       material.title,
       material.rawInput,
       material.contentText,
+      ...(material.mediaUrls ?? []),
       material.platform,
       material.sourceUrl,
       material.parseError,
@@ -1851,12 +2133,14 @@ export function searchKnowledgeAssets(input: { query?: string; limit?: number } 
         type: material.type,
         platform: material.platform ?? 'local',
         parseStatus: material.parseStatus,
+        mediaCount: material.mediaUrls?.length ?? 0,
       },
       score: scoreSearchText(
         terms,
         material.title,
         material.rawInput,
         material.contentText,
+        ...(material.mediaUrls ?? []),
         material.platform,
         material.sourceUrl,
         material.parseError,
