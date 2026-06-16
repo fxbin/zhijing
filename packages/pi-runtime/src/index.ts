@@ -402,7 +402,7 @@ function buildToolContext(request: ToolCallingRequest): Context {
 function parseStructuredJson<TOutput>(response: AssistantMessage): TOutput {
   const text = textFromMessage(response);
   const json = extractJson(text);
-  return JSON.parse(json) as TOutput;
+  return normalizeStructuredJson(JSON.parse(json)) as TOutput;
 }
 
 export class StructuredOutputValidationError extends Error {
@@ -499,6 +499,22 @@ function extractJson(text: string) {
   }
 
   throw new Error('Pi response did not contain a JSON object.');
+}
+
+function normalizeStructuredJson(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeStructuredJson);
+  }
+
+  if (!value || typeof value !== 'object') {
+    return typeof value === 'string' ? value.trim() : value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, item]) => [key, normalizeStructuredJson(item)] as const)
+      .filter(([, item]) => !(typeof item === 'string' && item.length === 0)),
+  );
 }
 
 function withFallbackReason<TOutput>(

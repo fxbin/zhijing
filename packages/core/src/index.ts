@@ -19,7 +19,6 @@ import {
 } from '@zhijing/shared';
 import {
   createPiAiRuntime,
-  createConfiguredPiRuntime,
   getDefaultPiModel,
   getDefaultPiProvider,
   getKnownPiModels,
@@ -37,12 +36,22 @@ import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+type PersistedModelProviderConfig = Partial<{
+  provider: string;
+  model: string;
+  apiKey: string;
+  enabled: boolean;
+  fallbackToMock: boolean;
+  updatedAt: string;
+}>;
+
 type StoreState = {
   knowledgeBases: KnowledgeBaseSummary[];
   materials: MaterialRecord[];
   cards: KnowledgeCard[];
   tasks: AgentTask[];
   artifacts: ArtifactRecord[];
+  modelProviderConfig?: PersistedModelProviderConfig;
 };
 
 type KnowledgeRepository = {
@@ -62,6 +71,8 @@ type KnowledgeRepository = {
   findTask(id: string): AgentTask | undefined;
   insertArtifact(artifact: ArtifactRecord): void;
   listArtifacts(knowledgeBaseId?: string, limit?: number): ArtifactRecord[];
+  readModelProviderConfig(): PersistedModelProviderConfig | undefined;
+  writeModelProviderConfig(config: PersistedModelProviderConfig): void;
 };
 
 type GeneratedCard = {
@@ -161,6 +172,14 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
       : this.state.artifacts;
     return typeof limit === 'number' ? artifacts.slice(0, limit) : artifacts;
   }
+
+  readModelProviderConfig() {
+    return this.state.modelProviderConfig;
+  }
+
+  writeModelProviderConfig(config: PersistedModelProviderConfig) {
+    this.state.modelProviderConfig = config;
+  }
 }
 
 type KnowledgeBaseRow = {
@@ -220,6 +239,16 @@ type ArtifactRow = {
   body: string;
   source_material_ids_json: string;
   created_at: string;
+};
+
+type ModelProviderSettingsRow = {
+  id: string;
+  provider: string;
+  model: string;
+  api_key: string | null;
+  enabled: number;
+  fallback_to_mock: number;
+  updated_at: string;
 };
 
 class SqliteKnowledgeRepository implements KnowledgeRepository {
@@ -384,6 +413,42 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     return (rows as ArtifactRow[]).map(mapArtifact);
   }
 
+  readModelProviderConfig() {
+    const row = this.db.prepare('SELECT * FROM model_provider_settings WHERE id = ?').get('default') as ModelProviderSettingsRow | undefined;
+    if (!row) return undefined;
+    return {
+      provider: row.provider,
+      model: row.model,
+      apiKey: row.api_key ?? undefined,
+      enabled: Boolean(row.enabled),
+      fallbackToMock: Boolean(row.fallback_to_mock),
+      updatedAt: row.updated_at,
+    };
+  }
+
+  writeModelProviderConfig(config: PersistedModelProviderConfig) {
+    this.db.prepare(`
+      INSERT INTO model_provider_settings (
+        id, provider, model, api_key, enabled, fallback_to_mock, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        provider = excluded.provider,
+        model = excluded.model,
+        api_key = excluded.api_key,
+        enabled = excluded.enabled,
+        fallback_to_mock = excluded.fallback_to_mock,
+        updated_at = excluded.updated_at
+    `).run(
+      'default',
+      config.provider ?? getDefaultPiProvider(),
+      config.model ?? getDefaultPiModel(),
+      config.apiKey ?? null,
+      config.enabled === false ? 0 : 1,
+      config.fallbackToMock === false ? 0 : 1,
+      config.updatedAt ?? now(),
+    );
+  }
+
   private migrate() {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS knowledge_bases (
@@ -443,6 +508,16 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         body TEXT NOT NULL,
         source_material_ids_json TEXT NOT NULL,
         created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS model_provider_settings (
+        id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        api_key TEXT,
+        enabled INTEGER NOT NULL DEFAULT 0,
+        fallback_to_mock INTEGER NOT NULL DEFAULT 1,
+        updated_at TEXT NOT NULL
       );
 
       CREATE INDEX IF NOT EXISTS idx_materials_knowledge_base_id ON materials(knowledge_base_id);
@@ -537,7 +612,6 @@ export function createSqliteKnowledgeRepository(path = defaultSqlitePath()): Kno
 let repository: KnowledgeRepository = process.env.ZHIJING_STORAGE === 'memory'
   ? createMemoryKnowledgeRepository()
   : createSqliteKnowledgeRepository();
-let piRuntime: PiRuntime = createConfiguredPiRuntime();
 
 type RuntimeModelProviderConfig = {
   provider: KnownProvider;
@@ -550,6 +624,7 @@ type RuntimeModelProviderConfig = {
 };
 
 let modelProviderConfig: RuntimeModelProviderConfig = initialModelProviderConfig();
+let piRuntime: PiRuntime = createRuntimeFromModelProviderConfig(modelProviderConfig);
 
 export function configureKnowledgeRepository(nextRepository: KnowledgeRepository) {
   repository = nextRepository;
@@ -560,15 +635,21 @@ export function configurePiRuntime(nextRuntime: PiRuntime) {
 }
 
 function initialModelProviderConfig(): RuntimeModelProviderConfig {
-  const provider = normalizeProvider(process.env.ZHIJING_PI_PROVIDER);
+  const persisted = repository.readModelProviderConfig();
+  const provider = normalizeProvider(process.env.ZHIJING_PI_PROVIDER ?? persisted?.provider);
+  const persistedMatchesProvider = persisted?.provider === provider;
   const envApiKey = process.env.ZHIJING_PI_API_KEY ?? getPiEnvApiKey(provider);
+  const runtimeApiKey = persistedMatchesProvider ? normalizeSecret(persisted.apiKey) : undefined;
   return {
     provider,
-    model: process.env.ZHIJING_PI_MODEL ?? (provider === getDefaultPiProvider() ? getDefaultPiModel() : defaultModelForProvider(provider)),
-    apiKey: envApiKey,
-    enabled: process.env.ZHIJING_PI_ENABLED === '1' || Boolean(envApiKey),
-    fallbackToMock: process.env.ZHIJING_PI_FALLBACK === '0' ? false : true,
-    keySource: envApiKey ? 'env' : 'none',
+    model: process.env.ZHIJING_PI_MODEL
+      ?? (persistedMatchesProvider ? persisted?.model : undefined)
+      ?? (provider === getDefaultPiProvider() ? getDefaultPiModel() : defaultModelForProvider(provider)),
+    apiKey: runtimeApiKey,
+    enabled: process.env.ZHIJING_PI_ENABLED === '1' || persisted?.enabled === true || Boolean(envApiKey ?? runtimeApiKey),
+    fallbackToMock: process.env.ZHIJING_PI_FALLBACK === '0' ? false : persisted?.fallbackToMock ?? true,
+    keySource: envApiKey ? 'env' : runtimeApiKey ? 'runtime' : 'none',
+    updatedAt: persisted?.updatedAt,
   };
 }
 
@@ -593,14 +674,18 @@ function currentApiKey() {
   return modelProviderConfig.apiKey ?? getPiEnvApiKey(modelProviderConfig.provider);
 }
 
-function applyModelProviderConfig() {
-  piRuntime = createPiAiRuntime({
-    provider: modelProviderConfig.provider,
-    model: modelProviderConfig.model,
-    apiKey: modelProviderConfig.apiKey,
-    enabled: modelProviderConfig.enabled,
-    fallbackToMock: modelProviderConfig.fallbackToMock,
+function createRuntimeFromModelProviderConfig(config: RuntimeModelProviderConfig) {
+  return createPiAiRuntime({
+    provider: config.provider,
+    model: config.model,
+    apiKey: config.apiKey ?? getPiEnvApiKey(config.provider),
+    enabled: config.enabled,
+    fallbackToMock: config.fallbackToMock,
   });
+}
+
+function applyModelProviderConfig() {
+  piRuntime = createRuntimeFromModelProviderConfig(modelProviderConfig);
 }
 
 function modelSettingsSnapshot(): ModelProviderSettings {
@@ -627,21 +712,31 @@ export function saveModelProviderSettings(input: SaveModelProviderSettingsReques
     ? input.model
     : defaultModelForProvider(provider);
   const providerScopedExistingKey = modelProviderConfig.provider === provider
-    ? currentApiKey()
-    : getPiEnvApiKey(provider);
+    ? modelProviderConfig.apiKey
+    : undefined;
+  const inputApiKey = normalizeSecret(input.apiKey);
+  const envApiKey = getPiEnvApiKey(provider);
   const apiKey = input.clearApiKey
     ? undefined
-    : input.apiKey?.trim() || providerScopedExistingKey;
+    : inputApiKey ?? providerScopedExistingKey;
 
   modelProviderConfig = {
     provider,
     model,
     apiKey,
-    enabled: input.enabled ?? Boolean(apiKey),
+    enabled: input.enabled ?? Boolean(apiKey ?? envApiKey),
     fallbackToMock: input.fallbackToMock ?? true,
-    keySource: apiKey ? input.apiKey?.trim() ? 'runtime' : getPiEnvApiKey(provider) ? 'env' : modelProviderConfig.keySource : 'none',
+    keySource: apiKey ? 'runtime' : envApiKey ? 'env' : 'none',
     updatedAt: now(),
   };
+  repository.writeModelProviderConfig({
+    provider: modelProviderConfig.provider,
+    model: modelProviderConfig.model,
+    apiKey: modelProviderConfig.keySource === 'runtime' ? modelProviderConfig.apiKey : undefined,
+    enabled: modelProviderConfig.enabled,
+    fallbackToMock: modelProviderConfig.fallbackToMock,
+    updatedAt: modelProviderConfig.updatedAt,
+  });
   applyModelProviderConfig();
   return modelSettingsSnapshot();
 }
@@ -697,6 +792,11 @@ export async function testModelProviderSettings(input: TestModelProviderSettings
       message: error instanceof Error ? error.message : '模型测试失败。',
     };
   }
+}
+
+function normalizeSecret(value: string | undefined) {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
 }
 
 export class KnowledgeCoreError extends Error {
