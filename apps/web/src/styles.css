@@ -1559,7 +1559,9 @@ button { cursor: pointer; }
 .library-card-head,
 .library-card-actions,
 .library-card-actions a,
-.library-card-actions button {
+.library-card-actions button,
+.assignment-row,
+.review-actions {
   display: flex;
   align-items: center;
 }
@@ -1732,6 +1734,86 @@ button { cursor: pointer; }
   margin: 20px 0 12px;
   font-size: 22px;
   line-height: 1.25;
+}
+
+.assignment-row {
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.assignment-row select,
+.assignment-row input,
+.review-box input,
+.review-box textarea {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: 0;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--primary);
+}
+
+.assignment-row select {
+  flex: 1 1 150px;
+  height: 38px;
+  padding: 0 10px;
+}
+
+.assignment-row input {
+  flex: 1 1 140px;
+  height: 38px;
+  padding: 0 10px;
+}
+
+.assignment-row button,
+.review-actions button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--primary);
+  padding: 0 12px;
+  font-weight: 850;
+}
+
+.assignment-row button:disabled,
+.review-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.review-box {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(247, 249, 252, 0.78);
+  padding: 12px;
+}
+
+.review-box input {
+  height: 40px;
+  padding: 0 12px;
+}
+
+.review-box textarea {
+  width: 100%;
+  min-height: 78px;
+  resize: vertical;
+  padding: 12px;
+  line-height: 1.45;
+}
+
+.review-actions {
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.review-actions button:last-child {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
 }
 
 .library-card p {

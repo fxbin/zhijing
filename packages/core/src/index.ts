@@ -1,7 +1,9 @@
 import {
   type AgentTask,
+  type AssignMaterialRequest,
   type ArtifactRecord,
   classifyInput,
+  type CompleteMaterialReviewRequest,
   type IntakeRequest,
   type IntakeResult,
   type KnowledgeBaseAnalytics,
@@ -10,8 +12,10 @@ import {
   type KnowledgeCard,
   type KnowledgeKitId,
   type KnowledgeKitRunResult,
+  type MaterialAssignmentResult,
   type MaterialParseQueueResult,
   type MaterialRecord,
+  type MaterialReviewResult,
   type ModelProviderSettings,
   type ModelProviderTestResult,
   type SaveModelProviderSettingsRequest,
@@ -66,12 +70,14 @@ type KnowledgeRepository = {
   findMaterial(id: string): MaterialRecord | undefined;
   listMaterials(knowledgeBaseId?: string, limit?: number): MaterialRecord[];
   insertCards(cards: KnowledgeCard[]): void;
+  updateCard(card: KnowledgeCard): void;
   listCards(knowledgeBaseId?: string): KnowledgeCard[];
   insertTask(task: AgentTask): void;
   updateTask(task: AgentTask): void;
   listTasks(limit?: number): AgentTask[];
   findTask(id: string): AgentTask | undefined;
   insertArtifact(artifact: ArtifactRecord): void;
+  updateArtifact(artifact: ArtifactRecord): void;
   listArtifacts(knowledgeBaseId?: string, limit?: number): ArtifactRecord[];
   readModelProviderConfig(): PersistedModelProviderConfig | undefined;
   writeModelProviderConfig(config: PersistedModelProviderConfig): void;
@@ -155,6 +161,11 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     this.state.cards.unshift(...cards);
   }
 
+  updateCard(card: KnowledgeCard) {
+    const index = this.state.cards.findIndex((item) => item.id === card.id);
+    if (index >= 0) this.state.cards[index] = card;
+  }
+
   listCards(knowledgeBaseId?: string) {
     return knowledgeBaseId
       ? this.state.cards.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
@@ -180,6 +191,11 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
 
   insertArtifact(artifact: ArtifactRecord) {
     this.state.artifacts.unshift(artifact);
+  }
+
+  updateArtifact(artifact: ArtifactRecord) {
+    const index = this.state.artifacts.findIndex((item) => item.id === artifact.id);
+    if (index >= 0) this.state.artifacts[index] = artifact;
   }
 
   listArtifacts(knowledgeBaseId?: string, limit?: number) {
@@ -376,6 +392,24 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     }
   }
 
+  updateCard(card: KnowledgeCard) {
+    this.db.prepare(`
+      UPDATE cards
+      SET knowledge_base_id = ?, material_id = ?, type = ?, title = ?, body = ?, claim_status = ?, created_at = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      card.knowledgeBaseId,
+      card.materialId ?? null,
+      card.type,
+      card.title,
+      card.body,
+      card.claimStatus,
+      card.createdAt,
+      card.updatedAt,
+      card.id,
+    );
+  }
+
   listCards(knowledgeBaseId?: string) {
     const rows = knowledgeBaseId
       ? this.db.prepare('SELECT * FROM cards WHERE knowledge_base_id = ? ORDER BY updated_at DESC, created_at DESC').all(knowledgeBaseId)
@@ -422,6 +456,22 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       artifact.body,
       JSON.stringify(artifact.sourceMaterialIds),
       artifact.createdAt,
+    );
+  }
+
+  updateArtifact(artifact: ArtifactRecord) {
+    this.db.prepare(`
+      UPDATE artifacts
+      SET knowledge_base_id = ?, artifact_type = ?, title = ?, body = ?, source_material_ids_json = ?, created_at = ?
+      WHERE id = ?
+    `).run(
+      artifact.knowledgeBaseId,
+      artifact.artifactType,
+      artifact.title,
+      artifact.body,
+      JSON.stringify(artifact.sourceMaterialIds),
+      artifact.createdAt,
+      artifact.id,
     );
   }
 
@@ -1294,6 +1344,178 @@ export async function runKnowledgeKit(
   }
 }
 
+export function assignMaterialToKnowledgeBase(
+  materialId: string,
+  input: AssignMaterialRequest,
+): MaterialAssignmentResult {
+  const material = requireMaterial(materialId);
+  const previousKnowledgeBaseId = material.knowledgeBaseId;
+  const targetBase = resolveMaterialAssignmentTarget(input, material);
+
+  material.knowledgeBaseId = targetBase.id;
+  repository.updateMaterial(material);
+  moveMaterialAssets(material.id, previousKnowledgeBaseId, targetBase.id);
+  reconcileKnowledgeBaseStats(previousKnowledgeBaseId);
+  const knowledgeBase = reconcileKnowledgeBaseStats(targetBase.id) ?? targetBase;
+
+  return {
+    material,
+    knowledgeBase,
+    previousKnowledgeBaseId,
+    message: previousKnowledgeBaseId === targetBase.id
+      ? '资料已在当前知识库中。'
+      : `资料已移动到「${knowledgeBase.title}」。`,
+  };
+}
+
+export async function completeMaterialReview(
+  materialId: string,
+  input: CompleteMaterialReviewRequest,
+): Promise<MaterialReviewResult> {
+  const material = requireMaterial(materialId);
+  const knowledgeBase = repository.findKnowledgeBase(material.knowledgeBaseId);
+  if (!knowledgeBase) {
+    throw new KnowledgeCoreError('Knowledge base not found.', 404);
+  }
+
+  const nextTitle = normalizeSecret(input.title);
+  const nextText = typeof input.contentText === 'string' ? cleanText(input.contentText) : undefined;
+  const nextMediaUrls = input.mediaUrls === undefined
+    ? material.mediaUrls ?? []
+    : normalizeMediaUrls(input.mediaUrls);
+  const markIngested = input.markIngested === true;
+  const contentForGeneration = cleanText([
+    nextText ?? material.contentText,
+    nextMediaUrls.length ? `媒体链接：\n${nextMediaUrls.join('\n')}` : undefined,
+  ].filter(Boolean).join('\n\n'));
+
+  if (markIngested && contentForGeneration.length < 4 && nextMediaUrls.length === 0) {
+    throw new KnowledgeCoreError('Content text or media URLs are required before marking a material ingested.', 400);
+  }
+
+  material.title = nextTitle ? compactTitle(nextTitle) : material.title;
+  if (nextText !== undefined) material.contentText = nextText;
+  material.mediaUrls = nextMediaUrls;
+  material.parseStatus = markIngested ? 'ingested' : 'needs_review';
+  material.parseError = markIngested ? undefined : '等待用户补充更多正文或媒体。';
+  repository.updateMaterial(material);
+  reconcileKnowledgeBaseStats(material.knowledgeBaseId);
+
+  if (!markIngested) {
+    return {
+      material,
+      knowledgeBase: repository.findKnowledgeBase(material.knowledgeBaseId) ?? knowledgeBase,
+      message: '资料补充已保存，仍保留为待复核状态。',
+    };
+  }
+
+  const task = createTask('parse_material', {
+    materialId: material.id,
+    knowledgeBaseId: material.knowledgeBaseId,
+    source: 'manual_review',
+    previousParseStatus: 'needs_review',
+  });
+
+  try {
+    const generation = await generateKnowledge('material_summary', contentForGeneration, {
+      kind: 'manual_review',
+      knowledgeBaseId: material.knowledgeBaseId,
+      materialId: material.id,
+      hasSourceMaterial: true,
+      parseStatus: material.parseStatus,
+      sourceUrl: material.sourceUrl,
+      mediaUrls: material.mediaUrls,
+      mediaCount: material.mediaUrls.length,
+    });
+    const base = repository.findKnowledgeBase(material.knowledgeBaseId) ?? knowledgeBase;
+    const cards = createCards(base, material, contentForGeneration, generation.output.cards);
+    const artifact = createArtifact(base, material, contentForGeneration, generation.output);
+    const reconciledBase = reconcileKnowledgeBaseStats(base.id) ?? base;
+
+    finishTask(task, {
+      materialId: material.id,
+      parseStatus: material.parseStatus,
+      source: 'manual_review',
+      cardIds: cards.map((card) => card.id),
+      artifactId: artifact.id,
+      generationProvider: generation.provider,
+      generationModel: generation.model,
+      generationFallbackReason: generation.fallbackReason,
+    });
+
+    return {
+      material,
+      knowledgeBase: reconciledBase,
+      task,
+      cards,
+      artifact,
+      message: '资料已手动补全，并生成知识卡片。',
+    };
+  } catch (error) {
+    failTask(task, error);
+    throw error;
+  }
+}
+
+function resolveMaterialAssignmentTarget(input: AssignMaterialRequest, material: MaterialRecord) {
+  const targetId = normalizeSecret(input.knowledgeBaseId);
+  if (targetId) {
+    const target = repository.findKnowledgeBase(targetId);
+    if (!target) {
+      throw new KnowledgeCoreError('Target knowledge base not found.', 404);
+    }
+    return target;
+  }
+
+  const title = normalizeSecret(input.newKnowledgeBaseTitle);
+  if (title) {
+    return createKnowledgeBase(compactTitle(title), `由资料「${material.title}」新建的知识库。`);
+  }
+
+  throw new KnowledgeCoreError('Target knowledge base or new title is required.', 400);
+}
+
+function moveMaterialAssets(materialId: string, previousKnowledgeBaseId: string, nextKnowledgeBaseId: string) {
+  if (previousKnowledgeBaseId === nextKnowledgeBaseId) return;
+  for (const card of repository.listCards(previousKnowledgeBaseId)) {
+    if (card.materialId !== materialId) continue;
+    card.knowledgeBaseId = nextKnowledgeBaseId;
+    card.updatedAt = now();
+    repository.updateCard(card);
+  }
+  for (const artifact of repository.listArtifacts(previousKnowledgeBaseId)) {
+    if (!artifact.sourceMaterialIds.includes(materialId)) continue;
+    artifact.knowledgeBaseId = nextKnowledgeBaseId;
+    repository.updateArtifact(artifact);
+  }
+}
+
+function reconcileKnowledgeBaseStats(knowledgeBaseId: string) {
+  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  if (!base) return undefined;
+  const materials = repository.listMaterials(base.id);
+  const cards = repository.listCards(base.id);
+  const sourcedCards = cards.filter((card) => card.claimStatus === 'sourced').length;
+  base.sourceCount = materials.length;
+  base.cardCount = cards.length;
+  base.sourcedRatio = cards.length > 0 ? sourcedCards / cards.length : 0;
+  base.stage = materials.some((material) => material.parseStatus === 'ingested')
+    ? 'grounded'
+    : cards.length > 0
+      ? 'organizing'
+      : 'ai_skeleton';
+  base.updatedAt = now();
+  repository.updateKnowledgeBase(base);
+  return base;
+}
+
+function normalizeMediaUrls(values: string[]) {
+  return uniqueStrings(values
+    .flatMap((value) => value.split(/\s+/))
+    .map((value) => value.trim())
+    .filter((value) => /^https?:\/\//i.test(value)));
+}
+
 function buildKitContext(knowledgeBaseId: string) {
   const materials = repository.listMaterials(knowledgeBaseId)
     .slice(0, 12)
@@ -2148,12 +2370,17 @@ function failMaterialParsingTask(
 }
 
 function requireLinkMaterial(materialId: string) {
+  const material = requireMaterial(materialId);
+  if (material.type !== 'link') {
+    throw new KnowledgeCoreError('Only link materials can be parsed through this endpoint.', 400);
+  }
+  return material;
+}
+
+function requireMaterial(materialId: string) {
   const material = repository.findMaterial(materialId);
   if (!material) {
     throw new KnowledgeCoreError('Material not found.', 404);
-  }
-  if (material.type !== 'link') {
-    throw new KnowledgeCoreError('Only link materials can be parsed through this endpoint.', 400);
   }
   return material;
 }

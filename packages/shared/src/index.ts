@@ -54,6 +54,18 @@ export interface TestModelProviderSettingsRequest {
   apiKey?: string;
 }
 
+export interface AssignMaterialRequest {
+  knowledgeBaseId?: string;
+  newKnowledgeBaseTitle?: string;
+}
+
+export interface CompleteMaterialReviewRequest {
+  title?: string;
+  contentText?: string;
+  mediaUrls?: string[];
+  markIngested?: boolean;
+}
+
 export interface ModelProviderTestResult {
   ok: boolean;
   provider: string;
@@ -145,6 +157,22 @@ export interface MaterialParseQueueResult {
   artifact?: ArtifactRecord;
   queued: boolean;
   retry: boolean;
+  message: string;
+}
+
+export interface MaterialAssignmentResult {
+  material: MaterialRecord;
+  knowledgeBase: KnowledgeBaseSummary;
+  previousKnowledgeBaseId: string;
+  message: string;
+}
+
+export interface MaterialReviewResult {
+  material: MaterialRecord;
+  knowledgeBase: KnowledgeBaseSummary;
+  task?: AgentTask;
+  cards?: KnowledgeCard[];
+  artifact?: ArtifactRecord;
   message: string;
 }
 

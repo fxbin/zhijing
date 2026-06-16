@@ -1,7 +1,9 @@
 import cors from '@fastify/cors';
 import Fastify from 'fastify';
 import {
+  assignMaterialToKnowledgeBase,
   answerKnowledgeBaseQuestion,
+  completeMaterialReview,
   getDashboard,
   getKnowledgeBaseAnalytics,
   getKnowledgeBase,
@@ -19,6 +21,8 @@ import {
   testModelProviderSettings,
 } from '@zhijing/core';
 import type {
+  AssignMaterialRequest,
+  CompleteMaterialReviewRequest,
   IntakeRequest,
   KnowledgeKitId,
   MaterialType,
@@ -194,6 +198,40 @@ export function buildApi() {
       }
       request.log.error({ error }, 'material parse failure report failed');
       return reply.code(500).send({ error: 'Material parse failure report failed.' });
+    }
+  });
+
+  app.post<{ Params: { id: string }; Body: Partial<AssignMaterialRequest> }>('/api/materials/:id/assign', async (request, reply) => {
+    try {
+      return assignMaterialToKnowledgeBase(request.params.id, {
+        knowledgeBaseId: typeof request.body?.knowledgeBaseId === 'string' ? request.body.knowledgeBaseId.trim() : undefined,
+        newKnowledgeBaseTitle: typeof request.body?.newKnowledgeBaseTitle === 'string' ? request.body.newKnowledgeBaseTitle.trim() : undefined,
+      });
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'material assignment failed');
+      return reply.code(500).send({ error: 'Material assignment failed.' });
+    }
+  });
+
+  app.post<{ Params: { id: string }; Body: Partial<CompleteMaterialReviewRequest> }>('/api/materials/:id/review', async (request, reply) => {
+    try {
+      return await completeMaterialReview(request.params.id, {
+        title: typeof request.body?.title === 'string' ? request.body.title : undefined,
+        contentText: typeof request.body?.contentText === 'string' ? request.body.contentText : undefined,
+        mediaUrls: Array.isArray(request.body?.mediaUrls)
+          ? request.body.mediaUrls.filter((item): item is string => typeof item === 'string')
+          : undefined,
+        markIngested: request.body?.markIngested === true,
+      });
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'material manual review failed');
+      return reply.code(500).send({ error: 'Material manual review failed.' });
     }
   });
 

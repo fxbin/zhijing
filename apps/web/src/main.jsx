@@ -84,9 +84,10 @@ function materialFromApi(item) {
   const platform = item.platform ?? item.type ?? 'material';
   const status = item.parseStatus ?? 'saved';
   return {
+    ...item,
     source: platform.toUpperCase(),
     status: status.toUpperCase(),
-    title: item.title,
+    title: item.title ?? 'Untitled material',
     summary: item.contentText || item.rawInput || 'Saved source material.',
     tags: [item.type ?? 'material', status],
     time: 'just now',
@@ -139,6 +140,18 @@ function materialSourceUrl(item) {
 
 function materialMediaUrls(item) {
   return Array.isArray(item.mediaUrls) ? item.mediaUrls.filter(Boolean) : [];
+}
+
+function splitMediaUrls(value) {
+  return value
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter((item) => /^https?:\/\//i.test(item));
+}
+
+function knowledgeBaseTitle(knowledgeBases, knowledgeBaseId) {
+  const matched = knowledgeBases.find((base) => base.id === knowledgeBaseId);
+  return matched?.title ?? 'Unassigned';
 }
 
 function isImageUrl(url) {
@@ -438,6 +451,40 @@ function App() {
     }
   };
 
+  const applyMaterialMutation = (result) => {
+    if (!result?.material) return;
+    if (result.task) {
+      setLatestTaskId(result.task.id);
+      setLatestTask(result.task);
+      setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
+    }
+    if (result.knowledgeBase) {
+      setKnowledgeBases((current) => [result.knowledgeBase, ...current.filter((base) => base.id !== result.knowledgeBase.id)]);
+    }
+    setMaterials((current) => [materialFromApi(result.material), ...current.filter((material) => material.id !== result.material.id)].slice(0, 6));
+    setKnowledgeBaseDetail((current) => {
+      const isTargetDetail = current.id === result.material.knowledgeBaseId;
+      const isPreviousDetail = current.id === result.previousKnowledgeBaseId;
+      if (!isTargetDetail && !isPreviousDetail) return current;
+      if (isPreviousDetail && !isTargetDetail) {
+        return {
+          ...current,
+          materials: (current.materials ?? []).filter((material) => material.id !== result.material.id),
+        };
+      }
+      return {
+        ...current,
+        ...(result.knowledgeBase ?? {}),
+        materials: [result.material, ...(current.materials ?? []).filter((material) => material.id !== result.material.id)],
+        cards: [...(result.cards ?? []), ...(current.cards ?? []).filter((card) => !(result.cards ?? []).some((item) => item.id === card.id))],
+        artifacts: result.artifact
+          ? [result.artifact, ...(current.artifacts ?? []).filter((artifact) => artifact.id !== result.artifact.id)]
+          : current.artifacts ?? [],
+      };
+    });
+    if (result.artifact) setSelectedArtifact(result.artifact);
+  };
+
   const submit = async () => {
     const value = query.trim();
     if (!value || isSubmitting) return;
@@ -720,7 +767,9 @@ function App() {
           {view === 'library' && (
             <LibraryView
               apiStatus={apiStatus}
+              knowledgeBases={knowledgeBases}
               onCaptureResult={applyIntakeResult}
+              onMaterialMutation={applyMaterialMutation}
               onParseMaterial={parseMaterial}
               parsingMaterialId={parsingMaterialId}
             />
@@ -1116,14 +1165,19 @@ function DetailView({
   );
 }
 
-function LibraryView({ apiStatus, onCaptureResult, onParseMaterial, parsingMaterialId }) {
+function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMutation, onParseMaterial, parsingMaterialId }) {
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState('all');
   const [searchValue, setSearchValue] = useState('');
   const [captureValue, setCaptureValue] = useState('');
   const [captureMode, setCaptureMode] = useState('auto');
+  const [reviewingId, setReviewingId] = useState(null);
+  const [reviewDraft, setReviewDraft] = useState({ title: '', contentText: '', mediaUrls: '' });
+  const [assignDrafts, setAssignDrafts] = useState({});
+  const [newBaseTitles, setNewBaseTitles] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [mutatingMaterialId, setMutatingMaterialId] = useState(null);
   const [status, setStatus] = useState('Loading materials...');
 
   async function loadMaterials() {
@@ -1216,6 +1270,71 @@ function LibraryView({ apiStatus, onCaptureResult, onParseMaterial, parsingMater
     await loadMaterials();
   }
 
+  function openReview(item) {
+    setReviewingId((current) => current === item.id ? null : item.id);
+    setReviewDraft({
+      title: item.title ?? '',
+      contentText: item.contentText ?? '',
+      mediaUrls: (materialMediaUrls(item) ?? []).join('\n'),
+    });
+  }
+
+  async function saveReview(item, markIngested) {
+    if (!item?.id || apiStatus !== 'online' || mutatingMaterialId) return;
+    setMutatingMaterialId(item.id);
+    setStatus(markIngested ? 'Completing material...' : 'Saving review draft...');
+    try {
+      const response = await fetch(`/api/materials/${item.id}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: reviewDraft.title,
+          contentText: reviewDraft.contentText,
+          mediaUrls: splitMediaUrls(reviewDraft.mediaUrls),
+          markIngested,
+        }),
+      });
+      if (!response.ok) throw new Error('Review save failed.');
+      const result = await response.json();
+      onMaterialMutation?.(result);
+      setStatus(result.message);
+      if (markIngested) setReviewingId(null);
+      await loadMaterials();
+    } catch {
+      setStatus('保存补全内容失败，请确认 API 正在运行。');
+    } finally {
+      setMutatingMaterialId(null);
+    }
+  }
+
+  async function assignMaterial(item) {
+    if (!item?.id || apiStatus !== 'online' || mutatingMaterialId) return;
+    const target = assignDrafts[item.id] ?? item.knowledgeBaseId ?? '';
+    const newKnowledgeBaseTitle = (newBaseTitles[item.id] ?? item.title ?? '').trim();
+    if (!target || (target === item.knowledgeBaseId && target !== '__new')) return;
+    setMutatingMaterialId(item.id);
+    setStatus('Updating material assignment...');
+    try {
+      const response = await fetch(`/api/materials/${item.id}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(target === '__new'
+          ? { newKnowledgeBaseTitle }
+          : { knowledgeBaseId: target }),
+      });
+      if (!response.ok) throw new Error('Assignment failed.');
+      const result = await response.json();
+      onMaterialMutation?.(result);
+      setStatus(result.message);
+      setAssignDrafts((current) => ({ ...current, [item.id]: result.knowledgeBase.id }));
+      await loadMaterials();
+    } catch {
+      setStatus('移动资料失败，请确认目标知识库可用。');
+    } finally {
+      setMutatingMaterialId(null);
+    }
+  }
+
   return (
     <section className="page-main full">
       <div className="page-title-row">
@@ -1294,11 +1413,60 @@ function LibraryView({ apiStatus, onCaptureResult, onParseMaterial, parsingMater
             <p>{materialPreview(item)}</p>
             {item.parseError && <p className="library-error">{item.parseError}</p>}
             <div className="tag-row">
+              <span>{knowledgeBaseTitle(knowledgeBases, item.knowledgeBaseId)}</span>
               <span>{item.platform ?? 'local'}</span>
               <span>{formatMaterialTime(item.createdAt)}</span>
               {materialMediaUrls(item).length > 0 && <span>{materialMediaUrls(item).length} media</span>}
             </div>
             <MediaPreview urls={materialMediaUrls(item)} compact />
+            <div className="assignment-row">
+              <select
+                aria-label="选择资料归属知识库"
+                value={assignDrafts[item.id] ?? item.knowledgeBaseId ?? ''}
+                onChange={(event) => setAssignDrafts((current) => ({ ...current, [item.id]: event.target.value }))}
+              >
+                <option value="">Move to...</option>
+                {knowledgeBases.map((base) => <option key={base.id ?? base.title} value={base.id}>{base.title}</option>)}
+                <option value="__new">New knowledge base</option>
+              </select>
+              {(assignDrafts[item.id] ?? item.knowledgeBaseId) === '__new' && (
+                <input
+                  aria-label="新知识库标题"
+                  value={newBaseTitles[item.id] ?? item.title ?? ''}
+                  onChange={(event) => setNewBaseTitles((current) => ({ ...current, [item.id]: event.target.value }))}
+                  placeholder="Knowledge base title"
+                />
+              )}
+              <button disabled={apiStatus !== 'online' || mutatingMaterialId === item.id} onClick={() => assignMaterial(item)} type="button">
+                Assign
+              </button>
+            </div>
+            {reviewingId === item.id && (
+              <div className="review-box">
+                <input
+                  aria-label="资料标题"
+                  value={reviewDraft.title}
+                  onChange={(event) => setReviewDraft((current) => ({ ...current, title: event.target.value }))}
+                  placeholder="Title"
+                />
+                <textarea
+                  aria-label="手动补充正文"
+                  value={reviewDraft.contentText}
+                  onChange={(event) => setReviewDraft((current) => ({ ...current, contentText: event.target.value }))}
+                  placeholder="Paste or edit the material text..."
+                />
+                <textarea
+                  aria-label="手动补充媒体链接"
+                  value={reviewDraft.mediaUrls}
+                  onChange={(event) => setReviewDraft((current) => ({ ...current, mediaUrls: event.target.value }))}
+                  placeholder="Media URLs, one per line..."
+                />
+                <div className="review-actions">
+                  <button disabled={mutatingMaterialId === item.id} onClick={() => saveReview(item, false)} type="button">Save Draft</button>
+                  <button disabled={mutatingMaterialId === item.id} onClick={() => saveReview(item, true)} type="button">Complete</button>
+                </div>
+              </div>
+            )}
             <div className="library-card-actions">
               {materialSourceUrl(item) && (
                 <a href={materialSourceUrl(item)} target="_blank" rel="noreferrer">
@@ -1312,6 +1480,10 @@ function LibraryView({ apiStatus, onCaptureResult, onParseMaterial, parsingMater
                   {item.parseStatus === 'failed' ? 'Retry Parse' : 'Parse'}
                 </button>
               )}
+              <button disabled={apiStatus !== 'online'} onClick={() => openReview(item)} type="button">
+                <FileText size={14} />
+                {reviewingId === item.id ? 'Close Review' : 'Review'}
+              </button>
             </div>
           </article>
           );
