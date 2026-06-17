@@ -11,6 +11,8 @@
   --sage: #6dfe9c;
   --sage-text: #007439;
   --error: #ba1a1a;
+  --scholar: #2c5f8d;
+  --scholar-soft: rgba(44, 95, 141, 0.18);
   --shadow: 0 12px 32px rgba(9, 20, 38, 0.08);
   font-family: Inter, "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
 }
@@ -3591,6 +3593,86 @@ button { cursor: pointer; }
   color: var(--error) !important;
   padding: 10px;
   font-size: 13px;
+}
+
+.parse-timeline {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  margin-top: 12px;
+  padding-top: 2px;
+}
+
+.parse-stage {
+  position: relative;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.parse-stage::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: calc(-50% + 7px);
+  width: calc(100% - 14px);
+  height: 2px;
+  background: var(--line-soft);
+  z-index: 0;
+}
+
+.parse-stage:first-child::before {
+  display: none;
+}
+
+.parse-stage.done::before {
+  background: var(--scholar);
+}
+
+.parse-stage-dot {
+  position: relative;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: var(--surface);
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.parse-stage.done .parse-stage-dot {
+  background: var(--scholar);
+  border-color: var(--scholar);
+}
+
+.parse-stage.current .parse-stage-dot {
+  box-shadow: 0 0 0 4px var(--scholar-soft);
+}
+
+.parse-stage.failed .parse-stage-dot {
+  background: var(--error);
+  border-color: var(--error);
+}
+
+.parse-stage-label {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.parse-stage.done .parse-stage-label {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.parse-stage.failed .parse-stage-label {
+  color: var(--error);
+  font-weight: 600;
 }
 
 .library-card .tag-row {

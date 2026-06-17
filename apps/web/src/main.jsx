@@ -205,6 +205,57 @@ function formatMaterialTime(value) {
   }
 }
 
+const PARSE_STAGE_LABELS = {
+  captured: '采集',
+  queued: '排队',
+  parsing: '解析',
+  review: '复核',
+  ingested: '入库',
+};
+
+function buildParseTimelineStages(item) {
+  const timeline = item.statusTimeline ?? {};
+  const failed = Boolean(timeline.failedAt);
+  const stamps = {
+    captured: timeline.capturedAt ?? item.createdAt,
+    queued: timeline.queuedAt,
+    parsing: timeline.parsingAt,
+    review: timeline.reviewedAt ?? timeline.failedAt,
+    ingested: timeline.ingestedAt,
+  };
+  return ['captured', 'queued', 'parsing', 'review', 'ingested'].map((key) => ({
+    key,
+    label: PARSE_STAGE_LABELS[key],
+    at: stamps[key],
+    failed: failed && key === 'review',
+  }));
+}
+
+function ParseTimeline({ item }) {
+  const stages = buildParseTimelineStages(item);
+  const lastIndex = stages.reduce((acc, stage, idx) => (stage.at ? idx : acc), -1);
+  const visible = stages.some((stage) => stage.at);
+  if (!visible) return null;
+  return (
+    <div className="parse-timeline" aria-label="解析进度时间线">
+      {stages.map((stage, idx) => {
+        const done = Boolean(stage.at);
+        const current = idx === lastIndex && item.parseStatus !== 'ingested' && !stage.failed;
+        const tip = stage.at ? `${stage.label}：${formatMaterialTime(stage.at)}` : `${stage.label}：待处理`;
+        return (
+          <div
+            className={`parse-stage${done ? ' done' : ''}${stage.failed ? ' failed' : ''}${current ? ' current' : ''}`}
+            key={stage.key}
+          >
+            <span className="parse-stage-dot" title={tip} />
+            <span className="parse-stage-label">{stage.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function formatPercent(value) {
   return `${Math.round((value ?? 0) * 100)}%`;
 }
@@ -2654,6 +2705,7 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
             </div>
             <h3>{item.title}</h3>
             <p>{materialPreview(item)}</p>
+            <ParseTimeline item={item} />
             {item.parseError && <p className="library-error">{item.parseError}</p>}
             <div className="tag-row">
               <span>{knowledgeBaseTitle(knowledgeBases, item.knowledgeBaseId)}</span>
