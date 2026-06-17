@@ -1377,6 +1377,27 @@ function KnowledgeMapPanel({ setView }) {
   );
 }
 
+const CARD_TYPE_LABELS = {
+  concept: 'Concept',
+  method: 'Method',
+  fact: 'Fact',
+  question: 'Question',
+  general: 'General',
+};
+
+function extractConceptTags(cards) {
+  return keywordTokens(...(cards ?? []).map((card) => `${card.title ?? ''} ${card.body ?? ''}`)).slice(0, 12);
+}
+
+function groupCardsByType(cards) {
+  return (cards ?? []).reduce((groups, card) => {
+    const type = card.type ?? 'general';
+    if (!groups[type]) groups[type] = [];
+    groups[type].push(card);
+    return groups;
+  }, {});
+}
+
 function DetailView({
   apiStatus,
   analytics,
