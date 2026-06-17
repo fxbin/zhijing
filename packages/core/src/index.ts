@@ -2,6 +2,7 @@ import {
   type AgentTask,
   type AssignMaterialRequest,
   type ArtifactRecord,
+  type ArtifactSubtype,
   classifyInput,
   type CompleteMaterialReviewRequest,
   type IntakeRequest,
@@ -291,6 +292,7 @@ type ArtifactRow = {
   id: string;
   knowledge_base_id: string;
   artifact_type: ArtifactRecord['artifactType'];
+  subtype: string;
   title: string;
   body: string;
   source_material_ids_json: string;
@@ -481,12 +483,13 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   insertArtifact(artifact: ArtifactRecord) {
     this.db.prepare(`
       INSERT INTO artifacts (
-        id, knowledge_base_id, artifact_type, title, body, source_material_ids_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        id, knowledge_base_id, artifact_type, subtype, title, body, source_material_ids_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       artifact.id,
       artifact.knowledgeBaseId,
       artifact.artifactType,
+      artifact.subtype,
       artifact.title,
       artifact.body,
       JSON.stringify(artifact.sourceMaterialIds),
@@ -497,11 +500,12 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   updateArtifact(artifact: ArtifactRecord) {
     this.db.prepare(`
       UPDATE artifacts
-      SET knowledge_base_id = ?, artifact_type = ?, title = ?, body = ?, source_material_ids_json = ?, created_at = ?
+      SET knowledge_base_id = ?, artifact_type = ?, subtype = ?, title = ?, body = ?, source_material_ids_json = ?, created_at = ?
       WHERE id = ?
     `).run(
       artifact.knowledgeBaseId,
       artifact.artifactType,
+      artifact.subtype,
       artifact.title,
       artifact.body,
       JSON.stringify(artifact.sourceMaterialIds),
@@ -609,6 +613,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         id TEXT PRIMARY KEY,
         knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
         artifact_type TEXT NOT NULL,
+        subtype TEXT NOT NULL DEFAULT 'summary',
         title TEXT NOT NULL,
         body TEXT NOT NULL,
         source_material_ids_json TEXT NOT NULL,
@@ -632,6 +637,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     `);
     this.ensureMaterialMediaColumn();
     this.ensureMaterialStatusTimelineColumn();
+    this.ensureArtifactSubtypeColumn();
   }
 
   private ensureMaterialMediaColumn() {
@@ -645,6 +651,13 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     const columns = this.db.prepare('PRAGMA table_info(materials)').all() as Array<{ name: string }>;
     if (!columns.some((column) => column.name === 'status_timeline_json')) {
       this.db.exec('ALTER TABLE materials ADD COLUMN status_timeline_json TEXT;');
+    }
+  }
+
+  private ensureArtifactSubtypeColumn() {
+    const columns = this.db.prepare('PRAGMA table_info(artifacts)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'subtype')) {
+      this.db.exec("ALTER TABLE artifacts ADD COLUMN subtype TEXT NOT NULL DEFAULT 'summary';");
     }
   }
 }
@@ -755,11 +768,34 @@ function mapTask(row: TaskRow): AgentTask {
   };
 }
 
+const ARTIFACT_SUBTYPE_VALUES: readonly ArtifactSubtype[] = [
+  'deep_research',
+  'product',
+  'topic',
+  'xiaohongshu',
+  'summary',
+];
+
+function normalizeArtifactSubtype(value: string | null | undefined): ArtifactSubtype {
+  if (value && (ARTIFACT_SUBTYPE_VALUES as readonly string[]).includes(value)) {
+    return value as ArtifactSubtype;
+  }
+  return 'summary';
+}
+
+function kitToSubtype(kitId: KnowledgeKitId): ArtifactSubtype {
+  if (kitId === 'learning_research') return 'deep_research';
+  if (kitId === 'product_research') return 'product';
+  return 'xiaohongshu';
+}
+
 function mapArtifact(row: ArtifactRow): ArtifactRecord {
+  const subtype = normalizeArtifactSubtype(row.subtype);
   return {
     id: row.id,
     knowledgeBaseId: row.knowledge_base_id,
     artifactType: row.artifact_type,
+    subtype,
     title: row.title,
     body: row.body,
     sourceMaterialIds: JSON.parse(row.source_material_ids_json) as string[],
@@ -1153,6 +1189,7 @@ function createArtifact(
     id: id('art'),
     knowledgeBaseId: base.id,
     artifactType: 'summary',
+    subtype: 'summary',
     title: compactTitle(generated.artifactTitle ?? `${compactTitle(seed)} 摘要`),
     body: generated.artifactBody ?? generated.summary ?? (material
       ? `已保存资料「${material.title}」，并生成可继续整理的摘要占位。`
@@ -1175,6 +1212,7 @@ function createKitArtifact(
     id: id('art'),
     knowledgeBaseId: base.id,
     artifactType: 'kit_report',
+    subtype: kitToSubtype(kitId),
     title: compactTitle(generated.artifactTitle ?? `${base.title} ${kitLabel(kitId)}`),
     body: generated.artifactBody ?? generated.summary ?? buildFallbackKitBody(base, kitId),
     sourceMaterialIds,

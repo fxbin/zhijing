@@ -139,10 +139,18 @@ export interface AgentTask {
   updatedAt: string;
 }
 
+export type ArtifactSubtype =
+  | 'deep_research'
+  | 'product'
+  | 'topic'
+  | 'xiaohongshu'
+  | 'summary';
+
 export interface ArtifactRecord {
   id: string;
   knowledgeBaseId: string;
   artifactType: 'summary' | 'research_report' | 'cards' | 'kit_report';
+  subtype: ArtifactSubtype;
   title: string;
   body: string;
   sourceMaterialIds: string[];
