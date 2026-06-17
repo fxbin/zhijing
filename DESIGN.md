@@ -135,6 +135,8 @@ Artifact           -> stitch_/artifact, stitch_/deep_research_artifact, stitch_/
 设置               -> stitch_/settings
 ```
 
+完整原型覆盖状态维护在 `prototype-coverage.md`。实现新页面或补齐原型状态前，先更新该文件中的状态、优先级和下一步动作。
+
 ## Brand & Style
 The brand personality is intellectual, orderly, and nurturing. It aims to evoke a sense of "calm productivity"—where the complexity of information is tamed by a structured, minimalist framework. The design system follows a **Modern Minimalist** aesthetic, prioritizing high-density information through generous whitespace and a rigorous grid.
 
