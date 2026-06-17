@@ -26,7 +26,7 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 | `#kits` | `KitView` | `kit_1`, `kit_2`, `kit_3` | Partial | Kit cards and run entry exist; collection/progress variants are incomplete. |
 | `#workflow` | `WorkflowView` | `workflow_run`, `kit_collection_in_progress` | Partial | Basic run/result view exists; progress and multi-step states need Stitch-aligned treatment. |
 | `#artifact` | `ArtifactView` | `artifact`, `deep_research_artifact`, `product_research_artifact`, `topic_library_artifact`, `xiaohongshu_operation_artifact` | Partial | Typed artifact layouts exist for research, product, topic, Xiaohongshu, and summary views; explicit persisted subtype and editing remain missing. |
-| `#maps` | `MapsView` | `full_map`, `interaction_specs` | Partial | Knowledge map exists; interaction/connection states are incomplete. |
+| `#maps` | `MapsView` | `full_map`, `interaction_specs` | Partial | Full Knowledge Map workbench exists with search, filters, zoom, SVG graph, node inspector, relation list, and legend; persisted layout and relationship editing are still missing. |
 | `#chat` | `ChatView` | `chat_onboarding`, `active_chat_1`, `active_chat_2`, `active_chat_3`, `back_loop_to_chat` | Partial | Dedicated knowledge-base chat route exists; persistent conversation states and source-expanded variants are still missing. |
 | `#recall` | `RecallView` | `active_recall`, `card_evolution` | Partial | Card-based reveal/next recall flow exists; scheduling, scoring, and card evolution are still missing. |
 | `#export` | `ExportView` | `export_management`, `export_configuration`, `export_progress`, `export_success`, `export_backup` | Partial | Local Markdown/JSON export, progress, success, and backup download exist; persistent history, PDF, and cloud backup are still missing. |
@@ -112,8 +112,8 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 | `knowledge_conflict_resolver_1` | Conflict resolution | Partial | `#conflicts` now shows duplicate, review, and unsourced-card signals with review entry points. |
 | `knowledge_conflict_resolver_2` | Conflict resolution variant | Partial | Resolver variant is represented as read-only action cards; audited resolution mutations are deferred. |
 | `decomposition` | Decompose topic/material | Missing | Add as a Kit or card operation. |
-| `full_map` | Full knowledge map | Partial | Current map exists; add expanded graph controls and relationship editing. |
-| `interaction_specs` | Interaction and connection reference | Reference | Use when refining graph interactions. |
+| `full_map` | Full knowledge map | Done | `#maps` now implements the full-map workbench with graph controls, selected-node detail, relation list, filters, search, and legend. |
+| `interaction_specs` | Interaction and connection reference | Partial | Map search, filter, select, zoom, and inspect states exist; drag layout, saved positions, and relationship editing remain deferred. |
 
 ### P3: Sharing, Templates, Discovery, And Motion
 
@@ -150,4 +150,4 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 
 ## Immediate Next Slice
 
-Run a visual pass on `#assets`, `#synthesis`, `#compare`, and `#conflicts`, then continue with the remaining P0/P1 polish gaps.
+Run a visual pass on `#maps`, then continue with remaining P0/P1 polish gaps.

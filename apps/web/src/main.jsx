@@ -989,7 +989,7 @@ function App() {
 
         <div className="canvas">
           {apiStatus === 'offline' && <SystemNotice status="offline" />}
-          {view === 'workspace' && <WorkspaceView activity={activity} isSubmitting={isSubmitting} latestTask={latestTask} materials={materials} query={query} setQuery={setQuery} submit={submit} />}
+          {view === 'workspace' && <WorkspaceView activity={activity} isSubmitting={isSubmitting} latestTask={latestTask} materials={materials} query={query} setQuery={setQuery} setView={go} submit={submit} />}
           {view === 'workspace' && <TaskList tasks={tasks} />}
           {view === 'detail' && (
             <DetailView
@@ -1042,7 +1042,7 @@ function App() {
             />
           )}
           {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={knowledgeBaseDetail} setView={go} />}
-          {view === 'maps' && <MapsView apiStatus={apiStatus} selectedKnowledgeBaseId={selectedKnowledgeBaseId} />}
+          {view === 'maps' && <MapsView apiStatus={apiStatus} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={go} />}
           {view === 'assets' && <GlobalAssetsDashboard data={advancedOpsData} setView={go} />}
           {view === 'synthesis' && <CrossKbSynthesisView data={advancedOpsData} setView={go} />}
           {view === 'compare' && <MultiEntityComparisonView data={advancedOpsData} setView={go} />}
@@ -1082,7 +1082,7 @@ function SystemNotice() {
   );
 }
 
-function WorkspaceView({ activity, isSubmitting, latestTask, materials, query, setQuery, submit }) {
+function WorkspaceView({ activity, isSubmitting, latestTask, materials, query, setQuery, setView, submit }) {
   return (
     <>
       <section className="hero">
@@ -1113,7 +1113,7 @@ function WorkspaceView({ activity, isSubmitting, latestTask, materials, query, s
 
       <section className="lower-grid">
         <RecentImports materials={materials} />
-        <KnowledgeMapPanel />
+        <KnowledgeMapPanel setView={setView} />
       </section>
     </>
   );
@@ -1212,12 +1212,12 @@ function RecentImports({ materials }) {
   );
 }
 
-function KnowledgeMapPanel() {
+function KnowledgeMapPanel({ setView }) {
   return (
     <aside className="map-panel">
       <div className="map-head">
         <div><Network size={22} /><h3>Knowledge Map</h3></div>
-        <SquareArrowOutUpRight size={20} />
+        <button aria-label="打开知识地图" onClick={() => setView('maps')} type="button"><SquareArrowOutUpRight size={20} /></button>
       </div>
       <div className="map-card" aria-label="知识地图预览">
         <span className="node core">✣</span>
@@ -1228,7 +1228,7 @@ function KnowledgeMapPanel() {
       </div>
       <div className="map-footer">
         <div><span>Active Nodes</span><strong>1,204</strong></div>
-        <button type="button">Explore →</button>
+        <button onClick={() => setView('maps')} type="button">Explore →</button>
       </div>
     </aside>
   );
@@ -2914,9 +2914,13 @@ function ArtifactView({ artifact, detail, setView }) {
   );
 }
 
-function MapsView({ apiStatus, selectedKnowledgeBaseId }) {
+function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }) {
   const [map, setMap] = useState(null);
   const [status, setStatus] = useState('选择一个知识库后生成地图。');
+  const [query, setQuery] = useState('');
+  const [nodeFilter, setNodeFilter] = useState('all');
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [zoom, setZoom] = useState(1);
 
   useEffect(() => {
     if (!selectedKnowledgeBaseId || apiStatus !== 'online') {
@@ -2935,6 +2939,7 @@ function MapsView({ apiStatus, selectedKnowledgeBaseId }) {
         if (!ignore) {
           setMap(result);
           setStatus(result.nodes?.length ? 'Knowledge map synced.' : '当前知识库还没有可生成地图的节点。');
+          setSelectedNodeId(result.nodes?.[0]?.id ?? null);
         }
       } catch {
         if (!ignore) {
@@ -2951,59 +2956,227 @@ function MapsView({ apiStatus, selectedKnowledgeBaseId }) {
 
   const nodes = map?.nodes ?? [];
   const edges = map?.edges ?? [];
-  const primaryNodes = nodes.slice(0, 12);
+  const filteredNodes = nodes.filter((node) => mapNodeMatches(node, nodeFilter, query));
+  const visibleNodeIds = new Set(filteredNodes.map((node) => node.id));
+  const visibleEdges = edges.filter((edge) => visibleNodeIds.has(edge.sourceId) && visibleNodeIds.has(edge.targetId));
+  const layoutNodes = buildMapLayout(filteredNodes);
+  const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? filteredNodes[0] ?? nodes[0];
+  const selectedRelations = selectedNode
+    ? edges.filter((edge) => edge.sourceId === selectedNode.id || edge.targetId === selectedNode.id)
+    : [];
+  const connectedNodeCount = selectedRelations.length;
+  const typeCounts = nodes.reduce((acc, node) => ({ ...acc, [node.kind]: (acc[node.kind] ?? 0) + 1 }), {});
+  const filterOptions = [
+    { key: 'all', label: 'All Nodes', count: nodes.length },
+    { key: 'knowledge_base', label: 'Knowledge Base', count: typeCounts.knowledge_base ?? 0 },
+    { key: 'material', label: 'Materials', count: typeCounts.material ?? 0 },
+    { key: 'card', label: 'Cards', count: typeCounts.card ?? 0 },
+  ];
 
   return (
-    <section className="page-main full">
-      <div className="page-title-row">
-        <div>
-          <h2>Knowledge Maps</h2>
-          <p>从当前知识库的资料、卡片和来源关系生成结构化地图。</p>
-        </div>
-        {map && (
-          <div className="library-stats">
-            <span>{nodes.length} nodes</span>
-            <span>{edges.length} edges</span>
-            <span>{map.stats?.sourcedCards ?? 0} sourced</span>
+    <section className="page-main full knowledge-map-page">
+      <div className="knowledge-map-shell">
+        <header className="knowledge-map-topbar">
+          <div className="map-breadcrumb">
+            <button aria-label="返回知识库" onClick={() => setView('detail')} type="button"><CircleX size={18} /></button>
+            <span>Knowledge Base</span>
+            <span>/</span>
+            <strong>Full Map</strong>
           </div>
-        )}
-      </div>
-
-      {!map ? (
-        <EmptyState title="暂无知识地图" body={status} />
-      ) : (
-        <div className="real-map-layout">
-          <section className="real-map-canvas" aria-label="知识地图节点">
-            {primaryNodes.map((node, index) => (
-              <article className={`real-map-node ${node.kind}`} key={node.id} style={{ '--node-index': index }}>
-                <span>{mapKindLabel(node.kind)}</span>
-                <strong>{node.label}</strong>
-                <p>{node.summary}</p>
-              </article>
+          <div className="map-filter-bar">
+            {filterOptions.map((option) => (
+              <button className={nodeFilter === option.key ? 'active' : ''} key={option.key} onClick={() => setNodeFilter(option.key)} type="button">
+                <span className={`map-filter-dot ${option.key}`} />
+                {option.label}
+                <small>{option.count}</small>
+              </button>
             ))}
+          </div>
+          <label className="map-search">
+            <Search size={17} />
+            <input aria-label="搜索地图节点" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search nodes..." />
+          </label>
+        </header>
+
+        <div className="knowledge-map-board">
+          <section className="knowledge-map-canvas" aria-label="完整知识地图">
+            {!map ? (
+              <div className="map-empty-state">
+                <EmptyState title="暂无知识地图" body={status} />
+              </div>
+            ) : (
+              <>
+                <div className="map-canvas-heading">
+                  <div>
+                    <span>Knowledge Map</span>
+                    <h2>{selectedNode?.label ?? 'Knowledge Maps'}</h2>
+                    <p>{status} Updated {map.generatedAt ? new Date(map.generatedAt).toLocaleTimeString() : 'now'}.</p>
+                  </div>
+                  <div className="map-stats-strip">
+                    <span>{nodes.length} nodes</span>
+                    <span>{edges.length} edges</span>
+                    <span>{map.stats?.sourcedCards ?? 0} sourced</span>
+                  </div>
+                </div>
+
+                <div className="map-graph-viewport">
+                  <svg aria-label="知识地图关系图" className="map-graph-svg" viewBox="0 0 1000 720" role="img">
+                    <g style={{ transform: `scale(${zoom})`, transformOrigin: '500px 360px' }}>
+                      {visibleEdges.map((edge) => {
+                        const source = layoutNodes.find((node) => node.id === edge.sourceId);
+                        const target = layoutNodes.find((node) => node.id === edge.targetId);
+                        if (!source || !target) return null;
+                        const isActive = selectedNode && (edge.sourceId === selectedNode.id || edge.targetId === selectedNode.id);
+                        return (
+                          <line
+                            className={isActive ? 'map-edge active' : 'map-edge'}
+                            key={edge.id}
+                            x1={source.x}
+                            y1={source.y}
+                            x2={target.x}
+                            y2={target.y}
+                          />
+                        );
+                      })}
+                      {layoutNodes.map((node) => (
+                        <g
+                          className={node.id === selectedNode?.id ? `map-svg-node ${node.kind} active` : `map-svg-node ${node.kind}`}
+                          key={node.id}
+                          onClick={() => setSelectedNodeId(node.id)}
+                          role="button"
+                          tabIndex={0}
+                          transform={`translate(${node.x}, ${node.y})`}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') setSelectedNodeId(node.id);
+                          }}
+                        >
+                          <circle r={node.radius} />
+                          <text y={node.radius + 18}>{truncateNodeLabel(node.label)}</text>
+                        </g>
+                      ))}
+                    </g>
+                  </svg>
+                  {layoutNodes.length === 0 && (
+                    <div className="map-no-match">
+                      <EmptyState title="没有匹配节点" body="换一个关键词或切回 All Nodes 查看完整地图。" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="map-legend">
+                  {filterOptions.slice(1).map((option) => (
+                    <span key={option.key}><i className={`map-filter-dot ${option.key}`} />{option.label}</span>
+                  ))}
+                </div>
+                <div className="map-floating-controls" aria-label="地图缩放控制">
+                  <button aria-label="放大" onClick={() => setZoom((value) => Math.min(value + 0.12, 1.36))} type="button">+</button>
+                  <button aria-label="重置视图" onClick={() => setZoom(1)} type="button"><RefreshCw size={16} /></button>
+                  <button aria-label="缩小" onClick={() => setZoom((value) => Math.max(value - 0.12, 0.76))} type="button">−</button>
+                </div>
+              </>
+            )}
           </section>
-          <aside className="map-inspector">
-            <h3>Relations</h3>
-            <p>{status} Updated {map.generatedAt ? new Date(map.generatedAt).toLocaleTimeString() : 'now'}.</p>
-            <div className="relation-list">
-              {edges.slice(0, 12).map((edge) => {
-                const source = nodes.find((node) => node.id === edge.sourceId);
-                const target = nodes.find((node) => node.id === edge.targetId);
-                return (
-                  <article key={edge.id}>
-                    <span>{edge.relation}</span>
-                    <strong>{source?.label ?? edge.sourceId}</strong>
-                    <p>{target?.label ?? edge.targetId}</p>
-                  </article>
-                );
-              })}
-              {edges.length === 0 && <EmptyState title="暂无关系" body="导入资料并生成卡片后，会出现来源关系。" />}
-            </div>
+
+          <aside className="map-detail-drawer" aria-label="节点详情">
+            {!map || !selectedNode ? (
+              <EmptyState title="选择一个节点" body="点击地图里的节点后，这里会展示摘要、来源和关联关系。" />
+            ) : (
+              <>
+                <div className="map-node-detail-head">
+                  <span>{mapKindLabel(selectedNode.kind)}</span>
+                  <h3>{selectedNode.label}</h3>
+                  <p>{selectedNode.summary || '这个节点暂时没有摘要。'}</p>
+                </div>
+                <div className="map-node-confidence">
+                  <div>
+                    <span>Status</span>
+                    <strong>{selectedNode.status ?? 'draft'}</strong>
+                  </div>
+                  <div>
+                    <span>Connections</span>
+                    <strong>{connectedNodeCount}</strong>
+                  </div>
+                </div>
+                <div className="map-node-metadata">
+                  {Object.entries(selectedNode.metadata ?? {}).slice(0, 5).map(([key, value]) => (
+                    <div key={key}>
+                      <span>{key}</span>
+                      <strong>{String(value ?? '-')}</strong>
+                    </div>
+                  ))}
+                </div>
+                <section className="map-relation-panel">
+                  <h4>Relations</h4>
+                  <div className="relation-list">
+                    {selectedRelations.slice(0, 10).map((edge) => {
+                      const source = nodes.find((node) => node.id === edge.sourceId);
+                      const target = nodes.find((node) => node.id === edge.targetId);
+                      const other = edge.sourceId === selectedNode.id ? target : source;
+                      return (
+                        <article key={edge.id}>
+                          <span>{edge.relation}</span>
+                          <strong>{other?.label ?? edge.targetId}</strong>
+                          <p>{edge.sourceId === selectedNode.id ? 'Outgoing relation' : 'Incoming relation'}</p>
+                        </article>
+                      );
+                    })}
+                    {selectedRelations.length === 0 && <EmptyState title="暂无关系" body="导入资料并生成卡片后，会出现来源关系。" />}
+                  </div>
+                </section>
+                <div className="map-drawer-actions">
+                  <button onClick={() => setView(selectedNode.kind === 'material' ? 'library' : 'detail')} type="button">Open context</button>
+                  <button disabled type="button">Edit node</button>
+                </div>
+              </>
+            )}
           </aside>
         </div>
-      )}
+      </div>
     </section>
   );
+}
+
+function mapNodeMatches(node, filter, query) {
+  const matchesFilter = filter === 'all' || node.kind === filter;
+  const keyword = query.trim().toLowerCase();
+  if (!matchesFilter) return false;
+  if (!keyword) return true;
+  return [node.label, node.summary, node.status, ...Object.values(node.metadata ?? {})]
+    .join(' ')
+    .toLowerCase()
+    .includes(keyword);
+}
+
+function buildMapLayout(nodes) {
+  const center = nodes.find((node) => node.kind === 'knowledge_base') ?? nodes[0];
+  const remaining = nodes.filter((node) => node.id !== center?.id);
+  const materialNodes = remaining.filter((node) => node.kind === 'material');
+  const cardNodes = remaining.filter((node) => node.kind === 'card');
+  const otherNodes = remaining.filter((node) => node.kind !== 'material' && node.kind !== 'card');
+  const positioned = center ? [{ ...center, x: 500, y: 350, radius: 34 }] : [];
+  const ring = [
+    ...materialNodes.map((node, index) => ({ node, index, total: Math.max(materialNodes.length, 1), start: 205, end: 335, radius: 230 })),
+    ...cardNodes.map((node, index) => ({ node, index, total: Math.max(cardNodes.length, 1), start: 25, end: 155, radius: 245 })),
+    ...otherNodes.map((node, index) => ({ node, index, total: Math.max(otherNodes.length, 1), start: 160, end: 200, radius: 285 })),
+  ];
+  return [
+    ...positioned,
+    ...ring.map(({ node, index, total, start, end, radius }) => {
+      const angle = total === 1 ? (start + end) / 2 : start + ((end - start) * index) / (total - 1);
+      const radian = (angle * Math.PI) / 180;
+      return {
+        ...node,
+        x: 500 + Math.cos(radian) * radius,
+        y: 350 + Math.sin(radian) * radius,
+        radius: node.kind === 'material' ? 22 : 18,
+      };
+    }),
+  ];
+}
+
+function truncateNodeLabel(label) {
+  const value = label ?? 'Untitled';
+  return value.length > 22 ? `${value.slice(0, 20)}...` : value;
 }
 
 function mapKindLabel(kind) {
