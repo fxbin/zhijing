@@ -23,6 +23,8 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 | `#workflow` | `WorkflowView` | `workflow_run`, `kit_collection_in_progress` | Partial | Basic run/result view exists; progress and multi-step states need Stitch-aligned treatment. |
 | `#artifact` | `ArtifactView` | `artifact`, `deep_research_artifact`, `product_research_artifact`, `topic_library_artifact`, `xiaohongshu_operation_artifact` | Partial | Generic artifact viewer exists; artifact type variants are not fully implemented. |
 | `#maps` | `MapsView` | `full_map`, `interaction_specs` | Partial | Knowledge map exists; interaction/connection states are incomplete. |
+| `#chat` | `ChatView` | `chat_onboarding`, `active_chat_1`, `active_chat_2`, `active_chat_3`, `back_loop_to_chat` | Partial | Dedicated knowledge-base chat route exists; persistent conversation states and source-expanded variants are still missing. |
+| `#recall` | `RecallView` | `active_recall`, `card_evolution` | Partial | Card-based reveal/next recall flow exists; scheduling, scoring, and card evolution are still missing. |
 | `#settings` | `SettingsView` | `settings`, `system_transparency` | Partial | Provider settings exist; transparency, source auth, and data controls are incomplete. |
 
 ## Coverage By Product Area
@@ -59,12 +61,12 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 
 | Stitch reference | Product intent | Current status | Next implementation action |
 | --- | --- | --- | --- |
-| `chat_onboarding` | First chat entry | Missing | Add chat intro state connected to a selected knowledge base. |
-| `active_chat_1` | Active Q&A conversation | Partial | Current Q&A exists inside detail; needs full chat layout. |
-| `active_chat_2` | Active conversation variant | Missing | Map variant to empty/loading/source-expanded state. |
-| `active_chat_3` | Active conversation variant | Missing | Map variant to citation-expanded or follow-up state. |
-| `back_loop_to_chat` | Return from artifact/workflow to chat | Missing | Add navigation affordance from artifact back to related conversation. |
-| `active_recall` | Recall practice | Missing | Add card-based self-test mode after stable card schema. |
+| `chat_onboarding` | First chat entry | Partial | `#chat` now has contextual onboarding and suggested prompts; first-run empty state can be refined. |
+| `active_chat_1` | Active Q&A conversation | Partial | `#chat` now reuses the knowledge-base Q&A flow with citations. |
+| `active_chat_2` | Active conversation variant | Partial | Loading and answer states exist; source-expanded variant is still missing. |
+| `active_chat_3` | Active conversation variant | Partial | Citation list exists; follow-up/thread persistence is still missing. |
+| `back_loop_to_chat` | Return from artifact/workflow to chat | Partial | Chat can open artifacts; artifact-to-chat return context is still missing. |
+| `active_recall` | Recall practice | Partial | `#recall` now provides card queue, reveal answer, and next-card flow. |
 | `card_evolution` | Card improvement lifecycle | Missing | Add card revision/evolution state after review workflow. |
 
 ### P1: Kits, Workflow, And Artifacts
@@ -132,8 +134,8 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 
 1. Finish import and collection lifecycle:
    detailed parser timeline, batch action side panel, and post-task success state.
-2. Chat and recall:
-   `chat_onboarding`, `active_chat_1`, `active_chat_2`, `active_chat_3`, `back_loop_to_chat`, `active_recall`.
+2. Finish chat and recall:
+   persistent conversation, source-expanded chat states, artifact back-link context, recall scoring, and card evolution.
 3. Export:
    `export_management`, `export_configuration`, `export_progress`, `export_success`, `export_backup`.
 4. Artifact variants:
@@ -143,4 +145,4 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 
 ## Immediate Next Slice
 
-Continue with chat and recall after a quick visual pass on the Library lifecycle panel.
+Continue with export flow coverage after a quick visual pass on `#chat` and `#recall`.

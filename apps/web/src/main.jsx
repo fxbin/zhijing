@@ -65,7 +65,7 @@ const kitCards = [
   { id: 'product_research', title: '产品调研 Kit', body: '提炼竞品对比、用户痛点、功能机会点和下一步验证问题。', status: 'Ready', icon: ClipboardList },
 ];
 
-const knownViews = new Set(['workspace', 'detail', 'library', 'search', 'kits', 'workflow', 'artifact', 'maps', 'settings']);
+const knownViews = new Set(['workspace', 'detail', 'library', 'search', 'kits', 'workflow', 'artifact', 'maps', 'chat', 'recall', 'settings']);
 
 function viewFromHash() {
   const hash = window.location.hash.replace('#', '');
@@ -814,6 +814,21 @@ function App() {
           )}
           {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={knowledgeBaseDetail} setView={go} />}
           {view === 'maps' && <MapsView apiStatus={apiStatus} selectedKnowledgeBaseId={selectedKnowledgeBaseId} />}
+          {view === 'chat' && (
+            <ChatView
+              apiStatus={apiStatus}
+              assistantAnswer={assistantAnswer}
+              assistantQuestion={assistantQuestion}
+              detail={knowledgeBaseDetail}
+              isAsking={isAsking}
+              onAsk={askKnowledgeBase}
+              onOpenArtifact={openArtifact}
+              selectedKnowledgeBaseId={selectedKnowledgeBaseId}
+              setAssistantQuestion={setAssistantQuestion}
+              setView={go}
+            />
+          )}
+          {view === 'recall' && <RecallView detail={knowledgeBaseDetail} setView={go} />}
           {view === 'settings' && <SettingsView />}
         </div>
       </section>
@@ -1023,7 +1038,11 @@ function DetailView({
             <h2>{detail.title}</h2>
             <p>{detail.summary}</p>
           </div>
-          <button onClick={() => setView('workflow')} type="button">Run Kit</button>
+          <div className="page-title-actions">
+            <button onClick={() => setView('chat')} type="button">Chat</button>
+            <button onClick={() => setView('recall')} type="button">Recall</button>
+            <button onClick={() => setView('workflow')} type="button">Run Kit</button>
+          </div>
         </div>
         {analytics && (
           <section className="detail-metrics" aria-label="知识库指标">
@@ -1195,6 +1214,189 @@ function DetailView({
           </button>
         </div>
       </aside>
+    </section>
+  );
+}
+
+function ChatView({
+  apiStatus,
+  assistantAnswer,
+  assistantQuestion,
+  detail,
+  isAsking,
+  onAsk,
+  onOpenArtifact,
+  selectedKnowledgeBaseId,
+  setAssistantQuestion,
+  setView,
+}) {
+  const cards = detail.cards ?? [];
+  const materials = detail.materials ?? [];
+  const latestAnswerCards = assistantAnswer?.cards?.slice(0, 3) ?? [];
+  const latestCitations = assistantAnswer?.citations ?? [];
+  const canAsk = apiStatus === 'online' && Boolean(selectedKnowledgeBaseId) && !isAsking;
+  const starterPrompts = [
+    '这个知识库最重要的三个概念是什么？',
+    '有哪些内容还缺少可靠来源？',
+    '帮我把这些资料整理成一个行动清单。',
+  ];
+
+  return (
+    <section className="page-main full">
+      <div className="chat-workbench">
+        <aside className="chat-context-panel">
+          <button className="back-button" onClick={() => setView('detail')} type="button">← Back to Knowledge Base</button>
+          <span>Knowledge Chat</span>
+          <h2>{detail.title}</h2>
+          <p>{detail.summary}</p>
+          <div className="chat-context-stats">
+            <div><strong>{materials.length}</strong><span>sources</span></div>
+            <div><strong>{cards.length}</strong><span>cards</span></div>
+            <div><strong>{formatPercent(detail.sourcedRatio)}</strong><span>sourced</span></div>
+          </div>
+          <div className="prompt-stack">
+            <strong>Suggested Questions</strong>
+            {starterPrompts.map((prompt) => (
+              <button key={prompt} onClick={() => setAssistantQuestion(prompt)} type="button">{prompt}</button>
+            ))}
+          </div>
+        </aside>
+
+        <section className="chat-main-panel">
+          <div className="chat-thread-head">
+            <Sparkles size={24} />
+            <div>
+              <span>Assistant Onboarding</span>
+              <h3>Ask from your sourced knowledge</h3>
+            </div>
+          </div>
+          <div className="chat-conversation">
+            <div className="assistant-message">
+              <Sparkles size={19} />
+              <p>我会优先使用当前知识库里的资料和卡片回答；没有来源时会明确标注。</p>
+            </div>
+            {assistantAnswer?.question && <div className="chat-user">{assistantAnswer.question}</div>}
+            {assistantAnswer?.loading && <div className="assistant-message pending"><Clock3 size={19} /><p>正在整理当前知识库里的资料和卡片...</p></div>}
+            {assistantAnswer?.error && <div className="assistant-message failed"><CircleX size={19} /><p>{assistantAnswer.error}</p></div>}
+            {assistantAnswer?.message && (
+              <div className="assistant-message">
+                <Sparkles size={19} />
+                <div>
+                  <p>{assistantAnswer.artifact?.body ?? assistantAnswer.message}</p>
+                  {latestAnswerCards.length > 0 && (
+                    <div className="answer-card-list">
+                      {latestAnswerCards.map((card) => (
+                        <article key={card.id ?? card.title}>
+                          <span>{card.type}</span>
+                          <strong>{card.title}</strong>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                  <div className="citation-list">
+                    <strong>引用来源</strong>
+                    {latestCitations.length === 0 ? (
+                      <p>当前回答没有可用来源，属于 AI 骨架内容。</p>
+                    ) : latestCitations.slice(0, 6).map((citation) => (
+                      <article key={citation.id}>
+                        <span>{citation.kind}</span>
+                        <div>
+                          <strong>{citation.title}</strong>
+                          <p>{citation.preview}</p>
+                          {citation.sourceUrl && <a href={citation.sourceUrl} target="_blank" rel="noreferrer">Open source</a>}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                  {assistantAnswer.artifact && (
+                    <button className="assistant-link-button" onClick={() => onOpenArtifact(assistantAnswer.artifact)} type="button">
+                      Open Artifact
+                      <SquareArrowOutUpRight size={15} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="chat-input-bar">
+            <input
+              aria-label="在独立对话页提问"
+              disabled={!canAsk}
+              onChange={(event) => setAssistantQuestion(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') onAsk();
+              }}
+              placeholder={canAsk ? 'Ask this knowledge base...' : 'Select a knowledge base and keep API online to ask.'}
+              value={assistantQuestion}
+            />
+            <button disabled={!canAsk || !assistantQuestion.trim()} onClick={onAsk} type="button">
+              {isAsking ? <Clock3 size={18} /> : <Send size={18} />}
+            </button>
+          </div>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function RecallView({ detail, setView }) {
+  const cards = detail.cards ?? [];
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [revealed, setRevealed] = useState(false);
+  const activeCard = cards[activeIndex];
+
+  function nextCard() {
+    setActiveIndex((current) => cards.length ? (current + 1) % cards.length : 0);
+    setRevealed(false);
+  }
+
+  return (
+    <section className="page-main full">
+      <div className="recall-workbench">
+        <div className="recall-head">
+          <button className="back-button" onClick={() => setView('detail')} type="button">← Back to Knowledge Base</button>
+          <span>Active Recall</span>
+          <h2>{detail.title}</h2>
+          <p>把知识卡片转成自测队列：先回忆，再揭示答案，最后进入下一张。</p>
+        </div>
+
+        {cards.length === 0 ? (
+          <EmptyState title="暂无可练习卡片" body="导入资料或创建主题后，知识卡片会成为主动回忆题目。" />
+        ) : (
+          <div className="recall-layout">
+            <aside className="recall-queue">
+              <strong>Practice Queue</strong>
+              {cards.slice(0, 8).map((card, index) => (
+                <button className={index === activeIndex ? 'active' : ''} key={card.id ?? card.title} onClick={() => {
+                  setActiveIndex(index);
+                  setRevealed(false);
+                }} type="button">
+                  <span>{index + 1}</span>
+                  <div>
+                    <strong>{card.title}</strong>
+                    <small>{card.type} · {card.claimStatus}</small>
+                  </div>
+                </button>
+              ))}
+            </aside>
+
+            <article className="recall-card">
+              <span>{activeCard.type}</span>
+              <h3>{activeCard.title}</h3>
+              <p className={revealed ? '' : 'recall-prompt'}>{revealed ? activeCard.body : '先合上资料，用自己的话解释这张卡片。准备好后再揭示参考答案。'}</p>
+              <footer>
+                <button onClick={() => setRevealed((current) => !current)} type="button">
+                  {revealed ? 'Hide Answer' : 'Reveal Answer'}
+                </button>
+                <button onClick={nextCard} type="button">
+                  Next Card
+                  <RefreshCw size={16} />
+                </button>
+              </footer>
+            </article>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

@@ -844,7 +844,15 @@ button { cursor: pointer; }
   font-weight: 750;
 }
 
+.page-title-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .page-title-row > button,
+.page-title-actions button:last-child,
 .button-row button:last-child,
 .kit-card button {
   border-color: var(--primary);
@@ -1548,6 +1556,300 @@ button { cursor: pointer; }
 .assistant-input button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.chat-workbench,
+.recall-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 24px;
+}
+
+.chat-context-panel,
+.chat-main-panel,
+.recall-workbench,
+.recall-queue,
+.recall-card {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 2px 6px rgba(9, 20, 38, 0.03);
+}
+
+.chat-context-panel {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  padding: 22px;
+}
+
+.back-button {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.chat-context-panel > span,
+.recall-head > span,
+.chat-thread-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.chat-context-panel h2,
+.recall-head h2 {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.1;
+}
+
+.chat-context-panel p,
+.recall-head p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.chat-context-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.chat-context-stats div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface-low);
+  padding: 12px;
+}
+
+.chat-context-stats strong {
+  font-size: 24px;
+}
+
+.chat-context-stats span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.prompt-stack {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 16px;
+}
+
+.prompt-stack > strong {
+  color: var(--primary);
+}
+
+.prompt-stack button,
+.recall-queue button {
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--primary);
+  padding: 12px;
+  text-align: left;
+  line-height: 1.35;
+}
+
+.chat-main-panel {
+  display: grid;
+  grid-template-rows: auto minmax(360px, 1fr) auto;
+  min-height: 680px;
+  overflow: hidden;
+}
+
+.chat-thread-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface-low);
+  padding: 18px 20px;
+}
+
+.chat-thread-head svg {
+  color: var(--sage-text);
+}
+
+.chat-thread-head h3 {
+  margin: 2px 0 0;
+  font-size: 22px;
+}
+
+.chat-conversation {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  padding: 22px;
+}
+
+.chat-input-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  gap: 10px;
+  border-top: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.72);
+  padding: 14px;
+}
+
+.chat-input-bar input {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  outline: 0;
+  background: var(--surface);
+  color: var(--primary);
+  padding: 0 14px;
+}
+
+.chat-input-bar button {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--primary);
+  color: white;
+}
+
+.chat-input-bar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.recall-workbench {
+  display: grid;
+  gap: 24px;
+  padding: 24px;
+}
+
+.recall-head {
+  display: grid;
+  gap: 10px;
+}
+
+.recall-queue {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 18px;
+}
+
+.recall-queue > strong {
+  margin-bottom: 4px;
+}
+
+.recall-queue button {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.recall-queue button.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(9, 20, 38, 0.12);
+}
+
+.recall-queue button > span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--surface-low);
+  font-weight: 850;
+}
+
+.recall-queue button div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.recall-queue button strong,
+.recall-card h3 {
+  overflow-wrap: anywhere;
+}
+
+.recall-queue small {
+  color: var(--muted);
+}
+
+.recall-card {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  min-height: 430px;
+  padding: 28px;
+}
+
+.recall-card > span {
+  justify-self: start;
+  border-radius: 999px;
+  background: rgba(109, 254, 156, 0.25);
+  color: var(--sage-text);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.recall-card h3 {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.12;
+}
+
+.recall-card p {
+  margin: 0;
+  color: var(--primary);
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.recall-card .recall-prompt {
+  color: var(--muted);
+}
+
+.recall-card footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: auto;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 18px;
+}
+
+.recall-card footer button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--primary);
+  padding: 10px 14px;
+  font-weight: 850;
+}
+
+.recall-card footer button:last-child {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
 }
 
 .filter-bar {
@@ -2724,6 +3026,23 @@ button { cursor: pointer; }
   }
   .hygiene-grid {
     grid-template-columns: 1fr;
+  }
+  .chat-workbench,
+  .recall-layout {
+    grid-template-columns: 1fr;
+  }
+  .chat-main-panel {
+    min-height: 560px;
+  }
+  .chat-context-stats {
+    grid-template-columns: 1fr;
+  }
+  .recall-card {
+    min-height: 360px;
+    padding: 22px;
+  }
+  .recall-card h3 {
+    font-size: 26px;
   }
   .library-grid,
   .kit-grid {
