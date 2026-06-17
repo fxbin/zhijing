@@ -19,9 +19,11 @@ import {
   type MaterialAssignmentSuggestionsResult,
   type MaterialParseQueueResult,
   type MaterialRecord,
+  type MaterialStatusTimeline,
   type MaterialReviewResult,
   type ModelProviderSettings,
   type ModelProviderTestResult,
+  type ParseStatus,
   type SaveModelProviderSettingsRequest,
   type TaskStatus,
   type TestModelProviderSettingsRequest,
@@ -251,6 +253,7 @@ type MaterialRow = {
   parse_status: MaterialRecord['parseStatus'];
   parse_error: string | null;
   created_at: string;
+  status_timeline_json: string | null;
 };
 
 type CardRow = {
@@ -608,12 +611,20 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       CREATE INDEX IF NOT EXISTS idx_artifacts_knowledge_base_id ON artifacts(knowledge_base_id);
     `);
     this.ensureMaterialMediaColumn();
+    this.ensureMaterialStatusTimelineColumn();
   }
 
   private ensureMaterialMediaColumn() {
     const columns = this.db.prepare('PRAGMA table_info(materials)').all() as Array<{ name: string }>;
     if (!columns.some((column) => column.name === 'media_urls_json')) {
       this.db.exec("ALTER TABLE materials ADD COLUMN media_urls_json TEXT NOT NULL DEFAULT '[]';");
+    }
+  }
+
+  private ensureMaterialStatusTimelineColumn() {
+    const columns = this.db.prepare('PRAGMA table_info(materials)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'status_timeline_json')) {
+      this.db.exec('ALTER TABLE materials ADD COLUMN status_timeline_json TEXT;');
     }
   }
 }
@@ -646,6 +657,7 @@ function mapMaterial(row: MaterialRow): MaterialRecord {
     parseStatus: row.parse_status,
     parseError: row.parse_error ?? undefined,
     createdAt: row.created_at,
+    statusTimeline: parseStatusTimeline(row.status_timeline_json),
   };
 }
 
@@ -657,6 +669,43 @@ function parseJsonStringArray(value: string | null | undefined) {
   } catch {
     return [];
   }
+}
+
+function parseStatusTimeline(value: string | null | undefined): MaterialStatusTimeline | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === 'object' ? (parsed as MaterialStatusTimeline) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function serializeTimeline(timeline: MaterialStatusTimeline | undefined): string | null {
+  return timeline ? JSON.stringify(timeline) : null;
+}
+
+function stampMaterialStatus(
+  material: MaterialRecord,
+  nextStatus: ParseStatus,
+  options?: { markQueued?: boolean },
+): void {
+  material.parseStatus = nextStatus;
+  const timeline: MaterialStatusTimeline = material.statusTimeline ?? { capturedAt: material.createdAt };
+  const stamp = new Date().toISOString();
+  if (options?.markQueued && !timeline.queuedAt) timeline.queuedAt = stamp;
+  if (nextStatus === 'saved') {
+    if (!timeline.capturedAt) timeline.capturedAt = stamp;
+  } else if (nextStatus === 'parsing') {
+    timeline.parsingAt = stamp;
+  } else if (nextStatus === 'needs_review') {
+    timeline.reviewedAt = stamp;
+  } else if (nextStatus === 'ingested') {
+    timeline.ingestedAt = stamp;
+  } else if (nextStatus === 'failed') {
+    timeline.failedAt = stamp;
+  }
+  material.statusTimeline = timeline;
 }
 
 function mapCard(row: CardRow): KnowledgeCard {
@@ -1004,6 +1053,9 @@ function createMaterial(base: KnowledgeBaseSummary, request: IntakeRequest, type
   const timestamp = now();
   const platform = detectPlatform(request.input);
   const sourceUrl = type === 'link' ? extractFirstUrl(request.input) ?? request.input.trim() : undefined;
+  const initialStatus: ParseStatus = type === 'link' ? 'saved' : 'ingested';
+  const timeline: MaterialStatusTimeline = { capturedAt: timestamp };
+  if (initialStatus === 'ingested') timeline.ingestedAt = timestamp;
   const material: MaterialRecord = {
     id: id('mat'),
     knowledgeBaseId: base.id,
@@ -1014,8 +1066,9 @@ function createMaterial(base: KnowledgeBaseSummary, request: IntakeRequest, type
     title: type === 'link' ? titleFromLink(sourceUrl ?? request.input) : compactTitle(request.input),
     contentText: type === 'text' ? request.input.trim() : undefined,
     mediaUrls: [],
-    parseStatus: type === 'link' ? 'saved' : 'ingested',
+    parseStatus: initialStatus,
     createdAt: timestamp,
+    statusTimeline: timeline,
   };
   base.sourceCount += 1;
   base.updatedAt = timestamp;
@@ -1510,7 +1563,7 @@ export async function completeMaterialReview(
   material.title = nextTitle ? compactTitle(nextTitle) : material.title;
   if (nextText !== undefined) material.contentText = nextText;
   material.mediaUrls = nextMediaUrls;
-  material.parseStatus = markIngested ? 'ingested' : 'needs_review';
+  stampMaterialStatus(material, markIngested ? 'ingested' : 'needs_review');
   material.parseError = markIngested ? undefined : '等待用户补充更多正文或媒体。';
   repository.updateMaterial(material);
   reconcileKnowledgeBaseStats(material.knowledgeBaseId);
@@ -1721,7 +1774,7 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
   const activeTask = findActiveParseTask(material.id);
   if (activeTask) {
     if (material.parseStatus !== 'parsing') {
-      material.parseStatus = 'parsing';
+      stampMaterialStatus(material, 'parsing');
       material.parseError = undefined;
       repository.updateMaterial(material);
       touchKnowledgeBase(material.knowledgeBaseId);
@@ -1798,7 +1851,7 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
       },
       'needs_user_action',
     );
-    material.parseStatus = 'needs_review';
+    stampMaterialStatus(material, 'needs_review');
     material.parseError = throttle.message;
     repository.updateMaterial(material);
     touchKnowledgeBase(material.knowledgeBaseId);
@@ -1821,7 +1874,7 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
   }
 
   const previousStatus = material.parseStatus;
-  material.parseStatus = 'parsing';
+  stampMaterialStatus(material, 'parsing');
   material.parseError = undefined;
   repository.updateMaterial(material);
   touchKnowledgeBase(material.knowledgeBaseId);
@@ -1865,7 +1918,7 @@ async function applyParsedMaterialResult(
   material.title = parsed.title ? compactTitle(parsed.title) : material.title;
   material.contentText = parsed.text;
   material.mediaUrls = parsed.mediaUrls ?? [];
-  material.parseStatus = parsed.needsReview ? 'needs_review' : 'ingested';
+  stampMaterialStatus(material, parsed.needsReview ? 'needs_review' : 'ingested');
   material.parseError = parsed.reviewReason;
   repository.updateMaterial(material);
 
@@ -1874,23 +1927,38 @@ async function applyParsedMaterialResult(
     throw new KnowledgeCoreError('Knowledge base not found.', 404);
   }
 
-  const generation = await generateKnowledge('material_summary', parsed.text, {
-    kind: 'link',
-    knowledgeBaseId: base.id,
-    materialId: material.id,
-    hasSourceMaterial: true,
-    parseStatus: material.parseStatus,
-    sourceUrl: material.sourceUrl,
-    parsedTitle: parsed.title,
-    contentLength: parsed.text.length,
-    mediaUrls: material.mediaUrls,
-    mediaCount: material.mediaUrls.length,
-    needsReview: parsed.needsReview,
-    cacheHit: governance.cacheHit,
-  });
-  const generated = generation.output;
-  const cards = createCards(base, material, parsed.text, generated.cards);
-  const artifact = createArtifact(base, material, parsed.text, generated);
+  let cards: KnowledgeCard[] = [];
+  let artifact: ArtifactRecord | undefined;
+  let generationProvider: string | undefined;
+  let generationModel: string | undefined;
+  let generationFallbackReason: string | undefined;
+
+  try {
+    const generation = await generateKnowledge('material_summary', parsed.text, {
+      kind: 'link',
+      knowledgeBaseId: base.id,
+      materialId: material.id,
+      hasSourceMaterial: true,
+      parseStatus: material.parseStatus,
+      sourceUrl: material.sourceUrl,
+      parsedTitle: parsed.title,
+      contentLength: parsed.text.length,
+      mediaUrls: material.mediaUrls,
+      mediaCount: material.mediaUrls.length,
+      needsReview: parsed.needsReview,
+      cacheHit: governance.cacheHit,
+    });
+    const generated = generation.output;
+    cards = createCards(base, material, parsed.text, generated.cards);
+    artifact = createArtifact(base, material, parsed.text, generated);
+    generationProvider = generation.provider;
+    generationModel = generation.model;
+    generationFallbackReason = generation.fallbackReason;
+  } catch (generationError) {
+    task.error = cleanParseError(generationError instanceof Error
+      ? generationError.message
+      : 'Knowledge card generation failed.');
+  }
 
   finishTask(task, {
     materialId: material.id,
@@ -1901,10 +1969,10 @@ async function applyParsedMaterialResult(
     contentLength: parsed.text.length,
     mediaCount: material.mediaUrls.length,
     cardIds: cards.map((card) => card.id),
-    artifactId: artifact.id,
-    generationProvider: generation.provider,
-    generationModel: generation.model,
-    generationFallbackReason: generation.fallbackReason,
+    artifactId: artifact?.id,
+    generationProvider,
+    generationModel,
+    generationFallbackReason,
   });
 
   return {
@@ -1917,9 +1985,11 @@ async function applyParsedMaterialResult(
     retry,
     message: governance.message ?? (parsed.needsReview
       ? '链接已保存，公开页面暂未暴露完整正文或媒体，需要稍后重试或手动补充。'
-      : material.platform === 'xiaohongshu'
-        ? '小红书笔记已解析并生成知识卡片。'
-        : '普通网页已解析并生成知识卡片。'),
+      : cards.length === 0
+        ? '链接已解析并保存内容，知识卡片生成失败，可稍后重试。'
+        : material.platform === 'xiaohongshu'
+          ? '小红书笔记已解析并生成知识卡片。'
+          : '普通网页已解析并生成知识卡片。'),
   };
 }
 
@@ -1993,7 +2063,7 @@ function queueMaterialParsing(material: MaterialRecord): MaterialParseQueueResul
   const activeTask = findActiveParseTask(material.id);
   if (activeTask) {
     if (material.parseStatus !== 'parsing') {
-      material.parseStatus = 'parsing';
+      stampMaterialStatus(material, 'parsing');
       material.parseError = undefined;
       repository.updateMaterial(material);
       touchKnowledgeBase(material.knowledgeBaseId);
@@ -2008,7 +2078,7 @@ function queueMaterialParsing(material: MaterialRecord): MaterialParseQueueResul
   }
 
   const previousStatus = material.parseStatus;
-  material.parseStatus = 'parsing';
+  stampMaterialStatus(material, 'parsing');
   material.parseError = undefined;
   repository.updateMaterial(material);
   touchKnowledgeBase(material.knowledgeBaseId);
@@ -2060,7 +2130,7 @@ export function recordMaterialParsingFailure(
   );
   const parseError = cleanParseError(errorMessage);
 
-  material.parseStatus = 'failed';
+  stampMaterialStatus(material, 'failed');
   material.parseError = parseError;
   repository.updateMaterial(material);
   touchKnowledgeBase(material.knowledgeBaseId);
@@ -2622,7 +2692,7 @@ function failMaterialParsingTask(
 ): MaterialParseQueueResult {
   const failure = classifyParseFailure(error);
   const parseError = cleanParseError(`[${failure.category}] ${failure.message}`);
-  material.parseStatus = failure.recoverable ? 'needs_review' : 'failed';
+  stampMaterialStatus(material, failure.recoverable ? 'needs_review' : 'failed');
   material.parseError = parseError;
   repository.updateMaterial(material);
   touchKnowledgeBase(material.knowledgeBaseId);

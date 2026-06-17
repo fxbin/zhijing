@@ -6,6 +6,15 @@ export type MaterialType = 'link' | 'text' | 'question' | 'topic';
 
 export type ParseStatus = 'saved' | 'parsing' | 'needs_review' | 'ingested' | 'failed';
 
+export interface MaterialStatusTimeline {
+  capturedAt?: string;
+  queuedAt?: string;
+  parsingAt?: string;
+  reviewedAt?: string;
+  ingestedAt?: string;
+  failedAt?: string;
+}
+
 export type TaskStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'needs_user_action';
 
 export type CardType = 'concept' | 'method' | 'case' | 'question' | 'step' | 'viewpoint';
@@ -104,6 +113,7 @@ export interface MaterialRecord {
   parseStatus: ParseStatus;
   parseError?: string;
   createdAt: string;
+  statusTimeline?: MaterialStatusTimeline;
 }
 
 export interface KnowledgeCard {
