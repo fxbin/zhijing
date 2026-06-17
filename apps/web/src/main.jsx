@@ -233,20 +233,21 @@ function buildParseTimelineStages(item) {
 
 function ParseTimeline({ item }) {
   const stages = buildParseTimelineStages(item);
-  const lastIndex = stages.reduce((acc, stage, idx) => (stage.at ? idx : acc), -1);
-  const visible = stages.some((stage) => stage.at);
-  if (!visible) return null;
+  const fillIndex = stages.reduce((acc, stage, idx) => (stage.at ? idx : acc), -1);
+  const progressed = stages.some((stage, idx) => idx > 0 && stage.at);
+  if (!progressed) return null;
   return (
     <div className="parse-timeline" aria-label="解析进度时间线">
       {stages.map((stage, idx) => {
-        const done = Boolean(stage.at);
-        const current = idx === lastIndex && item.parseStatus !== 'ingested' && !stage.failed;
+        const reached = idx <= fillIndex;
+        const current = reached && idx === fillIndex && item.parseStatus !== 'ingested' && !stage.failed;
         const tip = stage.at ? `${stage.label}：${formatMaterialTime(stage.at)}` : `${stage.label}：待处理`;
+        const classes = ['parse-stage'];
+        if (reached) classes.push('reached');
+        if (reached && stage.failed) classes.push('failed');
+        if (current) classes.push('current');
         return (
-          <div
-            className={`parse-stage${done ? ' done' : ''}${stage.failed ? ' failed' : ''}${current ? ' current' : ''}`}
-            key={stage.key}
-          >
+          <div className={classes.join(' ')} key={stage.key}>
             <span className="parse-stage-dot" title={tip} />
             <span className="parse-stage-label">{stage.label}</span>
           </div>

@@ -3613,22 +3613,22 @@ button { cursor: pointer; }
   min-width: 0;
 }
 
-.parse-stage::before {
+.parse-stage::after {
   content: '';
   position: absolute;
   top: 5px;
-  left: calc(-50% + 7px);
+  left: calc(50% + 7px);
   width: calc(100% - 14px);
   height: 2px;
   background: var(--line-soft);
   z-index: 0;
 }
 
-.parse-stage:first-child::before {
+.parse-stage:last-child::after {
   display: none;
 }
 
-.parse-stage.done::before {
+.parse-stage.reached:not(.failed)::after {
   background: var(--scholar);
 }
 
@@ -3643,18 +3643,18 @@ button { cursor: pointer; }
   transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.parse-stage.done .parse-stage-dot {
+.parse-stage.reached .parse-stage-dot {
   background: var(--scholar);
   border-color: var(--scholar);
 }
 
-.parse-stage.current .parse-stage-dot {
-  box-shadow: 0 0 0 4px var(--scholar-soft);
-}
-
-.parse-stage.failed .parse-stage-dot {
+.parse-stage.reached.failed .parse-stage-dot {
   background: var(--error);
   border-color: var(--error);
+}
+
+.parse-stage.current .parse-stage-dot {
+  box-shadow: 0 0 0 4px var(--scholar-soft);
 }
 
 .parse-stage-label {
@@ -3665,12 +3665,12 @@ button { cursor: pointer; }
   letter-spacing: 0.02em;
 }
 
-.parse-stage.done .parse-stage-label {
+.parse-stage.reached .parse-stage-label {
   color: var(--primary);
   font-weight: 600;
 }
 
-.parse-stage.failed .parse-stage-label {
+.parse-stage.reached.failed .parse-stage-label {
   color: var(--error);
   font-weight: 600;
 }
