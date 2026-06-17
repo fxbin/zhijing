@@ -75,6 +75,7 @@ type KnowledgeRepository = {
   updateMaterial(material: MaterialRecord): void;
   findMaterial(id: string): MaterialRecord | undefined;
   listMaterials(knowledgeBaseId?: string, limit?: number): MaterialRecord[];
+  deleteMaterial(id: string): void;
   insertCards(cards: KnowledgeCard[]): void;
   updateCard(card: KnowledgeCard): void;
   listCards(knowledgeBaseId?: string): KnowledgeCard[];
@@ -169,6 +170,13 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
       ? this.state.materials.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
       : this.state.materials;
     return typeof limit === 'number' ? materials.slice(0, limit) : materials;
+  }
+
+  deleteMaterial(id: string) {
+    this.state.materials = this.state.materials.filter((item) => item.id !== id);
+    for (const card of this.state.cards) {
+      if (card.materialId === id) card.materialId = undefined;
+    }
   }
 
   insertCards(cards: KnowledgeCard[]) {
@@ -387,6 +395,18 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       ? this.db.prepare('SELECT * FROM materials WHERE knowledge_base_id = ? ORDER BY created_at DESC').all(knowledgeBaseId)
       : this.db.prepare(`SELECT * FROM materials ORDER BY created_at DESC${limit ? ` LIMIT ${limit}` : ''}`).all();
     return (rows as MaterialRow[]).map(mapMaterial);
+  }
+
+  deleteMaterial(id: string) {
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare('UPDATE cards SET material_id = NULL WHERE material_id = ?').run(id);
+      this.db.prepare('DELETE FROM materials WHERE id = ?').run(id);
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   insertCards(cards: KnowledgeCard[]) {
@@ -1674,6 +1694,17 @@ function reconcileKnowledgeBaseStats(knowledgeBaseId: string) {
   base.updatedAt = now();
   repository.updateKnowledgeBase(base);
   return base;
+}
+
+export function deleteMaterial(materialId: string): { materialId: string; knowledgeBaseId: string } {
+  const material = repository.findMaterial(materialId);
+  if (!material) {
+    throw new KnowledgeCoreError('Material not found.', 404);
+  }
+  const knowledgeBaseId = material.knowledgeBaseId;
+  repository.deleteMaterial(materialId);
+  reconcileKnowledgeBaseStats(knowledgeBaseId);
+  return { materialId, knowledgeBaseId };
 }
 
 function normalizeMediaUrls(values: string[]) {

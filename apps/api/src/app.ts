@@ -4,6 +4,7 @@ import {
   assignMaterialToKnowledgeBase,
   answerKnowledgeBaseQuestion,
   completeMaterialReview,
+  deleteMaterial,
   getDashboard,
   getKnowledgeBaseAnalytics,
   getKnowledgeBase,
@@ -254,6 +255,18 @@ export function buildApi() {
       }
       request.log.error({ error }, 'material manual review failed');
       return reply.code(500).send({ error: 'Material manual review failed.' });
+    }
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/materials/:id', async (request, reply) => {
+    try {
+      return deleteMaterial(request.params.id);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'material delete failed');
+      return reply.code(500).send({ error: 'Material delete failed.' });
     }
   });
 
