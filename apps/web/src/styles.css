@@ -2888,6 +2888,75 @@ button { cursor: pointer; }
   cursor: not-allowed;
 }
 
+.library-batch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 24px;
+  border: 1px solid var(--scholar);
+  border-radius: 12px;
+  background: var(--scholar-soft);
+  box-shadow: 0 2px 8px rgba(9, 20, 38, 0.06);
+  padding: 14px 18px;
+}
+
+.library-batch-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--primary);
+}
+
+.library-batch-info strong {
+  font-size: 15px;
+}
+
+.library-batch-progress {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--scholar);
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.library-batch-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.library-batch-actions button,
+.library-batch-actions select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--primary);
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.library-batch-actions button:disabled,
+.library-batch-actions select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.library-batch-actions button.danger {
+  border-color: #f3aaa3;
+  background: rgba(255, 218, 214, 0.5);
+  color: var(--error);
+}
+
 .library-search {
   flex: 0 1 310px;
   gap: 8px;

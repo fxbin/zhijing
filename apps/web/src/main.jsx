@@ -29,6 +29,7 @@ import {
   ShieldCheck,
   Sparkles,
   SquareArrowOutUpRight,
+  Trash2,
   Upload,
   Download,
 } from 'lucide-react';
@@ -2344,6 +2345,9 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
   const [mutatingMaterialId, setMutatingMaterialId] = useState(null);
   const [status, setStatus] = useState('Loading materials...');
   const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(null);
+  const [batchAssignTarget, setBatchAssignTarget] = useState('');
 
   async function loadMaterials() {
     setIsLoading(true);
@@ -2646,6 +2650,98 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
     }
   }
 
+  async function deleteSelected() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0 || apiStatus !== 'online' || isBatchProcessing) return;
+    const confirmed = window.confirm(`确认删除选中的 ${ids.length} 条资料？相关卡片将解除关联但不会删除。`);
+    if (!confirmed) return;
+    const snapshot = items;
+    setIsBatchProcessing(true);
+    setBatchProgress({ done: 0, total: ids.length, action: '删除' });
+    setStatus(`正在删除 ${ids.length} 条资料...`);
+    const selectedSnapshot = new Set(selectedIds);
+    clearSelection();
+    setItems((current) => current.filter((item) => !selectedSnapshot.has(item.id)));
+    let failed = 0;
+    for (let i = 0; i < ids.length; i += 1) {
+      try {
+        const response = await fetch(`/api/materials/${ids[i]}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('delete failed');
+        const result = await response.json();
+        onMaterialMutation?.(result);
+      } catch {
+        failed += 1;
+      }
+      setBatchProgress({ done: i + 1, total: ids.length, action: '删除' });
+    }
+    if (failed > 0) {
+      setStatus(`${ids.length - failed} 条已删除，${failed} 条失败，正在同步资料库。`);
+      setItems(snapshot);
+      await loadMaterials();
+    } else {
+      setStatus(`${ids.length} 条资料已删除。`);
+    }
+    setBatchProgress(null);
+    setIsBatchProcessing(false);
+  }
+
+  async function reparseSelected() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0 || apiStatus !== 'online' || isBatchProcessing) return;
+    const targets = items.filter((item) => selectedIds.has(item.id) && canParseMaterial(item));
+    if (targets.length === 0) {
+      setStatus('所选资料暂无可重新解析的条目。');
+      return;
+    }
+    setIsBatchProcessing(true);
+    setBatchProgress({ done: 0, total: targets.length, action: '解析' });
+    setStatus(`正在重新解析 ${targets.length} 条资料...`);
+    let failed = 0;
+    for (let i = 0; i < targets.length; i += 1) {
+      try {
+        if (onParseMaterial) await onParseMaterial(targets[i].id);
+      } catch {
+        failed += 1;
+      }
+      setBatchProgress({ done: i + 1, total: targets.length, action: '解析' });
+    }
+    await loadMaterials();
+    setStatus(failed ? `${targets.length - failed} 条已重新解析，${failed} 条失败。` : `${targets.length} 条资料已重新解析。`);
+    setBatchProgress(null);
+    setIsBatchProcessing(false);
+  }
+
+  async function assignSelected() {
+    const target = batchAssignTarget;
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0 || apiStatus !== 'online' || isBatchProcessing || !target) return;
+    setIsBatchProcessing(true);
+    setBatchProgress({ done: 0, total: ids.length, action: '分配' });
+    setStatus(`正在移动 ${ids.length} 条资料...`);
+    let failed = 0;
+    for (let i = 0; i < ids.length; i += 1) {
+      try {
+        const response = await fetch(`/api/materials/${ids[i]}/assign`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ knowledgeBaseId: target }),
+        });
+        if (!response.ok) throw new Error('assign failed');
+        const result = await response.json();
+        onMaterialMutation?.(result);
+      } catch {
+        failed += 1;
+      }
+      setBatchProgress({ done: i + 1, total: ids.length, action: '分配' });
+    }
+    await loadMaterials();
+    setStatus(failed ? `${ids.length - failed} 条已移动，${failed} 条失败。` : `${ids.length} 条资料已移动。`);
+    setBatchAssignTarget('');
+    clearSelection();
+    setBatchProgress(null);
+    setIsBatchProcessing(false);
+  }
+
   return (
     <section className="page-main full">
       <div className="page-title-row">
@@ -2728,6 +2824,44 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
           <input aria-label="搜索资料" value={searchValue} onChange={(event) => setSearchValue(event.target.value)} placeholder="Search materials..." />
         </label>
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="library-batch-bar">
+          <div className="library-batch-info">
+            <strong>已选 {selectedIds.size}</strong>
+            {batchProgress && (
+              <span className="library-batch-progress">
+                {batchProgress.action} {batchProgress.done}/{batchProgress.total}
+              </span>
+            )}
+          </div>
+          <div className="library-batch-actions">
+            <button type="button" disabled={isBatchProcessing || apiStatus !== 'online'} onClick={reparseSelected}>
+              <RefreshCw size={14} />
+              重新解析
+            </button>
+            <select
+              aria-label="批量移动到知识库"
+              value={batchAssignTarget}
+              onChange={(event) => setBatchAssignTarget(event.target.value)}
+              disabled={isBatchProcessing || apiStatus !== 'online'}
+            >
+              <option value="">移动到…</option>
+              {knowledgeBases.map((base) => <option key={base.id ?? base.title} value={base.id}>{base.title}</option>)}
+            </select>
+            <button type="button" disabled={isBatchProcessing || apiStatus !== 'online' || !batchAssignTarget} onClick={assignSelected}>
+              移动
+            </button>
+            <button type="button" className="danger" disabled={isBatchProcessing || apiStatus !== 'online'} onClick={deleteSelected}>
+              <Trash2 size={14} />
+              删除
+            </button>
+            <button type="button" disabled={isBatchProcessing} onClick={clearSelection}>
+              取消选择
+            </button>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <EmptyState title="正在同步资料库" body="稍等一下，正在读取本地 API 里的资料。" />
