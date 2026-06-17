@@ -3005,6 +3005,212 @@ button { cursor: pointer; }
   gap: 24px;
 }
 
+.artifact-hero,
+.artifact-metrics article,
+.artifact-document,
+.artifact-boundary-card,
+.artifact-action-card,
+.artifact-source-list {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 2px 6px rgba(9, 20, 38, 0.03);
+}
+
+.artifact-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: end;
+  margin-bottom: 20px;
+  padding: 24px;
+}
+
+.artifact-hero span {
+  display: inline-flex;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.artifact-hero h2 {
+  margin: 8px 0 10px;
+  font-size: clamp(34px, 4vw, 56px);
+  line-height: 1.06;
+}
+
+.artifact-hero p {
+  margin: 0;
+  max-width: 760px;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.artifact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.artifact-actions button,
+.artifact-action-card button {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--primary);
+  padding: 0 14px;
+  font-weight: 850;
+}
+
+.artifact-actions button:last-child,
+.artifact-action-card button:first-of-type {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+}
+
+.artifact-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.artifact-metrics article {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.artifact-metrics span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.artifact-metrics strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.typed-artifact-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 22px;
+}
+
+.artifact-document,
+.artifact-sidebar {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.artifact-document {
+  padding: 22px;
+}
+
+.artifact-section {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 14px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 18px;
+}
+
+.artifact-section > span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--surface-low);
+  color: var(--primary);
+  font-weight: 900;
+}
+
+.artifact-section h3 {
+  margin: 0 0 10px;
+  font-size: 24px;
+}
+
+.artifact-section p {
+  margin: 0 0 12px;
+  color: var(--primary);
+  line-height: 1.65;
+}
+
+.artifact-boundary-card,
+.artifact-action-card,
+.artifact-source-list {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.artifact-boundary-card h3,
+.artifact-action-card h3,
+.artifact-source-list h3 {
+  margin: 0;
+}
+
+.artifact-boundary-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.artifact-boundary-card div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.artifact-boundary-card span {
+  border-radius: 999px;
+  background: var(--surface-low);
+  color: var(--muted);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.artifact-action-card button {
+  width: 100%;
+  text-align: center;
+}
+
+.artifact-source-list div {
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 10px;
+}
+
+.artifact-source-list span {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.variant-xiaohongshu .artifact-hero,
+.variant-topic .artifact-hero {
+  border-top: 4px solid var(--sage);
+}
+
+.variant-product .artifact-hero,
+.variant-deep .artifact-hero {
+  border-top: 4px solid var(--primary);
+}
+
 .document-card,
 .citation-card {
   padding: 28px;
@@ -3307,6 +3513,22 @@ button { cursor: pointer; }
   }
   .export-option-grid,
   .export-counts {
+    grid-template-columns: 1fr;
+  }
+  .artifact-hero,
+  .typed-artifact-grid {
+    grid-template-columns: 1fr;
+  }
+  .artifact-actions {
+    justify-content: stretch;
+  }
+  .artifact-actions button {
+    flex: 1;
+  }
+  .artifact-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .artifact-section {
     grid-template-columns: 1fr;
   }
   .library-grid,

@@ -21,7 +21,7 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 | `#search` | `SearchView` | `search`, `semantic_discovery` | Partial | Search exists with local semantic recall v0; semantic discovery layout and saved discovery flows are missing. |
 | `#kits` | `KitView` | `kit_1`, `kit_2`, `kit_3` | Partial | Kit cards and run entry exist; collection/progress variants are incomplete. |
 | `#workflow` | `WorkflowView` | `workflow_run`, `kit_collection_in_progress` | Partial | Basic run/result view exists; progress and multi-step states need Stitch-aligned treatment. |
-| `#artifact` | `ArtifactView` | `artifact`, `deep_research_artifact`, `product_research_artifact`, `topic_library_artifact`, `xiaohongshu_operation_artifact` | Partial | Generic artifact viewer exists; artifact type variants are not fully implemented. |
+| `#artifact` | `ArtifactView` | `artifact`, `deep_research_artifact`, `product_research_artifact`, `topic_library_artifact`, `xiaohongshu_operation_artifact` | Partial | Typed artifact layouts exist for research, product, topic, Xiaohongshu, and summary views; explicit persisted subtype and editing remain missing. |
 | `#maps` | `MapsView` | `full_map`, `interaction_specs` | Partial | Knowledge map exists; interaction/connection states are incomplete. |
 | `#chat` | `ChatView` | `chat_onboarding`, `active_chat_1`, `active_chat_2`, `active_chat_3`, `back_loop_to_chat` | Partial | Dedicated knowledge-base chat route exists; persistent conversation states and source-expanded variants are still missing. |
 | `#recall` | `RecallView` | `active_recall`, `card_evolution` | Partial | Card-based reveal/next recall flow exists; scheduling, scoring, and card evolution are still missing. |
@@ -79,11 +79,11 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 | `kit_3` | Kit detail or variant | Partial | Add result preview / requirements state. |
 | `kit_collection_in_progress` | Kit collection/progress | Missing | Add progress state for multi-source kit generation. |
 | `workflow_run` | Workflow run | Partial | Add step timeline and evidence slots. |
-| `artifact` | Generic artifact | Partial | Current artifact viewer exists; refine layout and export actions. |
-| `deep_research_artifact` | Deep research output | Missing | Add artifact type template. |
-| `product_research_artifact` | Product research output | Missing | Add artifact type template. |
-| `topic_library_artifact` | Topic library output | Missing | Add artifact type template. |
-| `xiaohongshu_operation_artifact` | Xiaohongshu operations output | Missing | Add artifact type template. |
+| `artifact` | Generic artifact | Partial | Artifact viewer now has metrics, sections, source boundary, and action rail. |
+| `deep_research_artifact` | Deep research output | Partial | Deep research template is inferred in UI; persisted subtype and bespoke generation are missing. |
+| `product_research_artifact` | Product research output | Partial | Product research template is inferred in UI; product-specific generation schema is missing. |
+| `topic_library_artifact` | Topic library output | Partial | Topic library template is inferred in UI; queue management is missing. |
+| `xiaohongshu_operation_artifact` | Xiaohongshu operations output | Partial | Xiaohongshu operations template is inferred in UI; platform-specific risk workflow is missing. |
 
 ### P2: Export And Backup
 
@@ -139,11 +139,11 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
    persistent conversation, source-expanded chat states, artifact back-link context, recall scoring, and card evolution.
 3. Finish export:
    persisted export history, PDF output, and optional modal/auto-close behavior.
-4. Artifact variants:
-   `deep_research_artifact`, `product_research_artifact`, `topic_library_artifact`, `xiaohongshu_operation_artifact`.
+4. Finish artifact variants:
+   persisted artifact subtype, editable sections, and type-specific generation schemas.
 5. Advanced knowledge operations:
    `cross_kb_synthesis`, `multi_entity_comparison_view_*`, `knowledge_conflict_resolver_*`, `global_knowledge_assets_dashboard_*`.
 
 ## Immediate Next Slice
 
-Continue with artifact variants or advanced knowledge operations after a quick visual pass on `#export`.
+Continue with advanced knowledge operations after a quick visual pass on `#artifact`.

@@ -308,6 +308,62 @@ function downloadTextFile(filename, content, type) {
   URL.revokeObjectURL(url);
 }
 
+function inferArtifactVariant(artifact, detail) {
+  const text = `${artifact?.title ?? ''} ${artifact?.artifactType ?? ''} ${artifact?.body ?? ''} ${detail?.title ?? ''}`.toLowerCase();
+  if (/小红书|xiaohongshu|内容创作|运营|选题|标题|封面|爆款/.test(text)) return 'xiaohongshu';
+  if (/产品|竞品|用户|调研|product|research|opportunity/.test(text)) return 'product';
+  if (/选题库|topic|library|主题库|内容库/.test(text)) return 'topic';
+  if (/deep|research|研究|洞察|趋势|问题/.test(text)) return 'deep';
+  return artifact?.artifactType === 'kit_report' ? 'deep' : 'summary';
+}
+
+function artifactVariantConfig(variant) {
+  const configs = {
+    deep: {
+      label: 'Deep Research',
+      title: '研究结论',
+      lead: '把资料压缩成核心问题、证据链和下一步研究方向。',
+      sections: ['Core Insights', 'Evidence Trail', 'Open Questions'],
+    },
+    product: {
+      label: 'Product Research',
+      title: '产品调研成果',
+      lead: '面向产品决策整理用户痛点、机会点和验证动作。',
+      sections: ['User Pain', 'Opportunity', 'Validation'],
+    },
+    topic: {
+      label: 'Topic Library',
+      title: '选题库成果',
+      lead: '把素材整理成可持续创作的主题、角度和内容结构。',
+      sections: ['Topic Clusters', 'Angles', 'Publishing Queue'],
+    },
+    xiaohongshu: {
+      label: 'Xiaohongshu Ops',
+      title: '小红书运营诊断',
+      lead: '把笔记素材转成账号运营、内容结构和风险提示。',
+      sections: ['Account Diagnosis', 'Content Actions', 'Risk Notes'],
+    },
+    summary: {
+      label: 'Summary',
+      title: '知识产物',
+      lead: '当前知识库生成的结构化摘要与来源边界。',
+      sections: ['Summary', 'Source Boundary', 'Next Actions'],
+    },
+  };
+  return configs[variant] ?? configs.summary;
+}
+
+function artifactBodyBlocks(artifact) {
+  return artifact?.body
+    ? artifact.body.split(/\n+/).map((block) => block.trim()).filter(Boolean)
+    : [];
+}
+
+function distributeArtifactBlocks(blocks, sectionCount) {
+  const normalized = blocks.length ? blocks : ['这个产物暂时没有正文。'];
+  return Array.from({ length: sectionCount }, (_, index) => normalized.filter((_, itemIndex) => itemIndex % sectionCount === index));
+}
+
 function fallbackDetail() {
   return {
     title: 'AI Agent 学习',
@@ -2330,9 +2386,14 @@ function WorkflowView({ detail, isRunningKit, kitRunResult, latestTask, onOpenAr
 function ArtifactView({ artifact, detail, setView }) {
   const fallbackArtifact = detail.artifacts?.[0];
   const activeArtifact = artifact ?? fallbackArtifact;
-  const bodyBlocks = activeArtifact?.body
-    ? activeArtifact.body.split(/\n+/).map((block) => block.trim()).filter(Boolean)
-    : [];
+  const variant = inferArtifactVariant(activeArtifact, detail);
+  const config = artifactVariantConfig(variant);
+  const bodyBlocks = artifactBodyBlocks(activeArtifact);
+  const sectionBlocks = distributeArtifactBlocks(bodyBlocks, config.sections.length);
+  const sourceCount = activeArtifact?.sourceMaterialIds?.length ?? 0;
+  const cards = detail.cards ?? [];
+  const materials = detail.materials ?? [];
+  const sourceCards = cards.filter((card) => card.claimStatus === 'sourced');
 
   if (!activeArtifact) {
     return (
@@ -2347,27 +2408,72 @@ function ArtifactView({ artifact, detail, setView }) {
   }
 
   return (
-    <section className="artifact-page">
-      <div className="page-title-row">
+    <section className={`artifact-page variant-${variant}`}>
+      <div className="artifact-hero">
         <div>
+          <button className="back-button" onClick={() => setView('detail')} type="button">← Back to Knowledge Base</button>
+          <span>{config.label}</span>
           <h2>{activeArtifact.title}</h2>
-          <p>{detail.title} · {activeArtifact.artifactType ?? 'summary'} · {new Date(activeArtifact.createdAt).toLocaleString()}</p>
+          <p>{config.lead}</p>
         </div>
-        <div className="button-row">
-          <button onClick={() => setView('detail')} type="button">回到知识库</button>
+        <div className="artifact-actions">
+          <button onClick={() => setView('export')} type="button">Open Export</button>
           <button onClick={() => downloadArtifactMarkdown(activeArtifact, detail)} type="button">导出 Markdown</button>
         </div>
       </div>
-      <div className="artifact-grid">
-        <article className="document-card">
-          <h3>摘要正文</h3>
-          {bodyBlocks.length > 0 ? bodyBlocks.map((block) => <p key={block}>{block}</p>) : <p>这个产物暂时没有正文。</p>}
-        </article>
-        <aside className="citation-card">
-          <h3>来源边界</h3>
-          <p>{activeArtifact.sourceMaterialIds?.length ?? 0} source material links</p>
-          <p>{detail.cardCount ?? detail.cards?.length ?? 0} cards in current knowledge base</p>
-          <p>{activeArtifact.sourceMaterialIds?.length ? 'This artifact references saved source material.' : 'This artifact is an AI skeleton and needs source review.'}</p>
+
+      <div className="artifact-metrics">
+        <article><span>Source links</span><strong>{sourceCount}</strong></article>
+        <article><span>Cards</span><strong>{detail.cardCount ?? cards.length}</strong></article>
+        <article><span>Sourced cards</span><strong>{sourceCards.length}</strong></article>
+        <article><span>Updated</span><strong>{new Date(activeArtifact.createdAt).toLocaleDateString()}</strong></article>
+      </div>
+
+      <div className="typed-artifact-grid">
+        <section className="artifact-document">
+          <div className="panel-title">
+            <ClipboardList size={20} />
+            <div>
+              <span>{config.label}</span>
+              <h4>{config.title}</h4>
+            </div>
+          </div>
+          {config.sections.map((section, index) => (
+            <article className="artifact-section" key={section}>
+              <span>{String(index + 1).padStart(2, '0')}</span>
+              <div>
+                <h3>{section}</h3>
+                {(sectionBlocks[index]?.length ? sectionBlocks[index] : ['暂无内容。']).map((block) => <p key={block}>{block}</p>)}
+              </div>
+            </article>
+          ))}
+        </section>
+
+        <aside className="artifact-sidebar">
+          <article className="artifact-boundary-card">
+            <h3>来源边界</h3>
+            <p>{sourceCount ? 'This artifact references saved source material.' : 'This artifact is an AI skeleton and needs source review.'}</p>
+            <div>
+              <span>{materials.length} materials</span>
+              <span>{cards.length} cards</span>
+              <span>{formatPercent(detail.sourcedRatio)} sourced</span>
+            </div>
+          </article>
+          <article className="artifact-action-card">
+            <h3>Next Actions</h3>
+            <button onClick={() => setView('chat')} type="button">Discuss in Chat</button>
+            <button onClick={() => setView('recall')} type="button">Practice Cards</button>
+            <button onClick={() => setView('export')} type="button">Export Bundle</button>
+          </article>
+          <article className="artifact-source-list">
+            <h3>Representative Sources</h3>
+            {(materials.slice(0, 4).length ? materials.slice(0, 4) : [{ id: 'empty', title: 'No source material yet', parseStatus: 'needs_review' }]).map((material) => (
+              <div key={material.id ?? material.title}>
+                <strong>{material.title}</strong>
+                <span>{material.platform ?? material.type ?? 'local'} · {material.parseStatus ?? 'saved'}</span>
+              </div>
+            ))}
+          </article>
         </aside>
       </div>
     </section>
