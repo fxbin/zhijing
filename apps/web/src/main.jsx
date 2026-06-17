@@ -19,6 +19,7 @@ import {
   ListChecks,
   LogOut,
   Network,
+  PackageCheck,
   PlugZap,
   Plus,
   RefreshCw,
@@ -29,6 +30,7 @@ import {
   Sparkles,
   SquareArrowOutUpRight,
   Upload,
+  Download,
 } from 'lucide-react';
 import './styles.css';
 
@@ -65,7 +67,7 @@ const kitCards = [
   { id: 'product_research', title: '产品调研 Kit', body: '提炼竞品对比、用户痛点、功能机会点和下一步验证问题。', status: 'Ready', icon: ClipboardList },
 ];
 
-const knownViews = new Set(['workspace', 'detail', 'library', 'search', 'kits', 'workflow', 'artifact', 'maps', 'chat', 'recall', 'settings']);
+const knownViews = new Set(['workspace', 'detail', 'library', 'search', 'kits', 'workflow', 'artifact', 'maps', 'chat', 'recall', 'export', 'settings']);
 
 function viewFromHash() {
   const hash = window.location.hash.replace('#', '');
@@ -235,6 +237,71 @@ function downloadArtifactMarkdown(artifact, detail) {
   const link = document.createElement('a');
   link.href = url;
   link.download = `${safeFilename(artifact.title)}.md`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function knowledgeBaseMarkdown(detail, options = {}) {
+  const materials = detail.materials ?? [];
+  const cards = detail.cards ?? [];
+  const artifacts = detail.artifacts ?? [];
+  const lines = [
+    `# ${detail.title}`,
+    '',
+    detail.summary ?? '',
+    '',
+    '## Overview',
+    '',
+    `- Sources: ${materials.length}`,
+    `- Cards: ${cards.length}`,
+    `- Sourced ratio: ${formatPercent(detail.sourcedRatio)}`,
+    '',
+  ];
+  if (options.includeCards !== false) {
+    lines.push('## Knowledge Cards', '');
+    for (const card of cards) {
+      lines.push(`### ${card.title}`, '', `- Type: ${card.type}`, `- Claim: ${card.claimStatus}`, '', card.body, '');
+    }
+  }
+  if (options.includeMaterials !== false) {
+    lines.push('## Source Materials', '');
+    for (const material of materials) {
+      lines.push(`### ${material.title}`, '', `- Type: ${material.type}`, `- Platform: ${material.platform ?? 'local'}`, `- Status: ${material.parseStatus}`, '', material.contentText || material.rawInput || '', '');
+    }
+  }
+  if (options.includeArtifacts !== false && artifacts.length > 0) {
+    lines.push('## Artifacts', '');
+    for (const artifact of artifacts) {
+      lines.push(`### ${artifact.title}`, '', artifact.body, '');
+    }
+  }
+  return lines.join('\n');
+}
+
+function knowledgeBaseExportJson(detail, options = {}) {
+  return JSON.stringify({
+    exportedAt: new Date().toISOString(),
+    title: detail.title,
+    summary: detail.summary,
+    stats: {
+      sourceCount: detail.sourceCount,
+      cardCount: detail.cardCount,
+      sourcedRatio: detail.sourcedRatio,
+    },
+    materials: options.includeMaterials === false ? [] : detail.materials ?? [],
+    cards: options.includeCards === false ? [] : detail.cards ?? [],
+    artifacts: options.includeArtifacts === false ? [] : detail.artifacts ?? [],
+  }, null, 2);
+}
+
+function downloadTextFile(filename, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -744,7 +811,7 @@ function App() {
           <nav aria-label="工作区导航">
             <button className={view === 'workspace' ? 'active' : ''} onClick={() => go('workspace')} type="button">Path</button>
             <button className={view === 'maps' ? 'active' : ''} onClick={() => go('maps')} type="button">Maps</button>
-            <button className={view === 'artifact' ? 'active' : ''} onClick={() => go('artifact')} type="button">Archive</button>
+            <button className={view === 'export' ? 'active' : ''} onClick={() => go('export')} type="button">Archive</button>
           </nav>
           <div className="top-tools">
             <label className="search-pill">
@@ -829,6 +896,7 @@ function App() {
             />
           )}
           {view === 'recall' && <RecallView detail={knowledgeBaseDetail} setView={go} />}
+          {view === 'export' && <ExportView detail={knowledgeBaseDetail} setView={go} />}
           {view === 'settings' && <SettingsView />}
         </div>
       </section>
@@ -1041,6 +1109,7 @@ function DetailView({
           <div className="page-title-actions">
             <button onClick={() => setView('chat')} type="button">Chat</button>
             <button onClick={() => setView('recall')} type="button">Recall</button>
+            <button onClick={() => setView('export')} type="button">Export</button>
             <button onClick={() => setView('workflow')} type="button">Run Kit</button>
           </div>
         </div>
@@ -1396,6 +1465,182 @@ function RecallView({ detail, setView }) {
             </article>
           </div>
         )}
+      </div>
+    </section>
+  );
+}
+
+function ExportView({ detail, setView }) {
+  const [format, setFormat] = useState('markdown');
+  const [scope, setScope] = useState('all');
+  const [includeArtifacts, setIncludeArtifacts] = useState(true);
+  const [exportState, setExportState] = useState('idle');
+  const [progress, setProgress] = useState(0);
+  const [lastExport, setLastExport] = useState(null);
+  const materials = detail.materials ?? [];
+  const cards = detail.cards ?? [];
+  const artifacts = detail.artifacts ?? [];
+  const options = {
+    includeMaterials: scope === 'all' || scope === 'materials',
+    includeCards: scope === 'all' || scope === 'cards',
+    includeArtifacts,
+  };
+  const exportRows = [
+    { label: 'Knowledge cards', value: options.includeCards ? cards.length : 0 },
+    { label: 'Source materials', value: options.includeMaterials ? materials.length : 0 },
+    { label: 'Artifacts', value: options.includeArtifacts ? artifacts.length : 0 },
+  ];
+
+  useEffect(() => {
+    if (exportState !== 'running') return undefined;
+    setProgress(18);
+    const steps = [38, 64, 86, 100];
+    const timers = steps.map((value, index) => window.setTimeout(() => {
+      setProgress(value);
+      if (value === 100) setExportState('success');
+    }, 260 * (index + 1)));
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [exportState]);
+
+  function buildExport() {
+    const extension = format === 'json' ? 'json' : 'md';
+    const filename = `${safeFilename(detail.title)}-export.${extension}`;
+    const content = format === 'json'
+      ? knowledgeBaseExportJson(detail, options)
+      : knowledgeBaseMarkdown(detail, options);
+    const type = format === 'json' ? 'application/json;charset=utf-8' : 'text/markdown;charset=utf-8';
+    return { filename, content, type };
+  }
+
+  function startExport() {
+    setLastExport(buildExport());
+    setExportState('running');
+    setProgress(0);
+  }
+
+  function downloadLastExport() {
+    const prepared = lastExport ?? buildExport();
+    downloadTextFile(prepared.filename, prepared.content, prepared.type);
+    setLastExport(prepared);
+  }
+
+  function downloadBackup() {
+    downloadTextFile(
+      `${safeFilename(detail.title)}-backup.json`,
+      knowledgeBaseExportJson(detail, { includeMaterials: true, includeCards: true, includeArtifacts: true }),
+      'application/json;charset=utf-8',
+    );
+  }
+
+  return (
+    <section className="page-main full">
+      <div className="export-workbench">
+        <div className="export-head">
+          <div>
+            <span>Export Management</span>
+            <h2>Archive current knowledge base</h2>
+            <p>把当前知识库导出为 Markdown 或 JSON。第一版先做本地下载，后续再接导出历史和云端备份。</p>
+          </div>
+          <div className="export-head-actions">
+            <button onClick={() => setView('detail')} type="button">Back</button>
+            <button onClick={downloadBackup} type="button">
+              <PackageCheck size={18} />
+              Backup JSON
+            </button>
+          </div>
+        </div>
+
+        <div className="export-grid">
+          <section className="export-config-panel">
+            <div className="panel-title">
+              <Download size={20} />
+              <div>
+                <span>Export Configuration</span>
+                <h4>格式与范围</h4>
+              </div>
+            </div>
+            <div className="export-option-grid">
+              {[
+                { key: 'markdown', label: 'Markdown', body: 'For PKM tools and readable archives.' },
+                { key: 'json', label: 'JSON', body: 'Raw structured backup for later import.' },
+              ].map((option) => (
+                <button className={format === option.key ? 'active' : ''} key={option.key} onClick={() => setFormat(option.key)} type="button">
+                  <strong>{option.label}</strong>
+                  <span>{option.body}</span>
+                </button>
+              ))}
+            </div>
+            <div className="export-scope-row">
+              {[
+                { key: 'all', label: 'All assets' },
+                { key: 'cards', label: 'Cards only' },
+                { key: 'materials', label: 'Materials only' },
+              ].map((option) => (
+                <button className={scope === option.key ? 'active' : ''} key={option.key} onClick={() => setScope(option.key)} type="button">
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <label className="export-checkbox">
+              <input checked={includeArtifacts} onChange={(event) => setIncludeArtifacts(event.target.checked)} type="checkbox" />
+              Include generated artifacts
+            </label>
+          </section>
+
+          <section className="export-progress-panel">
+            <div className="panel-title">
+              <ClipboardList size={20} />
+              <div>
+                <span>Export Progress</span>
+                <h4>{exportState === 'success' ? '导出已准备好' : exportState === 'running' ? '正在打包知识资产' : '等待开始'}</h4>
+              </div>
+            </div>
+            <div className="export-progress-bar"><span style={{ width: `${progress}%` }} /></div>
+            <div className="export-counts">
+              {exportRows.map((row) => (
+                <div key={row.label}>
+                  <strong>{row.value}</strong>
+                  <span>{row.label}</span>
+                </div>
+              ))}
+            </div>
+            {exportState === 'success' ? (
+              <div className="export-success-card">
+                <CheckCircle2 size={26} />
+                <div>
+                  <strong>导出成功</strong>
+                  <p>{lastExport?.filename ?? 'Export file'} 已生成，可以下载到本地。</p>
+                </div>
+              </div>
+            ) : (
+              <p>配置完成后开始导出。当前流程不会上传任何内容，只会在本地生成文件。</p>
+            )}
+          </section>
+        </div>
+
+        <section className="export-history-panel">
+          <div className="panel-title">
+            <History size={20} />
+            <div>
+              <span>Export History</span>
+              <h4>本次导出</h4>
+            </div>
+          </div>
+          <div className="export-history-row">
+            <div>
+              <strong>{lastExport?.filename ?? `${safeFilename(detail.title)}-export.${format === 'json' ? 'json' : 'md'}`}</strong>
+              <span>{format.toUpperCase()} · {scope} · {new Date().toLocaleDateString()}</span>
+            </div>
+            <div className="export-actions">
+              <button disabled={exportState === 'running'} onClick={startExport} type="button">
+                {exportState === 'running' ? 'Exporting' : 'Start Export'}
+              </button>
+              <button disabled={exportState !== 'success'} onClick={downloadLastExport} type="button">
+                Download
+              </button>
+            </div>
+          </div>
+        </section>
       </div>
     </section>
   );

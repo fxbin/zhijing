@@ -25,6 +25,7 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 | `#maps` | `MapsView` | `full_map`, `interaction_specs` | Partial | Knowledge map exists; interaction/connection states are incomplete. |
 | `#chat` | `ChatView` | `chat_onboarding`, `active_chat_1`, `active_chat_2`, `active_chat_3`, `back_loop_to_chat` | Partial | Dedicated knowledge-base chat route exists; persistent conversation states and source-expanded variants are still missing. |
 | `#recall` | `RecallView` | `active_recall`, `card_evolution` | Partial | Card-based reveal/next recall flow exists; scheduling, scoring, and card evolution are still missing. |
+| `#export` | `ExportView` | `export_management`, `export_configuration`, `export_progress`, `export_success`, `export_backup` | Partial | Local Markdown/JSON export, progress, success, and backup download exist; persistent history, PDF, and cloud backup are still missing. |
 | `#settings` | `SettingsView` | `settings`, `system_transparency` | Partial | Provider settings exist; transparency, source auth, and data controls are incomplete. |
 
 ## Coverage By Product Area
@@ -88,12 +89,12 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 
 | Stitch reference | Product intent | Current status | Next implementation action |
 | --- | --- | --- | --- |
-| `export_management` | Export center | Missing | Add export center route or settings section. |
-| `export_configuration` | Export options | Missing | Add format/scope configuration. |
-| `export_progress` | Export progress | Missing | Add progress state after export task exists. |
-| `export_success` | Export success | Missing | Add success/download state. |
+| `export_management` | Export center | Partial | `#export` now provides local export center; persisted export history is still missing. |
+| `export_configuration` | Export options | Partial | Markdown/JSON, scope, and artifact inclusion are configurable; PDF and advanced options are missing. |
+| `export_progress` | Export progress | Partial | Local progress state exists; server task progress is deferred until backend export exists. |
+| `export_success` | Export success | Partial | Success state and download action exist; auto-close/modal variant is not implemented. |
 | `export_complete_auto_close` | Auto-close state | Missing | Add only if export modal pattern is chosen. |
-| `export_backup` | Backup flow | Missing | Add local backup action after storage policy is finalized. |
+| `export_backup` | Backup flow | Partial | Local JSON backup download exists; scheduled/cloud backup is missing. |
 
 ### P2: Advanced Knowledge Operations
 
@@ -136,8 +137,8 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
    detailed parser timeline, batch action side panel, and post-task success state.
 2. Finish chat and recall:
    persistent conversation, source-expanded chat states, artifact back-link context, recall scoring, and card evolution.
-3. Export:
-   `export_management`, `export_configuration`, `export_progress`, `export_success`, `export_backup`.
+3. Finish export:
+   persisted export history, PDF output, and optional modal/auto-close behavior.
 4. Artifact variants:
    `deep_research_artifact`, `product_research_artifact`, `topic_library_artifact`, `xiaohongshu_operation_artifact`.
 5. Advanced knowledge operations:
@@ -145,4 +146,4 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 
 ## Immediate Next Slice
 
-Continue with export flow coverage after a quick visual pass on `#chat` and `#recall`.
+Continue with artifact variants or advanced knowledge operations after a quick visual pass on `#export`.

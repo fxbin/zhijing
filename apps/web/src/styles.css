@@ -1852,6 +1852,254 @@ button { cursor: pointer; }
   color: white;
 }
 
+.export-workbench {
+  display: grid;
+  gap: 22px;
+}
+
+.export-head,
+.export-config-panel,
+.export-progress-panel,
+.export-history-panel {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 2px 6px rgba(9, 20, 38, 0.03);
+}
+
+.export-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 22px;
+}
+
+.export-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.export-head h2 {
+  margin: 6px 0 8px;
+  font-size: clamp(34px, 4vw, 52px);
+  line-height: 1.06;
+}
+
+.export-head p {
+  margin: 0;
+  max-width: 760px;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.export-head-actions,
+.export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.export-head-actions button,
+.export-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--primary);
+  padding: 0 14px;
+  font-weight: 850;
+}
+
+.export-head-actions button:last-child,
+.export-actions button:first-child,
+.export-actions button:last-child:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+}
+
+.export-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.export-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 18px;
+}
+
+.export-config-panel,
+.export-progress-panel,
+.export-history-panel {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  padding: 20px;
+}
+
+.export-option-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.export-option-grid button {
+  display: grid;
+  gap: 8px;
+  min-height: 128px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--primary);
+  padding: 18px;
+  text-align: left;
+}
+
+.export-option-grid button.active {
+  border-color: var(--primary);
+  background: var(--surface-low);
+  box-shadow: 0 0 0 2px rgba(9, 20, 38, 0.08);
+}
+
+.export-option-grid strong {
+  font-size: 18px;
+}
+
+.export-option-grid span {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.export-scope-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.export-scope-row button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  padding: 0 14px;
+  font-weight: 850;
+}
+
+.export-scope-row button.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+}
+
+.export-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--primary);
+  font-weight: 750;
+}
+
+.export-checkbox input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+
+.export-progress-bar {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-low);
+}
+
+.export-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--sage);
+  transition: width 0.24s ease;
+}
+
+.export-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.export-counts div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface-low);
+  padding: 12px;
+}
+
+.export-counts strong {
+  font-size: 26px;
+}
+
+.export-counts span,
+.export-progress-panel > p,
+.export-history-row span {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.export-success-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid rgba(0, 116, 57, 0.25);
+  border-radius: 10px;
+  background: rgba(109, 254, 156, 0.18);
+  padding: 14px;
+}
+
+.export-success-card svg {
+  color: var(--sage-text);
+  flex: 0 0 auto;
+}
+
+.export-success-card p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.export-history-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 16px;
+}
+
+.export-history-row > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.export-history-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
@@ -3043,6 +3291,23 @@ button { cursor: pointer; }
   }
   .recall-card h3 {
     font-size: 26px;
+  }
+  .export-head,
+  .export-grid,
+  .export-history-row {
+    grid-template-columns: 1fr;
+  }
+  .export-head-actions,
+  .export-actions {
+    justify-content: stretch;
+  }
+  .export-head-actions button,
+  .export-actions button {
+    flex: 1;
+  }
+  .export-option-grid,
+  .export-counts {
+    grid-template-columns: 1fr;
   }
   .library-grid,
   .kit-grid {
