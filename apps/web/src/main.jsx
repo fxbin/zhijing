@@ -67,7 +67,7 @@ const kitCards = [
   { id: 'product_research', title: '产品调研 Kit', body: '提炼竞品对比、用户痛点、功能机会点和下一步验证问题。', status: 'Ready', icon: ClipboardList },
 ];
 
-const knownViews = new Set(['workspace', 'detail', 'library', 'search', 'kits', 'workflow', 'artifact', 'maps', 'chat', 'recall', 'export', 'settings']);
+const knownViews = new Set(['workspace', 'detail', 'library', 'search', 'kits', 'workflow', 'artifact', 'maps', 'chat', 'recall', 'export', 'assets', 'synthesis', 'compare', 'conflicts', 'settings']);
 
 function viewFromHash() {
   const hash = window.location.hash.replace('#', '');
@@ -364,6 +364,105 @@ function distributeArtifactBlocks(blocks, sectionCount) {
   return Array.from({ length: sectionCount }, (_, index) => normalized.filter((_, itemIndex) => itemIndex % sectionCount === index));
 }
 
+function normalizeKnowledgeText(value) {
+  return (value ?? '').toString().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+function keywordTokens(...values) {
+  const stopWords = new Set(['and', 'the', 'for', 'with', 'this', 'that', '一个', '一种', '如何', '什么', '知识库']);
+  return [...new Set(values
+    .join(' ')
+    .split(/\s+/)
+    .map((item) => normalizeKnowledgeText(item))
+    .filter((item) => item.length >= 2 && !stopWords.has(item))
+    .slice(0, 24))];
+}
+
+function buildAdvancedOpsData({ knowledgeBases, materials, detail, tasks }) {
+  const detailMaterials = detail.materials ?? [];
+  const detailCards = detail.cards ?? [];
+  const detailArtifacts = detail.artifacts ?? [];
+  const allMaterials = mergeById([...materials, ...detailMaterials]);
+  const allCards = detailCards;
+  const allArtifacts = detailArtifacts;
+  const totalMaterials = knowledgeBases.reduce((sum, base) => sum + (base.sourceCount ?? 0), 0) || allMaterials.length;
+  const totalCards = knowledgeBases.reduce((sum, base) => sum + (base.cardCount ?? 0), 0) || allCards.length;
+  const sourcedCards = allCards.filter((card) => card.claimStatus === 'sourced').length;
+  const reviewMaterials = allMaterials.filter((item) => item.parseStatus === 'needs_review' || item.parseStatus === 'failed');
+  const duplicateMaterials = duplicateGroups(allMaterials, (item) => item.sourceUrl || item.rawInput || item.title);
+  const duplicateCards = duplicateGroups(allCards, (item) => item.title);
+  const baseThemes = knowledgeBases.map((base) => ({
+    ...base,
+    tokens: keywordTokens(base.title, base.summary),
+  }));
+  const crossKbThemes = baseThemes.flatMap((base, index) => baseThemes.slice(index + 1).map((other) => {
+    const overlap = base.tokens.filter((token) => other.tokens.includes(token));
+    return { left: base, right: other, overlap, score: overlap.length };
+  })).filter((item) => item.score > 0).sort((left, right) => right.score - left.score);
+  const fallbackThemes = crossKbThemes.length ? crossKbThemes : baseThemes.slice(0, 3).map((base) => ({
+    left: base,
+    right: baseThemes.find((item) => item.id !== base.id) ?? base,
+    overlap: base.tokens.slice(0, 3),
+    score: base.tokens.length ? 1 : 0,
+  }));
+  const comparisonEntities = (knowledgeBases.length ? knowledgeBases : [{ title: detail.title, sourceCount: allMaterials.length, cardCount: allCards.length }])
+    .slice(0, 4)
+    .map((base, index) => ({
+      id: base.id ?? `entity-${index}`,
+      title: base.title,
+      materials: base.sourceCount ?? allMaterials.length,
+      cards: base.cardCount ?? allCards.length,
+      artifacts: allArtifacts.filter((artifact) => artifact.knowledgeBaseId === base.id).length || (index === 0 ? allArtifacts.length : 0),
+      health: Math.round(((base.cardCount ?? allCards.length) ? sourcedCards / Math.max(base.cardCount ?? allCards.length, 1) : 0.3) * 100),
+    }));
+  const conflictSignals = [
+    ...duplicateMaterials.map((group) => ({ type: 'duplicate_material', title: group[0].title, count: group.length, severity: 'medium' })),
+    ...duplicateCards.map((group) => ({ type: 'duplicate_card', title: group[0].title, count: group.length, severity: 'medium' })),
+    ...reviewMaterials.slice(0, 4).map((item) => ({ type: 'needs_review', title: item.title, count: 1, severity: item.parseStatus === 'failed' ? 'high' : 'medium' })),
+    ...allCards.filter((card) => card.claimStatus !== 'sourced').slice(0, 4).map((card) => ({ type: 'unsourced_card', title: card.title, count: 1, severity: 'low' })),
+  ];
+  return {
+    totals: {
+      knowledgeBases: knowledgeBases.length,
+      materials: totalMaterials,
+      cards: totalCards,
+      artifacts: allArtifacts.length,
+      tasks: tasks.length,
+      sourcedCards,
+      reviewMaterials: reviewMaterials.length,
+      duplicateSignals: duplicateMaterials.length + duplicateCards.length,
+    },
+    allMaterials,
+    allCards,
+    allArtifacts,
+    crossKbThemes: fallbackThemes.slice(0, 5),
+    comparisonEntities,
+    conflictSignals: conflictSignals.slice(0, 8),
+  };
+}
+
+function mergeById(items) {
+  const seen = new Set();
+  return items.filter((item, index) => {
+    const key = item?.id ?? `${item?.title ?? 'item'}-${index}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function duplicateGroups(items, getKey) {
+  const groups = new Map();
+  for (const item of items) {
+    const key = normalizeKnowledgeText(getKey(item));
+    if (!key) continue;
+    const group = groups.get(key) ?? [];
+    group.push(item);
+    groups.set(key, group);
+  }
+  return [...groups.values()].filter((group) => group.length > 1);
+}
+
 function fallbackDetail() {
   return {
     title: 'AI Agent 学习',
@@ -435,6 +534,12 @@ function App() {
   const [isRunningKit, setIsRunningKit] = useState(false);
   const [kitRunResult, setKitRunResult] = useState(null);
   const kind = useMemo(() => (query.trim() ? classifyInput(query.trim()) : 'Theme, Link, or Question'), [query]);
+  const advancedOpsData = useMemo(() => buildAdvancedOpsData({
+    knowledgeBases,
+    materials,
+    detail: knowledgeBaseDetail,
+    tasks,
+  }), [knowledgeBases, materials, knowledgeBaseDetail, tasks]);
 
   useEffect(() => {
     const handleHashChange = () => setView(viewFromHash());
@@ -805,6 +910,7 @@ function App() {
     { key: 'detail', label: 'Knowledge Base', icon: Database },
     { key: 'library', label: 'Library', icon: FolderOpen },
     { key: 'search', label: 'Search', icon: Search },
+    { key: 'assets', label: 'Assets', icon: Layers },
     { key: 'kits', label: 'Insights', icon: Sparkles },
     { key: 'settings', label: 'Settings', icon: Settings },
   ];
@@ -937,6 +1043,10 @@ function App() {
           )}
           {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={knowledgeBaseDetail} setView={go} />}
           {view === 'maps' && <MapsView apiStatus={apiStatus} selectedKnowledgeBaseId={selectedKnowledgeBaseId} />}
+          {view === 'assets' && <GlobalAssetsDashboard data={advancedOpsData} setView={go} />}
+          {view === 'synthesis' && <CrossKbSynthesisView data={advancedOpsData} setView={go} />}
+          {view === 'compare' && <MultiEntityComparisonView data={advancedOpsData} setView={go} />}
+          {view === 'conflicts' && <KnowledgeConflictResolverView data={advancedOpsData} setView={go} />}
           {view === 'chat' && (
             <ChatView
               apiStatus={apiStatus}
@@ -1700,6 +1810,330 @@ function ExportView({ detail, setView }) {
       </div>
     </section>
   );
+}
+
+function AdvancedOpsTabs({ active, setView }) {
+  const tabs = [
+    { key: 'assets', label: 'Assets', icon: Layers },
+    { key: 'synthesis', label: 'Synthesis', icon: Network },
+    { key: 'compare', label: 'Compare', icon: ListChecks },
+    { key: 'conflicts', label: 'Conflicts', icon: AlertTriangle },
+  ];
+
+  return (
+    <div className="advanced-tabs" aria-label="高级知识操作">
+      {tabs.map((tab) => {
+        const Icon = tab.icon;
+        return (
+          <button className={active === tab.key ? 'active' : ''} key={tab.key} onClick={() => setView(tab.key)} type="button">
+            <Icon size={18} />
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function GlobalAssetsDashboard({ data, setView }) {
+  const metrics = [
+    { label: 'Knowledge bases', value: data.totals.knowledgeBases, body: '主题知识库' },
+    { label: 'Materials', value: data.totals.materials, body: '来源资料' },
+    { label: 'Cards', value: data.totals.cards, body: '结构化卡片' },
+    { label: 'Artifacts', value: data.totals.artifacts, body: '生成产物' },
+    { label: 'Tasks', value: data.totals.tasks, body: '近期任务' },
+    { label: 'Sourced cards', value: data.totals.sourcedCards, body: '有来源支撑' },
+    { label: 'Needs review', value: data.totals.reviewMaterials, body: '等待复核' },
+    { label: 'Duplicate signals', value: data.totals.duplicateSignals, body: '疑似重复' },
+  ];
+
+  return (
+    <section className="page-main full advanced-page">
+      <div className="advanced-head">
+        <div>
+          <span>Global Assets</span>
+          <h2>Knowledge asset dashboard</h2>
+          <p>把所有知识库、来源资料、卡片、产物和任务聚合到一个资产视角，先用于盘点和发现风险。</p>
+        </div>
+        <button onClick={() => setView('library')} type="button">Open Library</button>
+      </div>
+      <AdvancedOpsTabs active="assets" setView={setView} />
+
+      <div className="advanced-metric-grid">
+        {metrics.map((metric) => (
+          <article className="advanced-metric-card" key={metric.label}>
+            <span>{metric.label}</span>
+            <strong>{metric.value}</strong>
+            <small>{metric.body}</small>
+          </article>
+        ))}
+      </div>
+
+      <div className="advanced-panel-grid">
+        <section className="advanced-panel">
+          <div className="panel-title">
+            <Database size={20} />
+            <div>
+              <span>Source Materials</span>
+              <h4>最近资料</h4>
+            </div>
+          </div>
+          {data.allMaterials.length === 0 ? (
+            <EmptyState title="暂无资料资产" body="导入链接或文本后，会在这里汇总全局资料。" />
+          ) : (
+            <div className="asset-list">
+              {data.allMaterials.slice(0, 5).map((item, index) => (
+                <article key={item.id ?? `${item.title}-${index}`}>
+                  <span>{item.platform ?? item.source ?? item.type ?? 'material'}</span>
+                  <strong>{item.title}</strong>
+                  <small>{statusLabels[item.parseStatus] ?? item.status ?? 'saved'} · {formatMaterialTime(item.createdAt)}</small>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="advanced-panel">
+          <div className="panel-title">
+            <Layers size={20} />
+            <div>
+              <span>Knowledge Cards</span>
+              <h4>证据状态</h4>
+            </div>
+          </div>
+          {data.allCards.length === 0 ? (
+            <EmptyState title="暂无知识卡片" body="生成主题或解析资料后，卡片会成为跨库操作的基础。" />
+          ) : (
+            <div className="asset-list">
+              {data.allCards.slice(0, 5).map((card, index) => (
+                <article key={card.id ?? `${card.title}-${index}`}>
+                  <span>{card.type ?? 'card'}</span>
+                  <strong>{card.title}</strong>
+                  <small>{card.claimStatus ?? 'draft'}</small>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="advanced-panel advanced-wide-panel">
+          <div className="panel-title">
+            <FileText size={20} />
+            <div>
+              <span>Generated Artifacts</span>
+              <h4>产物资产</h4>
+            </div>
+          </div>
+          {data.allArtifacts.length === 0 ? (
+            <EmptyState title="暂无生成产物" body="运行 Kit 或提问后，研究摘要、主题库和行动清单会进入这里。" />
+          ) : (
+            <div className="artifact-strip-list">
+              {data.allArtifacts.slice(0, 4).map((artifact, index) => (
+                <article key={artifact.id ?? `${artifact.title}-${index}`}>
+                  <div>
+                    <strong>{artifact.title}</strong>
+                    <span>{artifact.type ?? 'artifact'} · {artifact.sections?.length ?? 0} sections</span>
+                  </div>
+                  <button onClick={() => setView('artifact')} type="button">Open</button>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function CrossKbSynthesisView({ data, setView }) {
+  return (
+    <section className="page-main full advanced-page">
+      <div className="advanced-head">
+        <div>
+          <span>Cross-KB Synthesis</span>
+          <h2>Find themes across knowledge bases</h2>
+          <p>用主题重叠、资料密度和卡片证据做跨库综合的入口，后续可接 Pi 生成正式综合报告。</p>
+        </div>
+        <button onClick={() => setView('compare')} type="button">Compare</button>
+      </div>
+      <AdvancedOpsTabs active="synthesis" setView={setView} />
+
+      {data.crossKbThemes.length === 0 ? (
+        <EmptyState title="暂无跨库主题" body="至少需要两个知识库或更多卡片后，系统才能形成可综合的主题线索。" />
+      ) : (
+        <div className="synthesis-grid">
+          {data.crossKbThemes.map((theme, index) => (
+            <article className="synthesis-card" key={`${theme.left.id ?? theme.left.title}-${theme.right.id ?? theme.right.title}-${index}`}>
+              <div className="synthesis-card-head">
+                <span>Theme {index + 1}</span>
+                <strong>{theme.score || theme.overlap.length} overlap</strong>
+              </div>
+              <h3>{theme.left.title} × {theme.right.title}</h3>
+              <p>把两个知识库的重叠关键词先汇成一个候选综合主题，适合生成对比摘要、研究问题或专题文档。</p>
+              <div className="overlap-chip-row">
+                {(theme.overlap.length ? theme.overlap : ['concept', 'source', 'review']).slice(0, 6).map((token) => (
+                  <span key={token}>{token}</span>
+                ))}
+              </div>
+              <footer>
+                <button onClick={() => setView('artifact')} type="button">Draft artifact</button>
+                <button onClick={() => setView('conflicts')} type="button">Check conflicts</button>
+              </footer>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <section className="advanced-panel synthesis-plan">
+        <div className="panel-title">
+          <Sparkles size={20} />
+          <div>
+            <span>Synthesis Plan</span>
+            <h4>建议的综合产物结构</h4>
+          </div>
+        </div>
+        <div className="synthesis-step-list">
+          {['共同概念', '分歧观点', '证据来源', '可行动问题'].map((step, index) => (
+            <article key={step}>
+              <span>{index + 1}</span>
+              <strong>{step}</strong>
+              <p>从当前卡片和资料里提取候选内容，先形成只读预览，之后再接生成和保存。</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function MultiEntityComparisonView({ data, setView }) {
+  const rows = data.comparisonEntities;
+
+  return (
+    <section className="page-main full advanced-page">
+      <div className="advanced-head">
+        <div>
+          <span>Entity Comparison</span>
+          <h2>Compare knowledge entities</h2>
+          <p>把知识库当作第一版可比较实体，展示资料量、卡片量、产物量和来源健康度。</p>
+        </div>
+        <button onClick={() => setView('synthesis')} type="button">Synthesize</button>
+      </div>
+      <AdvancedOpsTabs active="compare" setView={setView} />
+
+      {rows.length === 0 ? (
+        <EmptyState title="暂无可对比实体" body="创建知识库后，会自动出现第一批对比维度。" />
+      ) : (
+        <section className="comparison-board">
+          <div className="comparison-header">
+            <span>Entity</span>
+            <span>Materials</span>
+            <span>Cards</span>
+            <span>Artifacts</span>
+            <span>Source health</span>
+          </div>
+          {rows.map((row) => (
+            <article className="comparison-row" key={row.id}>
+              <div>
+                <strong>{row.title}</strong>
+                <small>{row.materials + row.cards + row.artifacts} total assets</small>
+              </div>
+              <span>{row.materials}</span>
+              <span>{row.cards}</span>
+              <span>{row.artifacts}</span>
+              <div className="health-cell">
+                <div className="health-bar"><span style={{ width: `${Math.min(row.health, 100)}%` }} /></div>
+                <small>{row.health}%</small>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+
+      <div className="comparison-insight-grid">
+        <article>
+          <ShieldCheck size={20} />
+          <strong>对比口径</strong>
+          <p>当前阶段按知识库粒度比较，后续可升级到人物、品牌、概念或平台实体。</p>
+        </article>
+        <article>
+          <Network size={20} />
+          <strong>下一步综合</strong>
+          <p>对比结果可以作为跨库综合的输入，生成差异、共性和待验证问题。</p>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function KnowledgeConflictResolverView({ data, setView }) {
+  const typeLabelsMap = {
+    duplicate_material: 'Duplicate material',
+    duplicate_card: 'Duplicate card',
+    needs_review: 'Needs review',
+    unsourced_card: 'Unsourced card',
+  };
+  const severityLabels = {
+    high: 'High',
+    medium: 'Medium',
+    low: 'Low',
+  };
+
+  return (
+    <section className="page-main full advanced-page">
+      <div className="advanced-head">
+        <div>
+          <span>Conflict Resolver</span>
+          <h2>Review knowledge conflicts</h2>
+          <p>集中展示重复、缺来源和需要复核的信号。当前只给处理建议，不会直接修改资料或卡片。</p>
+        </div>
+        <button onClick={() => setView('library')} type="button">Review library</button>
+      </div>
+      <AdvancedOpsTabs active="conflicts" setView={setView} />
+
+      {data.conflictSignals.length === 0 ? (
+        <EmptyState title="暂未发现明显冲突" body="继续导入资料后，重复来源、失败解析和缺来源卡片会出现在这里。" />
+      ) : (
+        <div className="conflict-grid">
+          {data.conflictSignals.map((signal, index) => (
+            <article className={`conflict-card severity-${signal.severity}`} key={`${signal.type}-${signal.title}-${index}`}>
+              <div className="conflict-card-head">
+                <span>{typeLabelsMap[signal.type] ?? signal.type}</span>
+                <strong>{severityLabels[signal.severity] ?? signal.severity}</strong>
+              </div>
+              <h3>{signal.title}</h3>
+              <p>{conflictBody(signal)}</p>
+              <div className="conflict-actions">
+                <button onClick={() => setView(signal.type === 'unsourced_card' ? 'detail' : 'library')} type="button">
+                  Review
+                </button>
+                <button disabled type="button">Auto resolve</button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <section className="advanced-panel conflict-note">
+        <div className="panel-title">
+          <AlertTriangle size={20} />
+          <div>
+            <span>Read-only Guard</span>
+            <h4>处理策略</h4>
+          </div>
+        </div>
+        <p>这个界面暂时只做冲突定位和人工复核入口。自动合并、删除、重写卡片会放到后续有审计记录的数据治理流程里。</p>
+      </section>
+    </section>
+  );
+}
+
+function conflictBody(signal) {
+  if (signal.type === 'duplicate_material') return `${signal.count} 条资料可能来自同一链接或同一段内容，建议先核对来源再合并。`;
+  if (signal.type === 'duplicate_card') return `${signal.count} 张卡片标题相近，建议保留证据最完整的一张。`;
+  if (signal.type === 'needs_review') return '资料解析或内容补全需要人工复核，确认后再生成卡片。';
+  if (signal.type === 'unsourced_card') return '这张卡片缺少明确来源，建议补充引用或降级为草稿。';
+  return '建议先进入来源或知识库详情页人工确认。';
 }
 
 function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMutation, onParseMaterial, parsingMaterialId }) {

@@ -19,6 +19,10 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 | `#detail` | `DetailView` | `kb_detail`, `kb_deep_dive_1`, `kb_deep_dive_2` | Partial | Knowledge base overview, cards, Q&A, recent material exist; deep-dive variants are not fully represented. |
 | `#library` | `LibraryView` | `library`, `instant_capture_inbox`, `interaction_connecting`, `batch_connection_mode`, `collection_summary`, `re_authorize_source`, `data_hygiene` | Partial | Capture, batch input, parsing summary, review recovery, assignment, file import, and hygiene signals exist; deeper automation and standalone modal states remain. |
 | `#search` | `SearchView` | `search`, `semantic_discovery` | Partial | Search exists with local semantic recall v0; semantic discovery layout and saved discovery flows are missing. |
+| `#assets` | `GlobalAssetsDashboard` | `global_knowledge_assets_dashboard_1`, `global_knowledge_assets_dashboard_2` | Partial | Global asset dashboard exists with aggregated materials, cards, artifacts, tasks, review and duplicate signals; persistent analytics and deeper filtering are still missing. |
+| `#synthesis` | `CrossKbSynthesisView` | `cross_kb_synthesis` | Partial | Cross-knowledge-base theme overlap view exists; generated synthesis documents and Pi-backed synthesis are still missing. |
+| `#compare` | `MultiEntityComparisonView` | `multi_entity_comparison_view_1`, `multi_entity_comparison_view_2` | Partial | Entity comparison exists at knowledge-base granularity; extracted entity comparison and expanded states are still missing. |
+| `#conflicts` | `KnowledgeConflictResolverView` | `knowledge_conflict_resolver_1`, `knowledge_conflict_resolver_2` | Partial | Conflict review exists for duplicate, review, and unsourced-card signals; audited merge/delete actions are still missing. |
 | `#kits` | `KitView` | `kit_1`, `kit_2`, `kit_3` | Partial | Kit cards and run entry exist; collection/progress variants are incomplete. |
 | `#workflow` | `WorkflowView` | `workflow_run`, `kit_collection_in_progress` | Partial | Basic run/result view exists; progress and multi-step states need Stitch-aligned treatment. |
 | `#artifact` | `ArtifactView` | `artifact`, `deep_research_artifact`, `product_research_artifact`, `topic_library_artifact`, `xiaohongshu_operation_artifact` | Partial | Typed artifact layouts exist for research, product, topic, Xiaohongshu, and summary views; explicit persisted subtype and editing remain missing. |
@@ -100,13 +104,13 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 
 | Stitch reference | Product intent | Current status | Next implementation action |
 | --- | --- | --- | --- |
-| `cross_kb_synthesis` | Cross-knowledge-base synthesis | Missing | Add after global search and artifact templates stabilize. |
-| `multi_entity_comparison_view_1` | Entity comparison | Missing | Add comparison artifact template. |
-| `multi_entity_comparison_view_2` | Entity comparison variant | Missing | Decide if this is an expanded state. |
-| `global_knowledge_assets_dashboard_1` | Global asset dashboard | Missing | Add after material/card analytics exist. |
-| `global_knowledge_assets_dashboard_2` | Global asset dashboard variant | Missing | Decide if it replaces or complements Search. |
-| `knowledge_conflict_resolver_1` | Conflict resolution | Missing | Add duplicate/conflict detection first. |
-| `knowledge_conflict_resolver_2` | Conflict resolution variant | Missing | Map to resolution review state. |
+| `cross_kb_synthesis` | Cross-knowledge-base synthesis | Partial | `#synthesis` now shows cross-KB theme overlap and suggested synthesis structure; generated reports are deferred. |
+| `multi_entity_comparison_view_1` | Entity comparison | Partial | `#compare` now compares knowledge-base entities by assets and source health. |
+| `multi_entity_comparison_view_2` | Entity comparison variant | Partial | Expanded variant is represented by the same comparison board; entity extraction is still deferred. |
+| `global_knowledge_assets_dashboard_1` | Global asset dashboard | Partial | `#assets` now aggregates global asset counts and recent asset lists. |
+| `global_knowledge_assets_dashboard_2` | Global asset dashboard variant | Partial | Dashboard variant is represented through review/duplicate signal metrics; saved filters are still missing. |
+| `knowledge_conflict_resolver_1` | Conflict resolution | Partial | `#conflicts` now shows duplicate, review, and unsourced-card signals with review entry points. |
+| `knowledge_conflict_resolver_2` | Conflict resolution variant | Partial | Resolver variant is represented as read-only action cards; audited resolution mutations are deferred. |
 | `decomposition` | Decompose topic/material | Missing | Add as a Kit or card operation. |
 | `full_map` | Full knowledge map | Partial | Current map exists; add expanded graph controls and relationship editing. |
 | `interaction_specs` | Interaction and connection reference | Reference | Use when refining graph interactions. |
@@ -141,9 +145,9 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
    persisted export history, PDF output, and optional modal/auto-close behavior.
 4. Finish artifact variants:
    persisted artifact subtype, editable sections, and type-specific generation schemas.
-5. Advanced knowledge operations:
-   `cross_kb_synthesis`, `multi_entity_comparison_view_*`, `knowledge_conflict_resolver_*`, `global_knowledge_assets_dashboard_*`.
+5. Continue advanced knowledge operations:
+   persist filters, add entity extraction, Pi-backed synthesis generation, and audited conflict resolution.
 
 ## Immediate Next Slice
 
-Continue with advanced knowledge operations after a quick visual pass on `#artifact`.
+Run a visual pass on `#assets`, `#synthesis`, `#compare`, and `#conflicts`, then continue with the remaining P0/P1 polish gaps.
