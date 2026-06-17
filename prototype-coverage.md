@@ -17,7 +17,7 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 | --- | --- | --- | --- | --- |
 | `#workspace` | `WorkspaceView` | `workspace`, `professional_workbench` | Partial | Main command and workspace shell exist; still missing richer discovery hub states. |
 | `#detail` | `DetailView` | `kb_detail`, `kb_deep_dive_1`, `kb_deep_dive_2` | Partial | Knowledge base overview, cards, Q&A, recent material exist; deep-dive variants are not fully represented. |
-| `#library` | `LibraryView` | `library`, `instant_capture_inbox` | Partial | Capture, parsing, review, assignment, file import exist; import lifecycle states need dedicated UI. |
+| `#library` | `LibraryView` | `library`, `instant_capture_inbox`, `interaction_connecting`, `batch_connection_mode`, `collection_summary`, `re_authorize_source`, `data_hygiene` | Partial | Capture, batch input, parsing summary, review recovery, assignment, file import, and hygiene signals exist; deeper automation and standalone modal states remain. |
 | `#search` | `SearchView` | `search`, `semantic_discovery` | Partial | Search exists with local semantic recall v0; semantic discovery layout and saved discovery flows are missing. |
 | `#kits` | `KitView` | `kit_1`, `kit_2`, `kit_3` | Partial | Kit cards and run entry exist; collection/progress variants are incomplete. |
 | `#workflow` | `WorkflowView` | `workflow_run`, `kit_collection_in_progress` | Partial | Basic run/result view exists; progress and multi-step states need Stitch-aligned treatment. |
@@ -39,7 +39,7 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 | `kb_deep_dive_1` | Deep knowledge base exploration | Missing | Add deeper card/material analysis panel. |
 | `kb_deep_dive_2` | Deep knowledge base exploration variant | Missing | Decide whether this is a responsive/alternate state or separate mode. |
 | `library` | Material repository | Partial | Keep current functional library and refine visual density against Stitch. |
-| `instant_capture_inbox` | Fast capture inbox | Partial | Add dedicated inbox queue state and pending import rows. |
+| `instant_capture_inbox` | Fast capture inbox | Partial | Inbox exists with batch/file capture; pending queue rows still need stronger visual treatment. |
 | `search` | Global search | Partial | Keep route and improve result hierarchy. |
 | `semantic_discovery` | Semantic discovery | Partial | Add discovery suggestions and related-cluster sections. |
 | `settings` | Settings | Partial | Expand beyond model settings into source, storage, and transparency settings. |
@@ -48,11 +48,11 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 
 | Stitch reference | Product intent | Current status | Next implementation action |
 | --- | --- | --- | --- |
-| `interaction_connecting` | Source connection / parsing state | Missing | Add parser lifecycle panel for connecting, parsing, blocked, retry, and manual review. |
-| `batch_connection_mode` | Batch import mode | Missing | Add batch URL/text import state in Library. |
-| `collection_summary` | Import result summary | Missing | Show summary after batch or parser completion. |
-| `re_authorize_source` | Source re-auth / permission recovery | Missing | Add compliant user-action state for auth/permission failures. |
-| `data_hygiene` | Data cleanup and health | Missing | Add duplicate/empty/failed material cleanup panel. |
+| `interaction_connecting` | Source connection / parsing state | Partial | Library now has lifecycle steps for captured, queued, review, and ingested states; detailed per-source parser timeline is still missing. |
+| `batch_connection_mode` | Batch import mode | Partial | Library now supports one-source-per-line batch capture; batch action side panel is still missing. |
+| `collection_summary` | Import result summary | Partial | Library now shows collection metrics and recent captures; post-task success splash is still missing. |
+| `re_authorize_source` | Source re-auth / permission recovery | Partial | Library now exposes recoverable review items; full authorization modal is deferred until source auth exists. |
+| `data_hygiene` | Data cleanup and health | Partial | Library now shows duplicate/review/failure signals; automatic merge/cleanup actions are still missing. |
 | `system_transparency` | System state and process visibility | Partial | Show parser/provider status and recent task evidence in Settings. |
 
 ### P1: Chat, Recall, And Learning Loop
@@ -130,8 +130,8 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 
 ## Recommended Implementation Order
 
-1. Import and collection lifecycle:
-   `interaction_connecting`, `batch_connection_mode`, `collection_summary`, `re_authorize_source`, `data_hygiene`.
+1. Finish import and collection lifecycle:
+   detailed parser timeline, batch action side panel, and post-task success state.
 2. Chat and recall:
    `chat_onboarding`, `active_chat_1`, `active_chat_2`, `active_chat_3`, `back_loop_to_chat`, `active_recall`.
 3. Export:
@@ -143,9 +143,4 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 
 ## Immediate Next Slice
 
-Implement the import and collection lifecycle screens first, because they directly support the current product promise:
-
-- Save links and local text/documents.
-- Parse or manually complete source material.
-- Show what happened and what needs user action.
-- Keep platform failures recoverable instead of blocking the knowledge-base flow.
+Continue with chat and recall after a quick visual pass on the Library lifecycle panel.

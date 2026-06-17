@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
+  AlertTriangle,
   Bell,
   BookOpen,
   CheckCircle2,
@@ -13,7 +14,9 @@ import {
   FolderOpen,
   History,
   KeyRound,
+  Layers,
   Link2,
+  ListChecks,
   LogOut,
   Network,
   PlugZap,
@@ -104,8 +107,17 @@ const materialFilterOptions = [
   { key: 'parsing', label: 'Parsing' },
 ];
 
+const captureModeOptions = ['auto', 'link', 'text', 'batch'];
 const supportedImportExtensions = ['.md', '.markdown', '.txt'];
 const maxImportedFileSize = 2 * 1024 * 1024;
+
+function splitBatchCaptureInput(value) {
+  return value
+    .split(/\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 30);
+}
 
 const searchScopeOptions = [
   { key: 'all', label: 'All' },
@@ -1264,12 +1276,61 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
     return acc;
   }, { total: 0 });
 
+  const lifecycleStats = useMemo(() => {
+    const sources = new Map();
+    let duplicateSignals = 0;
+    for (const item of items) {
+      const key = (item.sourceUrl || item.rawInput || item.title || '').trim().toLowerCase();
+      if (!key) continue;
+      const next = (sources.get(key) ?? 0) + 1;
+      sources.set(key, next);
+      if (next === 2) duplicateSignals += 1;
+    }
+    return {
+      total: items.length,
+      saved: counts.saved ?? 0,
+      parsing: counts.parsing ?? 0,
+      needsReview: counts.needs_review ?? 0,
+      failed: counts.failed ?? 0,
+      ingested: counts.ingested ?? 0,
+      media: items.reduce((sum, item) => sum + materialMediaUrls(item).length, 0),
+      duplicateSignals,
+      recent: items.slice(0, 4),
+      reviewItems: items.filter((item) => item.parseStatus === 'needs_review' || item.parseStatus === 'failed').slice(0, 3),
+    };
+  }, [items, counts.failed, counts.ingested, counts.needs_review, counts.parsing, counts.saved]);
+
   async function capture() {
     const value = captureValue.trim();
     if (!value || isCapturing || apiStatus !== 'online') return;
     setIsCapturing(true);
-    setStatus('Capturing material...');
+    const batchItems = captureMode === 'batch' ? splitBatchCaptureInput(value) : [];
+    setStatus(captureMode === 'batch' ? 'Capturing batch...' : 'Capturing material...');
     try {
+      if (captureMode === 'batch') {
+        if (batchItems.length === 0) throw new Error('Empty batch.');
+        let captured = 0;
+        let failed = 0;
+        let lastResult = null;
+        for (const input of batchItems) {
+          const response = await fetch('/api/intake', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ input }),
+          });
+          if (response.ok) {
+            lastResult = await response.json();
+            captured += 1;
+          } else {
+            failed += 1;
+          }
+        }
+        if (lastResult) onCaptureResult(lastResult);
+        setCaptureValue('');
+        setStatus(failed ? `${captured} 条已收集，${failed} 条失败。` : `${captured} 条资料已进入收集队列。`);
+        await loadMaterials();
+        return;
+      }
       const response = await fetch('/api/intake', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1447,7 +1508,7 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
             <h3>Inbox</h3>
           </div>
           <div className="capture-mode">
-            {['auto', 'link', 'text'].map((mode) => (
+            {captureModeOptions.map((mode) => (
               <button className={captureMode === mode ? 'active' : ''} key={mode} onClick={() => setCaptureMode(mode)} type="button">
                 {mode}
               </button>
@@ -1459,7 +1520,7 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
             aria-label="快速收集资料"
             value={captureValue}
             onChange={(event) => setCaptureValue(event.target.value)}
-            placeholder={captureMode === 'link' ? 'Paste a source link...' : 'Paste a note, question, or topic...'}
+            placeholder={captureMode === 'batch' ? 'Paste one source, note, or question per line...' : captureMode === 'link' ? 'Paste a source link...' : 'Paste a note, question, or topic...'}
           />
           <div className="capture-actions">
             <button disabled={apiStatus !== 'online' || isCapturing || !captureValue.trim()} onClick={capture} type="button">
@@ -1481,6 +1542,8 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
         </div>
         <p>{status}</p>
       </section>
+
+      <ImportLifecyclePanel apiStatus={apiStatus} stats={lifecycleStats} onReviewItem={openReview} />
 
       <div className="library-toolbar">
         <div className="filter-bar">
@@ -1598,6 +1661,125 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
         })}
       </div>
       )}
+    </section>
+  );
+}
+
+function ImportLifecyclePanel({ apiStatus, stats, onReviewItem }) {
+  const lifecycle = [
+    { key: 'captured', label: 'Captured', value: stats.total, body: 'Raw links, notes, and documents saved locally.' },
+    { key: 'queued', label: 'Queued', value: stats.saved + stats.parsing, body: 'Waiting for parsing, enrichment, or manual completion.' },
+    { key: 'review', label: 'Review', value: stats.needsReview + stats.failed, body: 'Needs user action before it can become knowledge cards.' },
+    { key: 'ingested', label: 'Ingested', value: stats.ingested, body: 'Converted into structured knowledge assets.' },
+  ];
+  const hasReview = stats.reviewItems.length > 0;
+
+  return (
+    <section className="import-lifecycle-panel" aria-label="导入生命周期">
+      <div className="lifecycle-summary">
+        <div>
+          <span>Collection Summary</span>
+          <h3>{stats.total ? '采集队列正在形成知识资产' : '等待第一批资料进入队列'}</h3>
+          <p>
+            {apiStatus === 'online'
+              ? '链接、文本和文档会先进入资料库，再根据解析状态进入补全、归属和卡片生成。'
+              : 'API 离线时仍可观察界面状态；重新连接后资料队列会自动同步。'}
+          </p>
+        </div>
+        <div className="lifecycle-metrics">
+          <strong>{stats.total}</strong>
+          <span>materials</span>
+          <strong>{stats.media}</strong>
+          <span>media</span>
+          <strong>{stats.ingested}</strong>
+          <span>ready</span>
+        </div>
+      </div>
+
+      <div className="lifecycle-steps">
+        {lifecycle.map((step) => (
+          <article className={step.key === 'review' && step.value > 0 ? 'attention' : ''} key={step.key}>
+            <div>
+              {step.key === 'review' && step.value > 0 ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
+              <span>{step.label}</span>
+            </div>
+            <strong>{step.value}</strong>
+            <p>{step.body}</p>
+          </article>
+        ))}
+      </div>
+
+      <div className="lifecycle-workbench">
+        <article className={hasReview ? 'source-recovery-card needs-action' : 'source-recovery-card'}>
+          <div className="panel-title">
+            <AlertTriangle size={20} />
+            <div>
+              <span>Source Recovery</span>
+              <h4>{hasReview ? '有资料需要手动处理' : '来源连接状态正常'}</h4>
+            </div>
+          </div>
+          {hasReview ? (
+            <div className="recovery-list">
+              {stats.reviewItems.map((item) => (
+                <button key={item.id} onClick={() => onReviewItem(item)} type="button">
+                  <span>{item.platform ?? item.type}</span>
+                  <strong>{item.title}</strong>
+                  <small>{item.parseError ?? '等待补全正文或媒体链接。'}</small>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p>当前没有失败或需要复核的资料。后续如果平台解析受限，会在这里提供可恢复入口。</p>
+          )}
+        </article>
+
+        <article className="data-hygiene-card">
+          <div className="panel-title">
+            <ListChecks size={20} />
+            <div>
+              <span>Data Hygiene</span>
+              <h4>清洗信号</h4>
+            </div>
+          </div>
+          <div className="hygiene-grid">
+            <div>
+              <strong>{stats.duplicateSignals}</strong>
+              <span>possible duplicates</span>
+            </div>
+            <div>
+              <strong>{stats.needsReview}</strong>
+              <span>needs review</span>
+            </div>
+            <div>
+              <strong>{stats.failed}</strong>
+              <span>failed</span>
+            </div>
+          </div>
+          <p>先用这些信号定位需要处理的资料；真正的自动去重和合并建议会在后续数据治理切片接入。</p>
+        </article>
+
+        <article className="recent-capture-card">
+          <div className="panel-title">
+            <Layers size={20} />
+            <div>
+              <span>Recent Captures</span>
+              <h4>最近进入队列</h4>
+            </div>
+          </div>
+          {stats.recent.length === 0 ? (
+            <p>暂无资料。可以从上方粘贴链接、文本，或导入 Markdown / TXT 文档。</p>
+          ) : (
+            <ol>
+              {stats.recent.map((item) => (
+                <li key={item.id}>
+                  <span>{statusLabels[item.parseStatus] ?? item.parseStatus}</span>
+                  <strong>{item.title}</strong>
+                </li>
+              ))}
+            </ol>
+          )}
+        </article>
+      </div>
     </section>
   );
 }

@@ -1736,6 +1736,232 @@ button { cursor: pointer; }
   font-size: 13px;
 }
 
+.import-lifecycle-panel {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.lifecycle-summary,
+.lifecycle-steps article,
+.source-recovery-card,
+.data-hygiene-card,
+.recent-capture-card {
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 2px 6px rgba(9, 20, 38, 0.03);
+}
+
+.lifecycle-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: center;
+  padding: 20px;
+}
+
+.lifecycle-summary span,
+.panel-title span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.lifecycle-summary h3,
+.panel-title h4 {
+  margin: 4px 0 0;
+  color: var(--primary);
+}
+
+.lifecycle-summary h3 {
+  font-size: 24px;
+}
+
+.lifecycle-summary p,
+.source-recovery-card p,
+.data-hygiene-card p,
+.recent-capture-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.lifecycle-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 2px 14px;
+  align-items: baseline;
+  min-width: 280px;
+  border-left: 1px solid var(--line-soft);
+  padding-left: 20px;
+}
+
+.lifecycle-metrics strong {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.lifecycle-metrics span {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: lowercase;
+}
+
+.lifecycle-steps,
+.lifecycle-workbench {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.lifecycle-steps article {
+  display: grid;
+  gap: 10px;
+  min-height: 152px;
+  padding: 16px;
+  border-top: 4px solid var(--surface-high);
+}
+
+.lifecycle-steps article.attention {
+  border-top-color: var(--error);
+  background: rgba(255, 250, 250, 0.86);
+}
+
+.lifecycle-steps article > div,
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lifecycle-steps article svg,
+.panel-title svg {
+  color: var(--sage-text);
+  flex: 0 0 auto;
+}
+
+.lifecycle-steps article.attention svg,
+.source-recovery-card.needs-action .panel-title svg {
+  color: var(--error);
+}
+
+.lifecycle-steps article > div span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.lifecycle-steps article strong {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.lifecycle-steps article p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.lifecycle-workbench {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
+}
+
+.source-recovery-card,
+.data-hygiene-card,
+.recent-capture-card {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 220px;
+  padding: 18px;
+}
+
+.source-recovery-card.needs-action {
+  border-color: #f3aaa3;
+}
+
+.recovery-list {
+  display: grid;
+  gap: 10px;
+}
+
+.recovery-list button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--primary);
+  padding: 12px;
+  text-align: left;
+}
+
+.recovery-list button span,
+.recovery-list button small,
+.recent-capture-card li span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.recovery-list button strong,
+.recent-capture-card li strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hygiene-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.hygiene-grid div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface-low);
+  padding: 12px;
+}
+
+.hygiene-grid strong {
+  font-size: 26px;
+}
+
+.hygiene-grid span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.recent-capture-card ol {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recent-capture-card li {
+  display: grid;
+  gap: 4px;
+  border-bottom: 1px solid var(--line-soft);
+  padding-bottom: 10px;
+}
+
+.recent-capture-card li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
 .library-toolbar {
   justify-content: space-between;
   gap: 16px;
@@ -2481,6 +2707,23 @@ button { cursor: pointer; }
   .file-import-button {
     min-height: 46px;
     width: 100%;
+  }
+  .lifecycle-summary,
+  .lifecycle-workbench {
+    grid-template-columns: 1fr;
+  }
+  .lifecycle-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    min-width: 0;
+    border-left: 0;
+    border-top: 1px solid var(--line-soft);
+    padding: 14px 0 0;
+  }
+  .lifecycle-steps {
+    grid-template-columns: 1fr;
+  }
+  .hygiene-grid {
+    grid-template-columns: 1fr;
   }
   .library-grid,
   .kit-grid {
