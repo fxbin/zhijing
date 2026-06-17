@@ -2957,6 +2957,109 @@ button { cursor: pointer; }
   color: var(--error);
 }
 
+.capture-success-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 22px;
+  border: 1px solid var(--sage);
+  border-left: 4px solid var(--sage);
+  border-radius: 12px;
+  background: rgba(109, 254, 156, 0.12);
+  box-shadow: 0 2px 8px rgba(9, 20, 38, 0.06);
+  padding: 16px 20px;
+  animation: capture-success-in 0.25s ease;
+}
+
+.capture-success-banner > svg {
+  flex: 0 0 auto;
+  color: var(--sage-text);
+  margin-top: 2px;
+}
+
+.capture-success-body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.capture-success-body strong {
+  font-size: 15px;
+  color: var(--primary);
+}
+
+.capture-success-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.capture-success-meta span {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--sage-text);
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.capture-success-recent {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.capture-success-recent li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.capture-success-status {
+  flex: 0 0 auto;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--sage-text);
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.capture-success-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.capture-success-cta {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.capture-success-cta button {
+  min-height: 34px;
+  border: 1px solid var(--sage);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--sage-text);
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@keyframes capture-success-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .library-search {
   flex: 0 1 310px;
   gap: 8px;

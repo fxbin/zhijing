@@ -2348,6 +2348,12 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchProgress, setBatchProgress] = useState(null);
   const [batchAssignTarget, setBatchAssignTarget] = useState('');
+  const [captureSummary, setCaptureSummary] = useState(null);
+  useEffect(() => {
+    if (!captureSummary) return undefined;
+    const timer = setTimeout(() => setCaptureSummary(null), 9000);
+    return () => clearTimeout(timer);
+  }, [captureSummary]);
 
   async function loadMaterials() {
     setIsLoading(true);
@@ -2491,6 +2497,7 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
         if (lastResult) onCaptureResult(lastResult);
         setCaptureValue('');
         setStatus(failed ? `${captured} 条已收集，${failed} 条失败。` : `${captured} 条资料已进入收集队列。`);
+        setCaptureSummary({ message: failed ? `${captured} 条已收集，${failed} 条失败。` : `${captured} 条资料已进入收集队列`, count: captured, at: Date.now() });
         await loadMaterials();
         return;
       }
@@ -2504,6 +2511,7 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
       onCaptureResult(result);
       setCaptureValue('');
       setStatus(result.message);
+      setCaptureSummary({ message: result.message || '资料已进入收集队列', count: 1, at: Date.now() });
       await loadMaterials();
     } catch {
       setStatus('收集失败，请确认 API 正在运行。');
@@ -2544,6 +2552,7 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
       const result = await response.json();
       onCaptureResult(result);
       setStatus(result.message);
+      setCaptureSummary({ message: result.message || '本地文档已进入收集队列', count: 1, at: Date.now() });
       await loadMaterials();
     } catch {
       setStatus('导入本地文档失败，请确认文件内容可读取。');
@@ -2755,6 +2764,18 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
           <span>{counts.failed ?? 0} failed</span>
         </div>
       </div>
+
+      {captureSummary && (
+        <CaptureSuccessBanner
+          summary={captureSummary}
+          stats={lifecycleStats}
+          onReview={() => {
+            const target = lifecycleStats.reviewItems[0];
+            if (target) openReview(target);
+          }}
+          onDismiss={() => setCaptureSummary(null)}
+        />
+      )}
 
       <section className="quick-capture-panel">
         <div className="capture-head">
@@ -3094,6 +3115,37 @@ function ImportLifecyclePanel({ apiStatus, stats, onReviewItem }) {
         </article>
       </div>
     </section>
+  );
+}
+
+function CaptureSuccessBanner({ summary, stats, onReview, onDismiss }) {
+  const reviewable = (stats.needsReview ?? 0) + (stats.failed ?? 0);
+  return (
+    <div className="capture-success-banner" role="status">
+      <CheckCircle2 size={22} />
+      <div className="capture-success-body">
+        <strong>{summary.message}</strong>
+        <div className="capture-success-meta">
+          <span>{stats.total} 资料</span>
+          <span>{stats.ingested ?? 0} 已入库</span>
+          {reviewable > 0 && <span>{reviewable} 待处理</span>}
+        </div>
+        {stats.recent.length > 0 && (
+          <ul className="capture-success-recent">
+            {stats.recent.slice(0, 3).map((item) => (
+              <li key={item.id}>
+                <span className="capture-success-status">{statusLabels[item.parseStatus] ?? item.parseStatus}</span>
+                <span className="capture-success-title">{item.title}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="capture-success-cta">
+          {reviewable > 0 && <button type="button" onClick={onReview}>去复核</button>}
+          <button type="button" onClick={onDismiss}>知道了</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
