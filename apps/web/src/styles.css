@@ -2860,6 +2860,34 @@ button { cursor: pointer; }
   margin-bottom: 0;
 }
 
+.library-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: 62px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.library-select-all input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--scholar);
+  cursor: pointer;
+}
+
+.library-select-all input:disabled {
+  cursor: not-allowed;
+}
+
 .library-search {
   flex: 0 1 310px;
   gap: 8px;
@@ -2902,6 +2930,25 @@ button { cursor: pointer; }
 
 .library-card.ready {
   border-top: 4px solid var(--sage);
+}
+
+.library-card.selected {
+  border-color: var(--scholar);
+  box-shadow: 0 0 0 2px var(--scholar-soft), 0 2px 6px rgba(9, 20, 38, 0.03);
+}
+
+.library-card-select {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
+.library-card-select input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--scholar);
+  cursor: pointer;
 }
 
 .library-card-head {

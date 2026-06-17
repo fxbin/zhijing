@@ -2343,6 +2343,7 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
   const [isImportingFile, setIsImportingFile] = useState(false);
   const [mutatingMaterialId, setMutatingMaterialId] = useState(null);
   const [status, setStatus] = useState('Loading materials...');
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
 
   async function loadMaterials() {
     setIsLoading(true);
@@ -2396,6 +2397,36 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
     if (filter === 'failed' || filter === 'parsing') return item.parseStatus === filter;
     return item.type === filter;
   });
+
+  const visibleIds = filteredItems.map((item) => item.id);
+  const selectedVisibleCount = visibleIds.filter((id) => selectedIds.has(id)).length;
+  const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected;
+
+  function toggleMaterialSelection(id) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAllVisible() {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (allVisibleSelected) {
+        for (const id of visibleIds) next.delete(id);
+      } else {
+        for (const id of visibleIds) next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
 
   const counts = items.reduce((acc, item) => {
     acc.total += 1;
@@ -2674,6 +2705,17 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
       <ImportLifecyclePanel apiStatus={apiStatus} stats={lifecycleStats} onReviewItem={openReview} />
 
       <div className="library-toolbar">
+        <label className={`library-select-all ${allVisibleSelected ? 'is-checked' : ''} ${someVisibleSelected ? 'is-indeterminate' : ''}`}>
+          <input
+            type="checkbox"
+            aria-label="全选当前可见资料"
+            checked={allVisibleSelected}
+            ref={(node) => { if (node) node.indeterminate = someVisibleSelected; }}
+            onChange={toggleSelectAllVisible}
+            disabled={filteredItems.length === 0}
+          />
+          <span>{selectedIds.size > 0 ? `已选 ${selectedIds.size}` : '全选'}</span>
+        </label>
         <div className="filter-bar">
           {materialFilterOptions.map((option) => (
             <button className={filter === option.key ? 'active' : ''} key={option.key} onClick={() => setFilter(option.key)} type="button">
@@ -2696,8 +2738,16 @@ function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMut
         {filteredItems.map((item) => {
           const Icon = materialIcon(item.type);
           return (
-          <article className={`library-card ${materialState(item.parseStatus)}`} key={item.id}>
+          <article className={`library-card ${materialState(item.parseStatus)} ${selectedIds.has(item.id) ? 'selected' : ''}`} key={item.id}>
             <div className="library-card-head">
+              <label className="library-card-select">
+                <input
+                  type="checkbox"
+                  aria-label={`选择 ${item.title}`}
+                  checked={selectedIds.has(item.id)}
+                  onChange={() => toggleMaterialSelection(item.id)}
+                />
+              </label>
               <Icon size={22} />
               <div className="material-meta">
                 <span>{typeLabels[item.type] ?? item.type}</span>
