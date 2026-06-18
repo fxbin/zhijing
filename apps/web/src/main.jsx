@@ -4864,6 +4864,32 @@ function SearchView() {
   const [isSearching, setIsSearching] = useState(false);
 
   const visibleResults = results.filter((result) => scope === 'all' || result.kind === scope);
+  const maxScore = visibleResults.reduce((max, result) => Math.max(max, Number(result.score) || 0), 0);
+  const discoveryTags = useMemo(() => {
+    if (visibleResults.length === 0) return [];
+    const tokens = visibleResults
+      .flatMap((result) => `${result.title ?? ''} ${result.preview ?? ''}`.split(/[\s,，。、；;:：]+/))
+      .filter((token) => token.length >= 2 && token.length <= 12)
+      .filter((token) => !query.toLowerCase().includes(token.toLowerCase()));
+    const freq = {};
+    for (const token of tokens) freq[token] = (freq[token] ?? 0) + 1;
+    return Object.entries(freq)
+      .filter(([, count]) => count >= 2)
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 8)
+      .map(([token]) => token);
+  }, [visibleResults, query]);
+  const resultClusters = useMemo(() => {
+    if (visibleResults.length === 0) return [];
+    const buckets = {};
+    for (const result of visibleResults) {
+      const key = result.knowledgeBaseId ?? 'unassigned';
+      if (!buckets[key]) buckets[key] = { id: key, title: result.metadata?.knowledgeBaseTitle ?? `知识库 ${key.slice(0, 8)}`, count: 0, results: [] };
+      buckets[key].count += 1;
+      buckets[key].results.push(result);
+    }
+    return Object.values(buckets).sort((left, right) => right.count - left.count);
+  }, [visibleResults]);
 
   async function runSearch(nextQuery = query) {
     const value = nextQuery.trim();
@@ -4991,6 +5017,23 @@ function SearchView() {
                   </button>
                 ))}
               </div>
+              {resultClusters.length > 1 && (
+                <div className="discovery-clusters">
+                  <header className="discovery-head">
+                    <Layers size={18} />
+                    <strong>结果聚类</strong>
+                  </header>
+                  <p>按知识库分组，查看结果分布。</p>
+                  <div className="cluster-list">
+                    {resultClusters.map((cluster) => (
+                      <div className="cluster-summary" key={cluster.id}>
+                        <strong>{cluster.title}</strong>
+                        <span>{cluster.count} 项</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </aside>
           )}
         </div>

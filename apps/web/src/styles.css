@@ -5401,6 +5401,41 @@ button { cursor: pointer; }
   background: var(--surface);
 }
 
+.discovery-clusters {
+  border-top: 1px solid var(--line-soft);
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.discovery-clusters .discovery-head {
+  margin-bottom: 8px;
+}
+
+.cluster-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cluster-summary {
+  align-items: center;
+  background: var(--surface-low);
+  border-radius: 6px;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 8px 12px;
+}
+
+.cluster-summary strong {
+  font-size: 13px;
+}
+
+.cluster-summary span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .search-result-card.skeleton {
   align-items: start;
 }
