@@ -2835,6 +2835,99 @@ button { cursor: pointer; }
   white-space: nowrap;
 }
 
+.export-history-empty {
+  margin: 0;
+  border: 1px dashed var(--line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--muted);
+  padding: 18px;
+  font-size: 13px;
+}
+
+.export-history-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.export-history-item > div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 14px 16px;
+}
+
+.export-history-item strong {
+  font-size: 14px;
+  color: var(--primary);
+}
+
+.export-history-item span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.export-progress-panel .export-actions {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.export-actions button.ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+
+.export-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(9, 20, 38, 0.45);
+  padding: 24px;
+}
+
+.export-modal-card {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  width: min(420px, 100%);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 18px 40px rgba(9, 20, 38, 0.18);
+  padding: 28px 24px;
+  text-align: center;
+}
+
+.export-modal-card svg {
+  color: var(--sage-text);
+}
+
+.export-modal-card strong {
+  font-size: 17px;
+  color: var(--primary);
+}
+
+.export-modal-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.export-modal-card .export-actions {
+  margin-top: 8px;
+  justify-content: center;
+}
+
 .filter-bar {
   display: flex;
   flex-wrap: wrap;

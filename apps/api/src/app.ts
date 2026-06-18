@@ -7,6 +7,7 @@ import {
   deleteMaterial,
   editCardContent,
   getDashboard,
+  recordExport,
   getKnowledgeBaseAnalytics,
   getKnowledgeBase,
   getKnowledgeMap,
@@ -15,6 +16,7 @@ import {
   intakeKnowledge,
   KnowledgeCoreError,
   listDueCards,
+  listExports,
   listMessages,
   listCardRevisions,
   recordCardReview,
@@ -186,6 +188,34 @@ export function buildApi() {
   app.get<{ Params: { id: string } }>('/api/cards/:id/revisions', async (request, reply) => {
     const revisions = await listCardRevisions(request.params.id);
     return { revisions };
+  });
+
+  app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/exports', async (request, reply) => {
+    const exports = await listExports(request.params.id);
+    return { exports };
+  });
+
+  app.post<{ Params: { id: string }; Body: { format?: string; scope?: string; includeArtifacts?: boolean; filename?: string; materialCount?: number; cardCount?: number; artifactCount?: number } }>('/api/knowledge-bases/:id/exports', async (request, reply) => {
+    const body = request.body ?? {};
+    const format = body.format;
+    if (format !== 'markdown' && format !== 'json' && format !== 'pdf') {
+      return reply.status(400).send({ error: 'format must be one of markdown/json/pdf' });
+    }
+    const scope = body.scope;
+    if (scope !== 'all' && scope !== 'materials' && scope !== 'cards') {
+      return reply.status(400).send({ error: 'scope must be one of all/materials/cards' });
+    }
+    const filename = typeof body.filename === 'string' && body.filename.trim().length > 0 ? body.filename.trim() : `export.${format === 'markdown' ? 'md' : format}`;
+    const record = await recordExport(request.params.id, {
+      format,
+      scope,
+      includeArtifacts: Boolean(body.includeArtifacts),
+      filename,
+      materialCount: Number.isFinite(body.materialCount) ? Math.max(0, body.materialCount ?? 0) : 0,
+      cardCount: Number.isFinite(body.cardCount) ? Math.max(0, body.cardCount ?? 0) : 0,
+      artifactCount: Number.isFinite(body.artifactCount) ? Math.max(0, body.artifactCount ?? 0) : 0,
+    });
+    return { export: record };
   });
 
   app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/map', async (request, reply) => {

@@ -7,6 +7,9 @@ import {
   type CardRevision,
   type CardRevisionField,
   type ChatMessage,
+  type ExportFormat,
+  type ExportRecord,
+  type ExportScope,
   type RecallGrade,
   classifyInput,
   type CompleteMaterialReviewRequest,
@@ -71,6 +74,7 @@ type StoreState = {
   artifacts: ArtifactRecord[];
   messages: ChatMessage[];
   cardRevisions: CardRevision[];
+  exports: ExportRecord[];
   modelProviderConfig?: PersistedModelProviderConfig;
 };
 
@@ -90,6 +94,8 @@ type KnowledgeRepository = {
   listCards(knowledgeBaseId?: string): KnowledgeCard[];
   insertCardRevision(revision: CardRevision): void;
   listCardRevisions(cardId: string): CardRevision[];
+  insertExportRecord(record: ExportRecord): void;
+  listExportRecords(knowledgeBaseId?: string): ExportRecord[];
   insertTask(task: AgentTask): void;
   updateTask(task: AgentTask): void;
   listTasks(limit?: number): AgentTask[];
@@ -148,6 +154,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     artifacts: [],
     messages: [],
     cardRevisions: [],
+    exports: [],
   };
 
   insertKnowledgeBase(base: KnowledgeBaseSummary) {
@@ -221,6 +228,16 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     return this.state.cardRevisions
       .filter((item) => item.cardId === cardId)
       .sort((a, b) => a.version - b.version);
+  }
+
+  insertExportRecord(record: ExportRecord) {
+    this.state.exports.unshift(record);
+  }
+
+  listExportRecords(knowledgeBaseId?: string) {
+    return knowledgeBaseId
+      ? this.state.exports.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
+      : this.state.exports;
   }
 
   insertTask(task: AgentTask) {
@@ -548,6 +565,32 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     return rows.map(mapCardRevision);
   }
 
+  insertExportRecord(record: ExportRecord) {
+    this.db.prepare(`
+      INSERT INTO exports (
+        id, knowledge_base_id, format, scope, include_artifacts, material_count, card_count, artifact_count, filename, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      record.id,
+      record.knowledgeBaseId,
+      record.format,
+      record.scope,
+      record.includeArtifacts ? 1 : 0,
+      record.materialCount,
+      record.cardCount,
+      record.artifactCount,
+      record.filename,
+      record.createdAt,
+    );
+  }
+
+  listExportRecords(knowledgeBaseId?: string) {
+    const rows = knowledgeBaseId
+      ? this.db.prepare('SELECT * FROM exports WHERE knowledge_base_id = ? ORDER BY created_at DESC').all(knowledgeBaseId)
+      : this.db.prepare('SELECT * FROM exports ORDER BY created_at DESC').all();
+    return (rows as ExportRow[]).map(mapExportRecord);
+  }
+
   insertTask(task: AgentTask) {
     this.db.prepare(`
       INSERT INTO tasks (
@@ -729,6 +772,19 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         created_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS exports (
+        id TEXT PRIMARY KEY,
+        knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+        format TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        include_artifacts INTEGER NOT NULL,
+        material_count INTEGER NOT NULL,
+        card_count INTEGER NOT NULL,
+        artifact_count INTEGER NOT NULL,
+        filename TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
         workflow TEXT NOT NULL,
@@ -775,6 +831,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       CREATE INDEX IF NOT EXISTS idx_materials_knowledge_base_id ON materials(knowledge_base_id);
       CREATE INDEX IF NOT EXISTS idx_cards_knowledge_base_id ON cards(knowledge_base_id);
       CREATE INDEX IF NOT EXISTS idx_card_revisions_card_id ON card_revisions(card_id, version);
+      CREATE INDEX IF NOT EXISTS idx_exports_knowledge_base_id ON exports(knowledge_base_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at);
       CREATE INDEX IF NOT EXISTS idx_artifacts_knowledge_base_id ON artifacts(knowledge_base_id);
       CREATE INDEX IF NOT EXISTS idx_messages_knowledge_base_id ON messages(knowledge_base_id);
@@ -957,6 +1014,34 @@ function parseRevisionFields(json: string): CardRevisionField[] {
   } catch {
     return [];
   }
+}
+
+type ExportRow = {
+  id: string;
+  knowledge_base_id: string;
+  format: ExportFormat;
+  scope: ExportScope;
+  include_artifacts: number;
+  material_count: number;
+  card_count: number;
+  artifact_count: number;
+  filename: string;
+  created_at: string;
+};
+
+function mapExportRecord(row: ExportRow): ExportRecord {
+  return {
+    id: row.id,
+    knowledgeBaseId: row.knowledge_base_id,
+    format: row.format,
+    scope: row.scope,
+    includeArtifacts: row.include_artifacts === 1,
+    materialCount: row.material_count,
+    cardCount: row.card_count,
+    artifactCount: row.artifact_count,
+    filename: row.filename,
+    createdAt: row.created_at,
+  };
 }
 
 const RECALL_EASE_FLOOR = 1.3;
@@ -3451,6 +3536,37 @@ export function editCardContent(cardId: string, changes: CardContentEdit): CardE
 
 export function listCardRevisions(cardId: string): CardRevision[] {
   return repository.listCardRevisions(cardId);
+}
+
+export type ExportSummary = {
+  format: ExportFormat;
+  scope: ExportScope;
+  includeArtifacts: boolean;
+  filename: string;
+  materialCount: number;
+  cardCount: number;
+  artifactCount: number;
+};
+
+export function recordExport(knowledgeBaseId: string, summary: ExportSummary): ExportRecord {
+  const record: ExportRecord = {
+    id: `export_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    knowledgeBaseId,
+    format: summary.format,
+    scope: summary.scope,
+    includeArtifacts: summary.includeArtifacts,
+    materialCount: summary.materialCount,
+    cardCount: summary.cardCount,
+    artifactCount: summary.artifactCount,
+    filename: summary.filename,
+    createdAt: new Date().toISOString(),
+  };
+  repository.insertExportRecord(record);
+  return record;
+}
+
+export function listExports(knowledgeBaseId: string): ExportRecord[] {
+  return repository.listExportRecords(knowledgeBaseId);
 }
 
 export function listDueCards(knowledgeBaseId: string, limit?: number): KnowledgeCard[] {

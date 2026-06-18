@@ -2169,6 +2169,9 @@ function ExportView({ detail, setView }) {
   const [exportState, setExportState] = useState('idle');
   const [progress, setProgress] = useState(0);
   const [lastExport, setLastExport] = useState(null);
+  const [exportHistory, setExportHistory] = useState([]);
+  const [useModal, setUseModal] = useState(false);
+  const [autoClose, setAutoClose] = useState(true);
   const materials = detail.materials ?? [];
   const cards = detail.cards ?? [];
   const artifacts = detail.artifacts ?? [];
@@ -2184,6 +2187,23 @@ function ExportView({ detail, setView }) {
   ];
 
   useEffect(() => {
+    if (!detail?.id) return undefined;
+    let ignore = false;
+    async function loadHistory() {
+      try {
+        const response = await fetch(`/api/knowledge-bases/${detail.id}/exports`);
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (!ignore) setExportHistory(payload.exports ?? []);
+      } catch {
+        return;
+      }
+    }
+    loadHistory();
+    return () => { ignore = true; };
+  }, [detail?.id]);
+
+  useEffect(() => {
     if (exportState !== 'running') return undefined;
     setProgress(18);
     const steps = [38, 64, 86, 100];
@@ -2194,8 +2214,17 @@ function ExportView({ detail, setView }) {
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [exportState]);
 
+  useEffect(() => {
+    if (exportState !== 'success' || !autoClose) return undefined;
+    const timer = window.setTimeout(() => {
+      setExportState('idle');
+      setProgress(0);
+    }, 3200);
+    return () => window.clearTimeout(timer);
+  }, [exportState, autoClose]);
+
   function buildExport() {
-    const extension = format === 'json' ? 'json' : 'md';
+    const extension = format === 'json' ? 'json' : format === 'pdf' ? 'pdf' : 'md';
     const filename = `${safeFilename(detail.title)}-export.${extension}`;
     const content = format === 'json'
       ? knowledgeBaseExportJson(detail, options)
@@ -2210,10 +2239,46 @@ function ExportView({ detail, setView }) {
     setProgress(0);
   }
 
-  function downloadLastExport() {
+  async function recordExportHistory(prepared) {
+    if (!detail?.id) return;
+    try {
+      const response = await fetch(`/api/knowledge-bases/${detail.id}/exports`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          format,
+          scope,
+          includeArtifacts,
+          filename: prepared.filename,
+          materialCount: options.includeMaterials ? materials.length : 0,
+          cardCount: options.includeCards ? cards.length : 0,
+          artifactCount: options.includeArtifacts ? artifacts.length : 0,
+        }),
+      });
+      if (!response.ok) return;
+      const payload = await response.json();
+      if (payload.export) setExportHistory((current) => [payload.export, ...current]);
+    } catch {
+      return;
+    }
+  }
+
+  async function downloadLastExport() {
     const prepared = lastExport ?? buildExport();
     downloadTextFile(prepared.filename, prepared.content, prepared.type);
     setLastExport(prepared);
+    await recordExportHistory(prepared);
+  }
+
+  function printPdf() {
+    const prepared = lastExport ?? buildExport();
+    setLastExport(prepared);
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    printWindow.document.write(`<html><head><meta charset="utf-8"><title>${prepared.filename}</title><style>body{font-family:Inter,system-ui,sans-serif;line-height:1.7;color:#1b2738;max-width:760px;margin:48px auto;padding:0 24px}h1{font-size:22px}h2{font-size:17px;margin-top:24px}pre{white-space:pre-wrap;word-break:break-word;background:#f6f7f9;padding:12px;border-radius:8px}</style></head><body><pre>${prepared.content.replace(/</g, '&lt;')}</pre></body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
   }
 
   function downloadBackup() {
@@ -2224,6 +2289,11 @@ function ExportView({ detail, setView }) {
     );
   }
 
+  function closeSuccess() {
+    setExportState('idle');
+    setProgress(0);
+  }
+
   return (
     <section className="page-main full">
       <div className="export-workbench">
@@ -2231,7 +2301,7 @@ function ExportView({ detail, setView }) {
           <div>
             <span>Export Management</span>
             <h2>Archive current knowledge base</h2>
-            <p>把当前知识库导出为 Markdown 或 JSON。第一版先做本地下载，后续再接导出历史和云端备份。</p>
+            <p>把当前知识库导出为 Markdown、JSON 或可打印的 PDF。导出记录会写入本地数据库，便于追溯历史版本；当前版本不会上传任何内容到云端。</p>
           </div>
           <div className="export-head-actions">
             <button onClick={() => setView('detail')} type="button">Back</button>
@@ -2255,6 +2325,7 @@ function ExportView({ detail, setView }) {
               {[
                 { key: 'markdown', label: 'Markdown', body: 'For PKM tools and readable archives.' },
                 { key: 'json', label: 'JSON', body: 'Raw structured backup for later import.' },
+                { key: 'pdf', label: 'PDF', body: 'Print-friendly archive via browser print.' },
               ].map((option) => (
                 <button className={format === option.key ? 'active' : ''} key={option.key} onClick={() => setFormat(option.key)} type="button">
                   <strong>{option.label}</strong>
@@ -2276,6 +2347,14 @@ function ExportView({ detail, setView }) {
             <label className="export-checkbox">
               <input checked={includeArtifacts} onChange={(event) => setIncludeArtifacts(event.target.checked)} type="checkbox" />
               Include generated artifacts
+            </label>
+            <label className="export-checkbox">
+              <input checked={useModal} onChange={(event) => setUseModal(event.target.checked)} type="checkbox" />
+              成功时使用模态弹层展示
+            </label>
+            <label className="export-checkbox">
+              <input checked={autoClose} onChange={(event) => setAutoClose(event.target.checked)} type="checkbox" />
+              成功后自动收起（约 3 秒）
             </label>
           </section>
 
@@ -2301,12 +2380,25 @@ function ExportView({ detail, setView }) {
                 <CheckCircle2 size={26} />
                 <div>
                   <strong>导出成功</strong>
-                  <p>{lastExport?.filename ?? 'Export file'} 已生成，可以下载到本地。</p>
+                  <p>{lastExport?.filename ?? 'Export file'} 已生成，可以下载到本地或打印为 PDF。</p>
                 </div>
               </div>
             ) : (
               <p>配置完成后开始导出。当前流程不会上传任何内容，只会在本地生成文件。</p>
             )}
+            <div className="export-actions">
+              <button disabled={exportState === 'running'} onClick={startExport} type="button">
+                {exportState === 'running' ? 'Exporting' : 'Start Export'}
+              </button>
+              {format === 'pdf' ? (
+                <button disabled={exportState !== 'success'} onClick={printPdf} type="button">打印为 PDF</button>
+              ) : (
+                <button disabled={exportState !== 'success'} onClick={downloadLastExport} type="button">Download</button>
+              )}
+              {exportState === 'success' && autoClose && (
+                <button className="ghost" onClick={closeSuccess} type="button">收起</button>
+              )}
+            </div>
           </section>
         </div>
 
@@ -2315,24 +2407,44 @@ function ExportView({ detail, setView }) {
             <History size={20} />
             <div>
               <span>Export History</span>
-              <h4>本次导出</h4>
+              <h4>{exportHistory.length > 0 ? `已记录 ${exportHistory.length} 次导出` : '尚无持久化记录'}</h4>
             </div>
           </div>
-          <div className="export-history-row">
-            <div>
-              <strong>{lastExport?.filename ?? `${safeFilename(detail.title)}-export.${format === 'json' ? 'json' : 'md'}`}</strong>
-              <span>{format.toUpperCase()} · {scope} · {new Date().toLocaleDateString()}</span>
-            </div>
-            <div className="export-actions">
-              <button disabled={exportState === 'running'} onClick={startExport} type="button">
-                {exportState === 'running' ? 'Exporting' : 'Start Export'}
-              </button>
-              <button disabled={exportState !== 'success'} onClick={downloadLastExport} type="button">
-                Download
-              </button>
-            </div>
-          </div>
+          {exportHistory.length === 0 ? (
+            <p className="export-history-empty">完成首次导出后，记录会出现在这里，便于追溯历史版本。记录保存在本地数据库，不会上传云端。</p>
+          ) : (
+            <ul className="export-history-list">
+              {exportHistory.map((item) => (
+                <li className="export-history-item" key={item.id}>
+                  <div>
+                    <strong>{item.filename}</strong>
+                    <span>
+                      {item.format.toUpperCase()} · {item.scope} · 卡片 {item.cardCount} · 资料 {item.materialCount} · 产物 {item.artifactCount}{item.includeArtifacts ? '' : '（不含产物）'} · {new Date(item.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
+
+        {useModal && exportState === 'success' && (
+          <div className="export-modal-overlay" role="dialog" aria-modal="true">
+            <div className="export-modal-card">
+              <CheckCircle2 size={32} />
+              <strong>导出成功</strong>
+              <p>{lastExport?.filename ?? 'Export file'} 已生成。</p>
+              <div className="export-actions">
+                {format === 'pdf' ? (
+                  <button onClick={printPdf} type="button">打印为 PDF</button>
+                ) : (
+                  <button onClick={downloadLastExport} type="button">Download</button>
+                )}
+                <button className="ghost" onClick={closeSuccess} type="button">关闭</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );

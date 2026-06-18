@@ -192,6 +192,23 @@ export interface ArtifactRecord {
   createdAt: string;
 }
 
+export type ExportFormat = 'markdown' | 'json' | 'pdf';
+
+export type ExportScope = 'all' | 'materials' | 'cards';
+
+export interface ExportRecord {
+  id: string;
+  knowledgeBaseId: string;
+  format: ExportFormat;
+  scope: ExportScope;
+  includeArtifacts: boolean;
+  materialCount: number;
+  cardCount: number;
+  artifactCount: number;
+  filename: string;
+  createdAt: string;
+}
+
 export interface KnowledgeCitation {
   id: string;
   kind: 'material' | 'card';
