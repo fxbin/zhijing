@@ -3,6 +3,7 @@ import {
   type AssignMaterialRequest,
   type ArtifactRecord,
   type ArtifactSubtype,
+  type ChatMessage,
   classifyInput,
   type CompleteMaterialReviewRequest,
   type IntakeRequest,
@@ -64,6 +65,7 @@ type StoreState = {
   cards: KnowledgeCard[];
   tasks: AgentTask[];
   artifacts: ArtifactRecord[];
+  messages: ChatMessage[];
   modelProviderConfig?: PersistedModelProviderConfig;
 };
 
@@ -87,6 +89,8 @@ type KnowledgeRepository = {
   insertArtifact(artifact: ArtifactRecord): void;
   updateArtifact(artifact: ArtifactRecord): void;
   listArtifacts(knowledgeBaseId?: string, limit?: number): ArtifactRecord[];
+  insertMessage(message: ChatMessage): void;
+  listMessages(knowledgeBaseId: string, limit?: number): ChatMessage[];
   readModelProviderConfig(): PersistedModelProviderConfig | undefined;
   writeModelProviderConfig(config: PersistedModelProviderConfig): void;
 };
@@ -134,6 +138,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     cards: [],
     tasks: [],
     artifacts: [],
+    messages: [],
   };
 
   insertKnowledgeBase(base: KnowledgeBaseSummary) {
@@ -228,6 +233,17 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     return typeof limit === 'number' ? artifacts.slice(0, limit) : artifacts;
   }
 
+  insertMessage(message: ChatMessage) {
+    this.state.messages.push(message);
+  }
+
+  listMessages(knowledgeBaseId: string, limit?: number) {
+    const messages = this.state.messages
+      .filter((item) => item.knowledgeBaseId === knowledgeBaseId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    return typeof limit === 'number' ? messages.slice(-limit) : messages;
+  }
+
   readModelProviderConfig() {
     return this.state.modelProviderConfig;
   }
@@ -296,6 +312,17 @@ type ArtifactRow = {
   title: string;
   body: string;
   source_material_ids_json: string;
+  created_at: string;
+};
+
+type MessageRow = {
+  id: string;
+  knowledge_base_id: string;
+  question: string;
+  answer: string;
+  card_ids_json: string;
+  artifact_id: string | null;
+  material_id: string | null;
   created_at: string;
 };
 
@@ -521,6 +548,30 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     return (rows as ArtifactRow[]).map(mapArtifact);
   }
 
+  insertMessage(message: ChatMessage) {
+    this.db.prepare(`
+      INSERT INTO messages (
+        id, knowledge_base_id, question, answer, card_ids_json, artifact_id, material_id, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      message.id,
+      message.knowledgeBaseId,
+      message.question,
+      message.answer,
+      JSON.stringify(message.cardIds),
+      message.artifactId ?? null,
+      message.materialId ?? null,
+      message.createdAt,
+    );
+  }
+
+  listMessages(knowledgeBaseId: string, limit?: number) {
+    const rows = limit
+      ? this.db.prepare('SELECT * FROM (SELECT * FROM messages WHERE knowledge_base_id = ? ORDER BY created_at DESC LIMIT ?) ORDER BY created_at ASC').all(knowledgeBaseId, limit)
+      : this.db.prepare('SELECT * FROM messages WHERE knowledge_base_id = ? ORDER BY created_at ASC').all(knowledgeBaseId);
+    return (rows as MessageRow[]).map(mapMessage);
+  }
+
   readModelProviderConfig() {
     const row = this.db.prepare('SELECT * FROM model_provider_settings WHERE id = ?').get('default') as ModelProviderSettingsRow | undefined;
     if (!row) return undefined;
@@ -630,10 +681,22 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         updated_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS messages (
+        id TEXT PRIMARY KEY,
+        knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+        question TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        card_ids_json TEXT NOT NULL,
+        artifact_id TEXT,
+        material_id TEXT,
+        created_at TEXT NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_materials_knowledge_base_id ON materials(knowledge_base_id);
       CREATE INDEX IF NOT EXISTS idx_cards_knowledge_base_id ON cards(knowledge_base_id);
       CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at);
       CREATE INDEX IF NOT EXISTS idx_artifacts_knowledge_base_id ON artifacts(knowledge_base_id);
+      CREATE INDEX IF NOT EXISTS idx_messages_knowledge_base_id ON messages(knowledge_base_id);
     `);
     this.ensureMaterialMediaColumn();
     this.ensureMaterialStatusTimelineColumn();
@@ -799,6 +862,19 @@ function mapArtifact(row: ArtifactRow): ArtifactRecord {
     title: row.title,
     body: row.body,
     sourceMaterialIds: JSON.parse(row.source_material_ids_json) as string[],
+    createdAt: row.created_at,
+  };
+}
+
+function mapMessage(row: MessageRow): ChatMessage {
+  return {
+    id: row.id,
+    knowledgeBaseId: row.knowledge_base_id,
+    question: row.question,
+    answer: row.answer,
+    cardIds: JSON.parse(row.card_ids_json) as string[],
+    artifactId: row.artifact_id ?? undefined,
+    materialId: row.material_id ?? undefined,
     createdAt: row.created_at,
   };
 }
@@ -1405,6 +1481,17 @@ export async function answerKnowledgeBaseQuestion(knowledgeBaseId: string, quest
       contextMaterialCount: generationContext.materials.length,
       contextCardCount: generationContext.cards.length,
       citationCount: citations.length,
+    });
+
+    repository.insertMessage({
+      id: id('msg'),
+      knowledgeBaseId: base.id,
+      question: value,
+      answer: generated.summary ?? artifact.body,
+      cardIds: cards.map((card) => card.id),
+      artifactId: artifact.id,
+      materialId: material.id,
+      createdAt: now(),
     });
 
     return {
@@ -3119,6 +3206,10 @@ export function getKnowledgeBase(id: string): KnowledgeBaseDetail | undefined {
     cards: repository.listCards(id),
     artifacts: repository.listArtifacts(id),
   };
+}
+
+export function listMessages(knowledgeBaseId: string, limit?: number): ChatMessage[] {
+  return repository.listMessages(knowledgeBaseId, limit);
 }
 
 export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {

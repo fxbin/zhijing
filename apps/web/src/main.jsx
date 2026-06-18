@@ -581,6 +581,7 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [assistantQuestion, setAssistantQuestion] = useState('');
   const [assistantAnswer, setAssistantAnswer] = useState(null);
+  const [knowledgeBaseMessages, setKnowledgeBaseMessages] = useState([]);
   const [isAsking, setIsAsking] = useState(false);
   const [selectedArtifact, setSelectedArtifact] = useState(null);
   const [parsingMaterialId, setParsingMaterialId] = useState(null);
@@ -643,6 +644,7 @@ function App() {
       setKnowledgeBaseAnalytics(null);
       setAssistantAnswer(null);
       setAssistantQuestion('');
+      setKnowledgeBaseMessages([]);
       return;
     }
 
@@ -657,7 +659,18 @@ function App() {
         if (!ignore) setKnowledgeBaseDetail(fallbackDetail());
       }
     }
+    async function loadMessages() {
+      try {
+        const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/messages?limit=50`);
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (!ignore) setKnowledgeBaseMessages(payload.messages ?? []);
+      } catch {
+        if (!ignore) setKnowledgeBaseMessages([]);
+      }
+    }
     loadDetail();
+    loadMessages();
     return () => {
       ignore = true;
     };
@@ -870,6 +883,20 @@ function App() {
         citations: result.citations ?? [],
         task: result.task,
       });
+      if (result.artifact) {
+        setKnowledgeBaseMessages((current) => [
+          ...current,
+          {
+            id: `msg_${Date.now()}`,
+            knowledgeBaseId: selectedKnowledgeBaseId,
+            question: value,
+            answer: result.artifact?.body ?? result.message,
+            cardIds: (result.cards ?? []).map((card) => card.id),
+            artifactId: result.artifact?.id,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      }
       if (result.artifact) setSelectedArtifact(result.artifact);
       setAssistantQuestion('');
     } catch {
@@ -1059,6 +1086,7 @@ function App() {
               detail={knowledgeBaseDetail}
               isAsking={isAsking}
               latestTask={latestTask}
+              messages={knowledgeBaseMessages}
               onAsk={askKnowledgeBase}
               onOpenArtifact={openArtifact}
               onParseMaterial={parseMaterial}
@@ -1406,6 +1434,7 @@ function DetailView({
   detail,
   isAsking,
   latestTask,
+  messages,
   onAsk,
   onOpenArtifact,
   onParseMaterial,
@@ -1723,6 +1752,15 @@ function ChatView({
               <Sparkles size={19} />
               <p>我会优先使用当前知识库里的资料和卡片回答；没有来源时会明确标注。</p>
             </div>
+            {(messages ?? []).map((message) => (
+              <div key={message.id} className="chat-history-item">
+                <div className="chat-user">{message.question}</div>
+                <div className="assistant-message">
+                  <Sparkles size={19} />
+                  <p>{message.answer}</p>
+                </div>
+              </div>
+            ))}
             {assistantAnswer?.question && <div className="chat-user">{assistantAnswer.question}</div>}
             {assistantAnswer?.loading && <div className="assistant-message pending"><Clock3 size={19} /><p>正在整理当前知识库里的资料和卡片...</p></div>}
             {assistantAnswer?.error && <div className="assistant-message failed"><CircleX size={19} /><p>{assistantAnswer.error}</p></div>}

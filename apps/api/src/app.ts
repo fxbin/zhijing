@@ -13,6 +13,7 @@ import {
   getModelProviderSettings,
   intakeKnowledge,
   KnowledgeCoreError,
+  listMessages,
   listKnowledgeBases,
   listMaterials,
   recordMaterialParsingFailure,
@@ -134,6 +135,12 @@ export function buildApi() {
       return reply.code(404).send({ error: 'Knowledge base not found.' });
     }
     return analytics;
+  });
+
+  app.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/api/knowledge-bases/:id/messages', async (request, reply) => {
+    const limit = request.query.limit ? Number(request.query.limit) : undefined;
+    const messages = await listMessages(request.params.id, limit);
+    return { messages };
   });
 
   app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/map', async (request, reply) => {

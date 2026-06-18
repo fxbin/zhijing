@@ -128,6 +128,17 @@ export interface KnowledgeCard {
   updatedAt: string;
 }
 
+export interface ChatMessage {
+  id: string;
+  knowledgeBaseId: string;
+  question: string;
+  answer: string;
+  cardIds: string[];
+  artifactId?: string;
+  materialId?: string;
+  createdAt: string;
+}
+
 export interface AgentTask {
   id: string;
   workflow: 'create_knowledge_base' | 'ingest_material' | 'answer_question' | 'parse_material' | 'run_kit';
