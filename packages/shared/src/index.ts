@@ -209,6 +209,13 @@ export interface ExportRecord {
   createdAt: string;
 }
 
+export interface CloudBackupStub {
+  status: 'not_implemented';
+  decision: 'local_first';
+  reason: string;
+  plannedFor: string | null;
+}
+
 export interface KnowledgeCitation {
   id: string;
   kind: 'material' | 'card';

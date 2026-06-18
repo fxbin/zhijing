@@ -7,6 +7,7 @@ import {
   type CardRevision,
   type CardRevisionField,
   type ChatMessage,
+  type CloudBackupStub,
   type ExportFormat,
   type ExportRecord,
   type ExportScope,
@@ -3567,6 +3568,34 @@ export function recordExport(knowledgeBaseId: string, summary: ExportSummary): E
 
 export function listExports(knowledgeBaseId: string): ExportRecord[] {
   return repository.listExportRecords(knowledgeBaseId);
+}
+
+const CLOUD_BACKUP_LOCAL_FIRST_REASON = '当前版本采用本地优先架构：导出文件保存在用户浏览器下载目录，导出历史保存在本地 SQLite 数据库，用户可随时通过 Backup JSON 按钮手动备份。';
+
+const CLOUD_BACKUP_LOCAL_FIRST_PLANNED_FOR = null;
+
+/**
+ * 描述云备份能力的当前状态与产品决策。
+ *
+ * D3-4 决策记录：当前版本明确选择 local-first 架构。
+ * - 所有导出文件保存在用户浏览器下载目录，应用不接触文件内容
+ * - 所有导出历史记录保存在本地 SQLite 数据库
+ * - 用户通过 ExportView 的 Backup JSON 按钮进行整库备份
+ *
+ * 云端同步延后至 PMF 验证后再评估，届时需要回答：
+ *   1. 自建账号体系 vs 接入 WebDAV / iCloud Drive / Dropbox
+ *   2. 端到端加密策略（用户持密钥 vs 服务端可见）
+ *   3. 多端冲突合并策略（CRDT vs last-write-wins）
+ *
+ * 该函数返回的结构稳定，前端可据此隐藏云端入口并展示原因。
+ */
+export function describeCloudBackupStatus(): CloudBackupStub {
+  return {
+    status: 'not_implemented',
+    decision: 'local_first',
+    reason: CLOUD_BACKUP_LOCAL_FIRST_REASON,
+    plannedFor: CLOUD_BACKUP_LOCAL_FIRST_PLANNED_FOR,
+  };
 }
 
 export function listDueCards(knowledgeBaseId: string, limit?: number): KnowledgeCard[] {

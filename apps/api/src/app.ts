@@ -5,6 +5,7 @@ import {
   answerKnowledgeBaseQuestion,
   completeMaterialReview,
   deleteMaterial,
+  describeCloudBackupStatus,
   editCardContent,
   getDashboard,
   recordExport,
@@ -216,6 +217,17 @@ export function buildApi() {
       artifactCount: Number.isFinite(body.artifactCount) ? Math.max(0, body.artifactCount ?? 0) : 0,
     });
     return { export: record };
+  });
+
+  app.get('/api/cloud-backup/status', async () => describeCloudBackupStatus());
+
+  app.post<{ Params: { id: string } }>('/api/knowledge-bases/:id/cloud-backup', async (request, reply) => {
+    const stub = describeCloudBackupStatus();
+    return reply.status(501).send({
+      ...stub,
+      knowledgeBaseId: request.params.id,
+      message: '云备份功能尚未启用。请使用 ExportView 的 Backup JSON 按钮进行本地整库备份。',
+    });
   });
 
   app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/map', async (request, reply) => {
