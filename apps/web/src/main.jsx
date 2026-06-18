@@ -5,6 +5,7 @@ import {
   Bell,
   BookOpen,
   CheckCircle2,
+  ChevronDown,
   CircleHelp,
   CircleX,
   ClipboardList,
@@ -1426,6 +1427,53 @@ function groupCardsByType(cards) {
   }, {});
 }
 
+const CITATION_SNIPPET_LIMIT = 280;
+
+function SourceCitation({ citation, cards, materials }) {
+  const [expanded, setExpanded] = useState(false);
+  const fullBody = useMemo(() => {
+    if (citation.kind === 'card' && citation.cardId) {
+      const card = cards.find((item) => item.id === citation.cardId);
+      return card?.body;
+    }
+    if (citation.kind === 'material' && citation.materialId) {
+      const material = materials.find((item) => item.id === citation.materialId);
+      return material?.contentText;
+    }
+    return undefined;
+  }, [citation, cards, materials]);
+
+  const hasBody = typeof fullBody === 'string' && fullBody.trim().length > 0;
+  const snippet = hasBody ? fullBody.slice(0, CITATION_SNIPPET_LIMIT) : '';
+  const truncated = hasBody && fullBody.length > CITATION_SNIPPET_LIMIT;
+
+  return (
+    <article className={`citation-item${expanded ? ' expanded' : ''}`}>
+      <button
+        className="citation-toggle"
+        type="button"
+        onClick={() => hasBody && setExpanded((value) => !value)}
+        aria-expanded={expanded}
+        disabled={!hasBody}
+      >
+        <span className="citation-kind">{citation.kind}</span>
+        <strong>{citation.title}</strong>
+        {hasBody && <ChevronDown size={15} className="citation-chevron" />}
+      </button>
+      <div className="citation-body">
+        <p className="citation-preview">{citation.preview}</p>
+        {expanded && hasBody && (
+          <div className="citation-snippet">
+            <span>来源片段</span>
+            <p>{snippet}{truncated ? '…' : ''}</p>
+          </div>
+        )}
+        {citation.sourceUrl && <a href={citation.sourceUrl} target="_blank" rel="noreferrer">Open source</a>}
+      </div>
+    </article>
+  );
+}
+
 function DetailView({
   apiStatus,
   analytics,
@@ -1641,14 +1689,7 @@ function DetailView({
                     {latestCitations.length === 0 ? (
                       <p>当前回答没有可用来源，属于 AI 骨架内容。</p>
                     ) : latestCitations.slice(0, 6).map((citation) => (
-                      <article key={citation.id}>
-                        <span>{citation.kind}</span>
-                        <div>
-                          <strong>{citation.title}</strong>
-                          <p>{citation.preview}</p>
-                          {citation.sourceUrl && <a href={citation.sourceUrl} target="_blank" rel="noreferrer">Open source</a>}
-                        </div>
-                      </article>
+                      <SourceCitation key={citation.id} citation={citation} cards={cards} materials={materials} />
                     ))}
                   </div>
                 )}
@@ -1752,15 +1793,35 @@ function ChatView({
               <Sparkles size={19} />
               <p>我会优先使用当前知识库里的资料和卡片回答；没有来源时会明确标注。</p>
             </div>
-            {(messages ?? []).map((message) => (
-              <div key={message.id} className="chat-history-item">
-                <div className="chat-user">{message.question}</div>
-                <div className="assistant-message">
-                  <Sparkles size={19} />
-                  <p>{message.answer}</p>
+            {(messages ?? []).map((message) => {
+              const messageCards = (message.cardIds ?? [])
+                .map((cardId) => cards.find((card) => card.id === cardId))
+                .filter(Boolean);
+              return (
+                <div key={message.id} className="chat-history-item">
+                  <div className="chat-user">{message.question}</div>
+                  <div className="assistant-message">
+                    <Sparkles size={19} />
+                    <div>
+                      <p>{message.answer}</p>
+                      {messageCards.length > 0 && (
+                        <div className="citation-list">
+                          <strong>引用卡片</strong>
+                          {messageCards.map((card) => (
+                            <SourceCitation
+                              key={card.id}
+                              citation={{ id: `citation:card:${card.id}`, kind: 'card', cardId: card.id, title: card.title, preview: card.body.slice(0, 120) }}
+                              cards={cards}
+                              materials={materials}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {assistantAnswer?.question && <div className="chat-user">{assistantAnswer.question}</div>}
             {assistantAnswer?.loading && <div className="assistant-message pending"><Clock3 size={19} /><p>正在整理当前知识库里的资料和卡片...</p></div>}
             {assistantAnswer?.error && <div className="assistant-message failed"><CircleX size={19} /><p>{assistantAnswer.error}</p></div>}
@@ -1784,14 +1845,7 @@ function ChatView({
                     {latestCitations.length === 0 ? (
                       <p>当前回答没有可用来源，属于 AI 骨架内容。</p>
                     ) : latestCitations.slice(0, 6).map((citation) => (
-                      <article key={citation.id}>
-                        <span>{citation.kind}</span>
-                        <div>
-                          <strong>{citation.title}</strong>
-                          <p>{citation.preview}</p>
-                          {citation.sourceUrl && <a href={citation.sourceUrl} target="_blank" rel="noreferrer">Open source</a>}
-                        </div>
-                      </article>
+                      <SourceCitation key={citation.id} citation={citation} cards={cards} materials={materials} />
                     ))}
                   </div>
                   {assistantAnswer.artifact && (

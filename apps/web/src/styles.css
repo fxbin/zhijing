@@ -1811,6 +1811,115 @@ button { cursor: pointer; }
   font-weight: 850;
 }
 
+.citation-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.citation-item.expanded {
+  border-color: var(--scholar);
+  box-shadow: 0 0 0 3px var(--scholar-soft);
+}
+
+.citation-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  color: var(--primary);
+}
+
+.citation-toggle:disabled {
+  cursor: default;
+}
+
+.citation-toggle .citation-kind {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--scholar-soft);
+  color: var(--scholar);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.citation-toggle strong {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.citation-chevron {
+  flex: none;
+  color: var(--muted);
+  transition: transform 0.18s ease;
+}
+
+.citation-item.expanded .citation-chevron {
+  transform: rotate(180deg);
+}
+
+.citation-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.citation-preview {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.citation-snippet {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--sage);
+  background: rgba(107, 142, 127, 0.12);
+  border-radius: 0 8px 8px 0;
+}
+
+.citation-snippet span {
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sage);
+}
+
+.citation-snippet p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.citation-body a {
+  display: inline-block;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .assistant-link-button {
   display: inline-flex;
   align-items: center;
