@@ -580,6 +580,52 @@ button { cursor: pointer; }
   padding: 20px 24px;
 }
 
+.modal-mode-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.modal-mode-tabs button {
+  background: var(--surface-low);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 8px 16px;
+  transition: all 0.15s;
+}
+
+.modal-mode-tabs button.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.modal-empty-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal-empty-form textarea {
+  background: var(--surface-low);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+  resize: vertical;
+  width: 100%;
+}
+
+.modal-empty-form textarea:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
 .modal-field {
   display: block;
 }

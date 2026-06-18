@@ -4,6 +4,7 @@ import {
   assignMaterialToKnowledgeBase,
   answerKnowledgeBaseQuestion,
   clearFilter,
+  createEmptyKnowledgeBase,
   completeMaterialReview,
   deleteMaterial,
   describeCloudBackupStatus,
@@ -113,6 +114,23 @@ export function buildApi() {
   app.get('/api/knowledge-bases', async () => ({
     knowledgeBases: listKnowledgeBases(),
   }));
+
+  app.post<{ Body: { title?: string; summary?: string } }>('/api/knowledge-bases', async (request, reply) => {
+    const title = request.body?.title;
+    const summary = request.body?.summary;
+    if (!title || !title.trim()) {
+      return reply.status(400).send({ error: 'title 为必填。' });
+    }
+    try {
+      const base = createEmptyKnowledgeBase(title, summary);
+      return { knowledgeBase: base };
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.status(error.statusCode).send({ error: error.message });
+      }
+      throw error;
+    }
+  });
 
   app.get<{
     Querystring: {

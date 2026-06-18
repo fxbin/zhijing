@@ -1865,6 +1865,19 @@ function upsertDefaultKnowledgeBase(input: string) {
   return createKnowledgeBase(compactTitle(input), `围绕「${compactTitle(input)}」生成的知识库骨架。`);
 }
 
+/**
+ * 显式创建空知识库，不触发 LLM 生成。
+ * 用户可通过模态输入标题和可选摘要，后续再导入资料或运行 Kit。
+ */
+export function createEmptyKnowledgeBase(title: string, summary?: string): KnowledgeBaseSummary {
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle) {
+    throw new KnowledgeCoreError('知识库标题不能为空。', 400);
+  }
+  const finalSummary = (summary?.trim()) || `围绕「${trimmedTitle}」的知识库，等待导入资料。`;
+  return createKnowledgeBase(compactTitle(trimmedTitle), finalSummary);
+}
+
 function createMaterial(base: KnowledgeBaseSummary, request: IntakeRequest, type: MaterialRecord['type']) {
   const timestamp = now();
   const platform = detectPlatform(request.input);

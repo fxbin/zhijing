@@ -1190,6 +1190,28 @@ function App() {
             setIsCreateKbOpen(false);
             submit(theme);
           }}
+          onCreateEmpty={async (title, summary) => {
+            try {
+              const response = await fetch('/api/knowledge-bases', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, summary }),
+              });
+              if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                throw new Error(body.error || '创建失败');
+              }
+              const result = await response.json();
+              if (result.knowledgeBase?.id) {
+                setSelectedKnowledgeBaseId(result.knowledgeBase.id);
+                go('detail');
+              }
+              await refreshDashboard();
+            } catch (err) {
+              setActivity(err.message || '创建知识库失败');
+            }
+            setIsCreateKbOpen(false);
+          }}
         />
       )}
     </main>
@@ -1214,12 +1236,26 @@ const CREATE_KB_KITS = [
   { key: 'reading', title: '读书笔记', hint: '结构化提取书中核心观点', icon: BookOpen },
 ];
 
-function CreateKbModal({ onClose, onSubmit }) {
+function CreateKbModal({ onClose, onSubmit, onCreateEmpty }) {
   const [theme, setTheme] = useState('');
+  const [emptyTitle, setEmptyTitle] = useState('');
+  const [emptySummary, setEmptySummary] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [mode, setMode] = useState('ai');
   const handleConfirm = () => {
     const value = theme.trim();
     if (!value) return;
     onSubmit(value);
+  };
+  const handleCreateEmpty = async () => {
+    const title = emptyTitle.trim();
+    if (!title || creating) return;
+    setCreating(true);
+    try {
+      await onCreateEmpty(title, emptySummary.trim());
+    } finally {
+      setCreating(false);
+    }
   };
   return (
     <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
@@ -1234,49 +1270,89 @@ function CreateKbModal({ onClose, onSubmit }) {
           </button>
         </header>
         <div className="modal-body">
-          <label className="modal-field">
-            <span>主题 / 目标</span>
-            <div className="modal-input-row">
-              <Search size={18} />
-              <input
-                autoFocus
-                onChange={(event) => setTheme(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') handleConfirm();
-                }}
-                placeholder="例如：AI Agent 产品竞品分析"
-                type="text"
-                value={theme}
-              />
-            </div>
-            <small>输入一个主题、链接或问题，系统将自动创建知识库并开始整理。</small>
-          </label>
-          <div className="modal-kits">
-            <p className="modal-kits-label">推荐路径</p>
-            <div className="modal-kit-grid">
-              {CREATE_KB_KITS.map((kit) => {
-                const Icon = kit.icon;
-                return (
-                  <button
-                    className="modal-kit-card"
-                    key={kit.key}
-                    onClick={() => onSubmit(kit.title)}
-                    type="button"
-                  >
-                    <Icon size={22} />
-                    <strong>{kit.title}</strong>
-                    <small>{kit.hint}</small>
-                  </button>
-                );
-              })}
-            </div>
+          <div className="modal-mode-tabs">
+            <button className={mode === 'ai' ? 'active' : ''} onClick={() => setMode('ai')} type="button">AI 自动生成</button>
+            <button className={mode === 'empty' ? 'active' : ''} onClick={() => setMode('empty')} type="button">创建空知识库</button>
           </div>
+          {mode === 'ai' ? (
+            <>
+              <label className="modal-field">
+                <span>主题 / 目标</span>
+                <div className="modal-input-row">
+                  <Search size={18} />
+                  <input
+                    autoFocus
+                    onChange={(event) => setTheme(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') handleConfirm();
+                    }}
+                    placeholder="例如：AI Agent 产品竞品分析"
+                    type="text"
+                    value={theme}
+                  />
+                </div>
+                <small>输入一个主题、链接或问题，系统将自动创建知识库并开始整理。</small>
+              </label>
+              <div className="modal-kits">
+                <p className="modal-kits-label">推荐路径</p>
+                <div className="modal-kit-grid">
+                  {CREATE_KB_KITS.map((kit) => {
+                    const Icon = kit.icon;
+                    return (
+                      <button
+                        className="modal-kit-card"
+                        key={kit.key}
+                        onClick={() => onSubmit(kit.title)}
+                        type="button"
+                      >
+                        <Icon size={22} />
+                        <strong>{kit.title}</strong>
+                        <small>{kit.hint}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="modal-empty-form">
+              <label className="modal-field">
+                <span>知识库标题</span>
+                <div className="modal-input-row">
+                  <Plus size={18} />
+                  <input
+                    autoFocus
+                    onChange={(event) => setEmptyTitle(event.target.value)}
+                    placeholder="例如：我的读书笔记"
+                    type="text"
+                    value={emptyTitle}
+                  />
+                </div>
+                <small>创建一个空知识库，后续再导入资料或运行 Kit。</small>
+              </label>
+              <label className="modal-field">
+                <span>摘要（可选）</span>
+                <textarea
+                  onChange={(event) => setEmptySummary(event.target.value)}
+                  placeholder="简单描述这个知识库的用途…"
+                  rows={3}
+                  value={emptySummary}
+                />
+              </label>
+            </div>
+          )}
         </div>
         <footer className="modal-foot">
           <button className="btn-ghost" onClick={onClose} type="button">取消</button>
-          <button className="btn-primary" disabled={!theme.trim()} onClick={handleConfirm} type="button">
-            立即开启
-          </button>
+          {mode === 'ai' ? (
+            <button className="btn-primary" disabled={!theme.trim()} onClick={handleConfirm} type="button">
+              立即开启
+            </button>
+          ) : (
+            <button className="btn-primary" disabled={!emptyTitle.trim() || creating} onClick={handleCreateEmpty} type="button">
+              {creating ? '创建中…' : '创建空知识库'}
+            </button>
+          )}
         </footer>
       </div>
     </div>
