@@ -2196,6 +2196,47 @@ button { cursor: pointer; }
   color: white;
 }
 
+.recall-grade-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.recall-grade {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--primary);
+  padding: 10px 16px;
+  font-weight: 850;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.recall-grade:hover {
+  background: var(--scholar-soft);
+}
+
+.recall-grade-again {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.recall-grade-again:hover {
+  background: rgba(217, 86, 86, 0.12);
+}
+
+.recall-grade-easy {
+  border-color: var(--sage);
+  color: var(--sage-text);
+}
+
+.recall-grade-easy:hover {
+  background: var(--sage-soft, rgba(107, 142, 127, 0.12));
+}
+
 .export-workbench {
   display: grid;
   gap: 22px;

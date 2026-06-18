@@ -116,6 +116,15 @@ export interface MaterialRecord {
   statusTimeline?: MaterialStatusTimeline;
 }
 
+export interface CardRecall {
+  dueAt: string;
+  ease: number;
+  interval: number;
+  reviewedAt?: string;
+}
+
+export type RecallGrade = 'again' | 'hard' | 'good' | 'easy';
+
 export interface KnowledgeCard {
   id: string;
   knowledgeBaseId: string;
@@ -124,6 +133,7 @@ export interface KnowledgeCard {
   title: string;
   body: string;
   claimStatus: ClaimStatus;
+  recall?: CardRecall;
   createdAt: string;
   updatedAt: string;
 }

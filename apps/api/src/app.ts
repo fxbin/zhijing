@@ -13,7 +13,9 @@ import {
   getModelProviderSettings,
   intakeKnowledge,
   KnowledgeCoreError,
+  listDueCards,
   listMessages,
+  recordCardReview,
   listKnowledgeBases,
   listMaterials,
   recordMaterialParsingFailure,
@@ -141,6 +143,24 @@ export function buildApi() {
     const limit = request.query.limit ? Number(request.query.limit) : undefined;
     const messages = await listMessages(request.params.id, limit);
     return { messages };
+  });
+
+  app.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/api/knowledge-bases/:id/due-cards', async (request, reply) => {
+    const limit = request.query.limit ? Number(request.query.limit) : undefined;
+    const cards = await listDueCards(request.params.id, limit);
+    return { cards };
+  });
+
+  app.post<{ Params: { id: string }; Body: { grade?: string } }>('/api/cards/:id/review', async (request, reply) => {
+    const grade = request.body.grade;
+    if (grade !== 'again' && grade !== 'hard' && grade !== 'good' && grade !== 'easy') {
+      return reply.status(400).send({ error: 'grade must be one of again/hard/good/easy' });
+    }
+    const card = await recordCardReview(request.params.id, grade);
+    if (!card) {
+      return reply.status(404).send({ error: 'card not found' });
+    }
+    return { card };
   });
 
   app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/map', async (request, reply) => {

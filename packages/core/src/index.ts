@@ -3,7 +3,9 @@ import {
   type AssignMaterialRequest,
   type ArtifactRecord,
   type ArtifactSubtype,
+  type CardRecall,
   type ChatMessage,
+  type RecallGrade,
   classifyInput,
   type CompleteMaterialReviewRequest,
   type IntakeRequest,
@@ -78,6 +80,7 @@ type KnowledgeRepository = {
   updateMaterial(material: MaterialRecord): void;
   findMaterial(id: string): MaterialRecord | undefined;
   listMaterials(knowledgeBaseId?: string, limit?: number): MaterialRecord[];
+  findCard(id: string): KnowledgeCard | undefined;
   deleteMaterial(id: string): void;
   insertCards(cards: KnowledgeCard[]): void;
   updateCard(card: KnowledgeCard): void;
@@ -169,6 +172,10 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
 
   findMaterial(id: string) {
     return this.state.materials.find((item) => item.id === id);
+  }
+
+  findCard(id: string) {
+    return this.state.cards.find((item) => item.id === id);
   }
 
   listMaterials(knowledgeBaseId?: string, limit?: number) {
@@ -289,6 +296,7 @@ type CardRow = {
   title: string;
   body: string;
   claim_status: KnowledgeCard['claimStatus'];
+  recall_json: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -419,6 +427,11 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     return row ? mapMaterial(row) : undefined;
   }
 
+  findCard(id: string) {
+    const row = this.db.prepare('SELECT * FROM cards WHERE id = ?').get(id) as CardRow | undefined;
+    return row ? mapCard(row) : undefined;
+  }
+
   listMaterials(knowledgeBaseId?: string, limit?: number) {
     const rows = knowledgeBaseId
       ? this.db.prepare('SELECT * FROM materials WHERE knowledge_base_id = ? ORDER BY created_at DESC').all(knowledgeBaseId)
@@ -441,13 +454,13 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   insertCards(cards: KnowledgeCard[]) {
     const insert = this.db.prepare(`
       INSERT INTO cards (
-        id, knowledge_base_id, material_id, type, title, body, claim_status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, knowledge_base_id, material_id, type, title, body, claim_status, recall_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     this.db.exec('BEGIN');
     try {
       for (const card of cards) {
-        insert.run(card.id, card.knowledgeBaseId, card.materialId ?? null, card.type, card.title, card.body, card.claimStatus, card.createdAt, card.updatedAt);
+        insert.run(card.id, card.knowledgeBaseId, card.materialId ?? null, card.type, card.title, card.body, card.claimStatus, serializeCardRecall(card.recall), card.createdAt, card.updatedAt);
       }
       this.db.exec('COMMIT');
     } catch (error) {
@@ -459,7 +472,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   updateCard(card: KnowledgeCard) {
     this.db.prepare(`
       UPDATE cards
-      SET knowledge_base_id = ?, material_id = ?, type = ?, title = ?, body = ?, claim_status = ?, created_at = ?, updated_at = ?
+      SET knowledge_base_id = ?, material_id = ?, type = ?, title = ?, body = ?, claim_status = ?, recall_json = ?, created_at = ?, updated_at = ?
       WHERE id = ?
     `).run(
       card.knowledgeBaseId,
@@ -468,6 +481,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       card.title,
       card.body,
       card.claimStatus,
+      serializeCardRecall(card.recall),
       card.createdAt,
       card.updatedAt,
       card.id,
@@ -645,6 +659,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         title TEXT NOT NULL,
         body TEXT NOT NULL,
         claim_status TEXT NOT NULL,
+        recall_json TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -701,6 +716,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureMaterialMediaColumn();
     this.ensureMaterialStatusTimelineColumn();
     this.ensureArtifactSubtypeColumn();
+    this.ensureCardRecallColumn();
   }
 
   private ensureMaterialMediaColumn() {
@@ -721,6 +737,13 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     const columns = this.db.prepare('PRAGMA table_info(artifacts)').all() as Array<{ name: string }>;
     if (!columns.some((column) => column.name === 'subtype')) {
       this.db.exec("ALTER TABLE artifacts ADD COLUMN subtype TEXT NOT NULL DEFAULT 'summary';");
+    }
+  }
+
+  private ensureCardRecallColumn() {
+    const columns = this.db.prepare('PRAGMA table_info(cards)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'recall_json')) {
+      this.db.exec('ALTER TABLE cards ADD COLUMN recall_json TEXT;');
     }
   }
 }
@@ -813,9 +836,72 @@ function mapCard(row: CardRow): KnowledgeCard {
     title: row.title,
     body: row.body,
     claimStatus: row.claim_status,
+    recall: parseCardRecall(row.recall_json),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function parseCardRecall(json: string | null): CardRecall | undefined {
+  if (!json) return undefined;
+  try {
+    const parsed = JSON.parse(json) as Partial<CardRecall>;
+    if (typeof parsed.dueAt !== 'string' || typeof parsed.ease !== 'number' || typeof parsed.interval !== 'number') {
+      return undefined;
+    }
+    return {
+      dueAt: parsed.dueAt,
+      ease: parsed.ease,
+      interval: parsed.interval,
+      reviewedAt: typeof parsed.reviewedAt === 'string' ? parsed.reviewedAt : undefined,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function serializeCardRecall(recall: CardRecall | undefined): string | null {
+  if (!recall) return null;
+  return JSON.stringify(recall);
+}
+
+const RECALL_EASE_FLOOR = 1.3;
+const RECALL_EASE_CEIL = 2.8;
+const RECALL_EASE_STEP = 0.15;
+const RECALL_INTERVAL_LAPSE = 1;
+const RECALL_INTERVAL_GRADUATING_GOOD = 3;
+const RECALL_INTERVAL_GRADUATING_EASY = 4;
+const RECALL_MS_PER_DAY = 86_400_000;
+
+function clampEase(ease: number): number {
+  if (ease < RECALL_EASE_FLOOR) return RECALL_EASE_FLOOR;
+  if (ease > RECALL_EASE_CEIL) return RECALL_EASE_CEIL;
+  return ease;
+}
+
+export function scheduleCardRecall(prev: CardRecall | undefined, grade: RecallGrade): CardRecall {
+  const ease = prev?.ease ?? clampEase(2.5);
+  const prevInterval = prev?.interval ?? 0;
+  const reviewedAt = new Date().toISOString();
+
+  if (grade === 'again') {
+    return { dueAt: reviewedAt, ease: clampEase(ease - RECALL_EASE_STEP), interval: RECALL_INTERVAL_LAPSE, reviewedAt };
+  }
+
+  let nextEase = ease;
+  let nextInterval: number;
+  if (grade === 'hard') {
+    nextEase = clampEase(ease - RECALL_EASE_STEP);
+    nextInterval = prevInterval <= 0 ? RECALL_INTERVAL_LAPSE : Math.max(RECALL_INTERVAL_LAPSE, Math.round(prevInterval * 1.2));
+  } else if (grade === 'good') {
+    nextInterval = prevInterval <= 0 ? RECALL_INTERVAL_LAPSE : prevInterval === RECALL_INTERVAL_LAPSE ? RECALL_INTERVAL_GRADUATING_GOOD : Math.round(prevInterval * ease);
+  } else {
+    nextEase = clampEase(ease + RECALL_EASE_STEP);
+    nextInterval = prevInterval <= 0 ? 2 : prevInterval === RECALL_INTERVAL_LAPSE ? RECALL_INTERVAL_GRADUATING_EASY : Math.round(prevInterval * ease * 1.3);
+  }
+
+  const dueAt = new Date(Date.now() + nextInterval * RECALL_MS_PER_DAY).toISOString();
+  return { dueAt, ease: nextEase, interval: nextInterval, reviewedAt };
 }
 
 function mapTask(row: TaskRow): AgentTask {
@@ -3210,6 +3296,28 @@ export function getKnowledgeBase(id: string): KnowledgeBaseDetail | undefined {
 
 export function listMessages(knowledgeBaseId: string, limit?: number): ChatMessage[] {
   return repository.listMessages(knowledgeBaseId, limit);
+}
+
+export function recordCardReview(cardId: string, grade: RecallGrade): KnowledgeCard | undefined {
+  const card = repository.findCard(cardId);
+  if (!card) return undefined;
+  const next = scheduleCardRecall(card.recall, grade);
+  const updated: KnowledgeCard = { ...card, recall: next, updatedAt: new Date().toISOString() };
+  repository.updateCard(updated);
+  return updated;
+}
+
+export function listDueCards(knowledgeBaseId: string, limit?: number): KnowledgeCard[] {
+  const now = new Date().toISOString();
+  const all = repository.listCards(knowledgeBaseId);
+  const due = all
+    .filter((card) => !card.recall || card.recall.dueAt <= now)
+    .sort((a, b) => {
+      const aDue = a.recall?.dueAt ?? '';
+      const bDue = b.recall?.dueAt ?? '';
+      return aDue.localeCompare(bDue);
+    });
+  return typeof limit === 'number' ? due.slice(0, limit) : due;
 }
 
 export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {

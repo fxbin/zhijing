@@ -1826,13 +1826,53 @@ function ChatView({
 }
 
 function RecallView({ detail, setView }) {
-  const cards = detail.cards ?? [];
+  const [queue, setQueue] = useState([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
-  const activeCard = cards[activeIndex];
 
-  function nextCard() {
-    setActiveIndex((current) => cards.length ? (current + 1) % cards.length : 0);
+  useEffect(() => {
+    if (!detail?.id) {
+      setQueue(detail.cards ?? []);
+      return;
+    }
+    let ignore = false;
+    async function loadDue() {
+      try {
+        const response = await fetch(`/api/knowledge-bases/${detail.id}/due-cards?limit=20`);
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (!ignore) setQueue(payload.cards ?? []);
+      } catch {
+        if (!ignore) setQueue(detail.cards ?? []);
+      }
+    }
+    loadDue();
+    return () => { ignore = true; };
+  }, [detail?.id, detail.cards]);
+
+  const activeCard = queue[activeIndex];
+
+  function advanceQueue() {
+    setActiveIndex((current) => queue.length ? (current + 1) % queue.length : 0);
+    setRevealed(false);
+  }
+
+  async function gradeCard(grade) {
+    if (!activeCard?.id) return;
+    try {
+      await fetch(`/api/cards/${activeCard.id}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grade }),
+      });
+    } catch {
+      return;
+    }
+    setQueue((current) => {
+      const next = current.filter((card) => card.id !== activeCard.id);
+      setActiveIndex((idx) => (next.length ? idx % next.length : 0));
+      return next;
+    });
     setRevealed(false);
   }
 
@@ -1843,16 +1883,16 @@ function RecallView({ detail, setView }) {
           <button className="back-button" onClick={() => setView('detail')} type="button">← Back to Knowledge Base</button>
           <span>Active Recall</span>
           <h2>{detail.title}</h2>
-          <p>把知识卡片转成自测队列：先回忆，再揭示答案，最后进入下一张。</p>
+          <p>把知识卡片转成自测队列：先回忆，再揭示答案，最后按掌握程度评分，系统会据此安排下次复习。</p>
         </div>
 
-        {cards.length === 0 ? (
+        {queue.length === 0 ? (
           <EmptyState title="暂无可练习卡片" body="导入资料或创建主题后，知识卡片会成为主动回忆题目。" />
         ) : (
           <div className="recall-layout">
             <aside className="recall-queue">
-              <strong>Practice Queue</strong>
-              {cards.slice(0, 8).map((card, index) => (
+              <strong>Practice Queue · {queue.length}</strong>
+              {queue.slice(0, 8).map((card, index) => (
                 <button className={index === activeIndex ? 'active' : ''} key={card.id ?? card.title} onClick={() => {
                   setActiveIndex(index);
                   setRevealed(false);
@@ -1874,10 +1914,19 @@ function RecallView({ detail, setView }) {
                 <button onClick={() => setRevealed((current) => !current)} type="button">
                   {revealed ? 'Hide Answer' : 'Reveal Answer'}
                 </button>
-                <button onClick={nextCard} type="button">
-                  Next Card
-                  <RefreshCw size={16} />
-                </button>
+                {revealed ? (
+                  <div className="recall-grade-actions">
+                    <button className="recall-grade recall-grade-again" onClick={() => gradeCard('again')} type="button">Again</button>
+                    <button className="recall-grade recall-grade-hard" onClick={() => gradeCard('hard')} type="button">Hard</button>
+                    <button className="recall-grade recall-grade-good" onClick={() => gradeCard('good')} type="button">Good</button>
+                    <button className="recall-grade recall-grade-easy" onClick={() => gradeCard('easy')} type="button">Easy</button>
+                  </div>
+                ) : (
+                  <button onClick={advanceQueue} type="button">
+                    Next Card
+                    <RefreshCw size={16} />
+                  </button>
+                )}
               </footer>
             </article>
           </div>
