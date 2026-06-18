@@ -5,6 +5,7 @@ import {
   answerKnowledgeBaseQuestion,
   completeMaterialReview,
   deleteMaterial,
+  editCardContent,
   getDashboard,
   getKnowledgeBaseAnalytics,
   getKnowledgeBase,
@@ -15,6 +16,7 @@ import {
   KnowledgeCoreError,
   listDueCards,
   listMessages,
+  listCardRevisions,
   recordCardReview,
   listKnowledgeBases,
   listMaterials,
@@ -161,6 +163,29 @@ export function buildApi() {
       return reply.status(404).send({ error: 'card not found' });
     }
     return { card };
+  });
+
+  app.patch<{ Params: { id: string }; Body: { title?: string; body?: string; type?: string; claimStatus?: string } }>('/api/cards/:id', async (request, reply) => {
+    const body = request.body ?? {};
+    const allowedTypes = ['concept', 'method', 'case', 'question', 'step', 'viewpoint'];
+    const allowedClaims = ['ai_skeleton', 'sourced', 'user_confirmed', 'unsupported'];
+    const type = typeof body.type === 'string' && allowedTypes.includes(body.type) ? body.type : undefined;
+    const claimStatus = typeof body.claimStatus === 'string' && allowedClaims.includes(body.claimStatus) ? body.claimStatus : undefined;
+    const result = await editCardContent(request.params.id, {
+      title: typeof body.title === 'string' ? body.title : undefined,
+      body: typeof body.body === 'string' ? body.body : undefined,
+      type: type as never,
+      claimStatus: claimStatus as never,
+    });
+    if (!result) {
+      return reply.status(404).send({ error: 'card not found' });
+    }
+    return { card: result.card, revision: result.revision };
+  });
+
+  app.get<{ Params: { id: string } }>('/api/cards/:id/revisions', async (request, reply) => {
+    const revisions = await listCardRevisions(request.params.id);
+    return { revisions };
   });
 
   app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/map', async (request, reply) => {

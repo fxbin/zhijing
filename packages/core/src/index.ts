@@ -4,6 +4,8 @@ import {
   type ArtifactRecord,
   type ArtifactSubtype,
   type CardRecall,
+  type CardRevision,
+  type CardRevisionField,
   type ChatMessage,
   type RecallGrade,
   classifyInput,
@@ -68,6 +70,7 @@ type StoreState = {
   tasks: AgentTask[];
   artifacts: ArtifactRecord[];
   messages: ChatMessage[];
+  cardRevisions: CardRevision[];
   modelProviderConfig?: PersistedModelProviderConfig;
 };
 
@@ -85,6 +88,8 @@ type KnowledgeRepository = {
   insertCards(cards: KnowledgeCard[]): void;
   updateCard(card: KnowledgeCard): void;
   listCards(knowledgeBaseId?: string): KnowledgeCard[];
+  insertCardRevision(revision: CardRevision): void;
+  listCardRevisions(cardId: string): CardRevision[];
   insertTask(task: AgentTask): void;
   updateTask(task: AgentTask): void;
   listTasks(limit?: number): AgentTask[];
@@ -142,6 +147,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     tasks: [],
     artifacts: [],
     messages: [],
+    cardRevisions: [],
   };
 
   insertKnowledgeBase(base: KnowledgeBaseSummary) {
@@ -205,6 +211,16 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     return knowledgeBaseId
       ? this.state.cards.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
       : this.state.cards;
+  }
+
+  insertCardRevision(revision: CardRevision) {
+    this.state.cardRevisions.push(revision);
+  }
+
+  listCardRevisions(cardId: string) {
+    return this.state.cardRevisions
+      .filter((item) => item.cardId === cardId)
+      .sort((a, b) => a.version - b.version);
   }
 
   insertTask(task: AgentTask) {
@@ -299,6 +315,18 @@ type CardRow = {
   recall_json: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type CardRevisionRow = {
+  id: string;
+  card_id: string;
+  version: number;
+  title_snapshot: string;
+  body_snapshot: string;
+  type_snapshot: KnowledgeCard['type'];
+  claim_status_snapshot: KnowledgeCard['claimStatus'];
+  changed_fields_json: string;
+  created_at: string;
 };
 
 type TaskRow = {
@@ -495,6 +523,31 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     return (rows as CardRow[]).map(mapCard);
   }
 
+  insertCardRevision(revision: CardRevision) {
+    this.db.prepare(`
+      INSERT INTO card_revisions (
+        id, card_id, version, title_snapshot, body_snapshot, type_snapshot, claim_status_snapshot, changed_fields_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      revision.id,
+      revision.cardId,
+      revision.version,
+      revision.titleSnapshot,
+      revision.bodySnapshot,
+      revision.typeSnapshot,
+      revision.claimStatusSnapshot,
+      JSON.stringify(revision.changedFields),
+      revision.createdAt,
+    );
+  }
+
+  listCardRevisions(cardId: string) {
+    const rows = this.db
+      .prepare('SELECT * FROM card_revisions WHERE card_id = ? ORDER BY version ASC')
+      .all(cardId) as CardRevisionRow[];
+    return rows.map(mapCardRevision);
+  }
+
   insertTask(task: AgentTask) {
     this.db.prepare(`
       INSERT INTO tasks (
@@ -664,6 +717,18 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         updated_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS card_revisions (
+        id TEXT PRIMARY KEY,
+        card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL,
+        title_snapshot TEXT NOT NULL,
+        body_snapshot TEXT NOT NULL,
+        type_snapshot TEXT NOT NULL,
+        claim_status_snapshot TEXT NOT NULL,
+        changed_fields_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
         workflow TEXT NOT NULL,
@@ -709,6 +774,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
       CREATE INDEX IF NOT EXISTS idx_materials_knowledge_base_id ON materials(knowledge_base_id);
       CREATE INDEX IF NOT EXISTS idx_cards_knowledge_base_id ON cards(knowledge_base_id);
+      CREATE INDEX IF NOT EXISTS idx_card_revisions_card_id ON card_revisions(card_id, version);
       CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at);
       CREATE INDEX IF NOT EXISTS idx_artifacts_knowledge_base_id ON artifacts(knowledge_base_id);
       CREATE INDEX IF NOT EXISTS idx_messages_knowledge_base_id ON messages(knowledge_base_id);
@@ -863,6 +929,34 @@ function parseCardRecall(json: string | null): CardRecall | undefined {
 function serializeCardRecall(recall: CardRecall | undefined): string | null {
   if (!recall) return null;
   return JSON.stringify(recall);
+}
+
+function mapCardRevision(row: CardRevisionRow): CardRevision {
+  return {
+    id: row.id,
+    cardId: row.card_id,
+    version: row.version,
+    titleSnapshot: row.title_snapshot,
+    bodySnapshot: row.body_snapshot,
+    typeSnapshot: row.type_snapshot,
+    claimStatusSnapshot: row.claim_status_snapshot,
+    changedFields: parseRevisionFields(row.changed_fields_json),
+    createdAt: row.created_at,
+  };
+}
+
+const REVISION_FIELDS: CardRevisionField[] = ['title', 'body', 'type', 'claimStatus'];
+
+function parseRevisionFields(json: string): CardRevisionField[] {
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is CardRevisionField =>
+      typeof item === 'string' && (REVISION_FIELDS as string[]).includes(item),
+    );
+  } catch {
+    return [];
+  }
 }
 
 const RECALL_EASE_FLOOR = 1.3;
@@ -3305,6 +3399,58 @@ export function recordCardReview(cardId: string, grade: RecallGrade): KnowledgeC
   const updated: KnowledgeCard = { ...card, recall: next, updatedAt: new Date().toISOString() };
   repository.updateCard(updated);
   return updated;
+}
+
+export type CardContentEdit = {
+  title?: string;
+  body?: string;
+  type?: KnowledgeCard['type'];
+  claimStatus?: KnowledgeCard['claimStatus'];
+};
+
+export type CardEditResult = { card: KnowledgeCard; revision?: CardRevision };
+
+export function editCardContent(cardId: string, changes: CardContentEdit): CardEditResult | undefined {
+  const card = repository.findCard(cardId);
+  if (!card) return undefined;
+  const nextTitle = typeof changes.title === 'string' && changes.title.trim().length > 0 ? changes.title.trim() : card.title;
+  const nextBody = typeof changes.body === 'string' ? changes.body : card.body;
+  const nextType = changes.type ?? card.type;
+  const nextClaim = changes.claimStatus ?? card.claimStatus;
+  const changedFields: CardRevisionField[] = [];
+  if (nextTitle !== card.title) changedFields.push('title');
+  if (nextBody !== card.body) changedFields.push('body');
+  if (nextType !== card.type) changedFields.push('type');
+  if (nextClaim !== card.claimStatus) changedFields.push('claimStatus');
+  if (changedFields.length === 0) return { card };
+  const existing = repository.listCardRevisions(cardId);
+  const nextVersion = existing.length > 0 ? existing[existing.length - 1].version + 1 : 1;
+  const revision: CardRevision = {
+    id: `rev_${cardId}_${nextVersion}`,
+    cardId,
+    version: nextVersion,
+    titleSnapshot: card.title,
+    bodySnapshot: card.body,
+    typeSnapshot: card.type,
+    claimStatusSnapshot: card.claimStatus,
+    changedFields,
+    createdAt: new Date().toISOString(),
+  };
+  repository.insertCardRevision(revision);
+  const updated: KnowledgeCard = {
+    ...card,
+    title: nextTitle,
+    body: nextBody,
+    type: nextType,
+    claimStatus: nextClaim,
+    updatedAt: new Date().toISOString(),
+  };
+  repository.updateCard(updated);
+  return { card: updated, revision };
+}
+
+export function listCardRevisions(cardId: string): CardRevision[] {
+  return repository.listCardRevisions(cardId);
 }
 
 export function listDueCards(knowledgeBaseId: string, limit?: number): KnowledgeCard[] {

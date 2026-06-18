@@ -138,6 +138,20 @@ export interface KnowledgeCard {
   updatedAt: string;
 }
 
+export type CardRevisionField = 'title' | 'body' | 'type' | 'claimStatus';
+
+export interface CardRevision {
+  id: string;
+  cardId: string;
+  version: number;
+  titleSnapshot: string;
+  bodySnapshot: string;
+  typeSnapshot: CardType;
+  claimStatusSnapshot: ClaimStatus;
+  changedFields: CardRevisionField[];
+  createdAt: string;
+}
+
 export interface ChatMessage {
   id: string;
   knowledgeBaseId: string;
