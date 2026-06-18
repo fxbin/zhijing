@@ -35,6 +35,7 @@ import {
   Trash2,
   Upload,
   Download,
+  Users,
 } from 'lucide-react';
 import './styles.css';
 
@@ -1548,6 +1549,62 @@ function DetailView({
   const statusDistribution = analytics?.materialStatusDistribution?.slice(0, 4) ?? [];
   const platformDistribution = analytics?.platformDistribution?.slice(0, 4) ?? [];
 
+  const [entities, setEntities] = useState([]);
+  const [loadingEntities, setLoadingEntities] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [entityError, setEntityError] = useState('');
+
+  useEffect(() => {
+    if (!selectedKnowledgeBaseId) return;
+    let ignore = false;
+    setLoadingEntities(true);
+    setEntityError('');
+    async function loadEntities() {
+      try {
+        const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/entities`);
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (!ignore) setEntities(payload.entities ?? []);
+      } catch {
+        if (!ignore) setEntities([]);
+      } finally {
+        if (!ignore) setLoadingEntities(false);
+      }
+    }
+    loadEntities();
+    return () => { ignore = true; };
+  }, [selectedKnowledgeBaseId]);
+
+  async function extractEntitiesAction() {
+    if (!selectedKnowledgeBaseId || extracting) return;
+    setExtracting(true);
+    setEntityError('');
+    try {
+      const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/entities/extract`, { method: 'POST' });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        setEntityError(payload.error ?? '实体提取失败');
+        return;
+      }
+      const payload = await response.json();
+      setEntities(payload.entities ?? []);
+    } catch {
+      setEntityError('网络错误，实体提取失败');
+    } finally {
+      setExtracting(false);
+    }
+  }
+
+  const ENTITY_TYPE_LABELS = {
+    person: '人物',
+    organization: '组织',
+    concept: '概念',
+    tool: '工具',
+    place: '地点',
+    event: '事件',
+    other: '其他',
+  };
+
   return (
     <section className="page-grid">
       <div className="page-main">
@@ -1598,6 +1655,43 @@ function DetailView({
               </div>
             ))}
           </aside>
+          <section className="entity-panel">
+            <div className="panel-title">
+              <Users size={20} />
+              <div>
+                <span>Entities</span>
+                <h4>实体清单</h4>
+              </div>
+              <button
+                className="entity-extract-btn"
+                type="button"
+                onClick={extractEntitiesAction}
+                disabled={extracting || cards.length === 0}
+                title={cards.length === 0 ? '需要先生成知识卡片' : '从当前卡片中提取实体'}
+              >
+                {extracting ? '提取中…' : '提取实体'}
+              </button>
+            </div>
+            {entityError && <p className="entity-error">{entityError}</p>}
+            {loadingEntities ? (
+              <p className="entity-empty">加载中…</p>
+            ) : entities.length === 0 ? (
+              <p className="entity-empty">暂无实体。点击「提取实体」从知识库卡片中识别人物、组织、概念、工具等。</p>
+            ) : (
+              <ul className="entity-list">
+                {entities.map((entity) => (
+                  <li key={entity.id} className="entity-item">
+                    <div className="entity-head">
+                      <strong>{entity.name}</strong>
+                      <span className="entity-type-badge">{ENTITY_TYPE_LABELS[entity.type] ?? entity.type}</span>
+                    </div>
+                    <p>{entity.description}</p>
+                    <small>{entity.sourceCardIds.length} 张卡片提及</small>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
           <section className="feed">
             <div className="tabs">
               <button className={feedMode === 'feed' ? 'active' : ''} onClick={() => setFeedMode('feed')} type="button">Structured Feed</button>

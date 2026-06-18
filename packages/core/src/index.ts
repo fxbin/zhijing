@@ -19,6 +19,9 @@ import {
   type ExportScope,
   type RecallGrade,
   classifyInput,
+  type Entity,
+  type EntityType,
+  type ExtractedEntitySeed,
   type SavedFilter,
   type SavedFilterScope,
   type CompleteMaterialReviewRequest,
@@ -49,6 +52,8 @@ import {
 } from '@zhijing/shared';
 import {
   createPiAiRuntime,
+  createMockPiRuntime,
+  entityExtractionSchema,
   getDefaultPiModel,
   getDefaultPiProvider,
   getKnownPiModels,
@@ -86,6 +91,7 @@ type StoreState = {
   artifactRevisions: ArtifactRevision[];
   exports: ExportRecord[];
   savedFilters: SavedFilter[];
+  entities: Entity[];
   modelProviderConfig?: PersistedModelProviderConfig;
 };
 
@@ -110,6 +116,9 @@ type KnowledgeRepository = {
   upsertSavedFilter(record: SavedFilter): void;
   listSavedFilters(scope?: SavedFilterScope): SavedFilter[];
   deleteSavedFilter(id: string): void;
+  upsertEntity(record: Entity): void;
+  listEntities(knowledgeBaseId: string): Entity[];
+  deleteEntitiesByKnowledgeBase(knowledgeBaseId: string): void;
   insertTask(task: AgentTask): void;
   updateTask(task: AgentTask): void;
   listTasks(limit?: number): AgentTask[];
@@ -174,6 +183,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     artifactRevisions: [],
     exports: [],
     savedFilters: [],
+    entities: [],
   };
 
   insertKnowledgeBase(base: KnowledgeBaseSummary) {
@@ -276,6 +286,23 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
 
   deleteSavedFilter(id: string) {
     this.state.savedFilters = this.state.savedFilters.filter((item) => item.id !== id);
+  }
+
+  upsertEntity(record: Entity) {
+    const index = this.state.entities.findIndex((item) => item.id === record.id);
+    if (index >= 0) {
+      this.state.entities[index] = record;
+    } else {
+      this.state.entities.push(record);
+    }
+  }
+
+  listEntities(knowledgeBaseId: string) {
+    return this.state.entities.filter((item) => item.knowledgeBaseId === knowledgeBaseId);
+  }
+
+  deleteEntitiesByKnowledgeBase(knowledgeBaseId: string) {
+    this.state.entities = this.state.entities.filter((item) => item.knowledgeBaseId !== knowledgeBaseId);
   }
 
   insertTask(task: AgentTask) {
@@ -688,6 +715,37 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.db.prepare('DELETE FROM saved_filters WHERE id = ?').run(id);
   }
 
+  upsertEntity(record: Entity) {
+    this.db.prepare(`
+      INSERT INTO entities (id, knowledge_base_id, name, type, description, source_card_ids_json, created_at, updated_at)
+      VALUES (@id, @knowledge_base_id, @name, @type, @description, @source_card_ids_json, @created_at, @updated_at)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        type = excluded.type,
+        description = excluded.description,
+        source_card_ids_json = excluded.source_card_ids_json,
+        updated_at = excluded.updated_at
+    `).run({
+      id: record.id,
+      knowledge_base_id: record.knowledgeBaseId,
+      name: record.name,
+      type: record.type,
+      description: record.description,
+      source_card_ids_json: JSON.stringify(record.sourceCardIds),
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+    });
+  }
+
+  listEntities(knowledgeBaseId: string) {
+    const rows = this.db.prepare('SELECT * FROM entities WHERE knowledge_base_id = ? ORDER BY updated_at DESC').all(knowledgeBaseId);
+    return (rows as EntityRow[]).map(mapEntity);
+  }
+
+  deleteEntitiesByKnowledgeBase(knowledgeBaseId: string) {
+    this.db.prepare('DELETE FROM entities WHERE knowledge_base_id = ?').run(knowledgeBaseId);
+  }
+
   insertTask(task: AgentTask) {
     this.db.prepare(`
       INSERT INTO tasks (
@@ -971,6 +1029,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureCardRecallColumn();
     this.ensureArtifactRevisionsTable();
     this.ensureSavedFiltersTable();
+    this.ensureEntitiesTable();
   }
 
   private ensureMaterialMediaColumn() {
@@ -1015,6 +1074,22 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         updated_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_saved_filters_scope ON saved_filters(scope, updated_at DESC);
+    `);
+  }
+
+  private ensureEntitiesTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS entities (
+        id TEXT PRIMARY KEY,
+        knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        description TEXT NOT NULL,
+        source_card_ids_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_entities_kb ON entities(knowledge_base_id, updated_at DESC);
     `);
   }
 
@@ -1231,6 +1306,30 @@ function mapSavedFilter(row: SavedFilterRow): SavedFilter {
     claimStatus: row.claim_status,
     sortKey: row.sort_key,
     keyword: row.keyword,
+    updatedAt: row.updated_at,
+  };
+}
+
+type EntityRow = {
+  id: string;
+  knowledge_base_id: string;
+  name: string;
+  type: EntityType;
+  description: string;
+  source_card_ids_json: string;
+  created_at: string;
+  updated_at: string;
+};
+
+function mapEntity(row: EntityRow): Entity {
+  return {
+    id: row.id,
+    knowledgeBaseId: row.knowledge_base_id,
+    name: row.name,
+    type: row.type,
+    description: row.description,
+    sourceCardIds: JSON.parse(row.source_card_ids_json) as string[],
+    createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
@@ -3920,6 +4019,76 @@ export function loadFilter(scope: SavedFilterScope): SavedFilter | null {
  */
 export function clearFilter(scope: SavedFilterScope): void {
   repository.deleteSavedFilter(`${SAVED_FILTER_ID_PREFIX}${scope}`);
+}
+
+const ENTITY_ID_PREFIX = 'entity_';
+
+function normalizeEntityType(raw: string): EntityType {
+  const allowed: EntityType[] = ['person', 'organization', 'concept', 'tool', 'place', 'event', 'other'];
+  return allowed.includes(raw as EntityType) ? (raw as EntityType) : 'other';
+}
+
+/**
+ * 从知识库的卡片中提取实体（人物/组织/概念/工具等）并持久化。
+ * 若 piRuntime 未提供，则使用 mock 数据生成占位实体。
+ * 已有同名同类型实体会被合并（sourceCardIds 取并集），不会重复创建。
+ */
+export async function extractEntities(knowledgeBaseId: string, piRuntime?: PiRuntime): Promise<Entity[]> {
+  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  if (!base) {
+    throw new KnowledgeCoreError(`Knowledge base ${knowledgeBaseId} not found.`, 404);
+  }
+  const cards = repository.listCards(knowledgeBaseId);
+  if (cards.length === 0) {
+    throw new KnowledgeCoreError('当前知识库没有卡片，无法提取实体。', 400);
+  }
+  const cardDigest = cards.slice(0, 40).map((card) => `- ${card.title}: ${card.body.slice(0, 120)}`).join('\n');
+  const prompt = `请从以下知识库卡片中提取关键实体（人物、组织、概念、工具、地点、事件等）。\n知识库主题：${base.title}\n卡片摘要：\n${cardDigest}`;
+  const runtime = piRuntime ?? createMockPiRuntime();
+  const result = await runtime.completeStructured<{ entities: Array<{ name: string; type: string; description: string }> }>({
+    task: 'entity_extraction',
+    prompt,
+    schema: entityExtractionSchema,
+  });
+  const seeds = (result.output.entities ?? []).map((item) => ({
+    name: item.name.trim(),
+    type: normalizeEntityType(item.type),
+    description: item.description.trim(),
+  })).filter((item) => item.name.length > 0);
+  if (seeds.length === 0) {
+    throw new KnowledgeCoreError('实体提取未返回有效结果。', 500);
+  }
+  const now = new Date().toISOString();
+  const cardIds = cards.map((card) => card.id);
+  const existing = repository.listEntities(knowledgeBaseId);
+  const merged: Entity[] = [];
+  for (const seed of seeds) {
+    const match = existing.find((item) => item.name === seed.name && item.type === seed.type);
+    if (match) {
+      const unionIds = Array.from(new Set([...match.sourceCardIds, ...cardIds]));
+      const updated: Entity = { ...match, description: seed.description, sourceCardIds: unionIds, updatedAt: now };
+      repository.upsertEntity(updated);
+      merged.push(updated);
+    } else {
+      const entity: Entity = {
+        id: `${ENTITY_ID_PREFIX}${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+        knowledgeBaseId,
+        name: seed.name,
+        type: seed.type,
+        description: seed.description,
+        sourceCardIds: cardIds,
+        createdAt: now,
+        updatedAt: now,
+      };
+      repository.upsertEntity(entity);
+      merged.push(entity);
+    }
+  }
+  return merged;
+}
+
+export function listEntities(knowledgeBaseId: string): Entity[] {
+  return repository.listEntities(knowledgeBaseId);
 }
 
 const CLOUD_BACKUP_LOCAL_FIRST_REASON = '当前版本采用本地优先架构：导出文件保存在用户浏览器下载目录，导出历史保存在本地 SQLite 数据库，用户可随时通过 Backup JSON 按钮手动备份。';

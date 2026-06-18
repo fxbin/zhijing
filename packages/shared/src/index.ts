@@ -264,6 +264,25 @@ export interface SavedFilter {
   updatedAt: string;
 }
 
+export type EntityType = 'person' | 'organization' | 'concept' | 'tool' | 'place' | 'event' | 'other';
+
+export interface Entity {
+  id: string;
+  knowledgeBaseId: string;
+  name: string;
+  type: EntityType;
+  description: string;
+  sourceCardIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExtractedEntitySeed {
+  name: string;
+  type: EntityType;
+  description: string;
+}
+
 export interface KnowledgeCitation {
   id: string;
   kind: 'material' | 'card';

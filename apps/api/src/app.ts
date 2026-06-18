@@ -9,6 +9,7 @@ import {
   describeCloudBackupStatus,
   editArtifactSection,
   editCardContent,
+  extractEntities,
   getDashboard,
   loadFilter,
   recordExport,
@@ -22,6 +23,7 @@ import {
   KnowledgeCoreError,
   listArtifactRevisions,
   listDueCards,
+  listEntities,
   listExports,
   listMessages,
   listCardRevisions,
@@ -255,6 +257,23 @@ export function buildApi() {
   app.delete<{ Params: { scope: string } }>('/api/saved-filters/:scope', async (request) => {
     clearFilter(request.params.scope as 'assets' | 'compare');
     return { ok: true };
+  });
+
+  app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/entities', async (request) => {
+    const entities = listEntities(request.params.id);
+    return { entities };
+  });
+
+  app.post<{ Params: { id: string } }>('/api/knowledge-bases/:id/entities/extract', async (request, reply) => {
+    try {
+      const entities = await extractEntities(request.params.id);
+      return { entities };
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.status(error.statusCode).send({ error: error.message });
+      }
+      throw error;
+    }
   });
 
   app.post<{ Params: { id: string }; Body: { sections?: Array<{ title?: string; body?: string }> } }>('/api/artifacts/:id/sections/initialize', async (request, reply) => {

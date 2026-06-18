@@ -68,11 +68,28 @@ export const questionAnswerSchema = Type.Object({
   citationScope: Type.Optional(citationScopeSchema),
 });
 
+export const entityExtractionSchema = Type.Object({
+  entities: Type.Array(Type.Object({
+    name: Type.String(),
+    type: Type.Union([
+      Type.Literal('person'),
+      Type.Literal('organization'),
+      Type.Literal('concept'),
+      Type.Literal('tool'),
+      Type.Literal('place'),
+      Type.Literal('event'),
+      Type.Literal('other'),
+    ]),
+    description: Type.String(),
+  })),
+});
+
 export const structuredSchemas = {
   knowledge_base_skeleton: topicSkeletonSchema,
   material_summary: materialSummarySchema,
   knowledge_cards: knowledgeCardsSchema,
   question_answer: questionAnswerSchema,
+  entity_extraction: entityExtractionSchema,
 } as const;
 
 const artifactSectionSchema = Type.Object({
@@ -116,7 +133,7 @@ export type ArtifactSubtype = keyof typeof artifactSubtypeSchemas;
 const ARTIFACT_SUBTYPE_LIST = Object.keys(artifactSubtypeSchemas) as ArtifactSubtype[];
 
 export interface StructuredGenerationRequest<TSchemaInput = unknown> {
-  task: 'knowledge_base_skeleton' | 'material_summary' | 'knowledge_cards' | 'question_answer';
+  task: 'knowledge_base_skeleton' | 'material_summary' | 'knowledge_cards' | 'question_answer' | 'entity_extraction';
   prompt: string;
   schema?: TSchemaInput;
   context?: Record<string, unknown>;
@@ -473,7 +490,33 @@ export function validateStructuredOutput(task: StructuredGenerationTask, output:
     return;
   }
 
+  if (task === 'entity_extraction') {
+    validateEntities(value.entities, `${task}.entities`);
+    return;
+  }
+
   validateCards(value.cards, `${task}.cards`);
+}
+
+const allowedEntityTypes = new Set(['person', 'organization', 'concept', 'tool', 'place', 'event', 'other']);
+
+function validateEntities(value: unknown, path: string): void {
+  if (!Array.isArray(value)) {
+    throw new StructuredOutputValidationError(`${path} must be an array of entities.`);
+  }
+  if (value.length === 0) {
+    throw new StructuredOutputValidationError(`${path} must contain at least one entity.`);
+  }
+  value.forEach((entity, index) => validateEntity(entity, `${path}[${index}]`));
+}
+
+function validateEntity(value: unknown, path: string): void {
+  const entity = requirePlainObject(value, path);
+  requireNonEmptyString(entity.name, `${path}.name`);
+  requireNonEmptyString(entity.description, `${path}.description`);
+  if (entity.type !== undefined && (typeof entity.type !== 'string' || !allowedEntityTypes.has(entity.type))) {
+    throw new StructuredOutputValidationError(`${path}.type must be one of the supported entity types.`);
+  }
 }
 
 export function validateArtifactSubtypeOutput(subtype: ArtifactSubtype, output: unknown): void {
@@ -684,6 +727,15 @@ function mockOutputFor(request: StructuredGenerationRequest) {
       ],
       artifactTitle: `${title} 问答线索`,
       artifactBody: '已保存问题，等待后续基于来源资料回答。',
+    };
+  }
+
+  if (request.task === 'entity_extraction') {
+    return {
+      entities: [
+        { name: `${title} 核心概念`, type: 'concept', description: '从当前知识库卡片中提取的核心概念占位，配置 Pi provider 后会替换为真实实体。' },
+        { name: '相关工具', type: 'tool', description: '与该主题相关的工具或平台占位。' },
+      ],
     };
   }
 
