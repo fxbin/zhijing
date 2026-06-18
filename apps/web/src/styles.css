@@ -5627,6 +5627,16 @@ button { cursor: pointer; }
   font-size: 12px;
 }
 
+.synthesis-error {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(212, 148, 74, 0.12);
+  color: #b87333;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .advanced-panel {
   min-width: 0;
   padding: 22px;

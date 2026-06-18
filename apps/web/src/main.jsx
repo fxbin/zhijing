@@ -2809,6 +2809,32 @@ function GlobalAssetsDashboard({ data, setView }) {
 }
 
 function CrossKbSynthesisView({ data, setView }) {
+  const [synthesizing, setSynthesizing] = useState(null);
+  const [synthesisError, setSynthesisError] = useState('');
+
+  async function generateSynthesis(theme) {
+    if (synthesizing || !theme.left?.id || !theme.right?.id) return;
+    setSynthesizing(theme);
+    setSynthesisError('');
+    try {
+      const response = await fetch('/api/synthesis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leftKnowledgeBaseId: theme.left.id, rightKnowledgeBaseId: theme.right.id }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        setSynthesisError(payload.error ?? '跨库综合失败');
+        return;
+      }
+      setView('library');
+    } catch {
+      setSynthesisError('网络错误，跨库综合失败');
+    } finally {
+      setSynthesizing(null);
+    }
+  }
+
   return (
     <section className="page-main full advanced-page">
       <div className="advanced-head">
@@ -2820,6 +2846,8 @@ function CrossKbSynthesisView({ data, setView }) {
         <button onClick={() => setView('compare')} type="button">Compare</button>
       </div>
       <AdvancedOpsTabs active="synthesis" setView={setView} />
+
+      {synthesisError && <p className="synthesis-error">{synthesisError}</p>}
 
       {data.crossKbThemes.length === 0 ? (
         <EmptyState title="暂无跨库主题" body="至少需要两个知识库或更多卡片后，系统才能形成可综合的主题线索。" />
@@ -2839,7 +2867,13 @@ function CrossKbSynthesisView({ data, setView }) {
                 ))}
               </div>
               <footer>
-                <button onClick={() => setView('artifact')} type="button">Draft artifact</button>
+                <button
+                  onClick={() => generateSynthesis(theme)}
+                  type="button"
+                  disabled={synthesizing !== null}
+                >
+                  {synthesizing === theme ? '生成中…' : 'Draft artifact'}
+                </button>
                 <button onClick={() => setView('conflicts')} type="button">Check conflicts</button>
               </footer>
             </article>

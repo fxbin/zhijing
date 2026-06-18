@@ -10,6 +10,7 @@ import {
   editArtifactSection,
   editCardContent,
   extractEntities,
+  generateCrossKbSynthesis,
   getDashboard,
   loadFilter,
   recordExport,
@@ -268,6 +269,23 @@ export function buildApi() {
     try {
       const entities = await extractEntities(request.params.id);
       return { entities };
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.status(error.statusCode).send({ error: error.message });
+      }
+      throw error;
+    }
+  });
+
+  app.post<{ Body: { leftKnowledgeBaseId?: string; rightKnowledgeBaseId?: string } }>('/api/synthesis', async (request, reply) => {
+    const leftId = request.body?.leftKnowledgeBaseId;
+    const rightId = request.body?.rightKnowledgeBaseId;
+    if (!leftId || !rightId) {
+      return reply.status(400).send({ error: 'leftKnowledgeBaseId 与 rightKnowledgeBaseId 均为必填。' });
+    }
+    try {
+      const result = await generateCrossKbSynthesis(leftId, rightId);
+      return result;
     } catch (error) {
       if (error instanceof KnowledgeCoreError) {
         return reply.status(error.statusCode).send({ error: error.message });

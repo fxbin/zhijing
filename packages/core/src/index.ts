@@ -60,6 +60,7 @@ import {
   getKnownPiProviders,
   getPiEnvApiKey,
   isKnownPiProvider,
+  questionAnswerSchema,
   structuredSchemas,
   type KnownProvider,
   type PiRuntime,
@@ -4089,6 +4090,87 @@ export async function extractEntities(knowledgeBaseId: string, piRuntime?: PiRun
 
 export function listEntities(knowledgeBaseId: string): Entity[] {
   return repository.listEntities(knowledgeBaseId);
+}
+
+const SYNTHESIS_OVERLAP_LIMIT = 12;
+const SYNTHESIS_CARD_DIGEST_LIMIT = 30;
+const SYNTHESIS_ARTIFACT_TYPE = 'research_report' as const;
+
+/**
+ * 跨库综合生成：取两个知识库的卡片，构造综合 prompt，
+ * 通过 pi-runtime 生成跨库研究摘要，持久化为 research_report 产物。
+ */
+export async function generateCrossKbSynthesis(leftKbId: string, rightKbId: string): Promise<{ artifact: ArtifactRecord; overlapKeywords: string[] }> {
+  if (leftKbId === rightKbId) {
+    throw new KnowledgeCoreError('跨库综合需要两个不同的知识库。', 400);
+  }
+  const leftBase = repository.findKnowledgeBase(leftKbId);
+  if (!leftBase) {
+    throw new KnowledgeCoreError(`Knowledge base ${leftKbId} not found.`, 404);
+  }
+  const rightBase = repository.findKnowledgeBase(rightKbId);
+  if (!rightBase) {
+    throw new KnowledgeCoreError(`Knowledge base ${rightKbId} not found.`, 404);
+  }
+  const leftCards = repository.listCards(leftKbId);
+  const rightCards = repository.listCards(rightKbId);
+  if (leftCards.length === 0 && rightCards.length === 0) {
+    throw new KnowledgeCoreError('两个知识库都没有卡片，无法进行跨库综合。', 400);
+  }
+  const overlapKeywords = computeOverlapKeywords(leftCards, rightCards);
+  const leftDigest = leftCards.slice(0, SYNTHESIS_CARD_DIGEST_LIMIT).map((card) => `- ${card.title}`).join('\n');
+  const rightDigest = rightCards.slice(0, SYNTHESIS_CARD_DIGEST_LIMIT).map((card) => `- ${card.title}`).join('\n');
+  const prompt = [
+    `请基于以下两个知识库执行跨库综合分析。`,
+    `左库「${leftBase.title}」核心卡片：\n${leftDigest || '（暂无卡片）'}`,
+    `右库「${rightBase.title}」核心卡片：\n${rightDigest || '（暂无卡片）'}`,
+    `已知重叠关键词：${overlapKeywords.length > 0 ? overlapKeywords.join('、') : '暂无明显重叠'}`,
+    `请输出：共同概念、分歧观点、证据来源对比、可行动的下一步研究问题。`,
+  ].join('\n');
+  const runtime = createMockPiRuntime();
+  const result = await runtime.completeStructured<{ summary: string }>({
+    task: 'question_answer',
+    prompt,
+    schema: questionAnswerSchema,
+  });
+  const summary = result.output.summary ?? `「${leftBase.title}」与「${rightBase.title}」的跨库综合已生成占位摘要。`;
+  const now = new Date().toISOString();
+  const artifact: ArtifactRecord = {
+    id: id('art'),
+    knowledgeBaseId: leftKbId,
+    artifactType: SYNTHESIS_ARTIFACT_TYPE,
+    subtype: 'summary',
+    title: `跨库综合：${leftBase.title} × ${rightBase.title}`,
+    body: [
+      `## 综合摘要\n${summary}`,
+      `\n## 重叠关键词\n${overlapKeywords.length > 0 ? overlapKeywords.join('、') : '两个知识库暂无明显关键词重叠。'}`,
+      `\n## 左库「${leftBase.title}」\n共 ${leftCards.length} 张卡片参与综合。`,
+      `\n## 右库「${rightBase.title}」\n共 ${rightCards.length} 张卡片参与综合。`,
+    ].join('\n'),
+    sourceMaterialIds: [],
+    createdAt: now,
+  };
+  repository.insertArtifact(artifact);
+  return { artifact, overlapKeywords };
+}
+
+function computeOverlapKeywords(leftCards: KnowledgeCard[], rightCards: KnowledgeCard[]): string[] {
+  const tokenize = (cards: KnowledgeCard[]) => {
+    const tokens = new Set<string>();
+    for (const card of cards) {
+      for (const token of card.title.split(/[\s,，、。./]+/).filter((item) => item.length >= 2)) {
+        tokens.add(token.toLowerCase());
+      }
+    }
+    return tokens;
+  };
+  const leftTokens = tokenize(leftCards);
+  const rightTokens = tokenize(rightCards);
+  const overlap: string[] = [];
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) overlap.push(token);
+  }
+  return overlap.slice(0, SYNTHESIS_OVERLAP_LIMIT);
 }
 
 const CLOUD_BACKUP_LOCAL_FIRST_REASON = '当前版本采用本地优先架构：导出文件保存在用户浏览器下载目录，导出历史保存在本地 SQLite 数据库，用户可随时通过 Backup JSON 按钮手动备份。';
