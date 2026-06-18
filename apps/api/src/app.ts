@@ -3,12 +3,14 @@ import Fastify from 'fastify';
 import {
   assignMaterialToKnowledgeBase,
   answerKnowledgeBaseQuestion,
+  clearFilter,
   completeMaterialReview,
   deleteMaterial,
   describeCloudBackupStatus,
   editArtifactSection,
   editCardContent,
   getDashboard,
+  loadFilter,
   recordExport,
   getKnowledgeBaseAnalytics,
   getKnowledgeBase,
@@ -29,6 +31,7 @@ import {
   recordMaterialParsingFailure,
   requestMaterialParsing,
   runKnowledgeKit,
+  saveFilter,
   saveModelProviderSettings,
   searchKnowledgeAssets,
   suggestMaterialAssignments,
@@ -231,6 +234,27 @@ export function buildApi() {
       knowledgeBaseId: request.params.id,
       message: '云备份功能尚未启用。请使用 ExportView 的 Backup JSON 按钮进行本地整库备份。',
     });
+  });
+
+  app.get<{ Params: { scope: string } }>('/api/saved-filters/:scope', async (request) => {
+    const filter = loadFilter(request.params.scope as 'assets' | 'compare');
+    return { filter };
+  });
+
+  app.put<{ Params: { scope: string }; Body: { cardType?: string; claimStatus?: string; sortKey?: string; keyword?: string } }>('/api/saved-filters/:scope', async (request) => {
+    const body = request.body ?? {};
+    const record = saveFilter(request.params.scope as 'assets' | 'compare', {
+      cardType: typeof body.cardType === 'string' && body.cardType.length > 0 ? body.cardType : null,
+      claimStatus: typeof body.claimStatus === 'string' && body.claimStatus.length > 0 ? body.claimStatus : null,
+      sortKey: typeof body.sortKey === 'string' ? body.sortKey : 'updated_desc',
+      keyword: typeof body.keyword === 'string' ? body.keyword : '',
+    });
+    return { filter: record };
+  });
+
+  app.delete<{ Params: { scope: string } }>('/api/saved-filters/:scope', async (request) => {
+    clearFilter(request.params.scope as 'assets' | 'compare');
+    return { ok: true };
   });
 
   app.post<{ Params: { id: string }; Body: { sections?: Array<{ title?: string; body?: string }> } }>('/api/artifacts/:id/sections/initialize', async (request, reply) => {

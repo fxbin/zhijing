@@ -2494,6 +2494,53 @@ function AdvancedOpsTabs({ active, setView }) {
 }
 
 function GlobalAssetsDashboard({ data, setView }) {
+  const [filterCardType, setFilterCardType] = useState('all');
+  const [filterClaimStatus, setFilterClaimStatus] = useState('all');
+  const [filterSort, setFilterSort] = useState('updated_desc');
+  const [filterKeyword, setFilterKeyword] = useState('');
+  const [filterLoaded, setFilterLoaded] = useState(false);
+
+  useEffect(() => {
+    if (filterLoaded) return;
+    let ignore = false;
+    async function loadAssetsFilter() {
+      try {
+        const response = await fetch('/api/saved-filters/assets');
+        if (!response.ok) return;
+        const payload = await response.json();
+        const filter = payload.filter;
+        if (ignore || !filter) return;
+        if (filter.cardType) setFilterCardType(filter.cardType);
+        if (filter.claimStatus) setFilterClaimStatus(filter.claimStatus);
+        if (filter.sortKey) setFilterSort(filter.sortKey);
+        if (typeof filter.keyword === 'string') setFilterKeyword(filter.keyword);
+      } catch {
+        // 静默降级到默认筛选
+      } finally {
+        if (!ignore) setFilterLoaded(true);
+      }
+    }
+    loadAssetsFilter();
+    return () => { ignore = true; };
+  }, [filterLoaded]);
+
+  useEffect(() => {
+    if (!filterLoaded) return;
+    const timer = setTimeout(() => {
+      fetch('/api/saved-filters/assets', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cardType: filterCardType === 'all' ? '' : filterCardType,
+          claimStatus: filterClaimStatus === 'all' ? '' : filterClaimStatus,
+          sortKey: filterSort,
+          keyword: filterKeyword,
+        }),
+      }).catch(() => {});
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [filterLoaded, filterCardType, filterClaimStatus, filterSort, filterKeyword]);
+
   const metrics = [
     { label: 'Knowledge bases', value: data.totals.knowledgeBases, body: '主题知识库' },
     { label: 'Materials', value: data.totals.materials, body: '来源资料' },
@@ -2504,6 +2551,41 @@ function GlobalAssetsDashboard({ data, setView }) {
     { label: 'Needs review', value: data.totals.reviewMaterials, body: '等待复核' },
     { label: 'Duplicate signals', value: data.totals.duplicateSignals, body: '疑似重复' },
   ];
+
+  const CARD_TYPE_OPTIONS = ['all', 'concept', 'method', 'fact', 'question', 'general'];
+  const CLAIM_STATUS_OPTIONS = ['all', 'draft', 'sourced', 'verified'];
+  const SORT_OPTIONS = [
+    { key: 'updated_desc', label: '最近更新' },
+    { key: 'title_asc', label: '标题 A→Z' },
+  ];
+
+  const matchesKeyword = (text) => filterKeyword.trim().length === 0
+    || (text ?? '').toLowerCase().includes(filterKeyword.trim().toLowerCase());
+
+  const filteredCards = data.allCards
+    .filter((card) => filterCardType === 'all' || card.type === filterCardType)
+    .filter((card) => filterClaimStatus === 'all' || card.claimStatus === filterClaimStatus)
+    .filter((card) => matchesKeyword(card.title) || matchesKeyword(card.body))
+    .sort((a, b) => {
+      if (filterSort === 'title_asc') return (a.title ?? '').localeCompare(b.title ?? '');
+      return (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '');
+    });
+
+  const filteredMaterials = data.allMaterials
+    .filter((material) => matchesKeyword(material.title))
+    .slice(0, 5);
+
+  async function resetFilter() {
+    setFilterCardType('all');
+    setFilterClaimStatus('all');
+    setFilterSort('updated_desc');
+    setFilterKeyword('');
+    try {
+      await fetch('/api/saved-filters/assets', { method: 'DELETE' });
+    } catch {
+      // 静默降级
+    }
+  }
 
   return (
     <section className="page-main full advanced-page">
@@ -2527,6 +2609,34 @@ function GlobalAssetsDashboard({ data, setView }) {
         ))}
       </div>
 
+      <section className="assets-filter-bar">
+        <div className="assets-filter-group">
+          <label>
+            <span>卡片类型</span>
+            <select value={filterCardType} onChange={(event) => setFilterCardType(event.target.value)}>
+              {CARD_TYPE_OPTIONS.map((option) => <option key={option} value={option}>{option === 'all' ? '全部' : option}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>证据状态</span>
+            <select value={filterClaimStatus} onChange={(event) => setFilterClaimStatus(event.target.value)}>
+              {CLAIM_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option === 'all' ? '全部' : option}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>排序</span>
+            <select value={filterSort} onChange={(event) => setFilterSort(event.target.value)}>
+              {SORT_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+            </select>
+          </label>
+          <label className="assets-filter-keyword">
+            <span>关键词</span>
+            <input value={filterKeyword} onChange={(event) => setFilterKeyword(event.target.value)} placeholder="标题或正文搜索" />
+          </label>
+        </div>
+        <button type="button" className="assets-filter-reset" onClick={resetFilter}>重置筛选</button>
+      </section>
+
       <div className="advanced-panel-grid">
         <section className="advanced-panel">
           <div className="panel-title">
@@ -2536,11 +2646,11 @@ function GlobalAssetsDashboard({ data, setView }) {
               <h4>最近资料</h4>
             </div>
           </div>
-          {data.allMaterials.length === 0 ? (
+          {filteredMaterials.length === 0 ? (
             <EmptyState title="暂无资料资产" body="导入链接或文本后，会在这里汇总全局资料。" />
           ) : (
             <div className="asset-list">
-              {data.allMaterials.slice(0, 5).map((item, index) => (
+              {filteredMaterials.map((item, index) => (
                 <article key={item.id ?? `${item.title}-${index}`}>
                   <span>{item.platform ?? item.source ?? item.type ?? 'material'}</span>
                   <strong>{item.title}</strong>
@@ -2559,11 +2669,11 @@ function GlobalAssetsDashboard({ data, setView }) {
               <h4>证据状态</h4>
             </div>
           </div>
-          {data.allCards.length === 0 ? (
-            <EmptyState title="暂无知识卡片" body="生成主题或解析资料后，卡片会成为跨库操作的基础。" />
+          {filteredCards.length === 0 ? (
+            <EmptyState title="暂无知识卡片" body="调整筛选条件或生成主题后，卡片会成为跨库操作的基础。" />
           ) : (
             <div className="asset-list">
-              {data.allCards.slice(0, 5).map((card, index) => (
+              {filteredCards.slice(0, 5).map((card, index) => (
                 <article key={card.id ?? `${card.title}-${index}`}>
                   <span>{card.type ?? 'card'}</span>
                   <strong>{card.title}</strong>

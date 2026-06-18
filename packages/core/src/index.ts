@@ -19,6 +19,8 @@ import {
   type ExportScope,
   type RecallGrade,
   classifyInput,
+  type SavedFilter,
+  type SavedFilterScope,
   type CompleteMaterialReviewRequest,
   type IntakeRequest,
   type IntakeResult,
@@ -83,6 +85,7 @@ type StoreState = {
   cardRevisions: CardRevision[];
   artifactRevisions: ArtifactRevision[];
   exports: ExportRecord[];
+  savedFilters: SavedFilter[];
   modelProviderConfig?: PersistedModelProviderConfig;
 };
 
@@ -104,6 +107,9 @@ type KnowledgeRepository = {
   listCardRevisions(cardId: string): CardRevision[];
   insertExportRecord(record: ExportRecord): void;
   listExportRecords(knowledgeBaseId?: string): ExportRecord[];
+  upsertSavedFilter(record: SavedFilter): void;
+  listSavedFilters(scope?: SavedFilterScope): SavedFilter[];
+  deleteSavedFilter(id: string): void;
   insertTask(task: AgentTask): void;
   updateTask(task: AgentTask): void;
   listTasks(limit?: number): AgentTask[];
@@ -167,6 +173,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     cardRevisions: [],
     artifactRevisions: [],
     exports: [],
+    savedFilters: [],
   };
 
   insertKnowledgeBase(base: KnowledgeBaseSummary) {
@@ -250,6 +257,25 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     return knowledgeBaseId
       ? this.state.exports.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
       : this.state.exports;
+  }
+
+  upsertSavedFilter(record: SavedFilter) {
+    const index = this.state.savedFilters.findIndex((item) => item.id === record.id);
+    if (index >= 0) {
+      this.state.savedFilters[index] = record;
+    } else {
+      this.state.savedFilters.push(record);
+    }
+  }
+
+  listSavedFilters(scope?: SavedFilterScope) {
+    return scope
+      ? this.state.savedFilters.filter((item) => item.scope === scope)
+      : this.state.savedFilters;
+  }
+
+  deleteSavedFilter(id: string) {
+    this.state.savedFilters = this.state.savedFilters.filter((item) => item.id !== id);
   }
 
   insertTask(task: AgentTask) {
@@ -629,6 +655,39 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     return (rows as ExportRow[]).map(mapExportRecord);
   }
 
+  upsertSavedFilter(record: SavedFilter) {
+    this.db.prepare(`
+      INSERT INTO saved_filters (id, scope, card_type, claim_status, sort_key, keyword, updated_at)
+      VALUES (@id, @scope, @card_type, @claim_status, @sort_key, @keyword, @updated_at)
+      ON CONFLICT(id) DO UPDATE SET
+        scope = excluded.scope,
+        card_type = excluded.card_type,
+        claim_status = excluded.claim_status,
+        sort_key = excluded.sort_key,
+        keyword = excluded.keyword,
+        updated_at = excluded.updated_at
+    `).run({
+      id: record.id,
+      scope: record.scope,
+      card_type: record.cardType,
+      claim_status: record.claimStatus,
+      sort_key: record.sortKey,
+      keyword: record.keyword,
+      updated_at: record.updatedAt,
+    });
+  }
+
+  listSavedFilters(scope?: SavedFilterScope) {
+    const rows = scope
+      ? this.db.prepare('SELECT * FROM saved_filters WHERE scope = ? ORDER BY updated_at DESC').all(scope)
+      : this.db.prepare('SELECT * FROM saved_filters ORDER BY updated_at DESC').all();
+    return (rows as SavedFilterRow[]).map(mapSavedFilter);
+  }
+
+  deleteSavedFilter(id: string) {
+    this.db.prepare('DELETE FROM saved_filters WHERE id = ?').run(id);
+  }
+
   insertTask(task: AgentTask) {
     this.db.prepare(`
       INSERT INTO tasks (
@@ -911,6 +970,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureArtifactSectionsColumn();
     this.ensureCardRecallColumn();
     this.ensureArtifactRevisionsTable();
+    this.ensureSavedFiltersTable();
   }
 
   private ensureMaterialMediaColumn() {
@@ -940,6 +1000,21 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_artifact_revisions_artifact_id ON artifact_revisions(artifact_id, version);
+    `);
+  }
+
+  private ensureSavedFiltersTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS saved_filters (
+        id TEXT PRIMARY KEY,
+        scope TEXT NOT NULL,
+        card_type TEXT,
+        claim_status TEXT,
+        sort_key TEXT NOT NULL,
+        keyword TEXT NOT NULL DEFAULT '',
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_saved_filters_scope ON saved_filters(scope, updated_at DESC);
     `);
   }
 
@@ -1135,6 +1210,28 @@ function mapExportRecord(row: ExportRow): ExportRecord {
     artifactCount: row.artifact_count,
     filename: row.filename,
     createdAt: row.created_at,
+  };
+}
+
+type SavedFilterRow = {
+  id: string;
+  scope: SavedFilterScope;
+  card_type: string | null;
+  claim_status: string | null;
+  sort_key: string;
+  keyword: string;
+  updated_at: string;
+};
+
+function mapSavedFilter(row: SavedFilterRow): SavedFilter {
+  return {
+    id: row.id,
+    scope: row.scope,
+    cardType: row.card_type,
+    claimStatus: row.claim_status,
+    sortKey: row.sort_key,
+    keyword: row.keyword,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -3768,6 +3865,48 @@ export function recordExport(knowledgeBaseId: string, summary: ExportSummary): E
 
 export function listExports(knowledgeBaseId: string): ExportRecord[] {
   return repository.listExportRecords(knowledgeBaseId);
+}
+
+const SAVED_FILTER_DEFAULT_SORT = 'updated_desc';
+const SAVED_FILTER_ID_PREFIX = 'filter_';
+
+/**
+ * 保存或更新某个视图（assets / compare）的筛选状态。
+ * 同一 scope 下以固定 ID 级联更新，实现"最近一次筛选自动持久化"语义。
+ */
+export function saveFilter(scope: SavedFilterScope, filter: {
+  cardType: string | null;
+  claimStatus: string | null;
+  sortKey: string;
+  keyword: string;
+}): SavedFilter {
+  const id = `${SAVED_FILTER_ID_PREFIX}${scope}`;
+  const record: SavedFilter = {
+    id,
+    scope,
+    cardType: filter.cardType || null,
+    claimStatus: filter.claimStatus || null,
+    sortKey: filter.sortKey || SAVED_FILTER_DEFAULT_SORT,
+    keyword: filter.keyword ?? '',
+    updatedAt: new Date().toISOString(),
+  };
+  repository.upsertSavedFilter(record);
+  return record;
+}
+
+/**
+ * 读取指定 scope 的持久化筛选器；无记录时返回 null。
+ */
+export function loadFilter(scope: SavedFilterScope): SavedFilter | null {
+  const items = repository.listSavedFilters(scope);
+  return items.length > 0 ? items[0] : null;
+}
+
+/**
+ * 删除指定 scope 的筛选器，通常用于"重置筛选"操作。
+ */
+export function clearFilter(scope: SavedFilterScope): void {
+  repository.deleteSavedFilter(`${SAVED_FILTER_ID_PREFIX}${scope}`);
 }
 
 const CLOUD_BACKUP_LOCAL_FIRST_REASON = '当前版本采用本地优先架构：导出文件保存在用户浏览器下载目录，导出历史保存在本地 SQLite 数据库，用户可随时通过 Backup JSON 按钮手动备份。';

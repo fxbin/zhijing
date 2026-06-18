@@ -252,6 +252,18 @@ export interface CloudBackupStub {
   plannedFor: string | null;
 }
 
+export type SavedFilterScope = 'assets' | 'compare';
+
+export interface SavedFilter {
+  id: string;
+  scope: SavedFilterScope;
+  cardType: string | null;
+  claimStatus: string | null;
+  sortKey: string;
+  keyword: string;
+  updatedAt: string;
+}
+
 export interface KnowledgeCitation {
   id: string;
   kind: 'material' | 'card';
