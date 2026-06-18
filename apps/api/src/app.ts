@@ -6,6 +6,7 @@ import {
   completeMaterialReview,
   deleteMaterial,
   describeCloudBackupStatus,
+  editArtifactSection,
   editCardContent,
   getDashboard,
   recordExport,
@@ -14,8 +15,10 @@ import {
   getKnowledgeMap,
   getTask,
   getModelProviderSettings,
+  initializeArtifactSections,
   intakeKnowledge,
   KnowledgeCoreError,
+  listArtifactRevisions,
   listDueCards,
   listExports,
   listMessages,
@@ -228,6 +231,54 @@ export function buildApi() {
       knowledgeBaseId: request.params.id,
       message: '云备份功能尚未启用。请使用 ExportView 的 Backup JSON 按钮进行本地整库备份。',
     });
+  });
+
+  app.post<{ Params: { id: string }; Body: { sections?: Array<{ title?: string; body?: string }> } }>('/api/artifacts/:id/sections/initialize', async (request, reply) => {
+    const rawSections = Array.isArray(request.body?.sections) ? request.body.sections : [];
+    const sectionInits = rawSections
+      .map((section) => ({
+        title: typeof section?.title === 'string' ? section.title : '',
+        body: typeof section?.body === 'string' ? section.body : '',
+      }))
+      .filter((section) => section.title.trim().length > 0 || section.body.trim().length > 0);
+    if (sectionInits.length === 0) {
+      return reply.status(400).send({ error: 'sections 数组不能为空，且每项需包含非空 title 或 body' });
+    }
+    try {
+      const artifact = await initializeArtifactSections(request.params.id, sectionInits);
+      return { artifact };
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.status(error.statusCode).send({ error: error.message });
+      }
+      throw error;
+    }
+  });
+
+  app.patch<{ Params: { id: string; sectionId: string }; Body: { title?: string; body?: string } }>('/api/artifacts/:id/sections/:sectionId', async (request, reply) => {
+    const body = request.body ?? {};
+    const hasTitle = typeof body.title === 'string';
+    const hasBody = typeof body.body === 'string';
+    if (!hasTitle && !hasBody) {
+      return reply.status(400).send({ error: '至少需要提供 title 或 body 字段' });
+    }
+    try {
+      const result = await editArtifactSection(request.params.id, request.params.sectionId, {
+        title: hasTitle ? body.title : undefined,
+        body: hasBody ? body.body : undefined,
+      });
+      return result;
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.status(error.statusCode).send({ error: error.message });
+      }
+      throw error;
+    }
+  });
+
+  app.get<{ Params: { id: string } }>('/api/artifacts/:id/revisions', async (request) => {
+    const revisions = await listArtifactRevisions(request.params.id);
+    return { revisions };
   });
 
   app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/map', async (request, reply) => {

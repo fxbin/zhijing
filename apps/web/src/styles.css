@@ -4775,6 +4775,205 @@ button { cursor: pointer; }
   text-transform: uppercase;
 }
 
+.artifact-edit-toggle {
+  margin-left: auto;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 850;
+  background: var(--surface-low);
+  color: var(--primary);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.artifact-edit-toggle:hover:not(:disabled) {
+  background: var(--primary);
+  color: #fff;
+}
+
+.artifact-edit-toggle:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.artifact-edit-error {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(212, 148, 74, 0.12);
+  color: #b87333;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.artifact-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.artifact-section-head h3 {
+  margin: 0;
+}
+
+.artifact-section-edit-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  background: transparent;
+  color: var(--sage-text);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.artifact-section-edit-btn:hover {
+  background: var(--surface-low);
+}
+
+.artifact-section.editing {
+  background: var(--surface-low);
+  border-radius: 10px;
+  padding: 18px;
+}
+
+.artifact-section-form {
+  display: grid;
+  gap: 12px;
+}
+
+.artifact-section-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.artifact-section-form input,
+.artifact-section-form textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--primary);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.artifact-section-form textarea {
+  min-height: 120px;
+}
+
+.artifact-section-form-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.artifact-section-form-actions button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.artifact-section-form-actions button.primary {
+  background: var(--primary);
+  color: #fff;
+  border: 1px solid var(--primary);
+}
+
+.artifact-section-form-actions button.primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.artifact-section-form-actions button.ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+
+.artifact-revisions-panel {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+}
+
+.artifact-revisions-panel h3 {
+  margin: 0;
+}
+
+.artifact-revisions-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.artifact-revisions-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.artifact-revision-item {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 10px;
+}
+
+.artifact-revision-item > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.artifact-revision-item strong {
+  color: var(--primary);
+  font-size: 13px;
+}
+
+.artifact-revision-item span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.artifact-revision-snapshot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.artifact-revision-field {
+  border-radius: 6px;
+  background: var(--surface-low);
+  color: var(--primary);
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.artifact-revision-changes {
+  border-radius: 6px;
+  background: rgba(107, 142, 127, 0.15);
+  color: var(--sage-text);
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .variant-xiaohongshu .artifact-hero,
 .variant-topic .artifact-hero {
   border-top: 4px solid var(--sage);

@@ -2,6 +2,12 @@ import {
   type AgentTask,
   type AssignMaterialRequest,
   type ArtifactRecord,
+  type ArtifactRevision,
+  type ArtifactRevisionField,
+  type ArtifactSection,
+  type ArtifactSectionEdit,
+  type ArtifactSectionEditResult,
+  type ArtifactSectionInit,
   type ArtifactSubtype,
   type CardRecall,
   type CardRevision,
@@ -75,6 +81,7 @@ type StoreState = {
   artifacts: ArtifactRecord[];
   messages: ChatMessage[];
   cardRevisions: CardRevision[];
+  artifactRevisions: ArtifactRevision[];
   exports: ExportRecord[];
   modelProviderConfig?: PersistedModelProviderConfig;
 };
@@ -104,6 +111,9 @@ type KnowledgeRepository = {
   insertArtifact(artifact: ArtifactRecord): void;
   updateArtifact(artifact: ArtifactRecord): void;
   listArtifacts(knowledgeBaseId?: string, limit?: number): ArtifactRecord[];
+  insertArtifactRevision(revision: ArtifactRevision): void;
+  listArtifactRevisions(artifactId: string): ArtifactRevision[];
+  findArtifact(artifactId: string): ArtifactRecord | undefined;
   insertMessage(message: ChatMessage): void;
   listMessages(knowledgeBaseId: string, limit?: number): ChatMessage[];
   readModelProviderConfig(): PersistedModelProviderConfig | undefined;
@@ -155,6 +165,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     artifacts: [],
     messages: [],
     cardRevisions: [],
+    artifactRevisions: [],
     exports: [],
   };
 
@@ -274,6 +285,20 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     return typeof limit === 'number' ? artifacts.slice(0, limit) : artifacts;
   }
 
+  findArtifact(artifactId: string) {
+    return this.state.artifacts.find((item) => item.id === artifactId);
+  }
+
+  insertArtifactRevision(revision: ArtifactRevision) {
+    this.state.artifactRevisions.push(revision);
+  }
+
+  listArtifactRevisions(artifactId: string) {
+    return this.state.artifactRevisions
+      .filter((item) => item.artifactId === artifactId)
+      .sort((a, b) => a.version - b.version);
+  }
+
   insertMessage(message: ChatMessage) {
     this.state.messages.push(message);
   }
@@ -366,6 +391,18 @@ type ArtifactRow = {
   title: string;
   body: string;
   source_material_ids_json: string;
+  sections_json: string | null;
+  created_at: string;
+};
+
+type ArtifactRevisionRow = {
+  id: string;
+  artifact_id: string;
+  version: number;
+  section_id: string;
+  section_title_snapshot: string;
+  section_body_snapshot: string;
+  changed_fields_json: string;
   created_at: string;
 };
 
@@ -621,8 +658,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   insertArtifact(artifact: ArtifactRecord) {
     this.db.prepare(`
       INSERT INTO artifacts (
-        id, knowledge_base_id, artifact_type, subtype, title, body, source_material_ids_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        id, knowledge_base_id, artifact_type, subtype, title, body, source_material_ids_json, sections_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       artifact.id,
       artifact.knowledgeBaseId,
@@ -631,6 +668,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       artifact.title,
       artifact.body,
       JSON.stringify(artifact.sourceMaterialIds),
+      artifact.sections ? JSON.stringify(artifact.sections) : null,
       artifact.createdAt,
     );
   }
@@ -638,7 +676,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   updateArtifact(artifact: ArtifactRecord) {
     this.db.prepare(`
       UPDATE artifacts
-      SET knowledge_base_id = ?, artifact_type = ?, subtype = ?, title = ?, body = ?, source_material_ids_json = ?, created_at = ?
+      SET knowledge_base_id = ?, artifact_type = ?, subtype = ?, title = ?, body = ?, source_material_ids_json = ?, sections_json = ?, created_at = ?
       WHERE id = ?
     `).run(
       artifact.knowledgeBaseId,
@@ -647,6 +685,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       artifact.title,
       artifact.body,
       JSON.stringify(artifact.sourceMaterialIds),
+      artifact.sections ? JSON.stringify(artifact.sections) : null,
       artifact.createdAt,
       artifact.id,
     );
@@ -657,6 +696,35 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       ? this.db.prepare('SELECT * FROM artifacts WHERE knowledge_base_id = ? ORDER BY created_at DESC').all(knowledgeBaseId)
       : this.db.prepare(`SELECT * FROM artifacts ORDER BY created_at DESC${limit ? ` LIMIT ${limit}` : ''}`).all();
     return (rows as ArtifactRow[]).map(mapArtifact);
+  }
+
+  findArtifact(artifactId: string) {
+    const row = this.db.prepare('SELECT * FROM artifacts WHERE id = ?').get(artifactId) as ArtifactRow | undefined;
+    return row ? mapArtifact(row) : undefined;
+  }
+
+  insertArtifactRevision(revision: ArtifactRevision) {
+    this.db.prepare(`
+      INSERT INTO artifact_revisions (
+        id, artifact_id, version, section_id, section_title_snapshot, section_body_snapshot, changed_fields_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      revision.id,
+      revision.artifactId,
+      revision.version,
+      revision.sectionId,
+      revision.sectionTitleSnapshot,
+      revision.sectionBodySnapshot,
+      JSON.stringify(revision.changedFields),
+      revision.createdAt,
+    );
+  }
+
+  listArtifactRevisions(artifactId: string) {
+    const rows = this.db
+      .prepare('SELECT * FROM artifact_revisions WHERE artifact_id = ? ORDER BY version ASC')
+      .all(artifactId) as ArtifactRevisionRow[];
+    return rows.map(mapArtifactRevision);
   }
 
   insertMessage(message: ChatMessage) {
@@ -840,7 +908,9 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureMaterialMediaColumn();
     this.ensureMaterialStatusTimelineColumn();
     this.ensureArtifactSubtypeColumn();
+    this.ensureArtifactSectionsColumn();
     this.ensureCardRecallColumn();
+    this.ensureArtifactRevisionsTable();
   }
 
   private ensureMaterialMediaColumn() {
@@ -848,6 +918,29 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     if (!columns.some((column) => column.name === 'media_urls_json')) {
       this.db.exec("ALTER TABLE materials ADD COLUMN media_urls_json TEXT NOT NULL DEFAULT '[]';");
     }
+  }
+
+  private ensureArtifactSectionsColumn() {
+    const columns = this.db.prepare('PRAGMA table_info(artifacts)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'sections_json')) {
+      this.db.exec('ALTER TABLE artifacts ADD COLUMN sections_json TEXT;');
+    }
+  }
+
+  private ensureArtifactRevisionsTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS artifact_revisions (
+        id TEXT PRIMARY KEY,
+        artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL,
+        section_id TEXT NOT NULL,
+        section_title_snapshot TEXT NOT NULL,
+        section_body_snapshot TEXT NOT NULL,
+        changed_fields_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_artifact_revisions_artifact_id ON artifact_revisions(artifact_id, version);
+    `);
   }
 
   private ensureMaterialStatusTimelineColumn() {
@@ -1120,6 +1213,7 @@ function kitToSubtype(kitId: KnowledgeKitId): ArtifactSubtype {
 
 function mapArtifact(row: ArtifactRow): ArtifactRecord {
   const subtype = normalizeArtifactSubtype(row.subtype);
+  const sections = parseArtifactSections(row.sections_json);
   return {
     id: row.id,
     knowledgeBaseId: row.knowledge_base_id,
@@ -1127,7 +1221,41 @@ function mapArtifact(row: ArtifactRow): ArtifactRecord {
     subtype,
     title: row.title,
     body: row.body,
+    sections: sections.length > 0 ? sections : undefined,
     sourceMaterialIds: JSON.parse(row.source_material_ids_json) as string[],
+    createdAt: row.created_at,
+  };
+}
+
+function parseArtifactSections(raw: string | null | undefined): ArtifactSection[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item): item is ArtifactSection =>
+        typeof item === 'object' && item !== null
+        && typeof (item as ArtifactSection).id === 'string'
+        && typeof (item as ArtifactSection).title === 'string'
+        && typeof (item as ArtifactSection).body === 'string'
+        && typeof (item as ArtifactSection).updatedAt === 'string',
+      )
+      .map((item) => ({ ...item }));
+  } catch {
+    return [];
+  }
+}
+
+function mapArtifactRevision(row: ArtifactRevisionRow): ArtifactRevision {
+  const changedFields = JSON.parse(row.changed_fields_json) as ArtifactRevisionField[];
+  return {
+    id: row.id,
+    artifactId: row.artifact_id,
+    version: row.version,
+    sectionId: row.section_id,
+    sectionTitleSnapshot: row.section_title_snapshot,
+    sectionBodySnapshot: row.section_body_snapshot,
+    changedFields,
     createdAt: row.created_at,
   };
 }
@@ -3537,6 +3665,78 @@ export function editCardContent(cardId: string, changes: CardContentEdit): CardE
 
 export function listCardRevisions(cardId: string): CardRevision[] {
   return repository.listCardRevisions(cardId);
+}
+
+export function initializeArtifactSections(artifactId: string, sectionInits: ArtifactSectionInit[]): ArtifactRecord {
+  const artifact = repository.findArtifact(artifactId);
+  if (!artifact) {
+    throw new KnowledgeCoreError(`Artifact ${artifactId} not found`, 404);
+  }
+  if (sectionInits.length === 0) {
+    throw new KnowledgeCoreError('至少需要提供一个分区定义', 400);
+  }
+  const now = new Date().toISOString();
+  const sections: ArtifactSection[] = sectionInits.map((init, index) => ({
+    id: `section_${Date.now().toString(36)}_${index.toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    title: init.title,
+    body: init.body,
+    updatedAt: now,
+  }));
+  const updated: ArtifactRecord = { ...artifact, sections };
+  repository.updateArtifact(updated);
+  return updated;
+}
+
+export function editArtifactSection(artifactId: string, sectionId: string, edit: ArtifactSectionEdit): ArtifactSectionEditResult {
+  const artifact = repository.findArtifact(artifactId);
+  if (!artifact) {
+    throw new KnowledgeCoreError(`Artifact ${artifactId} not found`, 404);
+  }
+  if (!artifact.sections || artifact.sections.length === 0) {
+    throw new KnowledgeCoreError(`Artifact ${artifactId} 未初始化分区，请先调用 initializeArtifactSections`, 409);
+  }
+  const sectionIndex = artifact.sections.findIndex((section) => section.id === sectionId);
+  if (sectionIndex < 0) {
+    throw new KnowledgeCoreError(`Section ${sectionId} not found in artifact ${artifactId}`, 404);
+  }
+  const original = artifact.sections[sectionIndex];
+  const changedFields: ArtifactRevisionField[] = [];
+  const nextTitle = typeof edit.title === 'string' && edit.title !== original.title ? edit.title : original.title;
+  const nextBody = typeof edit.body === 'string' && edit.body !== original.body ? edit.body : original.body;
+  if (typeof edit.title === 'string' && edit.title !== original.title) changedFields.push('title');
+  if (typeof edit.body === 'string' && edit.body !== original.body) changedFields.push('body');
+  if (changedFields.length === 0) {
+    return { artifact };
+  }
+  const now = new Date().toISOString();
+  const updatedSection: ArtifactSection = {
+    id: original.id,
+    title: nextTitle,
+    body: nextBody,
+    updatedAt: now,
+  };
+  const sections = artifact.sections.slice();
+  sections[sectionIndex] = updatedSection;
+  const updated: ArtifactRecord = { ...artifact, sections };
+  repository.updateArtifact(updated);
+  const existingRevisions = repository.listArtifactRevisions(artifactId);
+  const nextVersion = existingRevisions.length > 0 ? Math.max(...existingRevisions.map((revision) => revision.version)) + 1 : 1;
+  const revision: ArtifactRevision = {
+    id: `artrev_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    artifactId,
+    version: nextVersion,
+    sectionId: original.id,
+    sectionTitleSnapshot: original.title,
+    sectionBodySnapshot: original.body,
+    changedFields,
+    createdAt: now,
+  };
+  repository.insertArtifactRevision(revision);
+  return { artifact: updated, revision };
+}
+
+export function listArtifactRevisions(artifactId: string): ArtifactRevision[] {
+  return repository.listArtifactRevisions(artifactId);
 }
 
 export type ExportSummary = {

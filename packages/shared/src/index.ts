@@ -190,6 +190,42 @@ export interface ArtifactRecord {
   body: string;
   sourceMaterialIds: string[];
   createdAt: string;
+  sections?: ArtifactSection[];
+}
+
+export interface ArtifactSection {
+  id: string;
+  title: string;
+  body: string;
+  updatedAt: string;
+}
+
+export type ArtifactRevisionField = 'title' | 'body';
+
+export interface ArtifactRevision {
+  id: string;
+  artifactId: string;
+  version: number;
+  sectionId: string;
+  sectionTitleSnapshot: string;
+  sectionBodySnapshot: string;
+  changedFields: ArtifactRevisionField[];
+  createdAt: string;
+}
+
+export interface ArtifactSectionInit {
+  title: string;
+  body: string;
+}
+
+export interface ArtifactSectionEdit {
+  title?: string;
+  body?: string;
+}
+
+export interface ArtifactSectionEditResult {
+  artifact: ArtifactRecord;
+  revision?: ArtifactRevision;
 }
 
 export type ExportFormat = 'markdown' | 'json' | 'pdf';
