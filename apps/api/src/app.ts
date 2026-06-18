@@ -23,6 +23,8 @@ import {
   intakeKnowledge,
   KnowledgeCoreError,
   listArtifactRevisions,
+  listConflictAuditEntries,
+  listConflictGroups,
   listDueCards,
   listEntities,
   listExports,
@@ -33,6 +35,7 @@ import {
   listMaterials,
   recordMaterialParsingFailure,
   requestMaterialParsing,
+  resolveConflictGroup,
   runKnowledgeKit,
   saveFilter,
   saveModelProviderSettings,
@@ -294,6 +297,42 @@ export function buildApi() {
     }
   });
 
+  app.get<{ Querystring: { kind?: string } }>('/api/conflicts/groups', async (request) => {
+    const kind = request.query.kind;
+    const groups = listConflictGroups(kind === 'duplicate_card' || kind === 'duplicate_material' ? kind : undefined);
+    return { groups };
+  });
+
+  app.get<{ Querystring: { limit?: string } }>('/api/conflicts/audit', async (request) => {
+    const limit = request.query.limit ? Number.parseInt(request.query.limit, 10) : undefined;
+    const entries = listConflictAuditEntries(Number.isFinite(limit) ? limit : undefined);
+    return { entries };
+  });
+
+  app.post<{ Body: { kind?: string; keepId?: string; dropIds?: string[] } }>('/api/conflicts/resolve', async (request, reply) => {
+    const kind = request.body?.kind;
+    const keepId = request.body?.keepId;
+    const dropIds = Array.isArray(request.body?.dropIds) ? request.body.dropIds : [];
+    if (kind !== 'duplicate_card' && kind !== 'duplicate_material') {
+      return reply.status(400).send({ error: 'kind 必须是 duplicate_card 或 duplicate_material。' });
+    }
+    if (!keepId) {
+      return reply.status(400).send({ error: 'keepId 为必填。' });
+    }
+    if (dropIds.length === 0) {
+      return reply.status(400).send({ error: 'dropIds 至少需要一项。' });
+    }
+    try {
+      const entry = resolveConflictGroup({ kind, keepId, dropIds });
+      return { entry };
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.status(error.statusCode).send({ error: error.message });
+      }
+      throw error;
+    }
+  });
+
   app.post<{ Params: { id: string }; Body: { sections?: Array<{ title?: string; body?: string }> } }>('/api/artifacts/:id/sections/initialize', async (request, reply) => {
     const rawSections = Array.isArray(request.body?.sections) ? request.body.sections : [];
     const sectionInits = rawSections
@@ -498,7 +537,7 @@ export function buildApi() {
 
 const materialTypes = new Set<MaterialType>(['link', 'text', 'question', 'topic']);
 const parseStatuses = new Set<ParseStatus>(['saved', 'parsing', 'needs_review', 'ingested', 'failed']);
-const knowledgeKitIds = new Set<KnowledgeKitId>(['learning_research', 'content_creation', 'product_research']);
+const knowledgeKitIds = new Set<KnowledgeKitId>(['learning_research', 'content_creation', 'product_research', 'topic_decomposition']);
 
 function parseMaterialType(value: string | undefined) {
   return value && materialTypes.has(value as MaterialType) ? value as MaterialType : undefined;

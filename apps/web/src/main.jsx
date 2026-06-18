@@ -2964,16 +2964,77 @@ function MultiEntityComparisonView({ data, setView }) {
 }
 
 function KnowledgeConflictResolverView({ data, setView }) {
+  const [groups, setGroups] = useState([]);
+  const [auditEntries, setAuditEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [resolving, setResolving] = useState(null);
+  const [keepMap, setKeepMap] = useState({});
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadConflicts() {
+      setLoading(true);
+      setError('');
+      try {
+        const [groupsRes, auditRes] = await Promise.all([
+          fetch('/api/conflicts/groups'),
+          fetch('/api/conflicts/audit'),
+        ]);
+        if (!groupsRes.ok || !auditRes.ok) throw new Error('加载冲突数据失败');
+        const groupsData = await groupsRes.json();
+        const auditData = await auditRes.json();
+        if (cancelled) return;
+        setGroups(groupsData.groups ?? []);
+        setAuditEntries(auditData.entries ?? []);
+        const initialKeep = {};
+        for (const group of groupsData.groups ?? []) {
+          if (group.items.length > 0) initialKeep[group.key] = group.items[0].id;
+        }
+        setKeepMap(initialKeep);
+      } catch (err) {
+        if (!cancelled) setError(err.message || '网络错误');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    loadConflicts();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function handleResolve(group) {
+    const keepId = keepMap[group.key];
+    if (!keepId) return;
+    const dropIds = group.items.filter((item) => item.id !== keepId).map((item) => item.id);
+    if (dropIds.length === 0) return;
+    setResolving(group.key);
+    setError('');
+    try {
+      const response = await fetch('/api/conflicts/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: group.kind, keepId, dropIds }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || '合并失败');
+      }
+      const groupsRes = await fetch('/api/conflicts/groups');
+      const auditRes = await fetch('/api/conflicts/audit');
+      setGroups((await groupsRes.json()).groups ?? []);
+      setAuditEntries((await auditRes.json()).entries ?? []);
+    } catch (err) {
+      setError(err.message || '网络错误');
+    } finally {
+      setResolving(null);
+    }
+  }
+
   const typeLabelsMap = {
-    duplicate_material: 'Duplicate material',
-    duplicate_card: 'Duplicate card',
-    needs_review: 'Needs review',
-    unsourced_card: 'Unsourced card',
-  };
-  const severityLabels = {
-    high: 'High',
-    medium: 'Medium',
-    low: 'Low',
+    duplicate_material: '重复资料',
+    duplicate_card: '重复卡片',
+    needs_review: '待复核',
+    unsourced_card: '缺来源',
   };
 
   return (
@@ -2982,44 +3043,85 @@ function KnowledgeConflictResolverView({ data, setView }) {
         <div>
           <span>Conflict Resolver</span>
           <h2>Review knowledge conflicts</h2>
-          <p>集中展示重复、缺来源和需要复核的信号。当前只给处理建议，不会直接修改资料或卡片。</p>
+          <p>集中展示重复卡片与资料，支持选择保留项并合并删除重复项，所有操作写入审计记录。</p>
         </div>
         <button onClick={() => setView('library')} type="button">Review library</button>
       </div>
       <AdvancedOpsTabs active="conflicts" setView={setView} />
 
-      {data.conflictSignals.length === 0 ? (
-        <EmptyState title="暂未发现明显冲突" body="继续导入资料后，重复来源、失败解析和缺来源卡片会出现在这里。" />
+      {error && <div className="conflict-error">{error}</div>}
+
+      {loading ? (
+        <EmptyState title="正在扫描冲突…" body="正在从全库聚合重复卡片与资料分组。" />
+      ) : groups.length === 0 ? (
+        <EmptyState title="暂未发现可合并的重复" body="当出现标题或来源相同的卡片/资料时，会在此显示分组供合并。" />
       ) : (
-        <div className="conflict-grid">
-          {data.conflictSignals.map((signal, index) => (
-            <article className={`conflict-card severity-${signal.severity}`} key={`${signal.type}-${signal.title}-${index}`}>
-              <div className="conflict-card-head">
-                <span>{typeLabelsMap[signal.type] ?? signal.type}</span>
-                <strong>{severityLabels[signal.severity] ?? signal.severity}</strong>
+        <div className="conflict-group-list">
+          {groups.map((group) => (
+            <article className="conflict-group-card" key={`${group.kind}-${group.key}`}>
+              <div className="conflict-group-head">
+                <span className="conflict-kind-badge">{typeLabelsMap[group.kind] ?? group.kind}</span>
+                <h3>{group.title}</h3>
+                <span className="conflict-count">{group.items.length} 项</span>
               </div>
-              <h3>{signal.title}</h3>
-              <p>{conflictBody(signal)}</p>
-              <div className="conflict-actions">
-                <button onClick={() => setView(signal.type === 'unsourced_card' ? 'detail' : 'library')} type="button">
-                  Review
+              <div className="conflict-group-items">
+                {group.items.map((item) => (
+                  <label className={`conflict-item${keepMap[group.key] === item.id ? ' selected' : ''}`} key={item.id}>
+                    <input
+                      type="radio"
+                      name={`keep-${group.key}`}
+                      checked={keepMap[group.key] === item.id}
+                      onChange={() => setKeepMap((prev) => ({ ...prev, [group.key]: item.id }))}
+                    />
+                    <div className="conflict-item-body">
+                      <strong>{item.title}</strong>
+                      <span className="conflict-item-meta">{item.meta}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              <div className="conflict-group-actions">
+                <button
+                  onClick={() => handleResolve(group)}
+                  disabled={resolving === group.key}
+                  type="button"
+                >
+                  {resolving === group.key ? '合并中…' : '合并并删除重复项'}
                 </button>
-                <button disabled type="button">Auto resolve</button>
               </div>
             </article>
           ))}
         </div>
       )}
 
-      <section className="advanced-panel conflict-note">
+      <section className="advanced-panel conflict-audit-panel">
         <div className="panel-title">
           <AlertTriangle size={20} />
           <div>
-            <span>Read-only Guard</span>
-            <h4>处理策略</h4>
+            <span>Audit Trail</span>
+            <h4>冲突解决审计</h4>
           </div>
         </div>
-        <p>这个界面暂时只做冲突定位和人工复核入口。自动合并、删除、重写卡片会放到后续有审计记录的数据治理流程里。</p>
+        {auditEntries.length === 0 ? (
+          <p className="conflict-audit-empty">暂无审计记录。合并操作完成后会在此显示。</p>
+        ) : (
+          <ul className="conflict-audit-list">
+            {auditEntries.map((entry) => (
+              <li className="conflict-audit-item" key={entry.id}>
+                <div className="conflict-audit-head">
+                  <span className="conflict-kind-badge">{typeLabelsMap[entry.kind] ?? entry.kind}</span>
+                  <span className="conflict-audit-action">{entry.action === 'merge' ? '合并' : entry.action}</span>
+                  <time>{new Date(entry.createdAt).toLocaleString('zh-CN')}</time>
+                </div>
+                <p>{entry.note}</p>
+                <div className="conflict-audit-ids">
+                  <span>保留 {entry.keepId.slice(0, 12)}</span>
+                  <span>删除 {entry.dropIds.length} 项</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </section>
   );

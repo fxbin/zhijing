@@ -14,6 +14,11 @@ import {
   type CardRevisionField,
   type ChatMessage,
   type CloudBackupStub,
+  type ConflictAuditEntry,
+  type ConflictGroup,
+  type ConflictKind,
+  type ConflictResolutionAction,
+  type ConflictResolutionRequest,
   type ExportFormat,
   type ExportRecord,
   type ExportScope,
@@ -93,6 +98,7 @@ type StoreState = {
   exports: ExportRecord[];
   savedFilters: SavedFilter[];
   entities: Entity[];
+  conflictAudit: ConflictAuditEntry[];
   modelProviderConfig?: PersistedModelProviderConfig;
 };
 
@@ -120,6 +126,9 @@ type KnowledgeRepository = {
   upsertEntity(record: Entity): void;
   listEntities(knowledgeBaseId: string): Entity[];
   deleteEntitiesByKnowledgeBase(knowledgeBaseId: string): void;
+  deleteCard(id: string): void;
+  insertConflictAudit(entry: ConflictAuditEntry): void;
+  listConflictAudit(limit?: number): ConflictAuditEntry[];
   insertTask(task: AgentTask): void;
   updateTask(task: AgentTask): void;
   listTasks(limit?: number): AgentTask[];
@@ -185,6 +194,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     exports: [],
     savedFilters: [],
     entities: [],
+    conflictAudit: [],
   };
 
   insertKnowledgeBase(base: KnowledgeBaseSummary) {
@@ -304,6 +314,20 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
 
   deleteEntitiesByKnowledgeBase(knowledgeBaseId: string) {
     this.state.entities = this.state.entities.filter((item) => item.knowledgeBaseId !== knowledgeBaseId);
+  }
+
+  deleteCard(id: string) {
+    this.state.cards = this.state.cards.filter((card) => card.id !== id);
+    this.state.cardRevisions = this.state.cardRevisions.filter((revision) => revision.cardId !== id);
+  }
+
+  insertConflictAudit(entry: ConflictAuditEntry) {
+    this.state.conflictAudit.unshift(entry);
+  }
+
+  listConflictAudit(limit?: number) {
+    const sorted = [...this.state.conflictAudit].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    return typeof limit === 'number' ? sorted.slice(0, limit) : sorted;
   }
 
   insertTask(task: AgentTask) {
@@ -747,6 +771,33 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.db.prepare('DELETE FROM entities WHERE knowledge_base_id = ?').run(knowledgeBaseId);
   }
 
+  deleteCard(id: string) {
+    this.db.prepare('DELETE FROM cards WHERE id = ?').run(id);
+  }
+
+  insertConflictAudit(entry: ConflictAuditEntry) {
+    this.db.prepare(`
+      INSERT INTO conflict_audit (id, kind, action, keep_id, drop_ids_json, knowledge_base_id, note, created_at)
+      VALUES (@id, @kind, @action, @keep_id, @drop_ids_json, @knowledge_base_id, @note, @created_at)
+    `).run({
+      id: entry.id,
+      kind: entry.kind,
+      action: entry.action,
+      keep_id: entry.keepId,
+      drop_ids_json: JSON.stringify(entry.dropIds),
+      knowledge_base_id: entry.knowledgeBaseId,
+      note: entry.note,
+      created_at: entry.createdAt,
+    });
+  }
+
+  listConflictAudit(limit?: number) {
+    const sql = typeof limit === 'number'
+      ? this.db.prepare('SELECT * FROM conflict_audit ORDER BY created_at DESC LIMIT ?').all(limit)
+      : this.db.prepare('SELECT * FROM conflict_audit ORDER BY created_at DESC').all();
+    return (sql as ConflictAuditRow[]).map(mapConflictAudit);
+  }
+
   insertTask(task: AgentTask) {
     this.db.prepare(`
       INSERT INTO tasks (
@@ -1031,6 +1082,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureArtifactRevisionsTable();
     this.ensureSavedFiltersTable();
     this.ensureEntitiesTable();
+    this.ensureConflictAuditTable();
   }
 
   private ensureMaterialMediaColumn() {
@@ -1091,6 +1143,22 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         updated_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_entities_kb ON entities(knowledge_base_id, updated_at DESC);
+    `);
+  }
+
+  private ensureConflictAuditTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS conflict_audit (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        action TEXT NOT NULL,
+        keep_id TEXT NOT NULL,
+        drop_ids_json TEXT NOT NULL,
+        knowledge_base_id TEXT NOT NULL,
+        note TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_conflict_audit_created ON conflict_audit(created_at DESC);
     `);
   }
 
@@ -1332,6 +1400,30 @@ function mapEntity(row: EntityRow): Entity {
     sourceCardIds: JSON.parse(row.source_card_ids_json) as string[],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+type ConflictAuditRow = {
+  id: string;
+  kind: ConflictKind;
+  action: ConflictResolutionAction;
+  keep_id: string;
+  drop_ids_json: string;
+  knowledge_base_id: string;
+  note: string;
+  created_at: string;
+};
+
+function mapConflictAudit(row: ConflictAuditRow): ConflictAuditEntry {
+  return {
+    id: row.id,
+    kind: row.kind,
+    action: row.action,
+    keepId: row.keep_id,
+    dropIds: JSON.parse(row.drop_ids_json) as string[],
+    knowledgeBaseId: row.knowledge_base_id,
+    note: row.note,
+    createdAt: row.created_at,
   };
 }
 
@@ -4090,6 +4182,159 @@ export async function extractEntities(knowledgeBaseId: string, piRuntime?: PiRun
 
 export function listEntities(knowledgeBaseId: string): Entity[] {
   return repository.listEntities(knowledgeBaseId);
+}
+
+const CONFLICT_ID_PREFIX = 'conflict';
+const CONFLICT_AUDIT_LIMIT = 50;
+const CONFLICT_GROUP_ITEM_LIMIT = 12;
+
+/**
+ * 扫描全库卡片与资料，按归一化键聚合并返回重复分组。
+ * 卡片按标题归一化聚合，资料按 sourceUrl/rawInput/title 聚合。
+ */
+export function listConflictGroups(kind?: ConflictKind): ConflictGroup[] {
+  const groups: ConflictGroup[] = [];
+  if (!kind || kind === 'duplicate_card') {
+    groups.push(...detectCardConflictGroups());
+  }
+  if (!kind || kind === 'duplicate_material') {
+    groups.push(...detectMaterialConflictGroups());
+  }
+  return groups;
+}
+
+function detectCardConflictGroups(): ConflictGroup[] {
+  const cards = repository.listCards();
+  const buckets = new Map<string, KnowledgeCard[]>();
+  for (const card of cards) {
+    const key = normalizeConflictKey(card.title);
+    if (!key) continue;
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(card);
+    buckets.set(key, bucket);
+  }
+  const groups: ConflictGroup[] = [];
+  for (const [key, bucket] of buckets) {
+    if (bucket.length < 2) continue;
+    groups.push({
+      kind: 'duplicate_card',
+      key,
+      title: bucket[0].title,
+      items: bucket.slice(0, CONFLICT_GROUP_ITEM_LIMIT).map((card) => ({
+        id: card.id,
+        knowledgeBaseId: card.knowledgeBaseId,
+        title: card.title,
+        meta: card.claimStatus === 'sourced' ? '已溯源' : `类型 ${card.type}`,
+      })),
+    });
+  }
+  return groups;
+}
+
+function detectMaterialConflictGroups(): ConflictGroup[] {
+  const materials = repository.listMaterials();
+  const buckets = new Map<string, MaterialRecord[]>();
+  for (const material of materials) {
+    const key = normalizeConflictKey(material.sourceUrl || material.rawInput || material.title);
+    if (!key) continue;
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(material);
+    buckets.set(key, bucket);
+  }
+  const groups: ConflictGroup[] = [];
+  for (const [key, bucket] of buckets) {
+    if (bucket.length < 2) continue;
+    groups.push({
+      kind: 'duplicate_material',
+      key,
+      title: bucket[0].title,
+      items: bucket.slice(0, CONFLICT_GROUP_ITEM_LIMIT).map((material) => ({
+        id: material.id,
+        knowledgeBaseId: material.knowledgeBaseId,
+        title: material.title,
+        meta: material.sourceUrl ? material.sourceUrl : `状态 ${material.parseStatus}`,
+      })),
+    });
+  }
+  return groups;
+}
+
+function normalizeConflictKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * 解决冲突分组：保留 keepId，删除 dropIds，并写入审计记录。
+ * 卡片冲突直接删除重复卡片；资料冲突先把卡片来源重指向保留项，再删除重复资料。
+ */
+export function resolveConflictGroup(request: ConflictResolutionRequest): ConflictAuditEntry {
+  if (!request.keepId) {
+    throw new KnowledgeCoreError('冲突解决需要指定保留项。', 400);
+  }
+  if (!Array.isArray(request.dropIds) || request.dropIds.length === 0) {
+    throw new KnowledgeCoreError('冲突解决至少需要一个被合并项。', 400);
+  }
+  if (request.dropIds.includes(request.keepId)) {
+    throw new KnowledgeCoreError('保留项不能同时出现在被合并列表中。', 400);
+  }
+  const knowledgeBaseId = request.kind === 'duplicate_card'
+    ? resolveCardConflict(request.keepId, request.dropIds)
+    : resolveMaterialConflict(request.keepId, request.dropIds);
+  const entry: ConflictAuditEntry = {
+    id: id(CONFLICT_ID_PREFIX),
+    kind: request.kind,
+    action: 'merge',
+    keepId: request.keepId,
+    dropIds: [...request.dropIds],
+    knowledgeBaseId,
+    note: `合并 ${request.dropIds.length} 个重复${request.kind === 'duplicate_card' ? '卡片' : '资料'}到保留项。`,
+    createdAt: new Date().toISOString(),
+  };
+  repository.insertConflictAudit(entry);
+  reconcileKnowledgeBaseStats(knowledgeBaseId);
+  return entry;
+}
+
+function resolveCardConflict(keepId: string, dropIds: string[]): string {
+  const keepCard = repository.findCard(keepId);
+  if (!keepCard) {
+    throw new KnowledgeCoreError(`Card ${keepId} not found.`, 404);
+  }
+  for (const dropId of dropIds) {
+    if (!repository.findCard(dropId)) {
+      throw new KnowledgeCoreError(`Card ${dropId} not found.`, 404);
+    }
+    repository.deleteCard(dropId);
+  }
+  return keepCard.knowledgeBaseId;
+}
+
+function resolveMaterialConflict(keepId: string, dropIds: string[]): string {
+  const keepMaterial = repository.findMaterial(keepId);
+  if (!keepMaterial) {
+    throw new KnowledgeCoreError(`Material ${keepId} not found.`, 404);
+  }
+  for (const dropId of dropIds) {
+    if (!repository.findMaterial(dropId)) {
+      throw new KnowledgeCoreError(`Material ${dropId} not found.`, 404);
+    }
+  }
+  for (const card of repository.listCards(keepMaterial.knowledgeBaseId)) {
+    if (card.materialId && dropIds.includes(card.materialId)) {
+      repository.updateCard({ ...card, materialId: keepId, updatedAt: new Date().toISOString() });
+    }
+  }
+  for (const dropId of dropIds) {
+    repository.deleteMaterial(dropId);
+  }
+  return keepMaterial.knowledgeBaseId;
+}
+
+/**
+ * 返回最近的冲突解决审计记录，按时间倒序。
+ */
+export function listConflictAuditEntries(limit?: number): ConflictAuditEntry[] {
+  return repository.listConflictAudit(limit ?? CONFLICT_AUDIT_LIMIT);
 }
 
 const SYNTHESIS_OVERLAP_LIMIT = 12;

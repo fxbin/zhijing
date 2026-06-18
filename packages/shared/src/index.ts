@@ -283,6 +283,41 @@ export interface ExtractedEntitySeed {
   description: string;
 }
 
+export type ConflictKind = 'duplicate_card' | 'duplicate_material';
+
+export type ConflictResolutionAction = 'merge' | 'delete';
+
+export interface ConflictGroupItem {
+  id: string;
+  knowledgeBaseId: string;
+  title: string;
+  meta: string;
+}
+
+export interface ConflictGroup {
+  kind: ConflictKind;
+  key: string;
+  title: string;
+  items: ConflictGroupItem[];
+}
+
+export interface ConflictAuditEntry {
+  id: string;
+  kind: ConflictKind;
+  action: ConflictResolutionAction;
+  keepId: string;
+  dropIds: string[];
+  knowledgeBaseId: string;
+  note: string;
+  createdAt: string;
+}
+
+export interface ConflictResolutionRequest {
+  kind: ConflictKind;
+  keepId: string;
+  dropIds: string[];
+}
+
 export interface KnowledgeCitation {
   id: string;
   kind: 'material' | 'card';
