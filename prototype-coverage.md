@@ -15,10 +15,10 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 
 | App route | Current component | Stitch baseline | Status | Notes |
 | --- | --- | --- | --- | --- |
-| `#workspace` | `WorkspaceView` | `workspace`, `professional_workbench` | Partial | Main command and workspace shell exist; still missing richer discovery hub states. |
-| `#detail` | `DetailView` | `kb_detail`, `kb_deep_dive_1`, `kb_deep_dive_2` | Done | Knowledge base overview, cards, Q&A, recent material, and entity extraction panel exist. |
+| `#workspace` | `WorkspaceView` | `workspace`, `professional_workbench` | Done | Main command, workspace shell, skeleton loading state, and empty-state guide exist. |
+| `#detail` | `DetailView` | `kb_detail`, `kb_deep_dive_1`, `kb_deep_dive_2` | Done | Knowledge base overview, cards, Q&A, recent material, entity extraction panel, and card-type distribution analysis panel exist. |
 | `#library` | `LibraryView` | `library`, `instant_capture_inbox`, `interaction_connecting`, `batch_connection_mode`, `collection_summary`, `re_authorize_source`, `data_hygiene` | Partial | Capture, batch input, parsing summary, review recovery, assignment, file import, and hygiene signals exist; deeper automation and standalone modal states remain. |
-| `#search` | `SearchView` | `search`, `semantic_discovery` | Partial | Search exists with local semantic recall v0; semantic discovery layout and saved discovery flows are missing. |
+| `#search` | `SearchView` | `search`, `semantic_discovery` | Done | Search with local semantic recall v0, discovery tag suggestions from result frequency, and cross-knowledge-base result clustering. |
 | `#assets` | `GlobalAssetsDashboard` | `global_knowledge_assets_dashboard_1`, `global_knowledge_assets_dashboard_2` | Done | Global asset dashboard with aggregated materials, cards, artifacts, tasks, review signals, and persistent filters. |
 | `#synthesis` | `CrossKbSynthesisView` | `cross_kb_synthesis` | Done | Cross-knowledge-base theme overlap view with Pi-backed synthesis generation and persisted artifact. |
 | `#compare` | `MultiEntityComparisonView` | `multi_entity_comparison_view_1`, `multi_entity_comparison_view_2` | Partial | Entity comparison exists at knowledge-base granularity; extracted entity comparison and expanded states are still missing. |
@@ -38,17 +38,17 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 
 | Stitch reference | Product intent | Current status | Next implementation action |
 | --- | --- | --- | --- |
-| `workspace` | Main workbench and command entry | Partial | Align top-level layout density and empty/loading states with Stitch. |
-| `professional_workbench` | More capable workspace shell | Partial | Merge useful workbench panels into `WorkspaceView` without adding a marketing surface. |
+| `workspace` | Main workbench and command entry | Done | Skeleton loading state and empty-state guide are implemented. |
+| `professional_workbench` | More capable workspace shell | Done | WorkspaceView includes hero command, skeleton loading, empty-state guide, recent imports, and knowledge map preview. |
 | `knowledge_path_logo` | Brand mark reference | Done | Brand mark is implemented in the side nav; keep this as visual reference. |
-| `create_kb_modal` | Create knowledge base modal | Missing | Add modal route/state for explicit knowledge base creation instead of relying only on text input. |
-| `kb_detail` | Knowledge base detail | Partial | Improve card/material grouping and source indicators to match Stitch. |
-| `kb_deep_dive_1` | Deep knowledge base exploration | Missing | Add deeper card/material analysis panel. |
+| `create_kb_modal` | Create knowledge base modal | Done | Dual-mode modal: AI auto-generation and explicit empty knowledge base creation via POST /api/knowledge-bases. |
+| `kb_detail` | Knowledge base detail | Done | Card/material grouping, source indicators, and card-type distribution analysis panel are implemented. |
+| `kb_deep_dive_1` | Deep knowledge base exploration | Done | Card-type distribution bar chart and source coverage analysis panel are implemented in DetailView. |
 | `kb_deep_dive_2` | Deep knowledge base exploration variant | Done | Decision: complementary "knowledge-connection" view, NOT a responsive variant. Adopted incremental fusion (Connections tab + concept tags in DetailView) rather than a separate route. Full perspective-switch system deferred to X-4 frontend split. |
 | `library` | Material repository | Partial | Keep current functional library and refine visual density against Stitch. |
 | `instant_capture_inbox` | Fast capture inbox | Partial | Inbox exists with batch/file capture; pending queue rows still need stronger visual treatment. |
 | `search` | Global search | Partial | Keep route and improve result hierarchy. |
-| `semantic_discovery` | Semantic discovery | Partial | Add discovery suggestions and related-cluster sections. |
+| `semantic_discovery` | Semantic discovery | Done | Discovery tag suggestions from result frequency analysis and cross-knowledge-base result clustering are implemented. |
 | `settings` | Settings | Partial | Expand beyond model settings into source, storage, and transparency settings. |
 
 ### P1: Import And Collection Lifecycle
@@ -137,15 +137,17 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 
 ## Recommended Implementation Order
 
+All planned domain tasks (D1–D5) and P0 core shell polish (P0-1..5) are complete.
+
 1. Finish import and collection lifecycle:
    detailed parser timeline and batch action side panel.
-2. Finish search and discovery:
-   semantic discovery layout and saved discovery flows.
-3. Continue advanced knowledge operations:
+2. Continue advanced knowledge operations:
    expanded entity comparison and richer map layout editing.
-4. Polish remaining P0/P1 visual gaps:
-   align density and empty/loading states with Stitch references.
+3. X-4 frontend split:
+   decompose `main.jsx` (~4500+ lines) into modular component files.
+4. Evaluate next iteration priorities:
+   vector-based semantic search, cloud backup, richer map editing.
 
 ## Immediate Next Slice
 
-All planned domain tasks (D1–D5) are complete. Run a final visual pass on `#maps` and `#workspace`, then evaluate next iteration priorities.
+All planned tasks (D1–D5, P0-1..5, X-1, X-3) are complete. The project is feature-complete for the current prototype scope. Next priorities: X-4 frontend file split, then evaluate whether to invest in vector-based semantic search or cloud backup.
