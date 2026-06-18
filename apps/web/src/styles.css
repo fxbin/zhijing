@@ -2046,6 +2046,34 @@ button { cursor: pointer; }
   font-weight: 850;
 }
 
+.back-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.artifact-origin-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--scholar);
+  background: var(--scholar-soft);
+  color: var(--scholar);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.artifact-origin-link:hover {
+  background: var(--scholar);
+  color: #fff;
+}
+
 .chat-context-panel > span,
 .recall-head > span,
 .chat-thread-head span {

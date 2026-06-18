@@ -585,6 +585,7 @@ function App() {
   const [knowledgeBaseMessages, setKnowledgeBaseMessages] = useState([]);
   const [isAsking, setIsAsking] = useState(false);
   const [selectedArtifact, setSelectedArtifact] = useState(null);
+  const [artifactOrigin, setArtifactOrigin] = useState(null);
   const [parsingMaterialId, setParsingMaterialId] = useState(null);
   const [isRunningKit, setIsRunningKit] = useState(false);
   const [kitRunResult, setKitRunResult] = useState(null);
@@ -910,8 +911,11 @@ function App() {
     }
   };
 
-  const openArtifact = (artifact) => {
-    if (artifact) setSelectedArtifact(artifact);
+  const openArtifact = (artifact, origin) => {
+    if (artifact) {
+      setSelectedArtifact(artifact);
+      setArtifactOrigin(origin ?? null);
+    }
     go('artifact');
   };
 
@@ -1129,7 +1133,7 @@ function App() {
               setView={go}
             />
           )}
-          {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={knowledgeBaseDetail} setView={go} />}
+          {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={knowledgeBaseDetail} setView={go} artifactOrigin={artifactOrigin} onClearOrigin={() => setArtifactOrigin(null)} />}
           {view === 'maps' && <MapsView apiStatus={apiStatus} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={go} />}
           {view === 'assets' && <GlobalAssetsDashboard data={advancedOpsData} setView={go} />}
           {view === 'synthesis' && <CrossKbSynthesisView data={advancedOpsData} setView={go} />}
@@ -1797,6 +1801,9 @@ function ChatView({
               const messageCards = (message.cardIds ?? [])
                 .map((cardId) => cards.find((card) => card.id === cardId))
                 .filter(Boolean);
+              const messageArtifact = message.artifactId
+                ? detail.artifacts?.find((item) => item.id === message.artifactId)
+                : undefined;
               return (
                 <div key={message.id} className="chat-history-item">
                   <div className="chat-user">{message.question}</div>
@@ -1816,6 +1823,11 @@ function ChatView({
                             />
                           ))}
                         </div>
+                      )}
+                      {messageArtifact && (
+                        <button className="assistant-link-button" type="button" onClick={() => onOpenArtifact(messageArtifact, { label: message.question })}>
+                          <SquareArrowOutUpRight size={15} /> 打开产物
+                        </button>
                       )}
                     </div>
                   </div>
@@ -3407,7 +3419,7 @@ function WorkflowView({ detail, isRunningKit, kitRunResult, latestTask, onOpenAr
   );
 }
 
-function ArtifactView({ artifact, detail, setView }) {
+function ArtifactView({ artifact, detail, setView, artifactOrigin, onClearOrigin }) {
   const fallbackArtifact = detail.artifacts?.[0];
   const activeArtifact = artifact ?? fallbackArtifact;
   const variant = inferArtifactVariant(activeArtifact, detail);
@@ -3435,7 +3447,14 @@ function ArtifactView({ artifact, detail, setView }) {
     <section className={`artifact-page variant-${variant}`}>
       <div className="artifact-hero">
         <div>
-          <button className="back-button" onClick={() => setView('detail')} type="button">← Back to Knowledge Base</button>
+          <div className="back-button-row">
+            <button className="back-button" onClick={() => { onClearOrigin?.(); setView('detail'); }} type="button">← Back to Knowledge Base</button>
+            {artifactOrigin?.label && (
+              <button className="back-button artifact-origin-link" type="button" onClick={() => { onClearOrigin?.(); setView('detail'); }}>
+                ↩ 来自对话：{artifactOrigin.label}
+              </button>
+            )}
+          </div>
           <span>{config.label}</span>
           <h2>{activeArtifact.title}</h2>
           <p>{config.lead}</p>
