@@ -21,7 +21,7 @@ export type CardType = 'concept' | 'method' | 'case' | 'question' | 'step' | 'vi
 
 export type ClaimStatus = 'ai_skeleton' | 'sourced' | 'user_confirmed' | 'unsupported';
 
-export type KnowledgeKitId = 'learning_research' | 'content_creation' | 'product_research';
+export type KnowledgeKitId = 'learning_research' | 'content_creation' | 'product_research' | 'topic_decomposition';
 
 export interface IntakeRequest {
   input: string;

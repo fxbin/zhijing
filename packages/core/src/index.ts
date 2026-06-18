@@ -1305,6 +1305,7 @@ function normalizeArtifactSubtype(value: string | null | undefined): ArtifactSub
 function kitToSubtype(kitId: KnowledgeKitId): ArtifactSubtype {
   if (kitId === 'learning_research') return 'deep_research';
   if (kitId === 'product_research') return 'product';
+  if (kitId === 'topic_decomposition') return 'topic';
   return 'xiaohongshu';
 }
 
@@ -1795,6 +1796,7 @@ function createKitArtifact(
 function kitLabel(kitId: KnowledgeKitId) {
   if (kitId === 'content_creation') return '内容创作产物';
   if (kitId === 'product_research') return '产品调研产物';
+  if (kitId === 'topic_decomposition') return '知识拆解清单';
   return '学习研究摘要';
 }
 
@@ -2014,12 +2016,23 @@ export async function runKnowledgeKit(
 
   try {
     const context = buildKitContext(base.id);
-    const prompt = [
-      `请基于知识库「${base.title}」运行「${kitLabel(kitId)}」。`,
-      '生成一个可以直接保存为 Markdown 的中文知识管理产物。',
-      '产物需要包含：核心摘要、关键概念、行动步骤、待补证据或待回答问题。',
-      '如果来源不足，请明确标注哪些内容仍是 AI 骨架。',
-    ].join('\n');
+    const prompt = kitId === 'topic_decomposition'
+      ? [
+          `请基于知识库「${base.title}」执行「${kitLabel(kitId)}」。`,
+          '目标：把一个宽泛主题拆解为可独立学习的子主题树。',
+          '产物结构：',
+          '1. 主题概述：一句话概括当前主题范围与学习目标。',
+          '2. 子主题清单：列出 5-8 个子主题，每个子主题给出名称、学习目标、建议难度（入门/进阶/精通）。',
+          '3. 子主题依赖关系：标注哪些子主题是其他子主题的前置。',
+          '4. 建议学习路径：按依赖关系给出推荐的循序渐进顺序。',
+          '如果当前知识库的卡片和资料不足以支撑某个子主题，请标注「证据待补」。',
+        ].join('\n')
+      : [
+          `请基于知识库「${base.title}」运行「${kitLabel(kitId)}」。`,
+          '生成一个可以直接保存为 Markdown 的中文知识管理产物。',
+          '产物需要包含：核心摘要、关键概念、行动步骤、待补证据或待回答问题。',
+          '如果来源不足，请明确标注哪些内容仍是 AI 骨架。',
+        ].join('\n');
     const generation = await generateKnowledge('question_answer', prompt, {
       kind: 'kit_run',
       kitId,
