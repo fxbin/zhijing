@@ -44,7 +44,7 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 | `create_kb_modal` | Create knowledge base modal | Missing | Add modal route/state for explicit knowledge base creation instead of relying only on text input. |
 | `kb_detail` | Knowledge base detail | Partial | Improve card/material grouping and source indicators to match Stitch. |
 | `kb_deep_dive_1` | Deep knowledge base exploration | Missing | Add deeper card/material analysis panel. |
-| `kb_deep_dive_2` | Deep knowledge base exploration variant | Missing | Decide whether this is a responsive/alternate state or separate mode. |
+| `kb_deep_dive_2` | Deep knowledge base exploration variant | Done | Decision: complementary "knowledge-connection" view, NOT a responsive variant. Adopted incremental fusion (Connections tab + concept tags in DetailView) rather than a separate route. Full perspective-switch system deferred to X-4 frontend split. |
 | `library` | Material repository | Partial | Keep current functional library and refine visual density against Stitch. |
 | `instant_capture_inbox` | Fast capture inbox | Partial | Inbox exists with batch/file capture; pending queue rows still need stronger visual treatment. |
 | `search` | Global search | Partial | Keep route and improve result hierarchy. |

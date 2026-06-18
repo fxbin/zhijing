@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   AlertTriangle,
+  BarChart3,
   Bell,
   BookOpen,
   CheckCircle2,
@@ -1283,6 +1284,7 @@ function CreateKbModal({ onClose, onSubmit }) {
 }
 
 function WorkspaceView({ activity, isSubmitting, latestTask, materials, query, setQuery, setView, submit }) {
+  const hasContent = materials.length > 0 || latestTask;
   return (
     <>
       <section className="hero">
@@ -1307,14 +1309,42 @@ function WorkspaceView({ activity, isSubmitting, latestTask, materials, query, s
           <button type="button"># Daily Notes</button>
           <button type="button">+ More</button>
         </div>
-        <p className="activity">{activity}</p>
+        {isSubmitting && (
+          <div className="workspace-loading" aria-live="polite">
+            <div className="workspace-skeleton-bar" />
+            <span>正在处理…</span>
+          </div>
+        )}
+        {!isSubmitting && activity && <p className="activity">{activity}</p>}
         <TaskStatus task={latestTask} />
       </section>
 
       <section className="lower-grid">
-        <RecentImports materials={materials} />
-        <KnowledgeMapPanel setView={setView} />
+        {isSubmitting && !hasContent ? (
+          <>
+            <div className="recent-panel skeleton">
+              <div className="workspace-skeleton-bar" />
+              <div className="workspace-skeleton-bar short" />
+              <div className="workspace-skeleton-bar" />
+            </div>
+            <div className="map-panel skeleton">
+              <div className="workspace-skeleton-bar" />
+              <div className="workspace-skeleton-bar short" />
+            </div>
+          </>
+        ) : (
+          <>
+            <RecentImports materials={materials} />
+            <KnowledgeMapPanel setView={setView} />
+          </>
+        )}
       </section>
+
+      {!isSubmitting && !hasContent && (
+        <section className="workspace-empty-guide">
+          <EmptyState title="开始你的第一个知识库" body="在上方输入框中输入主题、链接或问题，知径会自动为你生成知识卡片。" />
+        </section>
+      )}
     </>
   );
 }
@@ -1640,6 +1670,33 @@ function DetailView({
               <span>Tasks</span>
               <strong>{totals?.tasks ?? 0}</strong>
             </article>
+          </section>
+        )}
+        {cards.length > 0 && (
+          <section className="detail-analysis" aria-label="卡片与来源分析">
+            <div className="analysis-head">
+              <BarChart3 size={18} />
+              <strong>卡片类型分布</strong>
+            </div>
+            <div className="analysis-bars">
+              {Object.entries(cardGroups).map(([type, group]) => {
+                const ratio = cards.length > 0 ? Math.round((group.length / cards.length) * 100) : 0;
+                return (
+                  <div className="analysis-bar-row" key={type}>
+                    <span className={`analysis-bar-label type-${type}`}>{CARD_TYPE_LABELS[type] ?? type}</span>
+                    <div className="analysis-bar-track">
+                      <div className={`analysis-bar-fill type-${type}`} style={{ width: `${ratio}%` }} />
+                    </div>
+                    <span className="analysis-bar-count">{group.length} ({ratio}%)</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="analysis-coverage">
+              <span>来源覆盖率</span>
+              <strong>{formatPercent(cards.length > 0 ? cards.filter((card) => card.claimStatus === 'sourced').length / cards.length : 0)}</strong>
+              <small>{cards.filter((card) => card.claimStatus === 'sourced').length} / {cards.length} 张已溯源</small>
+            </div>
           </section>
         )}
         <div className="detail-layout">
