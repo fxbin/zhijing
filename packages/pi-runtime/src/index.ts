@@ -75,6 +75,46 @@ export const structuredSchemas = {
   question_answer: questionAnswerSchema,
 } as const;
 
+const artifactSectionSchema = Type.Object({
+  title: Type.String(),
+  body: Type.String(),
+});
+
+export const artifactSubtypeSchemas = {
+  summary: Type.Object({
+    summary: Type.String(),
+    sections: Type.Array(artifactSectionSchema),
+    followUpQuestions: Type.Optional(Type.Array(Type.String())),
+  }),
+  deep_research: Type.Object({
+    summary: Type.String(),
+    sections: Type.Array(artifactSectionSchema),
+    openQuestions: Type.Optional(Type.Array(Type.String())),
+    references: Type.Optional(Type.Array(artifactSectionSchema)),
+  }),
+  product: Type.Object({
+    summary: Type.String(),
+    sections: Type.Array(artifactSectionSchema),
+    accountDiagnosis: Type.Optional(Type.Array(artifactSectionSchema)),
+    alternatives: Type.Optional(Type.Array(artifactSectionSchema)),
+  }),
+  xiaohongshu: Type.Object({
+    summary: Type.String(),
+    sections: Type.Array(artifactSectionSchema),
+    publishingQueue: Type.Optional(Type.Array(artifactSectionSchema)),
+    accountStrategy: Type.Optional(artifactSectionSchema),
+  }),
+  topic: Type.Object({
+    summary: Type.String(),
+    sections: Type.Array(artifactSectionSchema),
+    openQuestions: Type.Optional(Type.Array(Type.String())),
+  }),
+} as const;
+
+export type ArtifactSubtype = keyof typeof artifactSubtypeSchemas;
+
+const ARTIFACT_SUBTYPE_LIST = Object.keys(artifactSubtypeSchemas) as ArtifactSubtype[];
+
 export interface StructuredGenerationRequest<TSchemaInput = unknown> {
   task: 'knowledge_base_skeleton' | 'material_summary' | 'knowledge_cards' | 'question_answer';
   prompt: string;
@@ -436,6 +476,68 @@ export function validateStructuredOutput(task: StructuredGenerationTask, output:
   validateCards(value.cards, `${task}.cards`);
 }
 
+export function validateArtifactSubtypeOutput(subtype: ArtifactSubtype, output: unknown): void {
+  if (!ARTIFACT_SUBTYPE_LIST.includes(subtype)) {
+    throw new StructuredOutputValidationError(`Unknown artifact subtype: ${String(subtype)}`);
+  }
+  const value = requirePlainObject(output, subtype);
+  requireNonEmptyString(value.summary, `${subtype}.summary`);
+  validateSections(value.sections, `${subtype}.sections`);
+
+  if (subtype === 'summary') {
+    validateOptionalStringArray(value.followUpQuestions, `${subtype}.followUpQuestions`);
+    return;
+  }
+  if (subtype === 'topic' || subtype === 'deep_research') {
+    validateOptionalStringArray(value.openQuestions, `${subtype}.openQuestions`);
+    if (subtype === 'deep_research') {
+      validateOptionalSections(value.references, `${subtype}.references`);
+    }
+    return;
+  }
+  if (subtype === 'product') {
+    validateOptionalSections(value.accountDiagnosis, `${subtype}.accountDiagnosis`);
+    validateOptionalSections(value.alternatives, `${subtype}.alternatives`);
+    return;
+  }
+  validateOptionalSections(value.publishingQueue, `${subtype}.publishingQueue`);
+  validateOptionalSection(value.accountStrategy, `${subtype}.accountStrategy`);
+}
+
+function validateSections(value: unknown, path: string): void {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new StructuredOutputValidationError(`${path} must contain at least one section.`);
+  }
+  value.forEach((section, index) => validateSection(section, `${path}[${index}]`));
+}
+
+function validateOptionalSections(value: unknown, path: string): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    throw new StructuredOutputValidationError(`${path} must be an array.`);
+  }
+  value.forEach((section, index) => validateSection(section, `${path}[${index}]`));
+}
+
+function validateOptionalSection(value: unknown, path: string): void {
+  if (value === undefined) return;
+  validateSection(value, path);
+}
+
+function validateSection(value: unknown, path: string): void {
+  const section = requirePlainObject(value, path);
+  requireNonEmptyString(section.title, `${path}.title`);
+  requireNonEmptyString(section.body, `${path}.body`);
+}
+
+function validateOptionalStringArray(value: unknown, path: string): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    throw new StructuredOutputValidationError(`${path} must be an array of strings.`);
+  }
+  value.forEach((item, index) => requireNonEmptyString(item, `${path}[${index}]`));
+}
+
 const allowedCardTypes = new Set(['concept', 'method', 'case', 'question', 'step', 'viewpoint']);
 
 function requirePlainObject(value: unknown, path: string): Record<string, unknown> {
@@ -602,6 +704,44 @@ function mockOutputFor(request: StructuredGenerationRequest) {
     artifactTitle: `${title} 摘要`,
     artifactBody: `已保存资料「${title}」，并生成可继续整理的摘要占位。`,
   };
+}
+
+export function mockArtifactSubtypeOutput(subtype: ArtifactSubtype, prompt: string): unknown {
+  const title = compactTitle(prompt);
+  const summary = `${title} 的本地 mock 结构化产物。配置 Pi provider 后会替换为真实生成内容。`;
+  const sections = [
+    { title: `${title} 核心要点`, body: '这是本地 mock 生成的产物片段，用于先跑通结构化校验与渲染闭环。' },
+    { title: '后续补充方向', body: '配置真实 Pi provider 后，该内容会被替换为基于资料的生成结果。' },
+  ];
+
+  if (subtype === 'summary') {
+    return { summary, sections, followUpQuestions: ['这个主题还需要补充哪些高质量来源？'] };
+  }
+  if (subtype === 'deep_research') {
+    return {
+      summary,
+      sections,
+      openQuestions: ['当前资料是否足以支撑深度结论？'],
+      references: [{ title: '参考来源占位', body: '配置真实生成后会回填引用资料。' }],
+    };
+  }
+  if (subtype === 'product') {
+    return {
+      summary,
+      sections,
+      accountDiagnosis: [{ title: '账号诊断占位', body: '配置真实生成后会给出账号定位建议。' }],
+      alternatives: [{ title: '替代方案占位', body: '配置真实生成后会列出竞品或替代路径。' }],
+    };
+  }
+  if (subtype === 'xiaohongshu') {
+    return {
+      summary,
+      sections,
+      publishingQueue: [{ title: '选题占位', body: '配置真实生成后会生成发布队列选题。' }],
+      accountStrategy: { title: '账号策略占位', body: '配置真实生成后会给出账号内容策略。' },
+    };
+  }
+  return { summary, sections, openQuestions: ['该主题还有哪些值得展开的方向？'] };
 }
 
 function compactTitle(input: string) {
