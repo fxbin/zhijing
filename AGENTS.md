@@ -68,6 +68,7 @@ npm run typecheck && npm test && npm run build -w @zhijing/web
 - **每一小步迭代完成后及时提交**，避免大量改动堆积。
 - 提交前确保验证门禁全绿。
 - **禁止提交过程性产物**：`docs/`、`stitch_/`、`.skill-*/`、`.env*`、`*.sqlite*`、`dist/` 等已在 `.gitignore`。
+- **禁止在提交信息中包含内部任务编号**：如 `D1-1`、`D5-3`、`P0-1`、`X-3` 等内部规划编号不得出现在 commit message 的标题或正文中。提交信息应只描述功能变更本身，内部编号仅用于 `docs/plan/` 下的进度文档。
 
 ## 设计系统
 
@@ -90,6 +91,7 @@ npm run typecheck && npm test && npm run build -w @zhijing/web
 - ❌ 禁止行尾注释（用户编码规范）
 - ❌ 禁止使用魔法值（用户编码规范）
 - ❌ 禁止未经允许编写单元测试用例（用户编码规范）
+- ❌ 禁止在提交信息中包含内部任务编号（如 D1-1、P0-1、X-3 等）
 
 ## 进度与规划（本地，已 gitignore）
 
