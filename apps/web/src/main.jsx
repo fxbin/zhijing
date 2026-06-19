@@ -43,6 +43,8 @@ import ChatView from './views/ChatView';
 import RecallView from './views/RecallView';
 import ExportView from './views/ExportView';
 import SettingsView from './views/SettingsView';
+import { I18nProvider, useI18n } from './i18n/I18nContext';
+import LanguageSwitcher from './components/LanguageSwitcher';
 
 function App() {
   const [view, setView] = useState(viewFromHash);
@@ -541,6 +543,7 @@ function App() {
         </section>
 
         <div className="side-footer">
+          <LanguageSwitcher />
           <button type="button"><CircleHelp size={22} />Help</button>
           <button type="button"><LogOut size={22} />Logout</button>
         </div>
@@ -680,4 +683,8 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+createRoot(document.getElementById('root')).render(
+  <I18nProvider>
+    <App />
+  </I18nProvider>
+);

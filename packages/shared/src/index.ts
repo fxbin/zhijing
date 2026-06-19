@@ -57,6 +57,64 @@ export interface SaveModelProviderSettingsRequest {
   clearApiKey?: boolean;
 }
 
+/**
+ * 模型 Provider Profile（多配置档案）
+ * 用于支持配置多个模型 profile，可在研究、创作等场景间切换激活。
+ * @author fxbin
+ */
+export interface ModelProviderProfile {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
+  enabled: boolean;
+  fallbackToMock: boolean;
+  hasApiKey: boolean;
+  keySource: 'none' | 'env' | 'runtime';
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * 模型 Provider 设置 V2（多 profile 聚合视图）
+ * @author fxbin
+ */
+export interface ModelProviderSettingsV2 {
+  profiles: ModelProviderProfile[];
+  activeProfileId: string | null;
+  providers: ModelProviderOption[];
+}
+
+/**
+ * 创建模型 Provider Profile 请求
+ * @author fxbin
+ */
+export interface CreateModelProviderProfileRequest {
+  name: string;
+  provider: string;
+  model: string;
+  apiKey?: string;
+  enabled?: boolean;
+  fallbackToMock?: boolean;
+  isDefault?: boolean;
+}
+
+/**
+ * 更新模型 Provider Profile 请求
+ * @author fxbin
+ */
+export interface UpdateModelProviderProfileRequest {
+  name?: string;
+  provider?: string;
+  model?: string;
+  apiKey?: string;
+  enabled?: boolean;
+  fallbackToMock?: boolean;
+  isDefault?: boolean;
+  clearApiKey?: boolean;
+}
+
 export interface TestModelProviderSettingsRequest {
   provider?: string;
   model?: string;

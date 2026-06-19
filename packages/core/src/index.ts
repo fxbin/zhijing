@@ -48,7 +48,11 @@ import {
   type MaterialStatusTimeline,
   type MaterialReviewResult,
   type ModelProviderSettings,
+  type ModelProviderSettingsV2,
   type ModelProviderTestResult,
+  type CreateModelProviderProfileRequest,
+  type UpdateModelProviderProfileRequest,
+  type ModelProviderProfile,
   type ParseStatus,
   type SaveModelProviderSettingsRequest,
   type TaskStatus,
@@ -86,6 +90,27 @@ type PersistedModelProviderConfig = Partial<{
   updatedAt: string;
 }>;
 
+/**
+ * 模型 Provider Profile 持久化记录（内部类型，包含 apiKey 明文）
+ * @author fxbin
+ */
+type ModelProviderProfileRecord = {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
+  apiKey?: string;
+  enabled: boolean;
+  fallbackToMock: boolean;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const DEFAULT_PROFILE_NAME = '默认配置';
+const MODEL_PROVIDER_PROFILE_ID_PREFIX = 'mpp';
+const LEGACY_MODEL_PROVIDER_SETTINGS_ID = 'default';
+
 type StoreState = {
   knowledgeBases: KnowledgeBaseSummary[];
   materials: MaterialRecord[];
@@ -100,6 +125,7 @@ type StoreState = {
   entities: Entity[];
   conflictAudit: ConflictAuditEntry[];
   modelProviderConfig?: PersistedModelProviderConfig;
+  modelProviderProfiles: ModelProviderProfileRecord[];
 };
 
 type KnowledgeRepository = {
@@ -143,6 +169,12 @@ type KnowledgeRepository = {
   listMessages(knowledgeBaseId: string, limit?: number): ChatMessage[];
   readModelProviderConfig(): PersistedModelProviderConfig | undefined;
   writeModelProviderConfig(config: PersistedModelProviderConfig): void;
+  listModelProviderProfiles(): ModelProviderProfileRecord[];
+  findModelProviderProfile(id: string): ModelProviderProfileRecord | undefined;
+  insertModelProviderProfile(record: ModelProviderProfileRecord): void;
+  updateModelProviderProfile(record: ModelProviderProfileRecord): void;
+  deleteModelProviderProfile(id: string): void;
+  clearModelProviderProfileDefault(): void;
 };
 
 type GeneratedCard = {
@@ -195,6 +227,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     savedFilters: [],
     entities: [],
     conflictAudit: [],
+    modelProviderProfiles: [],
   };
 
   insertKnowledgeBase(base: KnowledgeBaseSummary) {
@@ -395,6 +428,33 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
   writeModelProviderConfig(config: PersistedModelProviderConfig) {
     this.state.modelProviderConfig = config;
   }
+
+  listModelProviderProfiles() {
+    return [...this.state.modelProviderProfiles];
+  }
+
+  findModelProviderProfile(id: string) {
+    return this.state.modelProviderProfiles.find((record) => record.id === id);
+  }
+
+  insertModelProviderProfile(record: ModelProviderProfileRecord) {
+    this.state.modelProviderProfiles.push(record);
+  }
+
+  updateModelProviderProfile(record: ModelProviderProfileRecord) {
+    const index = this.state.modelProviderProfiles.findIndex((item) => item.id === record.id);
+    if (index >= 0) this.state.modelProviderProfiles[index] = record;
+  }
+
+  deleteModelProviderProfile(id: string) {
+    this.state.modelProviderProfiles = this.state.modelProviderProfiles.filter((item) => item.id !== id);
+  }
+
+  clearModelProviderProfileDefault() {
+    for (const record of this.state.modelProviderProfiles) {
+      if (record.isDefault) record.isDefault = false;
+    }
+  }
 }
 
 type KnowledgeBaseRow = {
@@ -502,6 +562,19 @@ type ModelProviderSettingsRow = {
   api_key: string | null;
   enabled: number;
   fallback_to_mock: number;
+  updated_at: string;
+};
+
+type ModelProviderProfileRow = {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
+  api_key: string | null;
+  enabled: number;
+  fallback_to_mock: number;
+  is_default: number;
+  created_at: string;
   updated_at: string;
 };
 
@@ -946,7 +1019,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         fallback_to_mock = excluded.fallback_to_mock,
         updated_at = excluded.updated_at
     `).run(
-      'default',
+      LEGACY_MODEL_PROVIDER_SETTINGS_ID,
       config.provider ?? getDefaultPiProvider(),
       config.model ?? getDefaultPiModel(),
       config.apiKey ?? null,
@@ -954,6 +1027,65 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       config.fallbackToMock === false ? 0 : 1,
       config.updatedAt ?? now(),
     );
+  }
+
+  listModelProviderProfiles() {
+    const rows = this.db
+      .prepare('SELECT * FROM model_provider_profiles ORDER BY created_at ASC')
+      .all() as ModelProviderProfileRow[];
+    return rows.map(mapModelProviderProfileRow);
+  }
+
+  findModelProviderProfile(id: string) {
+    const row = this.db
+      .prepare('SELECT * FROM model_provider_profiles WHERE id = ?')
+      .get(id) as ModelProviderProfileRow | undefined;
+    return row ? mapModelProviderProfileRow(row) : undefined;
+  }
+
+  insertModelProviderProfile(record: ModelProviderProfileRecord) {
+    this.db.prepare(`
+      INSERT INTO model_provider_profiles (
+        id, name, provider, model, api_key, enabled, fallback_to_mock, is_default, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      record.id,
+      record.name,
+      record.provider,
+      record.model,
+      record.apiKey ?? null,
+      record.enabled ? 1 : 0,
+      record.fallbackToMock ? 1 : 0,
+      record.isDefault ? 1 : 0,
+      record.createdAt,
+      record.updatedAt,
+    );
+  }
+
+  updateModelProviderProfile(record: ModelProviderProfileRecord) {
+    this.db.prepare(`
+      UPDATE model_provider_profiles
+      SET name = ?, provider = ?, model = ?, api_key = ?, enabled = ?, fallback_to_mock = ?, is_default = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      record.name,
+      record.provider,
+      record.model,
+      record.apiKey ?? null,
+      record.enabled ? 1 : 0,
+      record.fallbackToMock ? 1 : 0,
+      record.isDefault ? 1 : 0,
+      record.updatedAt,
+      record.id,
+    );
+  }
+
+  deleteModelProviderProfile(id: string) {
+    this.db.prepare('DELETE FROM model_provider_profiles WHERE id = ?').run(id);
+  }
+
+  clearModelProviderProfileDefault() {
+    this.db.prepare('UPDATE model_provider_profiles SET is_default = 0 WHERE is_default = 1').run();
   }
 
   private migrate() {
@@ -1083,6 +1215,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureSavedFiltersTable();
     this.ensureEntitiesTable();
     this.ensureConflictAuditTable();
+    this.ensureModelProviderProfilesTable();
   }
 
   private ensureMaterialMediaColumn() {
@@ -1160,6 +1293,62 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       );
       CREATE INDEX IF NOT EXISTS idx_conflict_audit_created ON conflict_audit(created_at DESC);
     `);
+  }
+
+  /**
+   * 创建 model_provider_profiles 表，并在表为空时从旧表 model_provider_settings
+   * 幂等迁移一条 default 记录为 is_default=1 的 profile。
+   * @author fxbin
+   */
+  private ensureModelProviderProfilesTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS model_provider_profiles (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        api_key TEXT,
+        enabled INTEGER NOT NULL DEFAULT 0,
+        fallback_to_mock INTEGER NOT NULL DEFAULT 1,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_model_provider_profiles_default ON model_provider_profiles(is_default);
+    `);
+    this.seedModelProviderProfilesFromLegacy();
+  }
+
+  /**
+   * 幂等迁移：若 profile 表为空且旧表存在 default 行，则迁移为一条 is_default=1 的 profile。
+   * @author fxbin
+   */
+  private seedModelProviderProfilesFromLegacy() {
+    const countRow = this.db
+      .prepare('SELECT COUNT(*) AS count FROM model_provider_profiles')
+      .get() as { count: number };
+    if (countRow.count > 0) return;
+    const legacy = this.db
+      .prepare('SELECT * FROM model_provider_settings WHERE id = ?')
+      .get(LEGACY_MODEL_PROVIDER_SETTINGS_ID) as ModelProviderSettingsRow | undefined;
+    if (!legacy) return;
+    const timestamp = now();
+    this.db.prepare(`
+      INSERT INTO model_provider_profiles (
+        id, name, provider, model, api_key, enabled, fallback_to_mock, is_default, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id(MODEL_PROVIDER_PROFILE_ID_PREFIX),
+      DEFAULT_PROFILE_NAME,
+      legacy.provider,
+      legacy.model,
+      legacy.api_key,
+      legacy.enabled,
+      legacy.fallback_to_mock,
+      1,
+      timestamp,
+      timestamp,
+    );
   }
 
   private ensureMaterialStatusTimelineColumn() {
@@ -1563,6 +1752,25 @@ function mapMessage(row: MessageRow): ChatMessage {
   };
 }
 
+/**
+ * 将 SQLite profile 行映射为内部持久化记录（包含 apiKey 明文）。
+ * @author fxbin
+ */
+function mapModelProviderProfileRow(row: ModelProviderProfileRow): ModelProviderProfileRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    provider: row.provider,
+    model: row.model,
+    apiKey: row.api_key ?? undefined,
+    enabled: Boolean(row.enabled),
+    fallbackToMock: Boolean(row.fallback_to_mock),
+    isDefault: Boolean(row.is_default),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function defaultSqlitePath() {
   return process.env.ZHIJING_DB_PATH ?? join(process.cwd(), '.data', 'zhijing.sqlite');
 }
@@ -1612,22 +1820,81 @@ export function resetKnowledgeCoreForTests() {
 }
 
 function initialModelProviderConfig(): RuntimeModelProviderConfig {
-  const persisted = repository.readModelProviderConfig();
-  const provider = normalizeProvider(process.env.ZHIJING_PI_PROVIDER ?? persisted?.provider);
-  const persistedMatchesProvider = persisted?.provider === provider;
+  const defaultProfile = ensureDefaultProfile();
+  return runtimeConfigFromProfile(defaultProfile);
+}
+
+/**
+ * 确保存在默认 profile：
+ * - 若已有 profile，确保有且仅有一条 is_default=1
+ * - 若无任何 profile，从环境变量 ZHIJING_PI_* 创建一个 env profile
+ * @author fxbin
+ */
+function ensureDefaultProfile(): ModelProviderProfileRecord {
+  const existing = repository.listModelProviderProfiles();
+  if (existing.length > 0) {
+    const defaultProfile = existing.find((record) => record.isDefault);
+    if (defaultProfile) return defaultProfile;
+    const first = existing[0];
+    const promoted: ModelProviderProfileRecord = { ...first, isDefault: true, updatedAt: now() };
+    repository.updateModelProviderProfile(promoted);
+    return promoted;
+  }
+  return createEnvProfile();
+}
+
+/**
+ * 从环境变量 ZHIJING_PI_* 创建一个默认 profile（仅在无任何 profile 时调用）。
+ * env profile 不存储 apiKey 明文，运行时通过 getPiEnvApiKey 读取。
+ * @author fxbin
+ */
+function createEnvProfile(): ModelProviderProfileRecord {
+  const provider = normalizeProvider(process.env.ZHIJING_PI_PROVIDER);
   const envApiKey = process.env.ZHIJING_PI_API_KEY ?? getPiEnvApiKey(provider);
-  const runtimeApiKey = persistedMatchesProvider ? normalizeSecret(persisted.apiKey) : undefined;
+  const envModel = process.env.ZHIJING_PI_MODEL
+    ?? (provider === getDefaultPiProvider() ? getDefaultPiModel() : defaultModelForProvider(provider));
+  const timestamp = now();
+  const record: ModelProviderProfileRecord = {
+    id: id(MODEL_PROVIDER_PROFILE_ID_PREFIX),
+    name: DEFAULT_PROFILE_NAME,
+    provider,
+    model: envModel,
+    apiKey: undefined,
+    enabled: process.env.ZHIJING_PI_ENABLED === '1' || Boolean(envApiKey),
+    fallbackToMock: process.env.ZHIJING_PI_FALLBACK === '0' ? false : true,
+    isDefault: true,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  repository.insertModelProviderProfile(record);
+  return record;
+}
+
+/**
+ * 将 profile 持久化记录转换为运行时配置。
+ * @author fxbin
+ */
+function runtimeConfigFromProfile(profile: ModelProviderProfileRecord): RuntimeModelProviderConfig {
+  const provider = normalizeProvider(profile.provider);
+  const envApiKey = getPiEnvApiKey(provider);
   return {
     provider,
-    model: process.env.ZHIJING_PI_MODEL
-      ?? (persistedMatchesProvider ? persisted?.model : undefined)
-      ?? (provider === getDefaultPiProvider() ? getDefaultPiModel() : defaultModelForProvider(provider)),
-    apiKey: runtimeApiKey,
-    enabled: process.env.ZHIJING_PI_ENABLED === '1' || persisted?.enabled === true || Boolean(envApiKey ?? runtimeApiKey),
-    fallbackToMock: process.env.ZHIJING_PI_FALLBACK === '0' ? false : persisted?.fallbackToMock ?? true,
-    keySource: envApiKey ? 'env' : runtimeApiKey ? 'runtime' : 'none',
-    updatedAt: persisted?.updatedAt,
+    model: profile.model,
+    apiKey: profile.apiKey,
+    enabled: profile.enabled,
+    fallbackToMock: profile.fallbackToMock,
+    keySource: profile.apiKey ? 'runtime' : envApiKey ? 'env' : 'none',
+    updatedAt: profile.updatedAt,
   };
+}
+
+/**
+ * 将激活的 profile 应用到运行时（重建 piRuntime）。
+ * @author fxbin
+ */
+function applyActiveProfileToRuntime(profile: ModelProviderProfileRecord) {
+  modelProviderConfig = runtimeConfigFromProfile(profile);
+  applyModelProviderConfig();
 }
 
 function normalizeProvider(provider: string | undefined): KnownProvider {
@@ -1688,8 +1955,10 @@ export function saveModelProviderSettings(input: SaveModelProviderSettingsReques
   const model = availableModels.some((item) => item.id === input.model)
     ? input.model
     : defaultModelForProvider(provider);
-  const providerScopedExistingKey = modelProviderConfig.provider === provider
-    ? modelProviderConfig.apiKey
+  const profiles = repository.listModelProviderProfiles();
+  const activeProfile = profiles.find((record) => record.isDefault) ?? profiles[0];
+  const providerScopedExistingKey = activeProfile && activeProfile.provider === provider
+    ? activeProfile.apiKey
     : undefined;
   const inputApiKey = normalizeSecret(input.apiKey);
   const envApiKey = getPiEnvApiKey(provider);
@@ -1706,6 +1975,18 @@ export function saveModelProviderSettings(input: SaveModelProviderSettingsReques
     keySource: apiKey ? 'runtime' : envApiKey ? 'env' : 'none',
     updatedAt: now(),
   };
+  if (activeProfile) {
+    const syncedProfile: ModelProviderProfileRecord = {
+      ...activeProfile,
+      provider,
+      model,
+      apiKey,
+      enabled: modelProviderConfig.enabled,
+      fallbackToMock: modelProviderConfig.fallbackToMock,
+      updatedAt: modelProviderConfig.updatedAt ?? now(),
+    };
+    repository.updateModelProviderProfile(syncedProfile);
+  }
   repository.writeModelProviderConfig({
     provider: modelProviderConfig.provider,
     model: modelProviderConfig.model,
@@ -1716,6 +1997,171 @@ export function saveModelProviderSettings(input: SaveModelProviderSettingsReques
   });
   applyModelProviderConfig();
   return modelSettingsSnapshot();
+}
+
+/**
+ * 将内部 profile 记录映射为对外 API 视图（不含 apiKey 明文）。
+ * @author fxbin
+ */
+function mapModelProviderProfileToApi(record: ModelProviderProfileRecord): ModelProviderProfile {
+  const provider = normalizeProvider(record.provider);
+  const envApiKey = getPiEnvApiKey(provider);
+  const hasApiKey = Boolean(record.apiKey ?? envApiKey);
+  const keySource = record.apiKey ? 'runtime' : envApiKey ? 'env' : 'none';
+  return {
+    id: record.id,
+    name: record.name,
+    provider: record.provider,
+    model: record.model,
+    enabled: record.enabled,
+    fallbackToMock: record.fallbackToMock,
+    hasApiKey,
+    keySource,
+    isDefault: record.isDefault,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+}
+
+/**
+ * 列出全部模型 Provider Profile。
+ * @author fxbin
+ */
+export function listModelProviderProfiles(): ModelProviderProfile[] {
+  return repository.listModelProviderProfiles().map(mapModelProviderProfileToApi);
+}
+
+/**
+ * 创建新的模型 Provider Profile。
+ * 若指定 isDefault=true 或当前无任何 profile，则自动设为默认并应用到运行时。
+ * @author fxbin
+ */
+export function createModelProviderProfile(input: CreateModelProviderProfileRequest): ModelProviderProfile {
+  const name = input.name?.trim();
+  if (!name) throw new KnowledgeCoreError('Profile 名称不能为空。', 400);
+  const provider = normalizeProvider(input.provider);
+  const availableModels = getKnownPiModels(provider);
+  const model = availableModels.some((item) => item.id === input.model)
+    ? input.model
+    : defaultModelForProvider(provider);
+  const apiKey = normalizeSecret(input.apiKey);
+  const envApiKey = getPiEnvApiKey(provider);
+  const timestamp = now();
+  const shouldBeDefault = input.isDefault === true || repository.listModelProviderProfiles().length === 0;
+  if (input.isDefault === true) {
+    repository.clearModelProviderProfileDefault();
+  }
+  const record: ModelProviderProfileRecord = {
+    id: id(MODEL_PROVIDER_PROFILE_ID_PREFIX),
+    name,
+    provider,
+    model,
+    apiKey,
+    enabled: input.enabled ?? Boolean(apiKey ?? envApiKey),
+    fallbackToMock: input.fallbackToMock ?? true,
+    isDefault: shouldBeDefault,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  repository.insertModelProviderProfile(record);
+  if (record.isDefault) {
+    applyActiveProfileToRuntime(record);
+  }
+  return mapModelProviderProfileToApi(record);
+}
+
+/**
+ * 更新指定模型 Provider Profile。
+ * 若该 profile 为默认，则同步重建运行时。
+ * @author fxbin
+ */
+export function updateModelProviderProfile(profileId: string, input: UpdateModelProviderProfileRequest): ModelProviderProfile {
+  const existing = repository.findModelProviderProfile(profileId);
+  if (!existing) throw new KnowledgeCoreError('Profile 不存在。', 404);
+  const name = input.name !== undefined ? input.name.trim() : existing.name;
+  if (!name) throw new KnowledgeCoreError('Profile 名称不能为空。', 400);
+  const provider = normalizeProvider(input.provider !== undefined ? input.provider : existing.provider);
+  const availableModels = getKnownPiModels(provider);
+  const model = input.model !== undefined
+    ? (availableModels.some((item) => item.id === input.model) ? input.model : defaultModelForProvider(provider))
+    : existing.model;
+  const apiKey = input.clearApiKey
+    ? undefined
+    : (input.apiKey !== undefined ? normalizeSecret(input.apiKey) : existing.apiKey);
+  const enabled = input.enabled ?? existing.enabled;
+  const fallbackToMock = input.fallbackToMock ?? existing.fallbackToMock;
+  const updatedAt = now();
+  const updated: ModelProviderProfileRecord = {
+    ...existing,
+    name,
+    provider,
+    model,
+    apiKey,
+    enabled,
+    fallbackToMock,
+    updatedAt,
+  };
+  if (input.isDefault === true && !existing.isDefault) {
+    repository.clearModelProviderProfileDefault();
+    updated.isDefault = true;
+  } else if (input.isDefault === false && existing.isDefault) {
+    updated.isDefault = false;
+  }
+  repository.updateModelProviderProfile(updated);
+  if (updated.isDefault) {
+    applyActiveProfileToRuntime(updated);
+  }
+  return mapModelProviderProfileToApi(updated);
+}
+
+/**
+ * 删除指定模型 Provider Profile。
+ * 若删除的是默认 profile，则自动将剩余首条提升为默认。
+ * @author fxbin
+ */
+export function deleteModelProviderProfile(profileId: string): { ok: boolean } {
+  const existing = repository.findModelProviderProfile(profileId);
+  if (!existing) throw new KnowledgeCoreError('Profile 不存在。', 404);
+  repository.deleteModelProviderProfile(profileId);
+  if (existing.isDefault) {
+    const remaining = repository.listModelProviderProfiles();
+    if (remaining.length > 0) {
+      const next = remaining[0];
+      const promoted: ModelProviderProfileRecord = { ...next, isDefault: true, updatedAt: now() };
+      repository.updateModelProviderProfile(promoted);
+      applyActiveProfileToRuntime(promoted);
+    }
+  }
+  return { ok: true };
+}
+
+/**
+ * 激活指定模型 Provider Profile（设为默认并重建运行时）。
+ * @author fxbin
+ */
+export function activateModelProviderProfile(profileId: string): ModelProviderProfile {
+  const existing = repository.findModelProviderProfile(profileId);
+  if (!existing) throw new KnowledgeCoreError('Profile 不存在。', 404);
+  repository.clearModelProviderProfileDefault();
+  const updated: ModelProviderProfileRecord = { ...existing, isDefault: true, updatedAt: now() };
+  repository.updateModelProviderProfile(updated);
+  applyActiveProfileToRuntime(updated);
+  return mapModelProviderProfileToApi(updated);
+}
+
+/**
+ * 获取模型 Provider 设置 V2（多 profile 聚合视图）。
+ * @author fxbin
+ */
+export function getModelProviderSettingsV2(): ModelProviderSettingsV2 {
+  const records = repository.listModelProviderProfiles();
+  const profiles = records.map(mapModelProviderProfileToApi);
+  const active = records.find((record) => record.isDefault);
+  return {
+    profiles,
+    activeProfileId: active?.id ?? null,
+    providers: providerOptions(),
+  };
 }
 
 export async function testModelProviderSettings(input: TestModelProviderSettingsRequest = {}): Promise<ModelProviderTestResult> {

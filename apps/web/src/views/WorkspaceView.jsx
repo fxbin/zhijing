@@ -8,6 +8,7 @@ import EmptyState from '../components/EmptyState';
 import TaskStatus from '../components/TaskStatus';
 import RecentImports from '../components/RecentImports';
 import KnowledgeMapPanel from '../components/KnowledgeMapPanel';
+import { useI18n } from '../i18n/I18nContext';
 
 /**
  * 工作区首页视图。
@@ -23,11 +24,12 @@ import KnowledgeMapPanel from '../components/KnowledgeMapPanel';
  * @returns {JSX.Element} 工作区视图
  */
 export default function WorkspaceView({ activity, isSubmitting, latestTask, materials, query, setQuery, setView, submit }) {
+  const { t } = useI18n();
   const hasContent = materials.length > 0 || latestTask;
   return (
     <>
       <section className="hero">
-        <h2>今天想整理什么？</h2>
+        <h2>{t('workspace.title')}</h2>
         <div className="command-glow">
           <div className="command-box">
             <Sparkles size={27} />
@@ -37,8 +39,8 @@ export default function WorkspaceView({ activity, isSubmitting, latestTask, mate
               onKeyDown={(event) => {
                 if (event.key === 'Enter') submit();
               }}
-              placeholder="Enter Theme, Link, or Question..."
-              aria-label="输入主题、链接或问题"
+              placeholder={t('workspace.placeholder')}
+              aria-label={t('workspace.placeholder')}
             />
             <button disabled={isSubmitting} onClick={submit} type="button"><SquareArrowOutUpRight size={25} /></button>
           </div>
@@ -51,7 +53,7 @@ export default function WorkspaceView({ activity, isSubmitting, latestTask, mate
         {isSubmitting && (
           <div className="workspace-loading" aria-live="polite">
             <div className="workspace-skeleton-bar" />
-            <span>正在处理…</span>
+            <span>{t('workspace.processing')}</span>
           </div>
         )}
         {!isSubmitting && activity && <p className="activity">{activity}</p>}
@@ -81,7 +83,7 @@ export default function WorkspaceView({ activity, isSubmitting, latestTask, mate
 
       {!isSubmitting && !hasContent && (
         <section className="workspace-empty-guide">
-          <EmptyState title="开始你的第一个知识库" body="在上方输入框中输入主题、链接或问题，知径会自动为你生成知识卡片。" />
+          <EmptyState title={t('workspace.empty.title')} body={t('workspace.empty.body')} />
         </section>
       )}
     </>

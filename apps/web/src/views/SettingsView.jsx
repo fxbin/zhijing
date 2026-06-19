@@ -1,39 +1,134 @@
 /**
  * @module views/SettingsView
- * 设置视图：配置模型服务商、系统透明度、数据控制。
+ * 设置视图：配置多模型 Profile、系统透明度、数据控制。
+ * @author fxbin
  */
 
 import { useEffect, useState } from 'react';
-import { BarChart3, Database, KeyRound, PlugZap, Settings, ShieldCheck, Trash2, Download } from 'lucide-react';
+import {
+  BarChart3,
+  Database,
+  Download,
+  KeyRound,
+  PlugZap,
+  Plus,
+  Settings,
+  ShieldCheck,
+  Star,
+  Trash2,
+} from 'lucide-react';
+import { useI18n } from '../i18n/I18nContext';
 
 /**
- * 设置视图组件：模型配置 + 系统透明度 + 数据控制
+ * 后端 API 路径常量
+ */
+const API_PATHS = {
+  v2Settings: '/api/settings/model-provider/v2',
+  profiles: '/api/settings/model-provider/profiles',
+  test: '/api/settings/model-provider/test',
+  dashboard: '/api/dashboard',
+};
+
+/**
+ * Key 来源中文标签
+ */
+const KEY_SOURCE_LABEL = {
+  none: '尚未配置 Key',
+  env: '环境变量',
+  runtime: '本次运行期',
+};
+
+/**
+ * 新建 Profile 表单的空值
+ */
+const EMPTY_PROFILE_FORM = {
+  name: '',
+  provider: '',
+  model: '',
+  apiKey: '',
+};
+
+/**
+ * Profile 卡片默认样式（复用 .status-card 的 grid 布局，通过 inline style 补充完整边框）
+ */
+const PROFILE_CARD_STYLE = {
+  cursor: 'pointer',
+  border: '1px solid var(--line-soft)',
+  borderRadius: '10px',
+  padding: '16px',
+};
+
+/**
+ * Profile 卡片选中样式
+ */
+const PROFILE_CARD_SELECTED_STYLE = {
+  cursor: 'pointer',
+  border: '1px solid var(--primary)',
+  borderRadius: '10px',
+  background: 'rgba(216, 227, 251, 0.32)',
+  padding: '16px',
+};
+
+/**
+ * Profile 列表容器样式
+ */
+const PROFILE_LIST_STYLE = {
+  display: 'grid',
+  gap: '12px',
+};
+
+/**
+ * 创建表单容器样式
+ */
+const CREATE_FORM_STYLE = {
+  display: 'grid',
+  gap: '16px',
+  borderTop: '1px solid var(--line-soft)',
+  paddingTop: '18px',
+};
+
+/**
+ * 设置视图组件：多 Profile 管理 + 系统透明度 + 数据控制
  * @returns {JSX.Element} 设置视图
  * @author fxbin
  */
 export default function SettingsView() {
-  const [settings, setSettings] = useState(null);
+  const { t } = useI18n();
+  const [profiles, setProfiles] = useState([]);
+  const [activeProfileId, setActiveProfileId] = useState(null);
+  const [selectedProfileId, setSelectedProfileId] = useState(null);
+  const [providerOptions, setProviderOptions] = useState([]);
+  const [profileName, setProfileName] = useState('');
   const [provider, setProvider] = useState('');
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [enabled, setEnabled] = useState(true);
   const [fallbackToMock, setFallbackToMock] = useState(true);
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [keySource, setKeySource] = useState('none');
+  const [updatedAt, setUpdatedAt] = useState(null);
   const [status, setStatus] = useState('Loading model settings...');
   const [systemStats, setSystemStats] = useState(null);
   const [dataAction, setDataAction] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newProfile, setNewProfile] = useState(EMPTY_PROFILE_FORM);
+
+  const activeProvider = providerOptions.find((item) => item.id === provider);
+  const modelOptions = activeProvider?.models ?? [];
+  const selectedProfile = profiles.find((item) => item.id === selectedProfileId);
 
   useEffect(() => {
     let ignore = false;
     async function loadSettings() {
       try {
-        const response = await fetch('/api/settings/model-provider');
+        const response = await fetch(API_PATHS.v2Settings);
         if (!response.ok) throw new Error('Settings unavailable.');
         const result = await response.json();
         if (ignore) return;
-        applySettings(result);
+        applyV2Settings(result);
         setStatus('Model settings are ready.');
       } catch {
         if (!ignore) setStatus('API 未连接，暂时无法读取模型设置。');
@@ -49,7 +144,7 @@ export default function SettingsView() {
     let ignore = false;
     async function loadSystemStats() {
       try {
-        const response = await fetch('/api/dashboard');
+        const response = await fetch(API_PATHS.dashboard);
         if (!response.ok) throw new Error('Dashboard unavailable.');
         const result = await response.json();
         if (ignore) return;
@@ -70,34 +165,146 @@ export default function SettingsView() {
     };
   }, []);
 
-  const providerOptions = settings?.providers ?? [];
-  const activeProvider = providerOptions.find((item) => item.id === provider);
-  const modelOptions = activeProvider?.models ?? [];
+  /**
+   * 应用 V2 设置到本地 state
+   * @param {object} v2Result - V2 API 返回的设置
+   * @param {string|null} forceSelectId - 强制选中的 profile id
+   */
+  function applyV2Settings(v2Result, forceSelectId = null) {
+    const list = v2Result.profiles ?? [];
+    setProfiles(list);
+    setActiveProfileId(v2Result.activeProfileId ?? null);
+    setProviderOptions(v2Result.providers ?? []);
+    const selectedExists = Boolean(selectedProfileId) && list.some((item) => item.id === selectedProfileId);
+    const fallbackId = (selectedExists ? selectedProfileId : null)
+      ?? v2Result.activeProfileId
+      ?? list[0]?.id
+      ?? null;
+    const targetId = forceSelectId ?? fallbackId;
+    setSelectedProfileId(targetId);
+    syncFormFromProfiles(list, targetId);
+  }
 
-  function applySettings(nextSettings) {
-    setSettings(nextSettings);
-    setProvider(nextSettings.provider);
-    setModel(nextSettings.model);
-    setEnabled(nextSettings.enabled);
-    setFallbackToMock(nextSettings.fallbackToMock);
+  /**
+   * 从 profile 列表同步表单字段到 state
+   * @param {Array} list - profile 列表
+   * @param {string|null} targetId - 目标 profile id
+   */
+  function syncFormFromProfiles(list, targetId) {
+    const target = list.find((item) => item.id === targetId);
+    if (!target) {
+      setProfileName('');
+      setProvider('');
+      setModel('');
+      setEnabled(true);
+      setFallbackToMock(true);
+      setHasApiKey(false);
+      setKeySource('none');
+      setUpdatedAt(null);
+      setApiKey('');
+      return;
+    }
+    setProfileName(target.name);
+    setProvider(target.provider);
+    setModel(target.model);
+    setEnabled(target.enabled);
+    setFallbackToMock(target.fallbackToMock);
+    setHasApiKey(target.hasApiKey);
+    setKeySource(target.keySource);
+    setUpdatedAt(target.updatedAt);
     setApiKey('');
   }
 
+  /**
+   * 选中指定 profile（仅切换选中，不激活）
+   * @param {string} id - profile id
+   */
+  function selectProfile(id) {
+    if (id === selectedProfileId) return;
+    setSelectedProfileId(id);
+    syncFormFromProfiles(profiles, id);
+    setTestResult(null);
+  }
+
+  /**
+   * 切换服务商，并自动选择第一个模型
+   * @param {string} nextProvider - 服务商 id
+   */
   function changeProvider(nextProvider) {
     setProvider(nextProvider);
     const nextModels = providerOptions.find((item) => item.id === nextProvider)?.models ?? [];
     setModel(nextModels[0]?.id ?? '');
   }
 
-  async function saveSettings() {
-    if (!provider || !model || isSaving) return;
+  /**
+   * 刷新 profile 列表（从后端重新拉取 V2 设置）
+   * @param {string|null} forceSelectId - 强制选中的 profile id
+   * @returns {Promise<object|null>} V2 设置结果
+   */
+  async function refreshProfiles(forceSelectId = null) {
+    try {
+      const response = await fetch(API_PATHS.v2Settings);
+      if (!response.ok) throw new Error('Settings unavailable.');
+      const result = await response.json();
+      applyV2Settings(result, forceSelectId);
+      return result;
+    } catch {
+      setStatus('刷新 profile 列表失败。');
+      return null;
+    }
+  }
+
+  /**
+   * 激活指定 profile（设为默认，应用到运行时）
+   * @param {string} id - profile id
+   */
+  async function activateProfile(id) {
+    setStatus('正在激活 Profile...');
+    try {
+      const response = await fetch(`${API_PATHS.profiles}/${id}/activate`, { method: 'POST' });
+      if (!response.ok) throw new Error('Activate failed.');
+      const result = await response.json();
+      setStatus(`已激活 Profile：${result.profile.name}`);
+      await refreshProfiles();
+    } catch {
+      setStatus('激活失败，请确认 API 正在运行。');
+    }
+  }
+
+  /**
+   * 删除指定 profile
+   * @param {string} id - profile id
+   */
+  async function deleteProfile(id) {
+    const target = profiles.find((item) => item.id === id);
+    if (!target) return;
+    if (!window.confirm(`确认删除 Profile「${target.name}」？此操作不可撤销。`)) return;
+    setStatus('正在删除 Profile...');
+    try {
+      const response = await fetch(`${API_PATHS.profiles}/${id}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Delete failed.');
+      const remaining = profiles.filter((item) => item.id !== id);
+      const nextSelected = selectedProfileId === id ? (remaining[0]?.id ?? null) : selectedProfileId;
+      setStatus(`已删除 Profile：${target.name}`);
+      await refreshProfiles(nextSelected);
+    } catch {
+      setStatus('删除失败，请确认 API 正在运行。');
+    }
+  }
+
+  /**
+   * 保存当前选中 profile 的配置
+   */
+  async function saveProfile() {
+    if (!selectedProfileId || !provider || !model || isSaving) return;
     setIsSaving(true);
     setTestResult(null);
     try {
-      const response = await fetch('/api/settings/model-provider', {
-        method: 'PUT',
+      const response = await fetch(`${API_PATHS.profiles}/${selectedProfileId}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          name: profileName.trim(),
           provider,
           model,
           apiKey: apiKey.trim() || undefined,
@@ -107,21 +314,29 @@ export default function SettingsView() {
       });
       if (!response.ok) throw new Error('Save failed.');
       const result = await response.json();
-      applySettings(result);
-      setStatus('模型设置已保存，本次 API 运行期间立即生效。');
+      const updated = result.profile;
+      setProfiles((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setHasApiKey(updated.hasApiKey);
+      setKeySource(updated.keySource);
+      setUpdatedAt(updated.updatedAt);
+      setApiKey('');
+      setStatus(t('settings.saveSuccess'));
     } catch {
-      setStatus('保存失败，请确认 API 正在运行。');
+      setStatus(t('settings.saveFailed'));
     } finally {
       setIsSaving(false);
     }
   }
 
+  /**
+   * 测试当前选中 profile 的模型配置
+   */
   async function testSettings() {
     if (!provider || !model || isTesting) return;
     setIsTesting(true);
     setTestResult(null);
     try {
-      const response = await fetch('/api/settings/model-provider/test', {
+      const response = await fetch(API_PATHS.test, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -133,21 +348,24 @@ export default function SettingsView() {
       if (!response.ok) throw new Error('Test failed.');
       const result = await response.json();
       setTestResult(result);
-      setStatus(result.ok ? '模型测试通过。' : '模型测试未通过。');
+      setStatus(result.ok ? t('settings.testPass') : t('settings.testFail'));
     } catch {
-      setStatus('测试失败，请确认 API 正在运行。');
+      setStatus(t('settings.testFailed'));
     } finally {
       setIsTesting(false);
     }
   }
 
+  /**
+   * 清除当前选中 profile 的运行期 API Key（不影响环境变量 Key）
+   */
   async function clearKey() {
-    if (!provider || !model || isSaving) return;
+    if (!selectedProfileId || !provider || !model || isSaving) return;
     setIsSaving(true);
     setTestResult(null);
     try {
-      const response = await fetch('/api/settings/model-provider', {
-        method: 'PUT',
+      const response = await fetch(`${API_PATHS.profiles}/${selectedProfileId}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider,
@@ -159,19 +377,82 @@ export default function SettingsView() {
       });
       if (!response.ok) throw new Error('Clear failed.');
       const result = await response.json();
-      applySettings(result);
-      setStatus('已清除本次运行期保存的 API Key。');
+      const updated = result.profile;
+      setProfiles((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setHasApiKey(updated.hasApiKey);
+      setKeySource(updated.keySource);
+      setStatus(t('settings.clearKeySuccess'));
     } catch {
-      setStatus('清除失败，请确认 API 正在运行。');
+      setStatus(t('settings.clearKeyFailed'));
     } finally {
       setIsSaving(false);
     }
   }
 
+  /**
+   * 打开创建 Profile 表单，并初始化默认值
+   */
+  function openCreateForm() {
+    const firstProvider = providerOptions[0]?.id ?? '';
+    const firstModel = providerOptions[0]?.models?.[0]?.id ?? '';
+    setNewProfile({ ...EMPTY_PROFILE_FORM, provider: firstProvider, model: firstModel });
+    setShowCreateForm(true);
+  }
+
+  /**
+   * 切换新建 Profile 表单中的服务商，并自动选择第一个模型
+   * @param {string} nextProvider - 服务商 id
+   */
+  function changeNewProfileProvider(nextProvider) {
+    const nextModels = providerOptions.find((item) => item.id === nextProvider)?.models ?? [];
+    setNewProfile((prev) => ({ ...prev, provider: nextProvider, model: nextModels[0]?.id ?? '' }));
+  }
+
+  /**
+   * 创建新的 Profile
+   */
+  async function createProfile() {
+    const name = newProfile.name.trim();
+    const providerValue = newProfile.provider;
+    const modelValue = newProfile.model;
+    if (!name || !providerValue || !modelValue) {
+      setStatus('name、provider、model 均为必填。');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const response = await fetch(API_PATHS.profiles, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          provider: providerValue,
+          model: modelValue,
+          apiKey: newProfile.apiKey.trim() || undefined,
+        }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Create failed.');
+      }
+      const result = await response.json();
+      setShowCreateForm(false);
+      setStatus(`Profile「${result.profile.name}」已创建。`);
+      await refreshProfiles(result.profile.id);
+    } catch (error) {
+      setStatus(error.message || '创建失败，请确认 API 正在运行。');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  /**
+   * 导出全部数据为 JSON 文件
+   */
   async function exportAllData() {
     setDataAction({ type: 'export', loading: true });
     try {
-      const response = await fetch('/api/dashboard');
+      const response = await fetch(API_PATHS.dashboard);
       if (!response.ok) throw new Error('Export failed.');
       const result = await response.json();
       const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
@@ -187,6 +468,9 @@ export default function SettingsView() {
     }
   }
 
+  /**
+   * 清除本地缓存（localStorage 中 zhijing_ 前缀的项）
+   */
   function clearLocalCache() {
     try {
       const keys = Object.keys(localStorage).filter((key) => key.startsWith('zhijing_'));
@@ -201,8 +485,8 @@ export default function SettingsView() {
     <section className="page-main full">
       <div className="page-title-row">
         <div>
-          <h2>Settings</h2>
-          <p>配置模型服务、查看系统状态、管理本地数据。Key 只发送到本地 API，页面不会保存明文。</p>
+          <h2>{t('settings.title')}</h2>
+          <p>{t('settings.subtitle')}</p>
         </div>
       </div>
 
@@ -211,86 +495,188 @@ export default function SettingsView() {
           <div className="settings-panel-head">
             <PlugZap size={24} />
             <div>
-              <h3>Provider</h3>
-              <p>选择服务商和模型，保存后新任务会直接使用这组配置。</p>
+              <h3>{t('settings.profiles')}</h3>
+              <p>管理多组模型配置，点击 Profile 选中后可在下方编辑。激活的 Profile 会被新任务使用。</p>
             </div>
-          </div>
-
-          <label className="field-row">
-            <span>服务商</span>
-            <select value={provider} onChange={(event) => changeProvider(event.target.value)}>
-              {providerOptions.map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
-            </select>
-          </label>
-
-          <label className="field-row">
-            <span>模型</span>
-            <select value={model} onChange={(event) => setModel(event.target.value)}>
-              {modelOptions.map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
-            </select>
-          </label>
-
-          <label className="field-row">
-            <span>API Key</span>
-            <div className="secret-input">
-              <KeyRound size={18} />
-              <input
-                autoComplete="off"
-                placeholder={settings?.hasApiKey ? '已配置，留空表示继续使用' : '粘贴你的 Provider Key'}
-                type="password"
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-              />
-            </div>
-          </label>
-
-          <div className="settings-toggles">
-            <label>
-              <input checked={enabled} onChange={(event) => setEnabled(event.target.checked)} type="checkbox" />
-              启用真实模型
-            </label>
-            <label>
-              <input checked={fallbackToMock} onChange={(event) => setFallbackToMock(event.target.checked)} type="checkbox" />
-              失败时回到本地 Mock
-            </label>
           </div>
 
           <div className="settings-actions">
-            <button disabled={isSaving || !provider || !model} onClick={saveSettings} type="button">
-              {isSaving ? 'Saving...' : 'Save'}
-            </button>
-            <button disabled={isTesting || !provider || !model} onClick={testSettings} type="button">
-              {isTesting ? 'Testing...' : 'Test'}
-            </button>
-            <button disabled={isSaving || !settings?.hasApiKey} onClick={clearKey} type="button">
-              Clear Key
+            <button type="button" onClick={openCreateForm}>
+              <Plus size={16} />
+              {t('settings.createProfile')}
             </button>
           </div>
+
+          {profiles.length === 0 ? (
+            <p className="settings-note">暂无 Profile，请创建第一个 Profile。</p>
+          ) : (
+            <div style={PROFILE_LIST_STYLE}>
+              {profiles.map((profile) => (
+                <div
+                  key={profile.id}
+                  className="status-card"
+                  style={selectedProfileId === profile.id ? PROFILE_CARD_SELECTED_STYLE : PROFILE_CARD_STYLE}
+                  onClick={() => selectProfile(profile.id)}
+                >
+                  <Star size={22} fill={profile.isDefault ? 'currentColor' : 'none'} />
+                  <div>
+                    <span>{profile.name}{profile.isDefault ? ` · ${t('settings.activated')}` : ''}</span>
+                    <strong>{profile.provider} / {profile.model}</strong>
+                    <p>{profile.hasApiKey ? `${t('settings.keyConfigured')}（${KEY_SOURCE_LABEL[profile.keySource]}）` : t('settings.keyNotConfigured')}</p>
+                    <div className="settings-actions" onClick={(event) => event.stopPropagation()}>
+                      {!profile.isDefault && (
+                        <button type="button" onClick={() => activateProfile(profile.id)}>{t('settings.activate')}</button>
+                      )}
+                      <button type="button" className="danger" onClick={() => deleteProfile(profile.id)}>
+                        <Trash2 size={16} />
+                        {t('common.delete')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showCreateForm && (
+            <div style={CREATE_FORM_STYLE}>
+              <strong>新建 Profile</strong>
+              <label className="field-row">
+                <span>{t('settings.profileName')}</span>
+                <input
+                  autoComplete="off"
+                  placeholder="如：研究模式 / 创作模式"
+                  type="text"
+                  value={newProfile.name}
+                  onChange={(event) => setNewProfile((prev) => ({ ...prev, name: event.target.value }))}
+                />
+              </label>
+              <label className="field-row">
+                <span>{t('settings.provider')}</span>
+                <select value={newProfile.provider} onChange={(event) => changeNewProfileProvider(event.target.value)}>
+                  {providerOptions.map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
+                </select>
+              </label>
+              <label className="field-row">
+                <span>{t('settings.model')}</span>
+                <select value={newProfile.model} onChange={(event) => setNewProfile((prev) => ({ ...prev, model: event.target.value }))}>
+                  {(providerOptions.find((item) => item.id === newProfile.provider)?.models ?? []).map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
+                </select>
+              </label>
+              <label className="field-row">
+                <span>{t('settings.apiKey')}</span>
+                <div className="secret-input">
+                  <KeyRound size={18} />
+                  <input
+                    autoComplete="off"
+                    placeholder="可选，留空则使用环境变量"
+                    type="password"
+                    value={newProfile.apiKey}
+                    onChange={(event) => setNewProfile((prev) => ({ ...prev, apiKey: event.target.value }))}
+                  />
+                </div>
+              </label>
+              <div className="settings-actions">
+                <button type="button" disabled={isSaving} onClick={createProfile}>
+                  {isSaving ? 'Creating...' : t('common.create')}
+                </button>
+                <button type="button" onClick={() => setShowCreateForm(false)}>{t('common.cancel')}</button>
+              </div>
+            </div>
+          )}
+
+          {selectedProfile && !showCreateForm && (
+            <>
+              <div className="settings-toggles">
+                <label className="field-row">
+                  <span>{t('settings.profileName')}</span>
+                  <input
+                    autoComplete="off"
+                    type="text"
+                    value={profileName}
+                    onChange={(event) => setProfileName(event.target.value)}
+                  />
+                </label>
+              </div>
+
+              <label className="field-row">
+                <span>{t('settings.provider')}</span>
+                <select value={provider} onChange={(event) => changeProvider(event.target.value)}>
+                  {providerOptions.map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
+                </select>
+              </label>
+
+              <label className="field-row">
+                <span>{t('settings.model')}</span>
+                <select value={model} onChange={(event) => setModel(event.target.value)}>
+                  {modelOptions.map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
+                </select>
+              </label>
+
+              <label className="field-row">
+                <span>{t('settings.apiKey')}</span>
+                <div className="secret-input">
+                  <KeyRound size={18} />
+                  <input
+                    autoComplete="off"
+                    placeholder={hasApiKey ? t('settings.apiKeyPlaceholder.configured') : t('settings.apiKeyPlaceholder.empty')}
+                    type="password"
+                    value={apiKey}
+                    onChange={(event) => setApiKey(event.target.value)}
+                  />
+                </div>
+              </label>
+
+              <div className="settings-toggles">
+                <label>
+                  <input checked={enabled} onChange={(event) => setEnabled(event.target.checked)} type="checkbox" />
+                  {t('settings.enableRealModel')}
+                </label>
+                <label>
+                  <input checked={fallbackToMock} onChange={(event) => setFallbackToMock(event.target.checked)} type="checkbox" />
+                  {t('settings.fallbackToMock')}
+                </label>
+              </div>
+
+              <div className="settings-actions">
+                <button disabled={isSaving || !provider || !model} onClick={saveProfile} type="button">
+                  {isSaving ? 'Saving...' : t('common.save')}
+                </button>
+                <button disabled={isTesting || !provider || !model} onClick={testSettings} type="button">
+                  {isTesting ? 'Testing...' : t('common.test')}
+                </button>
+                <button disabled={isSaving || !hasApiKey} onClick={clearKey} type="button">
+                  {t('common.clear')} Key
+                </button>
+              </div>
+            </>
+          )}
         </section>
 
         <aside className="settings-status">
           <div className="status-card">
             <ShieldCheck size={25} />
             <div>
-              <span>Current Runtime</span>
-              <strong>{provider || 'Provider'} / {model || 'Model'}</strong>
-              <p>{settings?.hasApiKey ? `Key 已配置（${settings.keySource === 'env' ? '环境变量' : '本次运行期'}）` : '尚未配置 Key'}</p>
+              <span>{t('settings.currentRuntime')}</span>
+              <strong>{provider || t('settings.provider')} / {model || t('settings.model')}</strong>
+              <p>{hasApiKey ? `${t('settings.keyConfigured')}（${KEY_SOURCE_LABEL[keySource]}）` : t('settings.keyNotConfigured')}</p>
+              {updatedAt && <small>{t('settings.lastSaved')}：{new Date(updatedAt).toLocaleString('zh-CN')}</small>}
             </div>
           </div>
           <div className="status-card">
             <Settings size={25} />
             <div>
-              <span>Policy</span>
-              <strong>{enabled ? '真实模型优先' : '仅本地 Mock'}</strong>
-              <p>{fallbackToMock ? '真实调用失败时会保留可用结果。' : '真实调用失败时会直接报错，适合调试。'}</p>
+              <span>{t('settings.policy')}</span>
+              <strong>{enabled ? t('settings.realModelFirst') : t('settings.mockOnly')}</strong>
+              <p>{fallbackToMock ? t('settings.fallbackHint') : t('settings.noFallbackHint')}</p>
             </div>
           </div>
           <p className="settings-note">{status}</p>
           {testResult && (
             <div className={`test-result ${testResult.ok ? 'ok' : 'failed'}`}>
-              <strong>{testResult.ok ? '测试通过' : '测试未通过'}</strong>
+              <strong>{testResult.ok ? t('settings.testPassed') : t('settings.testNotPassed')}</strong>
               <p>{testResult.message}</p>
-              {testResult.sampleTitle && <small>返回卡片：{testResult.sampleTitle}</small>}
+              {testResult.sampleTitle && <small>{t('settings.returnedCard')}{testResult.sampleTitle}</small>}
             </div>
           )}
         </aside>
@@ -301,8 +687,8 @@ export default function SettingsView() {
           <div className="settings-panel-head">
             <BarChart3 size={24} />
             <div>
-              <h3>System Transparency</h3>
-              <p>查看 API 连接状态、数据规模和最近任务。</p>
+              <h3>{t('settings.systemTransparency')}</h3>
+              <p>{t('settings.systemTransparency.desc')}</p>
             </div>
           </div>
           {systemStats ? (
@@ -310,22 +696,22 @@ export default function SettingsView() {
               <div className="status-card">
                 <Database size={22} />
                 <div>
-                  <span>API Status</span>
-                  <strong>{systemStats.apiOnline ? '在线' : '离线'}</strong>
-                  <p>{systemStats.apiOnline ? '本地 API 连接正常。' : '无法连接本地 API，请启动后端服务。'}</p>
+                  <span>{t('settings.apiStatus')}</span>
+                  <strong>{systemStats.apiOnline ? t('settings.online') : t('settings.offline')}</strong>
+                  <p>{systemStats.apiOnline ? t('settings.apiOnline') : t('settings.apiOffline')}</p>
                 </div>
               </div>
               <div className="status-card">
                 <ShieldCheck size={22} />
                 <div>
-                  <span>Data Scale</span>
+                  <span>{t('settings.dataScale')}</span>
                   <strong>{systemStats.knowledgeBases} KB · {systemStats.materials} materials</strong>
-                  <p>{systemStats.tasks} tasks recorded.</p>
+                  <p>{systemStats.tasks} {t('settings.tasksRecorded')}</p>
                 </div>
               </div>
               {systemStats.recentTasks?.length > 0 && (
                 <div className="settings-recent-tasks">
-                  <strong>Recent Tasks</strong>
+                  <strong>{t('settings.recentTasks')}</strong>
                   {systemStats.recentTasks.map((task) => (
                     <div key={task.id} className="settings-task-row">
                       <span>{task.workflow}</span>
@@ -336,7 +722,7 @@ export default function SettingsView() {
               )}
             </div>
           ) : (
-            <p className="settings-note">正在读取系统状态...</p>
+            <p className="settings-note">{t('settings.loadingSystem')}</p>
           )}
         </section>
 
@@ -344,8 +730,8 @@ export default function SettingsView() {
           <div className="settings-panel-head">
             <Database size={24} />
             <div>
-              <h3>Data Controls</h3>
-              <p>导出全部数据或清除本地缓存（不影响服务端数据）。</p>
+              <h3>{t('settings.dataControls')}</h3>
+              <p>{t('settings.dataControls.desc')}</p>
             </div>
           </div>
           <div className="settings-actions">
@@ -355,7 +741,7 @@ export default function SettingsView() {
               onClick={exportAllData}
             >
               <Download size={16} />
-              {dataAction?.type === 'export' && dataAction?.loading ? '导出中...' : '导出全部数据'}
+              {dataAction?.type === 'export' && dataAction?.loading ? t('settings.exporting') : t('settings.exportAll')}
             </button>
             <button
               type="button"
@@ -363,20 +749,20 @@ export default function SettingsView() {
               onClick={clearLocalCache}
             >
               <Trash2 size={16} />
-              清除本地缓存
+              {t('settings.clearLocalCache')}
             </button>
           </div>
           {dataAction?.type === 'export' && dataAction?.ok && (
-            <p className="settings-note">数据已导出为 JSON 文件。</p>
+            <p className="settings-note">{t('settings.exportSuccess')}</p>
           )}
           {dataAction?.type === 'export' && dataAction?.ok === false && (
-            <p className="settings-note">导出失败，请确认 API 正在运行。</p>
+            <p className="settings-note">{t('settings.exportFailed')}</p>
           )}
           {dataAction?.type === 'clear' && dataAction?.ok && (
-            <p className="settings-note">已清除 {dataAction.count} 项本地缓存。</p>
+            <p className="settings-note">{t('settings.clearSuccess')} {dataAction.count} {t('settings.items')}</p>
           )}
           {dataAction?.type === 'clear' && dataAction?.ok === false && (
-            <p className="settings-note">清除缓存失败，浏览器可能禁用了 localStorage。</p>
+            <p className="settings-note">{t('settings.clearFailed')}</p>
           )}
         </section>
       </div>

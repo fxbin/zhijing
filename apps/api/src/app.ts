@@ -6,20 +6,23 @@ import {
   clearFilter,
   createEmptyKnowledgeBase,
   completeMaterialReview,
+  createModelProviderProfile,
   deleteMaterial,
+  deleteModelProviderProfile,
   describeCloudBackupStatus,
   editArtifactSection,
   editCardContent,
   extractEntities,
   generateCrossKbSynthesis,
   getDashboard,
+  getModelProviderSettings,
+  getModelProviderSettingsV2,
   loadFilter,
   recordExport,
   getKnowledgeBaseAnalytics,
   getKnowledgeBase,
   getKnowledgeMap,
   getTask,
-  getModelProviderSettings,
   initializeArtifactSections,
   intakeKnowledge,
   KnowledgeCoreError,
@@ -30,7 +33,9 @@ import {
   listEntities,
   listExports,
   listMessages,
+  listModelProviderProfiles,
   listCardRevisions,
+  activateModelProviderProfile,
   recordCardReview,
   listKnowledgeBases,
   listMaterials,
@@ -43,10 +48,12 @@ import {
   searchKnowledgeAssets,
   suggestMaterialAssignments,
   testModelProviderSettings,
+  updateModelProviderProfile,
 } from '@zhijing/core';
 import type {
   AssignMaterialRequest,
   CompleteMaterialReviewRequest,
+  CreateModelProviderProfileRequest,
   IntakeRequest,
   KnowledgeKitId,
   MaterialType,
@@ -54,6 +61,7 @@ import type {
   RunKnowledgeKitRequest,
   SaveModelProviderSettingsRequest,
   TestModelProviderSettingsRequest,
+  UpdateModelProviderProfileRequest,
 } from '@zhijing/shared';
 
 export function buildApi() {
@@ -110,6 +118,86 @@ export function buildApi() {
     model: typeof request.body?.model === 'string' ? request.body.model.trim() : undefined,
     apiKey: typeof request.body?.apiKey === 'string' ? request.body.apiKey : undefined,
   }));
+
+  app.get('/api/settings/model-provider/v2', async () => getModelProviderSettingsV2());
+
+  app.get('/api/settings/model-provider/profiles', async () => ({
+    profiles: listModelProviderProfiles(),
+  }));
+
+  app.post<{ Body: Partial<CreateModelProviderProfileRequest> }>('/api/settings/model-provider/profiles', async (request, reply) => {
+    const name = typeof request.body?.name === 'string' ? request.body.name.trim() : '';
+    const provider = typeof request.body?.provider === 'string' ? request.body.provider.trim() : '';
+    const model = typeof request.body?.model === 'string' ? request.body.model.trim() : '';
+    if (!name || !provider || !model) {
+      return reply.code(400).send({ error: 'name、provider、model 均为必填。' });
+    }
+    try {
+      const profile = createModelProviderProfile({
+        name,
+        provider,
+        model,
+        apiKey: typeof request.body?.apiKey === 'string' ? request.body.apiKey : undefined,
+        enabled: typeof request.body?.enabled === 'boolean' ? request.body.enabled : undefined,
+        fallbackToMock: typeof request.body?.fallbackToMock === 'boolean' ? request.body.fallbackToMock : undefined,
+        isDefault: request.body?.isDefault === true,
+      });
+      return { profile };
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'model provider profile create failed');
+      return reply.code(500).send({ error: 'Model provider profile create failed.' });
+    }
+  });
+
+  app.patch<{ Params: { id: string }; Body: Partial<UpdateModelProviderProfileRequest> }>('/api/settings/model-provider/profiles/:id', async (request, reply) => {
+    try {
+      const profile = updateModelProviderProfile(request.params.id, {
+        name: typeof request.body?.name === 'string' ? request.body.name : undefined,
+        provider: typeof request.body?.provider === 'string' ? request.body.provider : undefined,
+        model: typeof request.body?.model === 'string' ? request.body.model : undefined,
+        apiKey: typeof request.body?.apiKey === 'string' ? request.body.apiKey : undefined,
+        enabled: typeof request.body?.enabled === 'boolean' ? request.body.enabled : undefined,
+        fallbackToMock: typeof request.body?.fallbackToMock === 'boolean' ? request.body.fallbackToMock : undefined,
+        isDefault: typeof request.body?.isDefault === 'boolean' ? request.body.isDefault : undefined,
+        clearApiKey: request.body?.clearApiKey === true,
+      });
+      return { profile };
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'model provider profile update failed');
+      return reply.code(500).send({ error: 'Model provider profile update failed.' });
+    }
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/settings/model-provider/profiles/:id', async (request, reply) => {
+    try {
+      return deleteModelProviderProfile(request.params.id);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'model provider profile delete failed');
+      return reply.code(500).send({ error: 'Model provider profile delete failed.' });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>('/api/settings/model-provider/profiles/:id/activate', async (request, reply) => {
+    try {
+      const profile = activateModelProviderProfile(request.params.id);
+      return { profile };
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'model provider profile activate failed');
+      return reply.code(500).send({ error: 'Model provider profile activate failed.' });
+    }
+  });
 
   app.get('/api/knowledge-bases', async () => ({
     knowledgeBases: listKnowledgeBases(),

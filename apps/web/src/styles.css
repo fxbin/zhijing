@@ -208,6 +208,27 @@ button { cursor: pointer; }
   border-top: 1px solid var(--line-soft);
 }
 
+.nav-language-switcher {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  border: 0;
+  border-left: 4px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 14px;
+  text-align: left;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.nav-language-switcher:hover {
+  background: var(--surface-high);
+  color: var(--primary);
+}
+
 .top-bar {
   position: sticky;
   top: 0;
@@ -896,6 +917,10 @@ button { cursor: pointer; }
   gap: 24px;
   max-width: 1000px;
   margin: 0 auto;
+}
+
+.lower-grid > * {
+  min-width: 0;
 }
 
 .section-title {
