@@ -75,17 +75,6 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
     return () => clearTimeout(timer);
   }, [captureSummary]);
 
-  useEffect(() => {
-    if (lifecycleStats.duplicateSignals > 0) {
-      setDedupeNotice({
-        count: lifecycleStats.duplicateSignals,
-        hint: '检测到重复资料，可在冲突解决面板批量合并。',
-      });
-    } else {
-      setDedupeNotice(null);
-    }
-  }, [lifecycleStats.duplicateSignals]);
-
   async function loadMaterials() {
     setIsLoading(true);
     try {
@@ -199,6 +188,17 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
       reviewItems: items.filter((item) => item.parseStatus === 'needs_review' || item.parseStatus === 'failed').slice(0, 3),
     };
   }, [items, counts.failed, counts.ingested, counts.needs_review, counts.parsing, counts.saved]);
+
+  useEffect(() => {
+    if (lifecycleStats.duplicateSignals > 0) {
+      setDedupeNotice({
+        count: lifecycleStats.duplicateSignals,
+        hint: '检测到重复资料，可在冲突解决面板批量合并。',
+      });
+    } else {
+      setDedupeNotice(null);
+    }
+  }, [lifecycleStats.duplicateSignals]);
 
   async function capture() {
     const value = captureValue.trim();

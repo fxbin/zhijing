@@ -2066,6 +2066,46 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
     }
 
     if (kind === 'link' && base && material) {
+      if (material.platform === 'xiaohongshu') {
+        try {
+          const parseResult = await requestMaterialParsing(material.id);
+          finishTask(task, {
+            kind,
+            knowledgeBaseId: base.id,
+            materialId: parseResult.material.id,
+            parseStatus: parseResult.material.parseStatus,
+            platform: parseResult.material.platform,
+            sourceUrl: parseResult.material.sourceUrl,
+          });
+          return {
+            kind,
+            knowledgeBase: parseResult.knowledgeBase ?? base,
+            material: parseResult.material,
+            cards: parseResult.cards ?? [],
+            task: parseResult.task ?? task,
+            artifact: parseResult.artifact,
+            message: parseResult.message ?? '小红书链接已自动解析。',
+          };
+        } catch {
+          finishTask(task, {
+            kind,
+            knowledgeBaseId: base.id,
+            materialId: material.id,
+            parseStatus: material.parseStatus,
+            platform: material.platform,
+            sourceUrl: material.sourceUrl,
+          });
+          return {
+            kind,
+            knowledgeBase: base,
+            material,
+            cards: [],
+            task,
+            message: '链接已保存，自动解析失败，可稍后手动重试。',
+          };
+        }
+      }
+
       finishTask(task, {
         kind,
         knowledgeBaseId: base.id,
@@ -3109,12 +3149,15 @@ async function tryParseXiaohongshuPublicShare(
   }
 
   const title = titleFromShare ?? titleFromLink(shareInfo.sourceUrl);
+  const hasCookie = Boolean(normalizeSecret(process.env.XHS_COOKIE ?? process.env.XIAOHONGSHU_COOKIE));
   return {
     title,
     text: cleanText([title, `来源链接：${shareInfo.sourceUrl}`].filter(Boolean).join('\n\n')),
     mediaUrls: [],
     needsReview: true,
-    reviewReason: '公开页面没有暴露可解析的笔记状态，可能需要登录、稍后重试或手动补充正文媒体。',
+    reviewReason: hasCookie
+      ? '公开页面没有暴露可解析的笔记状态，可能需要稍后重试或手动补充正文媒体。'
+      : '未配置 XHS_COOKIE 环境变量，小红书反爬限制下无法获取笔记内容。请在 .env 中设置 XHS_COOKIE 后重试，或手动补充正文媒体。',
   };
 }
 

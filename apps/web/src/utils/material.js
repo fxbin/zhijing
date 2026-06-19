@@ -70,12 +70,22 @@ export function splitMediaUrls(value) {
 }
 
 /**
+ * 判断 URL 是否为视频 URL。
+ * @param {string} url - 待判断的 URL
+ * @returns {boolean} 是否为视频 URL
+ */
+export function isVideoUrl(url) {
+  return /sns-video|\.mp4|\.mov|\.webm|\.m4v|videocdn/i.test(url);
+}
+
+/**
  * 判断 URL 是否为图片 URL。
  * @param {string} url - 待判断的 URL
  * @returns {boolean} 是否为图片 URL
  */
 export function isImageUrl(url) {
-  return /xhscdn\.com|sns-img|image|format\/jpg|format\/png|\.jpe?g|\.png|\.webp/i.test(url);
+  if (isVideoUrl(url)) return false;
+  return /sns-img|image|format\/jpg|format\/png|\.jpe?g|\.png|\.webp/i.test(url);
 }
 
 /**
