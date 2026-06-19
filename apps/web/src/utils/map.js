@@ -1,0 +1,174 @@
+/**
+ * 知识地图工具函数：节点过滤、布局计算、元数据描述等。
+ * @module utils/map
+ */
+
+const MAP_LAYOUT = {
+  centerX: 500,
+  centerY: 400,
+  rings: {
+    material: { startAngle: 100, endAngle: 260, radius: 210 },
+    card: { startAngle: 280, endAngle: 440, radius: 320 },
+    other: { startAngle: 260, endAngle: 280, radius: 260 },
+  },
+  nodeRadius: { knowledge_base: 34, material: 22, card: 18, other: 16 },
+};
+
+const NODE_METADATA_SPECS = {
+  material: [
+    { key: 'platform', label: '平台' },
+    { key: 'type', label: '类型' },
+    { key: 'mediaCount', label: '媒体数' },
+  ],
+  card: [
+    { key: 'type', label: '卡片类型' },
+    { key: 'materialId', label: '来源资料' },
+  ],
+  knowledge_base: [
+    { key: 'sourceCount', label: '资料数' },
+    { key: 'cardCount', label: '卡片数' },
+  ],
+};
+
+const NODE_STATUS_META = {
+  ready: { tone: 'positive', label: '就绪' },
+  active: { tone: 'positive', label: '活跃' },
+  seeded: { tone: 'positive', label: '已初始化' },
+  pending: { tone: 'pending', label: '待处理' },
+  queued: { tone: 'pending', label: '排队中' },
+  draft: { tone: 'pending', label: '草稿' },
+  parsing: { tone: 'pending', label: '解析中' },
+  failed: { tone: 'negative', label: '失败' },
+  error: { tone: 'negative', label: '异常' },
+};
+
+/**
+ * 判断节点是否匹配过滤器和搜索关键词。
+ * @param {object} node - 地图节点
+ * @param {string} filter - 过滤类型（all/material/card/...）
+ * @param {string} query - 搜索关键词
+ * @returns {boolean} 是否匹配
+ */
+export function mapNodeMatches(node, filter, query) {
+  const matchesFilter = filter === 'all' || node.kind === filter;
+  const keyword = query.trim().toLowerCase();
+  if (!matchesFilter) return false;
+  if (!keyword) return true;
+  return [node.label, node.summary, node.status, ...Object.values(node.metadata ?? {})]
+    .join(' ')
+    .toLowerCase()
+    .includes(keyword);
+}
+
+/**
+ * 根据节点类型构建环形布局坐标。
+ * @param {Array<object>} nodes - 节点数组
+ * @returns {Array<object>} 带坐标的节点数组
+ */
+export function buildMapLayout(nodes) {
+  const center = nodes.find((node) => node.kind === 'knowledge_base') ?? nodes[0];
+  const remaining = nodes.filter((node) => node.id !== center?.id);
+  const materialNodes = remaining.filter((node) => node.kind === 'material');
+  const cardNodes = remaining.filter((node) => node.kind === 'card');
+  const otherNodes = remaining.filter(
+    (node) => node.kind !== 'material' && node.kind !== 'card',
+  );
+  const positioned = center
+    ? [
+        {
+          ...center,
+          x: MAP_LAYOUT.centerX,
+          y: MAP_LAYOUT.centerY,
+          radius: MAP_LAYOUT.nodeRadius.knowledge_base,
+        },
+      ]
+    : [];
+  return [
+    ...positioned,
+    ...positionRing(materialNodes, MAP_LAYOUT.rings.material),
+    ...positionRing(cardNodes, MAP_LAYOUT.rings.card),
+    ...positionRing(otherNodes, MAP_LAYOUT.rings.other),
+  ];
+}
+
+/**
+ * 将节点数组按环形布局分配坐标。
+ * @param {Array<object>} nodes - 节点数组
+ * @param {object} ring - 环形配置（startAngle/endAngle/radius）
+ * @returns {Array<object>} 带坐标的节点数组
+ */
+export function positionRing(nodes, ring) {
+  const total = Math.max(nodes.length, 1);
+  return nodes.map((node, index) => {
+    const angle =
+      total === 1
+        ? (ring.startAngle + ring.endAngle) / 2
+        : ring.startAngle + ((ring.endAngle - ring.startAngle) * index) / (total - 1);
+    const radian = (angle * Math.PI) / 180;
+    return {
+      ...node,
+      x: MAP_LAYOUT.centerX + Math.cos(radian) * ring.radius,
+      y: MAP_LAYOUT.centerY + Math.sin(radian) * ring.radius,
+      radius: MAP_LAYOUT.nodeRadius[node.kind] ?? MAP_LAYOUT.nodeRadius.other,
+    };
+  });
+}
+
+/**
+ * 截断节点标签到 22 字符。
+ * @param {string} label - 原始标签
+ * @returns {string} 截断后的标签
+ */
+export function truncateNodeLabel(label) {
+  const value = label ?? 'Untitled';
+  return value.length > 22 ? `${value.slice(0, 20)}...` : value;
+}
+
+/**
+ * 返回节点类型的中文标签。
+ * @param {string} kind - 节点类型
+ * @returns {string} 中文标签
+ */
+export function mapKindLabel(kind) {
+  if (kind === 'knowledge_base') return 'Knowledge Base';
+  if (kind === 'material') return 'Material';
+  return 'Card';
+}
+
+/**
+ * 返回节点状态的色调和标签。
+ * @param {string} status - 状态标识
+ * @returns {object} 状态元信息（tone/label）
+ */
+export function describeNodeStatus(status) {
+  return NODE_STATUS_META[status] ?? { tone: 'neutral', label: status ?? '未知' };
+}
+
+/**
+ * 根据节点类型返回可展示的元数据键值对。
+ * @param {object} node - 地图节点
+ * @returns {Array<{label: string, value: string}>} 元数据数组
+ */
+export function describeNodeMetadata(node) {
+  const specs = NODE_METADATA_SPECS[node.kind] ?? [];
+  return specs
+    .filter((spec) => node.metadata?.[spec.key] !== undefined && node.metadata?.[spec.key] !== null)
+    .map((spec) => ({
+      label: spec.label,
+      value: formatMetadataValue(spec.key, node.metadata[spec.key]),
+    }));
+}
+
+/**
+ * 格式化元数据值（数字转字符串，materialId 截断）。
+ * @param {string} key - 元数据键
+ * @param {*} value - 元数据值
+ * @returns {string} 格式化后的字符串
+ */
+export function formatMetadataValue(key, value) {
+  if (typeof value === 'number') return String(value);
+  if (key === 'materialId' && typeof value === 'string') {
+    return value.length > 12 ? `${value.slice(0, 10)}…` : value;
+  }
+  return String(value ?? '-');
+}
