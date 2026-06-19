@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  AlertTriangle,
   Clock3,
   FileText,
   RefreshCw,
@@ -66,11 +67,24 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
   const [batchProgress, setBatchProgress] = useState(null);
   const [batchAssignTarget, setBatchAssignTarget] = useState('');
   const [captureSummary, setCaptureSummary] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [dedupeNotice, setDedupeNotice] = useState(null);
   useEffect(() => {
     if (!captureSummary) return undefined;
     const timer = setTimeout(() => setCaptureSummary(null), 9000);
     return () => clearTimeout(timer);
   }, [captureSummary]);
+
+  useEffect(() => {
+    if (lifecycleStats.duplicateSignals > 0) {
+      setDedupeNotice({
+        count: lifecycleStats.duplicateSignals,
+        hint: '检测到重复资料，可在冲突解决面板批量合并。',
+      });
+    } else {
+      setDedupeNotice(null);
+    }
+  }, [lifecycleStats.duplicateSignals]);
 
   async function loadMaterials() {
     setIsLoading(true);
@@ -376,16 +390,21 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
     }
   }
 
-  async function deleteSelected() {
+  function requestDelete() {
     const ids = Array.from(selectedIds);
     if (ids.length === 0 || apiStatus !== 'online' || isBatchProcessing) return;
-    const confirmed = window.confirm(`确认删除选中的 ${ids.length} 条资料？相关卡片将解除关联但不会删除。`);
-    if (!confirmed) return;
+    setDeleteConfirm({ ids });
+  }
+
+  async function confirmDelete() {
+    const ids = deleteConfirm?.ids ?? [];
+    if (ids.length === 0) return;
+    setDeleteConfirm(null);
     const snapshot = items;
     setIsBatchProcessing(true);
     setBatchProgress({ done: 0, total: ids.length, action: '删除' });
     setStatus(`正在删除 ${ids.length} 条资料...`);
-    const selectedSnapshot = new Set(selectedIds);
+    const selectedSnapshot = new Set(ids);
     clearSelection();
     setItems((current) => current.filter((item) => !selectedSnapshot.has(item.id)));
     let failed = 0;
@@ -481,6 +500,14 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
           <span>{counts.failed ?? 0} failed</span>
         </div>
       </div>
+
+      {dedupeNotice && (
+        <div className="library-dedupe-notice">
+          <AlertTriangle size={18} />
+          <span>检测到 {dedupeNotice.count} 组重复资料。{dedupeNotice.hint}</span>
+          <button type="button" onClick={() => setDedupeNotice(null)}>知道了</button>
+        </div>
+      )}
 
       {captureSummary && (
         <CaptureSuccessBanner
@@ -590,7 +617,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
             <button type="button" disabled={isBatchProcessing || apiStatus !== 'online' || !batchAssignTarget} onClick={assignSelected}>
               移动
             </button>
-            <button type="button" className="danger" disabled={isBatchProcessing || apiStatus !== 'online'} onClick={deleteSelected}>
+            <button type="button" className="danger" disabled={isBatchProcessing || apiStatus !== 'online'} onClick={requestDelete}>
               <Trash2 size={14} />
               删除
             </button>
@@ -711,6 +738,24 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
           );
         })}
       </div>
+      )}
+      {deleteConfirm && (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal-card">
+            <div className="modal-head">
+              <AlertTriangle size={24} />
+              <h3>确认删除资料</h3>
+            </div>
+            <p>即将删除 <strong>{deleteConfirm.ids.length}</strong> 条资料。相关卡片将解除关联但不会删除，此操作不可撤销。</p>
+            <div className="modal-actions">
+              <button type="button" onClick={() => setDeleteConfirm(null)}>取消</button>
+              <button type="button" className="danger" onClick={confirmDelete}>
+                <Trash2 size={16} />
+                确认删除
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   );

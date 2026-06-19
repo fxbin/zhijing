@@ -17,20 +17,20 @@ This file tracks how the Stitch prototype set maps to the actual app implementat
 | --- | --- | --- | --- | --- |
 | `#workspace` | `WorkspaceView` | `workspace`, `professional_workbench` | Done | Main command, workspace shell, skeleton loading state, and empty-state guide exist. |
 | `#detail` | `DetailView` | `kb_detail`, `kb_deep_dive_1`, `kb_deep_dive_2` | Done | Knowledge base overview, cards, Q&A, recent material, entity extraction panel, and card-type distribution analysis panel exist. |
-| `#library` | `LibraryView` | `library`, `instant_capture_inbox`, `interaction_connecting`, `batch_connection_mode`, `collection_summary`, `re_authorize_source`, `data_hygiene` | Partial | Capture, batch input, parsing summary, review recovery, assignment, file import, and hygiene signals exist; deeper automation and standalone modal states remain. |
+| `#library` | `LibraryView` | `library`, `instant_capture_inbox`, `interaction_connecting`, `batch_connection_mode`, `collection_summary`, `re_authorize_source`, `data_hygiene` | Done | Capture, batch input, parsing summary, review recovery, assignment, file import, hygiene signals, standalone delete confirmation modal, and automatic dedupe notice are implemented. |
 | `#search` | `SearchView` | `search`, `semantic_discovery` | Done | Search with local semantic recall v0, discovery tag suggestions from result frequency, and cross-knowledge-base result clustering. |
 | `#assets` | `GlobalAssetsDashboard` | `global_knowledge_assets_dashboard_1`, `global_knowledge_assets_dashboard_2` | Done | Global asset dashboard with aggregated materials, cards, artifacts, tasks, review signals, and persistent filters. |
 | `#synthesis` | `CrossKbSynthesisView` | `cross_kb_synthesis` | Done | Cross-knowledge-base theme overlap view with Pi-backed synthesis generation and persisted artifact. |
-| `#compare` | `MultiEntityComparisonView` | `multi_entity_comparison_view_1`, `multi_entity_comparison_view_2` | Partial | Entity comparison exists at knowledge-base granularity; extracted entity comparison and expanded states are still missing. |
+| `#compare` | `MultiEntityComparisonView` | `multi_entity_comparison_view_1`, `multi_entity_comparison_view_2` | Done | Knowledge-base comparison, card-type entity comparison, expandable row details, and comparison insights are implemented. |
 | `#conflicts` | `KnowledgeConflictResolverView` | `knowledge_conflict_resolver_1`, `knowledge_conflict_resolver_2` | Done | Conflict resolver with audited merge/delete actions and audit trail panel. |
-| `#kits` | `KitView` | `kit_1`, `kit_2`, `kit_3` | Partial | Kit cards and run entry exist; collection/progress variants are incomplete; topic decomposition kit added. |
-| `#workflow` | `WorkflowView` | `workflow_run`, `kit_collection_in_progress` | Partial | Basic run/result view exists; progress and multi-step states need Stitch-aligned treatment. |
+| `#kits` | `KitView` | `kit_1`, `kit_2`, `kit_3` | Done | Kit cards with category grouping, detail selection state, and running progress panel are implemented. |
+| `#workflow` | `WorkflowView` | `workflow_run`, `kit_collection_in_progress` | Done | Execution flow with step timestamps, evidence slots, task status badge, and error display are implemented. |
 | `#artifact` | `ArtifactView` | `artifact`, `deep_research_artifact`, `product_research_artifact`, `topic_library_artifact`, `xiaohongshu_operation_artifact` | Done | Typed artifact layouts with persisted subtype, editable sections, and revision history. |
-| `#maps` | `MapsView` | `full_map`, `interaction_specs` | Partial | Full Knowledge Map workbench exists with search, filters, zoom, SVG graph, node inspector, relation list, and legend; persisted layout and relationship editing are still missing. |
+| `#maps` | `MapsView` | `full_map`, `interaction_specs` | Done | Full Knowledge Map workbench with search, filters, zoom, SVG graph, node inspector, relation list, legend, persisted layout (localStorage), and relation editor are implemented. |
 | `#chat` | `ChatView` | `chat_onboarding`, `active_chat_1`, `active_chat_2`, `active_chat_3`, `back_loop_to_chat` | Done | Dedicated knowledge-base chat with persistent conversation history and source citations. |
 | `#recall` | `RecallView` | `active_recall`, `card_evolution` | Done | Card-based recall with SM-2-lite scheduling, scoring, and card revision history. |
 | `#export` | `ExportView` | `export_management`, `export_configuration`, `export_progress`, `export_success`, `export_backup` | Done | Local Markdown/JSON/PDF export, persistent history, auto-close modal, and local backup. |
-| `#settings` | `SettingsView` | `settings`, `system_transparency` | Partial | Provider settings exist; transparency, source auth, and data controls are incomplete. |
+| `#settings` | `SettingsView` | `settings`, `system_transparency` | Done | Provider settings, system transparency panel (API status, data scale, recent tasks), and data controls (export all, clear local cache) are implemented. |
 
 ## Coverage By Product Area
 

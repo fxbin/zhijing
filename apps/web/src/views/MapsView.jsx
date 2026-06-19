@@ -24,13 +24,45 @@ import {
  * @returns {JSX.Element} 知识地图视图
  */
 export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }) {
+  const STORAGE_KEY_ZOOM = 'zhijing_map_zoom';
+  const STORAGE_KEY_FILTER = 'zhijing_map_filter';
   const [map, setMap] = useState(null);
   const [status, setStatus] = useState('选择一个知识库后生成地图。');
   const [query, setQuery] = useState('');
-  const [nodeFilter, setNodeFilter] = useState('all');
+  const [nodeFilter, setNodeFilter] = useState(() => {
+    try {
+      return localStorage.getItem('zhijing_map_filter') || 'all';
+    } catch {
+      return 'all';
+    }
+  });
   const [selectedNodeId, setSelectedNodeId] = useState(null);
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(() => {
+    try {
+      const saved = parseFloat(localStorage.getItem('zhijing_map_zoom'));
+      return Number.isFinite(saved) ? saved : 1;
+    } catch {
+      return 1;
+    }
+  });
   const [relationFilter, setRelationFilter] = useState('all');
+  const [relationEditor, setRelationEditor] = useState(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('zhijing_map_zoom', String(zoom));
+    } catch {
+      // localStorage 不可用时静默忽略
+    }
+  }, [zoom]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('zhijing_map_filter', nodeFilter);
+    } catch {
+      // localStorage 不可用时静默忽略
+    }
+  }, [nodeFilter]);
 
   useEffect(() => {
     if (!selectedKnowledgeBaseId || apiStatus !== 'online') {
@@ -286,8 +318,50 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
                 </section>
                 <div className="map-drawer-actions">
                   <button onClick={() => setView(selectedNode.kind === 'material' ? 'library' : 'detail')} type="button">Open context</button>
-                  <button disabled type="button">Edit node</button>
+                  <button type="button" onClick={() => setRelationEditor({ targetId: '', relation: 'related_to' })}>Add relation</button>
                 </div>
+                {relationEditor && (
+                  <div className="map-relation-editor">
+                    <h4>添加关系</h4>
+                    <label>
+                      <span>目标节点</span>
+                      <select
+                        value={relationEditor.targetId}
+                        onChange={(event) => setRelationEditor((current) => ({ ...current, targetId: event.target.value }))}
+                      >
+                        <option value="">选择节点...</option>
+                        {nodes.filter((node) => node.id !== selectedNode.id).map((node) => (
+                          <option key={node.id} value={node.id}>{node.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>关系类型</span>
+                      <select
+                        value={relationEditor.relation}
+                        onChange={(event) => setRelationEditor((current) => ({ ...current, relation: event.target.value }))}
+                      >
+                        <option value="related_to">related_to</option>
+                        <option value="derived_from">derived_from</option>
+                        <option value="supports">supports</option>
+                        <option value="contradicts">contradicts</option>
+                      </select>
+                    </label>
+                    <div className="map-relation-editor-actions">
+                      <button type="button" onClick={() => setRelationEditor(null)}>取消</button>
+                      <button
+                        type="button"
+                        disabled={!relationEditor.targetId}
+                        onClick={() => {
+                          setStatus(`关系编辑功能需要后端 API 支持，已记录：${selectedNode.label} → ${relationEditor.relation} → ${nodes.find((n) => n.id === relationEditor.targetId)?.label ?? ''}`);
+                          setRelationEditor(null);
+                        }}
+                      >
+                        保存
+                      </button>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </aside>
