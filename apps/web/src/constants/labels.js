@@ -3,14 +3,6 @@
  * @module constants/labels
  */
 
-export const CARD_TYPE_LABELS = {
-  concept: 'Concept',
-  method: 'Method',
-  fact: 'Fact',
-  question: 'Question',
-  general: 'General',
-};
-
 export const PARSE_STAGE_LABELS = {
   captured: '采集',
   queued: '排队',
