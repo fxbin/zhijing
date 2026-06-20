@@ -58,6 +58,17 @@ export function materialMediaUrls(item) {
 }
 
 /**
+ * 将外部图片 URL 转换为本地代理 URL，解决跨域与 ORB 拦截问题。
+ * @param {string} url - 原始图片 URL
+ * @returns {string} 代理后的图片 URL
+ */
+export function proxyImageUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  if (url.startsWith('/api/proxy-image')) return url;
+  return `/api/proxy-image?url=${encodeURIComponent(url)}`;
+}
+
+/**
  * 将空格分隔的字符串拆分为合法 URL 数组。
  * @param {string} value - 包含 URL 的字符串
  * @returns {string[]} 合法 URL 数组

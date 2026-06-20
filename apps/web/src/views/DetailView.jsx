@@ -4,10 +4,13 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   BarChart3,
   BookOpen,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   CircleX,
   Clock3,
   History,
@@ -16,10 +19,10 @@ import {
   SquareArrowOutUpRight,
   Users,
 } from 'lucide-react';
-import { CARD_TYPE_LABELS } from '../constants/labels';
 import { materialMediaUrls } from '../utils/material';
 import { formatPercent } from '../utils/format';
 import { extractConceptTags, groupCardsByType } from '../utils/knowledge';
+import { useCardTypeLabel, useClaimStatusLabel, useIntakeKindLabel, useParseStatusLabel } from '../utils/i18nLabels';
 import EmptyState from '../components/EmptyState';
 import MediaPreview from '../components/MediaPreview';
 import SourceCitation from '../components/SourceCitation';
@@ -62,7 +65,14 @@ export default function DetailView({
   setAssistantQuestion,
   setView,
 }) {
+  const { t } = useTranslation();
+  const cardTypeLabel = useCardTypeLabel();
+  const claimStatusLabel = useClaimStatusLabel();
+  const parseStatusLabel = useParseStatusLabel();
+  const intakeKindLabel = useIntakeKindLabel();
   const [feedMode, setFeedMode] = useState('feed');
+  const [feedViewMode, setFeedViewMode] = useState('grouped');
+  const [collapsedGroups, setCollapsedGroups] = useState(new Set());
   const cards = detail.cards ?? [];
   const materials = detail.materials ?? [];
   const artifacts = detail.artifacts ?? [];
@@ -76,11 +86,16 @@ export default function DetailView({
   const totals = analytics?.totals;
   const statusDistribution = analytics?.materialStatusDistribution?.slice(0, 4) ?? [];
   const platformDistribution = analytics?.platformDistribution?.slice(0, 4) ?? [];
+  const CARD_TYPE_ORDER = ['concept', 'method', 'case', 'step', 'viewpoint', 'fact', 'question', 'general'];
+  const sortedGroupEntries = CARD_TYPE_ORDER
+    .filter((type) => (cardGroups[type]?.length ?? 0) > 0)
+    .map((type) => [type, cardGroups[type]]);
 
   const [entities, setEntities] = useState([]);
   const [loadingEntities, setLoadingEntities] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [entityError, setEntityError] = useState('');
+  const [highlightedCardId, setHighlightedCardId] = useState(null);
 
   useEffect(() => {
     if (!selectedKnowledgeBaseId) return;
@@ -102,6 +117,33 @@ export default function DetailView({
     loadEntities();
     return () => { ignore = true; };
   }, [selectedKnowledgeBaseId]);
+
+  /**
+   * 点击 Roadmap 节点后滚动并高亮对应卡片。
+   * @param {string} cardId - 卡片 ID
+   */
+  function handleRoadmapNodeClick(cardId) {
+    setHighlightedCardId(cardId);
+    const element = document.getElementById(`card-${cardId}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    const timer = setTimeout(() => setHighlightedCardId(null), 2000);
+    return () => clearTimeout(timer);
+  }
+
+  /**
+   * 切换 Feed 分组的折叠状态。
+   * @param {string} type - 卡片类型
+   */
+  function toggleGroup(type) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }
 
   async function extractEntitiesAction() {
     if (!selectedKnowledgeBaseId || extracting) return;
@@ -181,7 +223,7 @@ export default function DetailView({
                 const ratio = cards.length > 0 ? Math.round((group.length / cards.length) * 100) : 0;
                 return (
                   <div className="analysis-bar-row" key={type}>
-                    <span className={`analysis-bar-label type-${type}`}>{CARD_TYPE_LABELS[type] ?? type}</span>
+                    <span className={`analysis-bar-label type-${type}`}>{cardTypeLabel(type)}</span>
                     <div className="analysis-bar-track">
                       <div className={`analysis-bar-fill type-${type}`} style={{ width: `${ratio}%` }} />
                     </div>
@@ -201,11 +243,19 @@ export default function DetailView({
           <aside className="roadmap">
             <h3>Roadmap</h3>
             {roadmapCards.map((card, index) => (
-              <div className={`roadmap-node ${index === 0 ? 'active' : ''} ${card.claimStatus === 'sourced' ? 'done' : ''}`} key={card.id ?? card.title}>
+              <div
+                className={`roadmap-node ${index === 0 ? 'active' : ''} ${card.claimStatus === 'sourced' ? 'done' : ''}`}
+                key={card.id ?? card.title}
+                onClick={() => handleRoadmapNodeClick(card.id)}
+                onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') handleRoadmapNodeClick(card.id); }}
+                role="button"
+                tabIndex={0}
+                title="点击跳转到对应卡片"
+              >
                 <span className="roadmap-index">{index + 1}</span>
                 <div className="roadmap-body">
                   <strong>{card.title}</strong>
-                  <small>{card.claimStatus === 'sourced' ? 'Sourced from imported material.' : 'AI skeleton, needs sources.'}</small>
+                  <small>{card.claimStatus === 'sourced' ? '已溯源' : 'AI 骨架，待补充来源'}</small>
                 </div>
               </div>
             ))}
@@ -255,34 +305,105 @@ export default function DetailView({
             {cards.length === 0 ? (
               <EmptyState title="暂无知识卡片" body="创建主题或导入资料后，这里会生成结构化卡片。" />
             ) : feedMode === 'feed' ? (
-              cards.map((card) => (
-                <article className={`knowledge-card type-${card.type ?? 'general'}`} key={card.id ?? card.title}>
-                  <div className="card-head">
-                    <span className="card-type-badge">{card.type ?? 'general'}</span>
-                    {card.claimStatus === 'sourced' && (
-                      <span className="card-source-badge"><CheckCircle2 size={14} />已溯源</span>
-                    )}
+              <>
+                <div className="feed-controls">
+                  <div className="feed-type-distribution">
+                    {sortedGroupEntries.map(([type, group]) => {
+                      const ratio = cards.length > 0 ? Math.round((group.length / cards.length) * 100) : 0;
+                      return (
+                        <div
+                          key={type}
+                          className={`feed-dist-segment type-${type}`}
+                          style={{ width: `${ratio}%` }}
+                          title={`${cardTypeLabel(type)}: ${group.length} (${ratio}%)`}
+                        >
+                          <span className="feed-dist-label">{cardTypeLabel(type)}</span>
+                          <span className="feed-dist-count">{group.length}</span>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <h3>{card.title}</h3>
-                  <p>{card.body}</p>
-                  <footer>{card.claimStatus} · Updated {card.updatedAt ? new Date(card.updatedAt).toLocaleDateString() : 'today'}</footer>
-                </article>
-              ))
+                  <div className="feed-view-toggle">
+                    <button className={feedViewMode === 'grouped' ? 'active' : ''} onClick={() => setFeedViewMode('grouped')} type="button">{t('detail.groupedView')}</button>
+                    <button className={feedViewMode === 'list' ? 'active' : ''} onClick={() => setFeedViewMode('list')} type="button">{t('detail.listView')}</button>
+                  </div>
+                </div>
+                {feedViewMode === 'grouped' ? (
+                  <div className="feed-groups">
+                    {sortedGroupEntries.map(([type, group]) => {
+                      const isCollapsed = collapsedGroups.has(type);
+                      return (
+                        <section className="feed-group" key={type}>
+                          <header className="feed-group-head" onClick={() => toggleGroup(type)}>
+                            <div>
+                              <i className={`feed-group-dot ${type}`} />
+                              <strong>{cardTypeLabel(type)}</strong>
+                              <small>{group.length} 张</small>
+                            </div>
+                            {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                          </header>
+                          {!isCollapsed && (
+                            <div className="feed-group-body">
+                              {group.map((card) => (
+                                <article
+                                  id={`card-${card.id}`}
+                                  className={`knowledge-card type-${card.type ?? 'general'} ${highlightedCardId === card.id ? 'highlighted' : ''}`}
+                                  key={card.id ?? card.title}
+                                >
+                                  <div className="card-head">
+                                    <span className="card-type-badge">{cardTypeLabel(card.type)}</span>
+                                    {card.claimStatus === 'sourced' && (
+                                      <span className="card-source-badge"><CheckCircle2 size={14} />{claimStatusLabel(card.claimStatus)}</span>
+                                    )}
+                                  </div>
+                                  <h3>{card.title}</h3>
+                                  <p>{card.body}</p>
+                                  <footer>{claimStatusLabel(card.claimStatus)} · {card.updatedAt ? new Date(card.updatedAt).toLocaleDateString() : 'today'}</footer>
+                                </article>
+                              ))}
+                            </div>
+                          )}
+                        </section>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="feed-list">
+                    {cards.map((card) => (
+                      <article
+                        id={`card-${card.id}`}
+                        className={`knowledge-card type-${card.type ?? 'general'} ${highlightedCardId === card.id ? 'highlighted' : ''}`}
+                        key={card.id ?? card.title}
+                      >
+                        <div className="card-head">
+                          <span className="card-type-badge">{cardTypeLabel(card.type)}</span>
+                          {card.claimStatus === 'sourced' && (
+                            <span className="card-source-badge"><CheckCircle2 size={14} />{claimStatusLabel(card.claimStatus)}</span>
+                          )}
+                        </div>
+                        <h3>{card.title}</h3>
+                        <p>{card.body}</p>
+                        <footer>{claimStatusLabel(card.claimStatus)} · {card.updatedAt ? new Date(card.updatedAt).toLocaleDateString() : 'today'}</footer>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </>
             ) : (
               <div className="card-cluster">
                 {Object.entries(cardGroups).map(([type, group]) => (
                   <section className="cluster-group" key={type}>
                     <header className="cluster-head">
                       <i className={`cluster-type-dot ${type}`} />
-                      <strong>{CARD_TYPE_LABELS[type] ?? type}</strong>
-                      <small>{group.length} cards</small>
+                      <strong>{cardTypeLabel(type)}</strong>
+                      <small>{group.length} 张</small>
                     </header>
                     {group.map((card) => (
                       <article className={`knowledge-card type-${type}`} key={card.id ?? card.title}>
                         <h3>{card.title}</h3>
                         <p>{card.body}</p>
                         {card.claimStatus === 'sourced' && (
-                          <span className="card-source-badge"><CheckCircle2 size={14} />已溯源</span>
+                          <span className="card-source-badge"><CheckCircle2 size={14} />{claimStatusLabel(card.claimStatus)}</span>
                         )}
                       </article>
                     ))}
@@ -310,8 +431,8 @@ export default function DetailView({
                 <div>
                   <strong>{material.title}</strong>
                   <span>
-                    {material.platform ?? material.type ?? 'material'} · {material.parseStatus ?? 'saved'}
-                    {materialMediaUrls(material).length > 0 ? ` · ${materialMediaUrls(material).length} media` : ''}
+                    {material.platform ?? intakeKindLabel(material.type)} · {parseStatusLabel(material.parseStatus)}
+                    {materialMediaUrls(material).length > 0 ? ` · ${materialMediaUrls(material).length} 个媒体` : ''}
                   </span>
                   <MediaPreview urls={materialMediaUrls(material)} compact />
                 </div>
@@ -321,7 +442,7 @@ export default function DetailView({
                     onClick={() => onParseMaterial(material.id)}
                     type="button"
                   >
-                    {material.parseStatus === 'failed' ? 'Retry' : material.parseStatus === 'ingested' ? 'Parsed' : 'Parse'}
+                    {material.parseStatus === 'failed' ? t('detail.retryButton') : material.parseStatus === 'ingested' ? t('detail.parsedButton') : t('detail.parseButton')}
                   </button>
                 )}
               </article>
@@ -368,7 +489,7 @@ export default function DetailView({
                   <div className="answer-card-list">
                     {latestAnswerCards.map((card) => (
                       <article key={card.id ?? card.title}>
-                        <span>{card.type}</span>
+                        <span>{cardTypeLabel(card.type)}</span>
                         <strong>{card.title}</strong>
                       </article>
                     ))}

@@ -61,11 +61,12 @@ export function mapNodeMatches(node, filter, query) {
 }
 
 /**
- * 根据节点类型构建环形布局坐标。
+ * 根据节点类型构建环形布局坐标，并应用已保存的拖拽位置。
  * @param {Array<object>} nodes - 节点数组
+ * @param {Record<string, {x: number; y: number}>} nodePositions - 已保存的节点位置映射
  * @returns {Array<object>} 带坐标的节点数组
  */
-export function buildMapLayout(nodes) {
+export function buildMapLayout(nodes, nodePositions = {}) {
   const center = nodes.find((node) => node.kind === 'knowledge_base') ?? nodes[0];
   const remaining = nodes.filter((node) => node.id !== center?.id);
   const materialNodes = remaining.filter((node) => node.kind === 'material');
@@ -79,16 +80,29 @@ export function buildMapLayout(nodes) {
           ...center,
           x: MAP_LAYOUT.centerX,
           y: MAP_LAYOUT.centerY,
+          originalX: MAP_LAYOUT.centerX,
+          originalY: MAP_LAYOUT.centerY,
           radius: MAP_LAYOUT.nodeRadius.knowledge_base,
         },
       ]
     : [];
-  return [
+  const layout = [
     ...positioned,
     ...positionRing(materialNodes, MAP_LAYOUT.rings.material),
     ...positionRing(cardNodes, MAP_LAYOUT.rings.card),
     ...positionRing(otherNodes, MAP_LAYOUT.rings.other),
   ];
+  return layout.map((node) => {
+    const saved = nodePositions[node.id];
+    if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+      return {
+        ...node,
+        x: saved.x,
+        y: saved.y,
+      };
+    }
+    return node;
+  });
 }
 
 /**
@@ -105,10 +119,14 @@ export function positionRing(nodes, ring) {
         ? (ring.startAngle + ring.endAngle) / 2
         : ring.startAngle + ((ring.endAngle - ring.startAngle) * index) / (total - 1);
     const radian = (angle * Math.PI) / 180;
+    const x = MAP_LAYOUT.centerX + Math.cos(radian) * ring.radius;
+    const y = MAP_LAYOUT.centerY + Math.sin(radian) * ring.radius;
     return {
       ...node,
-      x: MAP_LAYOUT.centerX + Math.cos(radian) * ring.radius,
-      y: MAP_LAYOUT.centerY + Math.sin(radian) * ring.radius,
+      x,
+      y,
+      originalX: x,
+      originalY: y,
       radius: MAP_LAYOUT.nodeRadius[node.kind] ?? MAP_LAYOUT.nodeRadius.other,
     };
   });

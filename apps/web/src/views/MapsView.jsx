@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { CircleX, RefreshCw, Search } from 'lucide-react';
+import { CircleX, RefreshCw, Search, X } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import {
   mapNodeMatches,
@@ -47,6 +47,9 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
   });
   const [relationFilter, setRelationFilter] = useState('all');
   const [relationEditor, setRelationEditor] = useState(null);
+  const [nodePositions, setNodePositions] = useState({});
+  const [dragState, setDragState] = useState(null);
+  const [pendingSave, setPendingSave] = useState(false);
 
   useEffect(() => {
     try {
@@ -80,6 +83,12 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
         const result = await response.json();
         if (!ignore) {
           setMap(result);
+          setNodePositions(
+            (result.nodePositions ?? []).reduce((acc, position) => {
+              acc[position.nodeId] = { x: position.x, y: position.y };
+              return acc;
+            }, {}),
+          );
           setStatus(result.nodes?.length ? 'Knowledge map synced.' : '当前知识库还没有可生成地图的节点。');
           setSelectedNodeId(result.nodes?.[0]?.id ?? null);
         }
@@ -99,9 +108,12 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
   const nodes = map?.nodes ?? [];
   const edges = map?.edges ?? [];
   const filteredNodes = nodes.filter((node) => mapNodeMatches(node, nodeFilter, query));
+  const searchMatches = query.trim()
+    ? nodes.filter((node) => mapNodeMatches(node, 'all', query)).map((node) => node.id)
+    : [];
   const visibleNodeIds = new Set(filteredNodes.map((node) => node.id));
   const visibleEdges = edges.filter((edge) => visibleNodeIds.has(edge.sourceId) && visibleNodeIds.has(edge.targetId));
-  const layoutNodes = buildMapLayout(filteredNodes);
+  const layoutNodes = buildMapLayout(filteredNodes, nodePositions);
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? filteredNodes[0] ?? nodes[0];
   const selectedRelations = selectedNode
     ? edges.filter((edge) => edge.sourceId === selectedNode.id || edge.targetId === selectedNode.id)
@@ -125,6 +137,126 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
     { key: 'card', label: 'Cards', count: typeCounts.card ?? 0 },
   ];
 
+  /**
+   * 将屏幕坐标转换为 SVG 内部坐标。
+   * @param {PointerEvent} event - 指针事件
+   * @returns {{x: number; y: number}|null} SVG 坐标或转换失败时返回 null
+   */
+  function pointerToSvg(event) {
+    const svg = event.currentTarget.closest('svg');
+    if (!svg) return null;
+    const point = svg.createSVGPoint();
+    point.x = event.clientX;
+    point.y = event.clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    const transformed = point.matrixTransform(ctm.inverse());
+    return { x: transformed.x, y: transformed.y };
+  }
+
+  /**
+   * 开始拖拽节点。
+   * @param {PointerEvent} event - 指针事件
+   * @param {string} nodeId - 被拖拽节点 ID
+   */
+  function handleNodePointerDown(event, nodeId) {
+    event.stopPropagation();
+    const target = event.currentTarget;
+    target.setPointerCapture(event.pointerId);
+    const svgPoint = pointerToSvg(event);
+    const node = layoutNodes.find((item) => item.id === nodeId);
+    if (!svgPoint || !node) return;
+    setDragState({
+      nodeId,
+      startX: svgPoint.x,
+      startY: svgPoint.y,
+      nodeStartX: node.x,
+      nodeStartY: node.y,
+    });
+  }
+
+  /**
+   * 拖拽中实时更新节点位置。
+   * @param {PointerEvent} event - 指针事件
+   */
+  function handlePointerMove(event) {
+    if (!dragState) return;
+    const svgPoint = pointerToSvg(event);
+    if (!svgPoint) return;
+    const dx = svgPoint.x - dragState.startX;
+    const dy = svgPoint.y - dragState.startY;
+    setNodePositions((current) => ({
+      ...current,
+      [dragState.nodeId]: {
+        x: dragState.nodeStartX + dx,
+        y: dragState.nodeStartY + dy,
+      },
+    }));
+  }
+
+  /**
+   * 结束拖拽，若位置发生变化则触发后端保存。
+   */
+  function handlePointerUp() {
+    if (!dragState) return;
+    const current = nodePositions[dragState.nodeId];
+    const hasMoved = !current || current.x !== dragState.nodeStartX || current.y !== dragState.nodeStartY;
+    setDragState(null);
+    if (hasMoved) {
+      setPendingSave(true);
+    }
+  }
+
+  /**
+   * 将当前节点位置批量保存到后端。
+   * @param {Record<string, {x: number; y: number}>} positions - 节点位置映射
+   */
+  async function persistNodePositions(positions) {
+    if (!selectedKnowledgeBaseId) return;
+    try {
+      const payload = Object.entries(positions).map(([nodeId, point]) => ({
+        nodeId,
+        x: point.x,
+        y: point.y,
+      }));
+      const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/node-positions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ positions: payload }),
+      });
+      if (!response.ok) throw new Error('Save node positions failed.');
+      setStatus('Knowledge map synced.');
+    } catch {
+      setStatus('节点位置保存失败，请确认 API 正在运行。');
+    } finally {
+      setPendingSave(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!pendingSave) return;
+    persistNodePositions(nodePositions);
+  }, [pendingSave, nodePositions, selectedKnowledgeBaseId]);
+
+  /**
+   * 搜索词变化时，若当前选中节点不在匹配结果中，自动选中第一个匹配节点。
+   */
+  useEffect(() => {
+    if (!query.trim()) return;
+    const keyword = query.trim().toLowerCase();
+    const matches = nodes.filter((node) =>
+      [node.label, node.summary, node.status, ...Object.values(node.metadata ?? {})]
+        .join(' ')
+        .toLowerCase()
+        .includes(keyword),
+    );
+    if (matches.length === 0) return;
+    const isCurrentVisible = matches.some((node) => node.id === selectedNodeId);
+    if (!isCurrentVisible) {
+      setSelectedNodeId(matches[0].id);
+    }
+  }, [query, nodes, selectedNodeId]);
+
   return (
     <section className="page-main full knowledge-map-page">
       <div className="knowledge-map-shell">
@@ -147,6 +279,16 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
           <label className="map-search">
             <Search size={17} />
             <input aria-label="搜索地图节点" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search nodes..." />
+            {query && (
+              <button
+                aria-label="清空搜索"
+                className="map-search-clear"
+                onClick={() => setQuery('')}
+                type="button"
+              >
+                <X size={15} />
+              </button>
+            )}
           </label>
         </header>
 
@@ -172,7 +314,16 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
                 </div>
 
                 <div className="map-graph-viewport">
-                  <svg aria-label="知识地图关系图" className="map-graph-svg" viewBox="0 0 1000 800" role="img">
+                  <svg
+                    aria-label="知识地图关系图"
+                    className="map-graph-svg"
+                    viewBox="0 0 1000 800"
+                    role="img"
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    onPointerCancel={handlePointerUp}
+                    style={{ cursor: dragState ? 'grabbing' : 'default' }}
+                  >
                     <g style={{ transform: `scale(${zoom})`, transformOrigin: '500px 400px' }}>
                       {visibleEdges.map((edge) => {
                         const source = layoutNodes.find((node) => node.id === edge.sourceId);
@@ -190,22 +341,29 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
                           />
                         );
                       })}
-                      {layoutNodes.map((node) => (
-                        <g
-                          className={node.id === selectedNode?.id ? `map-svg-node ${node.kind} active` : `map-svg-node ${node.kind}`}
-                          key={node.id}
-                          onClick={() => setSelectedNodeId(node.id)}
-                          role="button"
-                          tabIndex={0}
-                          transform={`translate(${node.x}, ${node.y})`}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') setSelectedNodeId(node.id);
-                          }}
-                        >
-                          <circle r={node.radius} />
-                          <text y={node.radius + 18}>{truncateNodeLabel(node.label)}</text>
-                        </g>
-                      ))}
+                      {layoutNodes.map((node) => {
+                        const isActive = node.id === selectedNode?.id;
+                        const isMatched = searchMatches.includes(node.id);
+                        const className = `map-svg-node ${node.kind}${isActive ? ' active' : ''}${isMatched ? ' matched' : ''}`;
+                        return (
+                          <g
+                            className={className}
+                            key={node.id}
+                            onClick={() => setSelectedNodeId(node.id)}
+                            onPointerDown={(event) => handleNodePointerDown(event, node.id)}
+                            role="button"
+                            tabIndex={0}
+                            transform={`translate(${node.x}, ${node.y})`}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') setSelectedNodeId(node.id);
+                            }}
+                            style={{ cursor: dragState?.nodeId === node.id ? 'grabbing' : 'grab' }}
+                          >
+                            <circle r={node.radius} />
+                            <text y={node.radius + 18}>{truncateNodeLabel(node.label)}</text>
+                          </g>
+                        );
+                      })}
                     </g>
                   </svg>
                   {layoutNodes.length === 0 && (
