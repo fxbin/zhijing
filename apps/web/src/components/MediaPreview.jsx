@@ -21,13 +21,14 @@ export default function MediaPreview({ urls, compact = false }) {
       {mediaUrls.map((url, index) => {
         if (isVideoUrl(url)) {
           return (
-            <video
-              key={url}
-              src={url}
-              controls
-              preload="metadata"
-              title={`Media ${index + 1}`}
-            />
+            <div className="media-preview-video" key={url}>
+              <video
+                src={url}
+                controls
+                preload="metadata"
+                title={`Media ${index + 1}`}
+              />
+            </div>
           );
         }
         return (
