@@ -3225,6 +3225,11 @@ export function deleteMaterial(materialId: string): { materialId: string; knowle
     throw new KnowledgeCoreError('Material not found.', 404);
   }
   const knowledgeBaseId = material.knowledgeBaseId;
+  for (const artifact of repository.listArtifacts()) {
+    if (!artifact.sourceMaterialIds.includes(materialId)) continue;
+    artifact.sourceMaterialIds = artifact.sourceMaterialIds.filter((id) => id !== materialId);
+    repository.updateArtifact(artifact);
+  }
   repository.deleteMaterial(materialId);
   reconcileKnowledgeBaseStats(knowledgeBaseId);
   return { materialId, knowledgeBaseId };
@@ -5024,22 +5029,13 @@ function resolveMaterialConflict(keepId: string, dropIds: string[]): string {
       throw new KnowledgeCoreError(`Material ${dropId} not found.`, 404);
     }
   }
-  const affectedKnowledgeBaseIds = new Set<string>([keepMaterial.knowledgeBaseId]);
   for (const card of repository.listCards()) {
     if (card.materialId && dropIds.includes(card.materialId)) {
-      affectedKnowledgeBaseIds.add(card.knowledgeBaseId);
       repository.updateCard({ ...card, materialId: keepId, updatedAt: new Date().toISOString() });
     }
   }
   for (const dropId of dropIds) {
-    const dropMaterial = repository.findMaterial(dropId);
-    if (dropMaterial) {
-      affectedKnowledgeBaseIds.add(dropMaterial.knowledgeBaseId);
-    }
-    repository.deleteMaterial(dropId);
-  }
-  for (const knowledgeBaseId of affectedKnowledgeBaseIds) {
-    reconcileKnowledgeBaseStats(knowledgeBaseId);
+    deleteMaterial(dropId);
   }
   return keepMaterial.knowledgeBaseId;
 }
