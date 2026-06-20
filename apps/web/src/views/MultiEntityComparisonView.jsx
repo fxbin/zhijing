@@ -6,18 +6,13 @@
  */
 
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Network, ShieldCheck, Layers, ChevronDown } from 'lucide-react';
 import AdvancedOpsTabs from '../components/AdvancedOpsTabs';
 import EmptyState from '../components/EmptyState';
+import { useCardTypeLabel } from '../utils/i18nLabels';
 
-const CARD_TYPE_KEYS = ['concept', 'method', 'fact', 'question', 'general'];
-const CARD_TYPE_LABELS = {
-  concept: '概念',
-  method: '方法',
-  fact: '事实',
-  question: '问题',
-  general: '通用',
-};
+const CARD_TYPE_KEYS = ['concept', 'method', 'case', 'step', 'viewpoint', 'fact', 'question', 'general'];
 const MAX_EXPANDED_CARDS = 5;
 const PERCENT_MAX = 100;
 
@@ -27,7 +22,7 @@ const PERCENT_MAX = 100;
  * @returns {Object} 各类型卡片数量映射
  */
 function countCardsByType(cards) {
-  const counts = { concept: 0, method: 0, fact: 0, question: 0, general: 0 };
+  const counts = Object.fromEntries(CARD_TYPE_KEYS.map((type) => [type, 0]));
   cards.forEach((card) => {
     const type = card.type ?? 'general';
     if (counts[type] !== undefined) {
@@ -71,6 +66,8 @@ function totalAssets(entity) {
  * @returns {JSX.Element} 多实体对比视图
  */
 export default function MultiEntityComparisonView({ data, setView }) {
+  const { t } = useTranslation();
+  const cardTypeLabel = useCardTypeLabel();
   const rows = data.comparisonEntities;
   const [expandedId, setExpandedId] = useState(null);
   const allCards = data.allCards ?? [];
@@ -78,7 +75,7 @@ export default function MultiEntityComparisonView({ data, setView }) {
   const totalCards = allCards.length;
   const typeRows = CARD_TYPE_KEYS.map((key) => ({
     key,
-    label: CARD_TYPE_LABELS[key],
+    label: cardTypeLabel(key),
     count: typeCounts[key],
     sharePercent: totalCards > 0
       ? Math.round((typeCounts[key] / totalCards) * PERCENT_MAX)
@@ -168,7 +165,7 @@ export default function MultiEntityComparisonView({ data, setView }) {
                         >
                           <div className="card-head">
                             <span className="card-type-badge">
-                              {CARD_TYPE_LABELS[card.type] ?? CARD_TYPE_LABELS.general}
+                              {cardTypeLabel(card.type)}
                             </span>
                           </div>
                           <strong>{card.title ?? '未命名卡片'}</strong>

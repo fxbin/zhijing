@@ -4,12 +4,13 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Database, FileText, Layers } from 'lucide-react';
 
 import AdvancedOpsTabs from '../components/AdvancedOpsTabs';
 import EmptyState from '../components/EmptyState';
-import { statusLabels } from '../constants/labels';
 import { formatMaterialTime } from '../utils/material';
+import { useCardTypeLabel, useClaimStatusLabel, useParseStatusLabel } from '../utils/i18nLabels';
 
 /**
  * 全局资产仪表盘，展示聚合指标、筛选器和资产列表。
@@ -19,6 +20,10 @@ import { formatMaterialTime } from '../utils/material';
  * @returns {JSX.Element} 资产仪表盘
  */
 export default function GlobalAssetsDashboard({ data, setView }) {
+  const { t } = useTranslation();
+  const cardTypeLabel = useCardTypeLabel();
+  const claimStatusLabel = useClaimStatusLabel();
+  const parseStatusLabel = useParseStatusLabel();
   const [filterCardType, setFilterCardType] = useState('all');
   const [filterClaimStatus, setFilterClaimStatus] = useState('all');
   const [filterSort, setFilterSort] = useState('updated_desc');
@@ -77,8 +82,8 @@ export default function GlobalAssetsDashboard({ data, setView }) {
     { label: 'Duplicate signals', value: data.totals.duplicateSignals, body: '疑似重复' },
   ];
 
-  const CARD_TYPE_OPTIONS = ['all', 'concept', 'method', 'fact', 'question', 'general'];
-  const CLAIM_STATUS_OPTIONS = ['all', 'draft', 'sourced', 'verified'];
+  const CARD_TYPE_OPTIONS = ['all', 'concept', 'method', 'case', 'step', 'viewpoint', 'fact', 'question', 'general'];
+  const CLAIM_STATUS_OPTIONS = ['all', 'ai_skeleton', 'sourced', 'disputed', 'verified'];
   const SORT_OPTIONS = [
     { key: 'updated_desc', label: '最近更新' },
     { key: 'title_asc', label: '标题 A→Z' },
@@ -139,13 +144,17 @@ export default function GlobalAssetsDashboard({ data, setView }) {
           <label>
             <span>卡片类型</span>
             <select value={filterCardType} onChange={(event) => setFilterCardType(event.target.value)}>
-              {CARD_TYPE_OPTIONS.map((option) => <option key={option} value={option}>{option === 'all' ? '全部' : option}</option>)}
+              {CARD_TYPE_OPTIONS.map((option) => (
+                <option key={option} value={option}>{option === 'all' ? '全部' : cardTypeLabel(option)}</option>
+              ))}
             </select>
           </label>
           <label>
             <span>证据状态</span>
             <select value={filterClaimStatus} onChange={(event) => setFilterClaimStatus(event.target.value)}>
-              {CLAIM_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option === 'all' ? '全部' : option}</option>)}
+              {CLAIM_STATUS_OPTIONS.map((option) => (
+                <option key={option} value={option}>{option === 'all' ? '全部' : claimStatusLabel(option)}</option>
+              ))}
             </select>
           </label>
           <label>
@@ -179,7 +188,7 @@ export default function GlobalAssetsDashboard({ data, setView }) {
                 <article key={item.id ?? `${item.title}-${index}`}>
                   <span>{item.platform ?? item.source ?? item.type ?? 'material'}</span>
                   <strong>{item.title}</strong>
-                  <small>{statusLabels[item.parseStatus] ?? item.status ?? 'saved'} · {formatMaterialTime(item.createdAt)}</small>
+                  <small>{parseStatusLabel(item.parseStatus)} · {formatMaterialTime(item.createdAt)}</small>
                 </article>
               ))}
             </div>
@@ -200,9 +209,9 @@ export default function GlobalAssetsDashboard({ data, setView }) {
             <div className="asset-list">
               {filteredCards.slice(0, 5).map((card, index) => (
                 <article key={card.id ?? `${card.title}-${index}`}>
-                  <span>{card.type ?? 'card'}</span>
+                  <span>{cardTypeLabel(card.type)}</span>
                   <strong>{card.title}</strong>
-                  <small>{card.claimStatus ?? 'draft'}</small>
+                  <small>{claimStatusLabel(card.claimStatus)}</small>
                 </article>
               ))}
             </div>

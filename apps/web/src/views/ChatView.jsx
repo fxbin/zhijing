@@ -3,6 +3,7 @@
  * @module views/ChatView
  */
 
+import { useTranslation } from 'react-i18next';
 import {
   CircleX,
   Clock3,
@@ -11,6 +12,7 @@ import {
   SquareArrowOutUpRight,
 } from 'lucide-react';
 import { formatPercent } from '../utils/format';
+import { useCardTypeLabel } from '../utils/i18nLabels';
 import SourceCitation from '../components/SourceCitation';
 
 /**
@@ -40,6 +42,8 @@ export default function ChatView({
   setAssistantQuestion,
   setView,
 }) {
+  const { t } = useTranslation();
+  const cardTypeLabel = useCardTypeLabel();
   const cards = detail.cards ?? [];
   const materials = detail.materials ?? [];
   const latestAnswerCards = assistantAnswer?.cards?.slice(0, 3) ?? [];
@@ -134,7 +138,7 @@ export default function ChatView({
                     <div className="answer-card-list">
                       {latestAnswerCards.map((card) => (
                         <article key={card.id ?? card.title}>
-                          <span>{card.type}</span>
+                          <span>{cardTypeLabel(card.type)}</span>
                           <strong>{card.title}</strong>
                         </article>
                       ))}

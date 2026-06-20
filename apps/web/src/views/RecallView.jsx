@@ -4,11 +4,13 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { History, Pencil, RefreshCw, Save } from 'lucide-react';
 
 import EmptyState from '../components/EmptyState';
 import { REVISION_FIELD_LABELS } from '../constants/labels';
 import { formatRevisionTime } from '../utils/format';
+import { useCardTypeLabel, useClaimStatusLabel } from '../utils/i18nLabels';
 
 /**
  * 主动回忆视图，支持卡片队列、揭示答案、四档评分和内容编辑。
@@ -18,6 +20,9 @@ import { formatRevisionTime } from '../utils/format';
  * @returns {JSX.Element} 回忆视图
  */
 export default function RecallView({ detail, setView }) {
+  const { t } = useTranslation();
+  const cardTypeLabel = useCardTypeLabel();
+  const claimStatusLabel = useClaimStatusLabel();
   const [queue, setQueue] = useState([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
@@ -159,7 +164,7 @@ export default function RecallView({ detail, setView }) {
                   <span>{index + 1}</span>
                   <div>
                     <strong>{card.title}</strong>
-                    <small>{card.type} · {card.claimStatus}</small>
+                    <small>{cardTypeLabel(card.type)} · {claimStatusLabel(card.claimStatus)}</small>
                   </div>
                 </button>
               ))}
@@ -175,12 +180,12 @@ export default function RecallView({ detail, setView }) {
                   <label className="recall-edit-field">
                     <span>类型</span>
                     <select value={draftType} onChange={(event) => setDraftType(event.target.value)}>
-                      <option value="concept">concept</option>
-                      <option value="method">method</option>
-                      <option value="case">case</option>
-                      <option value="question">question</option>
-                      <option value="step">step</option>
-                      <option value="viewpoint">viewpoint</option>
+                      <option value="concept">{cardTypeLabel('concept')}</option>
+                      <option value="method">{cardTypeLabel('method')}</option>
+                      <option value="case">{cardTypeLabel('case')}</option>
+                      <option value="question">{cardTypeLabel('question')}</option>
+                      <option value="step">{cardTypeLabel('step')}</option>
+                      <option value="viewpoint">{cardTypeLabel('viewpoint')}</option>
                     </select>
                   </label>
                   <label className="recall-edit-field">
@@ -197,7 +202,7 @@ export default function RecallView({ detail, setView }) {
               ) : (
                 <>
                   <div className="recall-card-head">
-                    <span>{activeCard.type}</span>
+                    <span>{cardTypeLabel(activeCard.type)}</span>
                     <button className="recall-edit-trigger" onClick={startEdit} type="button">
                       <Pencil size={14} /> 编辑
                     </button>
