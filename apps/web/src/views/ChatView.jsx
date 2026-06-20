@@ -23,6 +23,7 @@ import SourceCitation from '../components/SourceCitation';
  * @param {string} props.assistantQuestion - 当前问题输入
  * @param {object} props.detail - 知识库详情
  * @param {boolean} props.isAsking - 是否正在提问
+ * @param {object[]} [props.messages=[]] - 历史消息列表
  * @param {() => void} props.onAsk - 提问回调
  * @param {(artifact: object, meta?: object) => void} props.onOpenArtifact - 打开产物回调
  * @param {string} props.selectedKnowledgeBaseId - 当前选中知识库 ID
@@ -36,6 +37,7 @@ export default function ChatView({
   assistantQuestion,
   detail,
   isAsking,
+  messages = [],
   onAsk,
   onOpenArtifact,
   selectedKnowledgeBaseId,

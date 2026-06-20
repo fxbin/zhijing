@@ -626,6 +626,7 @@ function App() {
               assistantQuestion={assistantQuestion}
               detail={knowledgeBaseDetail}
               isAsking={isAsking}
+              messages={knowledgeBaseMessages}
               onAsk={askKnowledgeBase}
               onOpenArtifact={openArtifact}
               selectedKnowledgeBaseId={selectedKnowledgeBaseId}
