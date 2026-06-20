@@ -4,6 +4,7 @@
  */
 
 import { CheckCircle2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { statusLabels } from '../constants/labels';
 
@@ -17,6 +18,7 @@ import { statusLabels } from '../constants/labels';
  * @returns {JSX.Element} 成功横幅
  */
 export default function CaptureSuccessBanner({ summary, stats, onReview, onDismiss }) {
+  const { t } = useTranslation();
   const reviewable = (stats.needsReview ?? 0) + (stats.failed ?? 0);
   return (
     <div className="capture-success-banner" role="status">
@@ -24,23 +26,23 @@ export default function CaptureSuccessBanner({ summary, stats, onReview, onDismi
       <div className="capture-success-body">
         <strong>{summary.message}</strong>
         <div className="capture-success-meta">
-          <span>{stats.total} 资料</span>
-          <span>{stats.ingested ?? 0} 已入库</span>
-          {reviewable > 0 && <span>{reviewable} 待处理</span>}
+          <span>{t('captureSuccess.totalMaterials', { count: stats.total })}</span>
+          <span>{t('captureSuccess.ingestedCount', { count: stats.ingested ?? 0 })}</span>
+          {reviewable > 0 && <span>{t('captureSuccess.pendingCount', { count: reviewable })}</span>}
         </div>
         {stats.recent.length > 0 && (
           <ul className="capture-success-recent">
             {stats.recent.slice(0, 3).map((item) => (
               <li key={item.id}>
-                <span className="capture-success-status">{statusLabels[item.parseStatus] ?? item.parseStatus}</span>
+                <span className="capture-success-status">{t(statusLabels[item.parseStatus] ?? `parseStatus.${item.parseStatus}`)}</span>
                 <span className="capture-success-title">{item.title}</span>
               </li>
             ))}
           </ul>
         )}
         <div className="capture-success-cta">
-          {reviewable > 0 && <button type="button" onClick={onReview}>去复核</button>}
-          <button type="button" onClick={onDismiss}>知道了</button>
+          {reviewable > 0 && <button type="button" onClick={onReview}>{t('captureSuccess.goReview')}</button>}
+          <button type="button" onClick={onDismiss}>{t('captureSuccess.gotIt')}</button>
         </div>
       </div>
     </div>

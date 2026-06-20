@@ -5,6 +5,7 @@
 
 import { useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { CITATION_SNIPPET_LIMIT } from '../constants/options';
 
@@ -17,6 +18,7 @@ import { CITATION_SNIPPET_LIMIT } from '../constants/options';
  * @returns {JSX.Element} 引用卡片
  */
 export default function SourceCitation({ citation, cards, materials }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const fullBody = useMemo(() => {
     if (citation.kind === 'card' && citation.cardId) {
@@ -43,7 +45,7 @@ export default function SourceCitation({ citation, cards, materials }) {
         aria-expanded={expanded}
         disabled={!hasBody}
       >
-        <span className="citation-kind">{citation.kind}</span>
+        <span className="citation-kind">{t(`sourceCitation.kind.${citation.kind}`, { defaultValue: citation.kind })}</span>
         <strong>{citation.title}</strong>
         {hasBody && <ChevronDown size={15} className="citation-chevron" />}
       </button>
@@ -51,11 +53,11 @@ export default function SourceCitation({ citation, cards, materials }) {
         <p className="citation-preview">{citation.preview}</p>
         {expanded && hasBody && (
           <div className="citation-snippet">
-            <span>来源片段</span>
+            <span>{t('sourceCitation.sourceSnippet')}</span>
             <p>{snippet}{truncated ? '…' : ''}</p>
           </div>
         )}
-        {citation.sourceUrl && <a href={citation.sourceUrl} target="_blank" rel="noreferrer">Open source</a>}
+        {citation.sourceUrl && <a href={citation.sourceUrl} target="_blank" rel="noreferrer">{t('sourceCitation.openSource')}</a>}
       </div>
     </article>
   );

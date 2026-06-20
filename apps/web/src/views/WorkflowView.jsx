@@ -4,24 +4,27 @@
  * @author fxbin
  */
 
+import { useTranslation } from 'react-i18next';
 import { CheckCircle2, CircleX, Clock3 } from 'lucide-react';
+
+import i18n from '../i18n';
 
 /**
  * 任务状态徽章元数据映射
  * key: 任务状态值；value: { tone, label } 复用 map-status-badge 配色
  */
 const TASK_STATUS_META = {
-  queued: { tone: 'neutral', label: '排队中' },
-  running: { tone: 'pending', label: '运行中' },
-  succeeded: { tone: 'positive', label: '已完成' },
-  failed: { tone: 'negative', label: '已失败' },
-  needs_user_action: { tone: 'pending', label: '需处理' },
+  queued: { tone: 'neutral', labelKey: 'workflow.status.queued' },
+  running: { tone: 'pending', labelKey: 'workflow.status.running' },
+  succeeded: { tone: 'positive', labelKey: 'workflow.status.succeeded' },
+  failed: { tone: 'negative', labelKey: 'workflow.status.failed' },
+  needs_user_action: { tone: 'pending', labelKey: 'workflow.status.needsUserAction' },
 };
 
 /**
  * 默认状态徽章（未知状态时回退）
  */
-const DEFAULT_STATUS_META = { tone: 'neutral', label: '未知' };
+const DEFAULT_STATUS_META = { tone: 'neutral', labelKey: 'workflow.status.unknown' };
 
 /**
  * 时间戳格式化选项（zh-CN 本地时间）
@@ -63,16 +66,19 @@ function formatTimestamp(iso) {
   if (!iso) return null;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleString('zh-CN', TIMESTAMP_FORMAT_OPTIONS);
+  const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US';
+  return date.toLocaleString(locale, TIMESTAMP_FORMAT_OPTIONS);
 }
 
 /**
  * 根据任务状态获取徽章元数据
  * @param {string} status - 任务状态
+ * @param {Function} t - react-i18next 翻译函数
  * @returns {{ tone: string, label: string }} 徽章色调与文案
  */
-function describeTaskStatus(status) {
-  return TASK_STATUS_META[status] ?? DEFAULT_STATUS_META;
+function describeTaskStatus(status, t) {
+  const meta = TASK_STATUS_META[status] ?? DEFAULT_STATUS_META;
+  return { tone: meta.tone, label: t(meta.labelKey) };
 }
 
 /**
@@ -89,6 +95,7 @@ function describeTaskStatus(status) {
  * @returns {JSX.Element} Workflow 视图
  */
 export default function WorkflowView({ detail, isRunningKit, kitRunResult, latestTask, onOpenArtifact, onRunKit, selectedKnowledgeBaseId, setView }) {
+  const { t } = useTranslation();
   const activeArtifact = kitRunResult?.artifact ?? detail.artifacts?.[0];
   const activeTask = kitRunResult?.task ?? latestTask;
   const hasKnowledgeBase = Boolean(selectedKnowledgeBaseId);
@@ -97,38 +104,38 @@ export default function WorkflowView({ detail, isRunningKit, kitRunResult, lates
   const artifactsCount = detail.artifacts?.length ?? 0;
   const taskStartedAt = activeTask?.createdAt ?? null;
   const taskUpdatedAt = activeTask?.updatedAt ?? null;
-  const statusMeta = describeTaskStatus(activeTask?.status);
+  const statusMeta = describeTaskStatus(activeTask?.status, t);
   const taskFailed = activeTask?.status === 'failed';
   const taskError = activeTask?.error ?? null;
 
   const dynamicSteps = [
     {
-      title: '读取知识库',
-      description: `${materialsCount} materials · ${cardsCount} cards`,
+      title: t('workflow.step.readKnowledgeBase'),
+      description: t('workflow.step.readDescription', { materialsCount, cardsCount }),
       state: hasKnowledgeBase ? 'done' : 'waiting',
       timestamp: taskStartedAt,
-      evidence: hasKnowledgeBase ? `资料 ${materialsCount} 条 · 卡片 ${cardsCount} 张` : null,
+      evidence: hasKnowledgeBase ? t('workflow.step.readEvidence', { materialsCount, cardsCount }) : null,
     },
     {
-      title: '整理上下文',
-      description: '合并资料、卡片和最近产物作为 Kit 输入。',
+      title: t('workflow.step.organizeContext'),
+      description: t('workflow.step.organizeDescription'),
       state: hasKnowledgeBase ? 'done' : 'waiting',
       timestamp: taskStartedAt,
-      evidence: hasKnowledgeBase ? `输入源 ${materialsCount + cardsCount + artifactsCount} 项` : null,
+      evidence: hasKnowledgeBase ? t('workflow.step.organizeEvidence', { count: materialsCount + cardsCount + artifactsCount }) : null,
     },
     {
-      title: '生成产物',
-      description: activeTask?.workflow === 'run_kit' ? activeTask.status : '等待运行 Kit。',
+      title: t('workflow.step.generateArtifact'),
+      description: activeTask?.workflow === 'run_kit' ? activeTask.status : t('workflow.step.generateWaiting'),
       state: isRunningKit ? 'active' : activeArtifact ? 'done' : 'waiting',
       timestamp: taskUpdatedAt,
       evidence: activeArtifact ? activeArtifact.title : null,
     },
     {
-      title: '导出归档',
-      description: activeArtifact ? '产物已可打开和导出 Markdown。' : '等待 Kit 生成产物。',
+      title: t('workflow.step.exportArchive'),
+      description: activeArtifact ? t('workflow.step.exportReady') : t('workflow.step.exportWaiting'),
       state: activeArtifact ? 'done' : 'waiting',
       timestamp: activeArtifact ? taskUpdatedAt : null,
-      evidence: activeArtifact ? '已归档至知识库' : null,
+      evidence: activeArtifact ? t('workflow.step.exportEvidence') : null,
     },
   ];
 
@@ -137,19 +144,19 @@ export default function WorkflowView({ detail, isRunningKit, kitRunResult, lates
       <header className="run-header">
         <button onClick={() => setView('kits')} type="button"><CircleX size={22} /></button>
         <div>
-          <h2>{detail.title || 'Knowledge Kit'}</h2>
-          <p>{activeTask?.id ?? 'Ready to run a minimal knowledge loop'}</p>
+          <h2>{detail.title || t('workflow.defaultTitle')}</h2>
+          <p>{activeTask?.id ?? t('workflow.readyHint')}</p>
         </div>
         {activeTask && (
           <span className={`map-status-badge ${statusMeta.tone}`}>{statusMeta.label}</span>
         )}
-        <span>{isRunningKit ? 'Executing' : activeArtifact ? 'Ready' : 'Idle'}</span>
+        <span>{isRunningKit ? t('workflow.state.executing') : activeArtifact ? t('workflow.state.ready') : t('workflow.state.idle')}</span>
       </header>
       {taskFailed && taskError && (
         <section className="system-notice">
           <CircleX size={NOTICE_ICON_SIZE} />
           <div>
-            <strong>任务执行失败</strong>
+            <strong>{t('workflow.errorTitle')}</strong>
             <p>{taskError}</p>
           </div>
         </section>
@@ -157,8 +164,8 @@ export default function WorkflowView({ detail, isRunningKit, kitRunResult, lates
       <div className="run-grid">
         <aside className="run-steps">
           <div className="section-title">
-            <h3>Execution Flow</h3>
-            <button type="button">{activeArtifact ? '4 of 4 Steps' : 'Ready'}</button>
+            <h3>{t('workflow.executionFlow')}</h3>
+            <button type="button">{activeArtifact ? t('workflow.stepsCount', { current: dynamicSteps.length, total: dynamicSteps.length }) : t('workflow.state.ready')}</button>
           </div>
           {dynamicSteps.map((step, index) => (
             <article className={step.state} key={step.title}>
@@ -183,13 +190,13 @@ export default function WorkflowView({ detail, isRunningKit, kitRunResult, lates
             onClick={() => onRunKit('learning_research')}
             type="button"
           >
-            {isRunningKit ? 'Running Kit...' : activeArtifact ? 'Run Again' : 'Run Learning Kit'}
+            {isRunningKit ? t('workflow.runKit.running') : activeArtifact ? t('workflow.runKit.runAgain') : t('workflow.runKit.runLearningKit')}
           </button>
         </aside>
         <article className="artifact-preview">
           <div className="section-title">
-            <h3>Live Artifact Preview</h3>
-            <button disabled={!activeArtifact} onClick={() => onOpenArtifact(activeArtifact)} type="button">Open</button>
+            <h3>{t('workflow.artifactPreview')}</h3>
+            <button disabled={!activeArtifact} onClick={() => onOpenArtifact(activeArtifact)} type="button">{t('common.open')}</button>
           </div>
           {activeArtifact ? (
             <>
@@ -198,8 +205,8 @@ export default function WorkflowView({ detail, isRunningKit, kitRunResult, lates
             </>
           ) : (
             <>
-              <h1>Run a Kit to create an artifact</h1>
-              <p>当前知识库会被整理成一份可保存、可打开、可导出的 Markdown 产物。</p>
+              <h1>{t('workflow.emptyTitle')}</h1>
+              <p>{t('workflow.emptyBody')}</p>
               <div className="skeleton" />
             </>
           )}

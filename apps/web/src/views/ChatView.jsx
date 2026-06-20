@@ -50,28 +50,33 @@ export default function ChatView({
   const latestCitations = assistantAnswer?.citations ?? [];
   const canAsk = apiStatus === 'online' && Boolean(selectedKnowledgeBaseId) && !isAsking;
   const starterPrompts = [
-    '这个知识库最重要的三个概念是什么？',
-    '有哪些内容还缺少可靠来源？',
-    '帮我把这些资料整理成一个行动清单。',
+    { key: 'chat.starterPrompt.keyConcepts' },
+    { key: 'chat.starterPrompt.missingSources' },
+    { key: 'chat.starterPrompt.actionList' },
   ];
 
   return (
     <section className="page-main full">
       <div className="chat-workbench">
         <aside className="chat-context-panel">
-          <button className="back-button" onClick={() => setView('detail')} type="button">← Back to Knowledge Base</button>
-          <span>Knowledge Chat</span>
+          <button className="back-button" onClick={() => setView('detail')} type="button">
+            ←
+            {t('chat.backToKnowledgeBase')}
+          </button>
+          <span>{t('chat.title')}</span>
           <h2>{detail.title}</h2>
           <p>{detail.summary}</p>
           <div className="chat-context-stats">
-            <div><strong>{materials.length}</strong><span>sources</span></div>
-            <div><strong>{cards.length}</strong><span>cards</span></div>
-            <div><strong>{formatPercent(detail.sourcedRatio)}</strong><span>sourced</span></div>
+            <div><strong>{materials.length}</strong><span>{t('chat.metric.sources')}</span></div>
+            <div><strong>{cards.length}</strong><span>{t('chat.metric.cards')}</span></div>
+            <div><strong>{formatPercent(detail.sourcedRatio)}</strong><span>{t('chat.metric.sourced')}</span></div>
           </div>
           <div className="prompt-stack">
-            <strong>Suggested Questions</strong>
+            <strong>{t('chat.suggestedQuestions')}</strong>
             {starterPrompts.map((prompt) => (
-              <button key={prompt} onClick={() => setAssistantQuestion(prompt)} type="button">{prompt}</button>
+              <button key={prompt.key} onClick={() => setAssistantQuestion(t(prompt.key))} type="button">
+                {t(prompt.key)}
+              </button>
             ))}
           </div>
         </aside>
@@ -80,14 +85,14 @@ export default function ChatView({
           <div className="chat-thread-head">
             <Sparkles size={24} />
             <div>
-              <span>Assistant Onboarding</span>
-              <h3>Ask from your sourced knowledge</h3>
+              <span>{t('chat.assistantOnboarding')}</span>
+              <h3>{t('chat.askFromKnowledge')}</h3>
             </div>
           </div>
           <div className="chat-conversation">
             <div className="assistant-message">
               <Sparkles size={19} />
-              <p>我会优先使用当前知识库里的资料和卡片回答；没有来源时会明确标注。</p>
+              <p>{t('chat.answerHint')}</p>
             </div>
             {(messages ?? []).map((message) => {
               const messageCards = (message.cardIds ?? [])
@@ -105,7 +110,7 @@ export default function ChatView({
                       <p>{message.answer}</p>
                       {messageCards.length > 0 && (
                         <div className="citation-list">
-                          <strong>引用卡片</strong>
+                          <strong>{t('chat.citedCards')}</strong>
                           {messageCards.map((card) => (
                             <SourceCitation
                               key={card.id}
@@ -118,7 +123,8 @@ export default function ChatView({
                       )}
                       {messageArtifact && (
                         <button className="assistant-link-button" type="button" onClick={() => onOpenArtifact(messageArtifact, { label: message.question })}>
-                          <SquareArrowOutUpRight size={15} /> 打开产物
+                          <SquareArrowOutUpRight size={15} />
+                          {t('chat.openArtifact')}
                         </button>
                       )}
                     </div>
@@ -127,7 +133,7 @@ export default function ChatView({
               );
             })}
             {assistantAnswer?.question && <div className="chat-user">{assistantAnswer.question}</div>}
-            {assistantAnswer?.loading && <div className="assistant-message pending"><Clock3 size={19} /><p>正在整理当前知识库里的资料和卡片...</p></div>}
+            {assistantAnswer?.loading && <div className="assistant-message pending"><Clock3 size={19} /><p>{t('chat.loadingAnswer')}</p></div>}
             {assistantAnswer?.error && <div className="assistant-message failed"><CircleX size={19} /><p>{assistantAnswer.error}</p></div>}
             {assistantAnswer?.message && (
               <div className="assistant-message">
@@ -145,16 +151,16 @@ export default function ChatView({
                     </div>
                   )}
                   <div className="citation-list">
-                    <strong>引用来源</strong>
+                    <strong>{t('chat.citations')}</strong>
                     {latestCitations.length === 0 ? (
-                      <p>当前回答没有可用来源，属于 AI 骨架内容。</p>
+                      <p>{t('chat.noCitations')}</p>
                     ) : latestCitations.slice(0, 6).map((citation) => (
                       <SourceCitation key={citation.id} citation={citation} cards={cards} materials={materials} />
                     ))}
                   </div>
                   {assistantAnswer.artifact && (
                     <button className="assistant-link-button" onClick={() => onOpenArtifact(assistantAnswer.artifact)} type="button">
-                      Open Artifact
+                      {t('chat.openArtifact')}
                       <SquareArrowOutUpRight size={15} />
                     </button>
                   )}
@@ -164,13 +170,13 @@ export default function ChatView({
           </div>
           <div className="chat-input-bar">
             <input
-              aria-label="在独立对话页提问"
+              aria-label={t('chat.askAria')}
               disabled={!canAsk}
               onChange={(event) => setAssistantQuestion(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') onAsk();
               }}
-              placeholder={canAsk ? 'Ask this knowledge base...' : 'Select a knowledge base and keep API online to ask.'}
+              placeholder={canAsk ? t('chat.askPlaceholderOnline') : t('chat.askPlaceholderOffline')}
               value={assistantQuestion}
             />
             <button disabled={!canAsk || !assistantQuestion.trim()} onClick={onAsk} type="button">

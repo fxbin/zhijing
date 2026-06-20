@@ -489,24 +489,24 @@ function App() {
     { key: 'library', label: t('nav.library'), icon: FolderOpen },
     { key: 'search', label: t('nav.search'), icon: Search },
     { key: 'assets', label: t('nav.assets'), icon: Layers },
-    { key: 'kits', label: t('nav.insights'), icon: Sparkles },
+    { key: 'kits', label: t('nav.kits'), icon: Sparkles },
     { key: 'settings', label: t('nav.settings'), icon: Settings },
   ];
 
   return (
     <main className="app-frame">
-      <aside className="side-nav" aria-label="主导航">
+      <aside className="side-nav" aria-label={t('nav.main')}>
         <div className="brand-row" onClick={() => go('workspace')} role="button" tabIndex={0}>
           <div className="brand-mark" aria-hidden="true"><span /></div>
           <div>
             <h1>{t('app.title')}</h1>
-            <p>Knowledge Path</p>
+            <p>{t('app.subtitle')}</p>
           </div>
         </div>
 
         <button className="primary-create" onClick={() => go('workspace')} type="button">
           <Plus size={23} />
-          {t('nav.createNote')}
+          {t('common.create')}
         </button>
 
         <nav className="nav-list">
@@ -540,19 +540,19 @@ function App() {
               }}
               selectedKnowledgeBaseId={selectedKnowledgeBaseId}
             />
-            <nav aria-label="工作区导航">
-            <button className={view === 'workspace' ? 'active' : ''} onClick={() => go('workspace')} type="button">{t('topBar.path')}</button>
-            <button className={view === 'maps' ? 'active' : ''} onClick={() => go('maps')} type="button">{t('topBar.maps')}</button>
-            <button className={view === 'export' ? 'active' : ''} onClick={() => go('export')} type="button">{t('topBar.archive')}</button>
-          </nav>
+            <nav aria-label={t('nav.workspaceNav')}>
+              <button className={view === 'workspace' ? 'active' : ''} onClick={() => go('workspace')} type="button">{t('nav.workspace')}</button>
+              <button className={view === 'maps' ? 'active' : ''} onClick={() => go('maps')} type="button">{t('nav.maps')}</button>
+              <button className={view === 'export' ? 'active' : ''} onClick={() => go('export')} type="button">{t('nav.export')}</button>
+            </nav>
           </div>
           <div className="top-tools">
             <label className="search-pill">
               <Search size={18} />
-              <input placeholder={t('topBar.search')} />
+              <input placeholder={t('common.search')} />
             </label>
-            <button title="Notifications" type="button"><Bell size={22} /></button>
-            <button title="History" type="button"><History size={22} /></button>
+            <button title={t('common.notifications')} type="button"><Bell size={22} /></button>
+            <button title={t('common.history')} type="button"><History size={22} /></button>
             <button className="node-button" onClick={() => go('workflow')} type="button">{t('topBar.createNode')}</button>
             <div className="avatar">U</div>
           </div>

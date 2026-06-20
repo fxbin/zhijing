@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Sparkles } from 'lucide-react';
 import AdvancedOpsTabs from '../components/AdvancedOpsTabs';
 import EmptyState from '../components/EmptyState';
@@ -16,6 +17,7 @@ import EmptyState from '../components/EmptyState';
  * @returns {JSX.Element} 跨库综合视图
  */
 export default function CrossKbSynthesisView({ data, setView }) {
+  const { t } = useTranslation();
   const [synthesizing, setSynthesizing] = useState(null);
   const [synthesisError, setSynthesisError] = useState('');
 
@@ -46,30 +48,30 @@ export default function CrossKbSynthesisView({ data, setView }) {
     <section className="page-main full advanced-page">
       <div className="advanced-head">
         <div>
-          <span>Cross-KB Synthesis</span>
-          <h2>Find themes across knowledge bases</h2>
+          <span>{t('synthesis.title')}</span>
+          <h2>{t('synthesis.heading')}</h2>
           <p>用主题重叠、资料密度和卡片证据做跨库综合的入口，后续可接 Pi 生成正式综合报告。</p>
         </div>
-        <button onClick={() => setView('compare')} type="button">Compare</button>
+        <button onClick={() => setView('compare')} type="button">{t('synthesis.compare')}</button>
       </div>
       <AdvancedOpsTabs active="synthesis" setView={setView} />
 
       {synthesisError && <p className="synthesis-error">{synthesisError}</p>}
 
       {data.crossKbThemes.length === 0 ? (
-        <EmptyState title="暂无跨库主题" body="至少需要两个知识库或更多卡片后，系统才能形成可综合的主题线索。" />
+        <EmptyState title={t('synthesis.noThemes')} body={t('synthesis.noThemesHint')} />
       ) : (
         <div className="synthesis-grid">
           {data.crossKbThemes.map((theme, index) => (
             <article className="synthesis-card" key={`${theme.left.id ?? theme.left.title}-${theme.right.id ?? theme.right.title}-${index}`}>
               <div className="synthesis-card-head">
-                <span>Theme {index + 1}</span>
-                <strong>{theme.score || theme.overlap.length} overlap</strong>
+                <span>{t('synthesis.themeNumber', { number: index + 1 })}</span>
+                <strong>{t('synthesis.overlapCount', { count: theme.score || theme.overlap.length })}</strong>
               </div>
               <h3>{theme.left.title} × {theme.right.title}</h3>
               <p>把两个知识库的重叠关键词先汇成一个候选综合主题，适合生成对比摘要、研究问题或专题文档。</p>
               <div className="overlap-chip-row">
-                {(theme.overlap.length ? theme.overlap : ['concept', 'source', 'review']).slice(0, 6).map((token) => (
+                {(theme.overlap.length ? theme.overlap : [t('cardType.concept'), t('synthesis.fallbackSource'), t('synthesis.fallbackReview')]).slice(0, 6).map((token) => (
                   <span key={token}>{token}</span>
                 ))}
               </div>
@@ -79,9 +81,9 @@ export default function CrossKbSynthesisView({ data, setView }) {
                   type="button"
                   disabled={synthesizing !== null}
                 >
-                  {synthesizing === theme ? '生成中…' : 'Draft artifact'}
+                  {synthesizing === theme ? '生成中…' : t('synthesis.draftArtifact')}
                 </button>
-                <button onClick={() => setView('conflicts')} type="button">Check conflicts</button>
+                <button onClick={() => setView('conflicts')} type="button">{t('synthesis.checkConflicts')}</button>
               </footer>
             </article>
           ))}
@@ -92,7 +94,7 @@ export default function CrossKbSynthesisView({ data, setView }) {
         <div className="panel-title">
           <Sparkles size={20} />
           <div>
-            <span>Synthesis Plan</span>
+            <span>{t('synthesis.planTitle')}</span>
             <h4>建议的综合产物结构</h4>
           </div>
         </div>

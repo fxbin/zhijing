@@ -5,6 +5,7 @@
 
 import { FileText, FolderOpen, Link2 } from 'lucide-react';
 
+import i18n from '../i18n';
 import { PARSE_STAGE_LABELS } from '../constants/labels';
 
 /**
@@ -146,11 +147,51 @@ export function canParseMaterial(item) {
  * @returns {string} 格式化后的时间字符串
  */
 export function formatMaterialTime(value) {
-  if (!value) return 'just now';
+  return formatDateTime(value);
+}
+
+/**
+ * 格式化日期时间为当前语言的本地化字符串。
+ * @param {string|number|Date} value - 时间值
+ * @returns {string} 本地化后的日期时间字符串
+ */
+export function formatDateTime(value) {
+  if (!value) return i18n.t('time.justNow');
   try {
-    return new Date(value).toLocaleString();
+    const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US';
+    return new Date(value).toLocaleString(locale);
   } catch {
-    return 'just now';
+    return i18n.t('time.justNow');
+  }
+}
+
+/**
+ * 格式化日期为当前语言的本地化字符串。
+ * @param {string|number|Date} value - 时间值
+ * @returns {string} 本地化后的日期字符串
+ */
+export function formatDate(value) {
+  if (!value) return i18n.t('time.justNow');
+  try {
+    const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US';
+    return new Date(value).toLocaleDateString(locale);
+  } catch {
+    return i18n.t('time.justNow');
+  }
+}
+
+/**
+ * 格式化时间为当前语言的本地化字符串。
+ * @param {string|number|Date} value - 时间值
+ * @returns {string} 本地化后的时间字符串
+ */
+export function formatTime(value) {
+  if (!value) return i18n.t('time.justNow');
+  try {
+    const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US';
+    return new Date(value).toLocaleTimeString(locale);
+  } catch {
+    return i18n.t('time.justNow');
   }
 }
 

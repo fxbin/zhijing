@@ -3,6 +3,8 @@
  * @module components/TaskStatus
  */
 
+import { useTaskStatusLabel, useTaskWorkflowLabel } from '../utils/i18nLabels';
+
 /**
  * 任务状态徽章组件。
  * @param {object} props - 组件属性
@@ -10,11 +12,14 @@
  * @returns {JSX.Element|null} 任务状态区块
  */
 export default function TaskStatus({ task }) {
+  const { t } = useTranslation();
+  const taskStatusLabel = useTaskStatusLabel();
+  const taskWorkflowLabel = useTaskWorkflowLabel();
   if (!task) return null;
   return (
     <div className={`task-status ${task.status}`}>
-      <span>{task.status}</span>
-      <strong>{task.workflow}</strong>
+      <span>{taskStatusLabel(task.status)}</span>
+      <strong>{taskWorkflowLabel(task.workflow)}</strong>
       <small>{task.id}</small>
     </div>
   );

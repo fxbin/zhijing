@@ -8,6 +8,7 @@ import { Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import EmptyState from './EmptyState';
+import { useParseStatusLabel } from '../utils/i18nLabels';
 import { materialMediaUrls, isImageUrl, proxyImageUrl } from '../utils/material';
 
 /**
@@ -23,13 +24,24 @@ function resolveXiaohongshuCover(item) {
 
 export default function RecentImports({ materials }) {
   const { t } = useTranslation();
+  const parseStatusLabel = useParseStatusLabel();
   const [previewUrl, setPreviewUrl] = useState(null);
+
+  /**
+   * 获取平台显示名称。
+   * @param {object} item - 材料对象
+   * @returns {string} 平台本地化名称
+   */
+  function platformLabel(item) {
+    const key = item.platform ?? 'material';
+    return t(`platform.${key}`);
+  }
 
   return (
     <article className="recent-panel">
       <div className="section-title">
         <Upload size={22} />
-        <h3>Recently Imported</h3>
+        <h3>{t('recentImports.title')}</h3>
         <button type="button">{t('common.viewAll')}</button>
       </div>
       <div className="material-list">
@@ -40,14 +52,14 @@ export default function RecentImports({ materials }) {
           return (
             <article className={`material-card ${item.state}`} key={item.id ?? `recent-${index}`}>
               <div className="material-meta">
-                <span>{item.source}</span>
-                <span>{item.status}</span>
+                <span>{platformLabel(item)}</span>
+                <span>{parseStatusLabel(item.parseStatus ?? item.status)}</span>
                 <time>{item.time}</time>
               </div>
               <h4>{item.title}</h4>
               {coverUrl && (
                 <button
-                  aria-label="查看封面大图"
+                  aria-label={t('recentImports.viewCover')}
                   className="material-cover-thumb"
                   onClick={() => setPreviewUrl(coverUrl)}
                   type="button"
@@ -75,14 +87,14 @@ export default function RecentImports({ materials }) {
           }}
         >
           <button
-            aria-label="关闭预览"
+            aria-label={t('media.closePreview')}
             className="image-lightbox-close"
             onClick={() => setPreviewUrl(null)}
             type="button"
           >
             <X size={22} />
           </button>
-          <img alt="封面预览" src={proxyImageUrl(previewUrl)} />
+          <img alt={t('media.mediaPreview')} src={proxyImageUrl(previewUrl)} />
         </div>
       )}
     </article>

@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ClipboardList } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import {
@@ -14,6 +15,7 @@ import {
 } from '../utils/artifact';
 import { downloadArtifactMarkdown } from '../utils/export';
 import { formatPercent } from '../utils/format';
+import { formatDate, formatDateTime } from '../utils/material';
 
 /**
  * 产物详情视图组件
@@ -27,6 +29,7 @@ import { formatPercent } from '../utils/format';
  * @returns {JSX.Element} 产物视图
  */
 export default function ArtifactView({ artifact, detail, setView, artifactOrigin, onClearOrigin, onArtifactUpdate }) {
+  const { t } = useTranslation();
   const fallbackArtifact = detail.artifacts?.[0];
   const activeArtifact = artifact ?? fallbackArtifact;
   const variant = inferArtifactVariant(activeArtifact, detail);
@@ -73,10 +76,10 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
   const displaySections = hasPersistedSections
     ? persistedSections
     : config.sections.map((title, index) => ({
-        id: `config_${index}`,
-        title,
-        body: (sectionBlocks[index]?.length ? sectionBlocks[index] : ['暂无内容。']).join('\n\n'),
-      }));
+      id: `config_${index}`,
+      title: t(`artifact.variant.${variant}.section.${index}`, { defaultValue: title }),
+      body: (sectionBlocks[index]?.length ? sectionBlocks[index] : [t('artifact.emptySection')]).join('\n\n'),
+    }));
 
   async function enableEditing() {
     if (!activeArtifact?.id || initializing) return;
@@ -84,8 +87,8 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
     setEditError('');
     try {
       const sectionInits = config.sections.map((title, index) => ({
-        title,
-        body: (sectionBlocks[index]?.length ? sectionBlocks[index] : ['暂无内容。']).join('\n\n'),
+        title: t(`artifact.variant.${variant}.section.${index}`, { defaultValue: title }),
+        body: (sectionBlocks[index]?.length ? sectionBlocks[index] : [t('artifact.emptySection')]).join('\n\n'),
       }));
       const response = await fetch(`/api/artifacts/${activeArtifact.id}/sections/initialize`, {
         method: 'POST',
@@ -94,13 +97,13 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
-        setEditError(payload.error ?? '初始化分区失败');
+        setEditError(payload.error ?? t('artifact.initSectionFailed'));
         return;
       }
       const payload = await response.json();
       onArtifactUpdate?.(payload.artifact);
     } catch {
-      setEditError('网络错误，初始化分区失败');
+      setEditError(t('artifact.initSectionNetworkError'));
     } finally {
       setInitializing(false);
     }
@@ -129,7 +132,7 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
-        setEditError(payload.error ?? '保存失败');
+        setEditError(payload.error ?? t('artifact.saveFailed'));
         return;
       }
       const payload = await response.json();
@@ -137,7 +140,7 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
       if (payload.revision) setRevisions((current) => [...current, payload.revision]);
       setEditingSectionId(null);
     } catch {
-      setEditError('网络错误，保存失败');
+      setEditError(t('artifact.saveNetworkError'));
     } finally {
       setSaving(false);
     }
@@ -147,10 +150,10 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
     return (
       <section className="artifact-page">
         <div className="page-title-row">
-          <div><h2>Artifact Archive</h2><p>问答或 Kit 生成产物后，会在这里打开完整内容。</p></div>
-          <div className="button-row"><button onClick={() => setView('detail')} type="button">回到知识库</button></div>
+          <div><h2>{t('artifact.title')}</h2><p>{t('artifact.subtitle')}</p></div>
+          <div className="button-row"><button onClick={() => setView('detail')} type="button">{t('maps.back')}</button></div>
         </div>
-        <EmptyState title="暂无可打开产物" body="在知识库详情页提问，或运行 Kit 后，可以从助手面板打开产物。" />
+        <EmptyState title={t('artifact.noArtifact')} body={t('artifact.noArtifactHint')} />
       </section>
     );
   }
@@ -160,28 +163,28 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
       <div className="artifact-hero">
         <div>
           <div className="back-button-row">
-            <button className="back-button" onClick={() => { onClearOrigin?.(); setView('detail'); }} type="button">← Back to Knowledge Base</button>
+            <button className="back-button" onClick={() => { onClearOrigin?.(); setView('detail'); }} type="button">{t('artifact.backToKnowledgeBase')}</button>
             {artifactOrigin?.label && (
               <button className="back-button artifact-origin-link" type="button" onClick={() => { onClearOrigin?.(); setView('detail'); }}>
-                ↩ 来自对话：{artifactOrigin.label}
+                {t('artifact.fromChat', { label: artifactOrigin.label })}
               </button>
             )}
           </div>
-          <span>{config.label}</span>
+          <span>{t(`artifact.variant.${variant}.label`, { defaultValue: config.label })}</span>
           <h2>{activeArtifact.title}</h2>
-          <p>{config.lead}</p>
+          <p>{t(`artifact.variant.${variant}.lead`, { defaultValue: config.lead })}</p>
         </div>
         <div className="artifact-actions">
-          <button onClick={() => setView('export')} type="button">Open Export</button>
-          <button onClick={() => downloadArtifactMarkdown(activeArtifact, detail)} type="button">导出 Markdown</button>
+          <button onClick={() => setView('export')} type="button">{t('artifact.openExport')}</button>
+          <button onClick={() => downloadArtifactMarkdown(activeArtifact, detail)} type="button">{t('artifact.exportMarkdown')}</button>
         </div>
       </div>
 
       <div className="artifact-metrics">
-        <article><span>Source links</span><strong>{sourceCount}</strong></article>
-        <article><span>Cards</span><strong>{detail.cardCount ?? cards.length}</strong></article>
-        <article><span>Sourced cards</span><strong>{sourceCards.length}</strong></article>
-        <article><span>Updated</span><strong>{new Date(activeArtifact.createdAt).toLocaleDateString()}</strong></article>
+        <article><span>{t('artifact.metric.sourceLinks')}</span><strong>{sourceCount}</strong></article>
+        <article><span>{t('detail.metric.cards')}</span><strong>{detail.cardCount ?? cards.length}</strong></article>
+        <article><span>{t('artifact.metric.sourcedCards')}</span><strong>{sourceCards.length}</strong></article>
+        <article><span>{t('artifact.metric.updated')}</span><strong>{formatDate(activeArtifact.createdAt)}</strong></article>
       </div>
 
       <div className="typed-artifact-grid">
@@ -189,17 +192,17 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
           <div className="panel-title">
             <ClipboardList size={20} />
             <div>
-              <span>{config.label}</span>
-              <h4>{config.title}</h4>
+              <span>{t(`artifact.variant.${variant}.label`, { defaultValue: config.label })}</span>
+              <h4>{t(`artifact.variant.${variant}.title`, { defaultValue: config.title })}</h4>
             </div>
             <button
               className="artifact-edit-toggle"
               type="button"
               onClick={enableEditing}
               disabled={initializing || hasPersistedSections}
-              title={hasPersistedSections ? '分区已可编辑，直接点击右侧编辑按钮' : '把当前内容固化为可编辑分区'}
+              title={hasPersistedSections ? t('artifact.sectionEditable') : t('artifact.sectionReadonly')}
             >
-              {initializing ? '初始化中…' : hasPersistedSections ? '✓ 可编辑' : '启用编辑'}
+              {initializing ? t('artifact.initializing') : hasPersistedSections ? t('artifact.editable') : t('artifact.enableEdit')}
             </button>
           </div>
           {editError && <p className="artifact-edit-error">{editError}</p>}
@@ -213,16 +216,16 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
                   {isEditing ? (
                     <div className="artifact-section-form">
                       <label>
-                        <span>分区标题</span>
-                        <input value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} placeholder="分区标题" />
+                        <span>{t('artifact.sectionTitle')}</span>
+                        <input value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} placeholder={t('artifact.sectionTitle')} />
                       </label>
                       <label>
-                        <span>分区正文</span>
-                        <textarea rows={6} value={draftBody} onChange={(event) => setDraftBody(event.target.value)} placeholder="分区正文（支持多段落，空行分隔）" />
+                        <span>{t('artifact.sectionBodyLabel')}</span>
+                        <textarea rows={6} value={draftBody} onChange={(event) => setDraftBody(event.target.value)} placeholder={t('artifact.sectionBody')} />
                       </label>
                       <div className="artifact-section-form-actions">
-                        <button type="button" className="primary" onClick={saveSectionEdit} disabled={saving}>{saving ? '保存中…' : '保存修订'}</button>
-                        <button type="button" className="ghost" onClick={cancelEditSection} disabled={saving}>取消</button>
+                        <button type="button" className="primary" onClick={saveSectionEdit} disabled={saving}>{saving ? t('common.saving') : t('artifact.saveRevision')}</button>
+                        <button type="button" className="ghost" onClick={cancelEditSection} disabled={saving}>{t('common.cancel')}</button>
                       </div>
                     </div>
                   ) : (
@@ -230,7 +233,7 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
                       <div className="artifact-section-head">
                         <h3>{section.title}</h3>
                         {canEdit && (
-                          <button type="button" className="artifact-section-edit-btn" onClick={() => startEditSection(section)}>编辑</button>
+                          <button type="button" className="artifact-section-edit-btn" onClick={() => startEditSection(section)}>{t('common.edit')}</button>
                         )}
                       </div>
                       {section.body.split(/\n+/).filter(Boolean).map((block, blockIndex) => <p key={`${section.id}-${blockIndex}`}>{block}</p>)}
@@ -244,42 +247,42 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
 
         <aside className="artifact-sidebar">
           <article className="artifact-boundary-card">
-            <h3>来源边界</h3>
-            <p>{sourceCount ? 'This artifact references saved source material.' : 'This artifact is an AI skeleton and needs source review.'}</p>
+            <h3>{t('artifact.sourceBoundary')}</h3>
+            <p>{sourceCount ? t('artifact.sourceBoundaryHas') : t('artifact.sourceBoundaryNeeds')}</p>
             <div>
-              <span>{materials.length} materials</span>
-              <span>{cards.length} cards</span>
-              <span>{formatPercent(detail.sourcedRatio)} sourced</span>
+              <span>{t('artifact.count.materials', { count: materials.length })}</span>
+              <span>{t('artifact.count.cards', { count: cards.length })}</span>
+              <span>{t('artifact.sourcedRatio', { ratio: formatPercent(detail.sourcedRatio) })}</span>
             </div>
           </article>
           <article className="artifact-action-card">
-            <h3>Next Actions</h3>
-            <button onClick={() => setView('chat')} type="button">Discuss in Chat</button>
-            <button onClick={() => setView('recall')} type="button">PracticeCards</button>
-            <button onClick={() => setView('export')} type="button">Export Bundle</button>
+            <h3>{t('artifact.nextActions')}</h3>
+            <button onClick={() => setView('chat')} type="button">{t('artifact.discussInChat')}</button>
+            <button onClick={() => setView('recall')} type="button">{t('artifact.practiceCards')}</button>
+            <button onClick={() => setView('export')} type="button">{t('artifact.exportBundle')}</button>
           </article>
           <article className="artifact-source-list">
-            <h3>Representative Sources</h3>
-            {(materials.slice(0, 4).length ? materials.slice(0, 4) : [{ id: 'empty', title: 'No source material yet', parseStatus: 'needs_review' }]).map((material) => (
+            <h3>{t('artifact.representativeSources')}</h3>
+            {(materials.slice(0, 4).length ? materials.slice(0, 4) : [{ id: 'empty', title: t('artifact.noSourceMaterial'), parseStatus: 'needs_review' }]).map((material) => (
               <div key={material.id ?? material.title}>
                 <strong>{material.title}</strong>
-                <span>{material.platform ?? material.type ?? 'local'} · {material.parseStatus ?? 'saved'}</span>
+                <span>{material.platform ?? material.type ?? t('library.localPlatform')} · {t(`parseStatus.${material.parseStatus ?? 'saved'}`)}</span>
               </div>
             ))}
           </article>
           <article className="artifact-revisions-panel">
-            <h3>修订历史</h3>
+            <h3>{t('artifact.revisions')}</h3>
             {loadingRevisions ? (
-              <p className="artifact-revisions-empty">加载中…</p>
+              <p className="artifact-revisions-empty">{t('common.loading')}</p>
             ) : revisions.length === 0 ? (
-              <p className="artifact-revisions-empty">暂无修订记录。启用编辑并保存分区后，每次修改都会留下版本快照。</p>
+              <p className="artifact-revisions-empty">{t('artifact.noRevisions')}</p>
             ) : (
               <ul className="artifact-revisions-list">
                 {revisions.map((revision) => (
                   <li key={revision.id} className="artifact-revision-item">
                     <div>
-                      <strong>v{revision.version}</strong>
-                      <span>{new Date(revision.createdAt).toLocaleString()}</span>
+                      <strong>{t('artifact.versionLabel', { version: revision.version })}</strong>
+                      <span>{formatDateTime(revision.createdAt)}</span>
                     </div>
                     <div className="artifact-revision-snapshot">
                       <span className="artifact-revision-field">{revision.sectionTitleSnapshot}</span>

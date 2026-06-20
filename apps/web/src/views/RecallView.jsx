@@ -144,18 +144,18 @@ export default function RecallView({ detail, setView }) {
     <section className="page-main full">
       <div className="recall-workbench">
         <div className="recall-head">
-          <button className="back-button" onClick={() => setView('detail')} type="button">← Back to Knowledge Base</button>
-          <span>Active Recall</span>
+          <button className="back-button" onClick={() => setView('detail')} type="button">{t('recall.backToKnowledgeBase')}</button>
+          <span>{t('recall.activeRecall')}</span>
           <h2>{detail.title}</h2>
-          <p>把知识卡片转成自测队列：先回忆，再揭示答案，最后按掌握程度评分，系统会据此安排下次复习。复习中发现卡片内容需要修正，可直接编辑并留下修订记录。</p>
+          <p>{t('recall.editDescription')}</p>
         </div>
 
         {queue.length === 0 ? (
-          <EmptyState title="暂无可练习卡片" body="导入资料或创建主题后，知识卡片会成为主动回忆题目。" />
+          <EmptyState title={t('recall.noCards')} body={t('recall.noCardsHint')} />
         ) : (
           <div className="recall-layout">
             <aside className="recall-queue">
-              <strong>Practice Queue · {queue.length}</strong>
+              <strong>{t('recall.practiceQueue', { count: queue.length })}</strong>
               {queue.slice(0, 8).map((card, index) => (
                 <button className={index === activeIndex ? 'active' : ''} key={card.id ?? card.title} onClick={() => {
                   setActiveIndex(index);
@@ -174,11 +174,11 @@ export default function RecallView({ detail, setView }) {
               {editing ? (
                 <div className="recall-edit-form">
                   <label className="recall-edit-field">
-                    <span>标题</span>
+                    <span>{t('recall.form.title')}</span>
                     <input value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} type="text" />
                   </label>
                   <label className="recall-edit-field">
-                    <span>类型</span>
+                    <span>{t('recall.form.type')}</span>
                     <select value={draftType} onChange={(event) => setDraftType(event.target.value)}>
                       <option value="concept">{cardTypeLabel('concept')}</option>
                       <option value="method">{cardTypeLabel('method')}</option>
@@ -189,14 +189,14 @@ export default function RecallView({ detail, setView }) {
                     </select>
                   </label>
                   <label className="recall-edit-field">
-                    <span>正文</span>
+                    <span>{t('recall.form.body')}</span>
                     <textarea value={draftBody} onChange={(event) => setDraftBody(event.target.value)} rows={6} />
                   </label>
                   <div className="recall-edit-actions">
                     <button className="recall-edit-save" onClick={saveEdit} disabled={saving} type="button">
-                      <Save size={15} /> {saving ? '保存中…' : '保存修订'}
+                      <Save size={15} /> {saving ? t('recall.savingRevision') : t('recall.saveRevision')}
                     </button>
-                    <button className="recall-edit-cancel" onClick={cancelEdit} disabled={saving} type="button">取消</button>
+                    <button className="recall-edit-cancel" onClick={cancelEdit} disabled={saving} type="button">{t('common.cancel')}</button>
                   </div>
                 </div>
               ) : (
@@ -204,25 +204,25 @@ export default function RecallView({ detail, setView }) {
                   <div className="recall-card-head">
                     <span>{cardTypeLabel(activeCard.type)}</span>
                     <button className="recall-edit-trigger" onClick={startEdit} type="button">
-                      <Pencil size={14} /> 编辑
+                      <Pencil size={14} /> {t('common.edit')}
                     </button>
                   </div>
                   <h3>{activeCard.title}</h3>
-                  <p className={revealed ? '' : 'recall-prompt'}>{revealed ? activeCard.body : '先合上资料，用自己的话解释这张卡片。准备好后再揭示参考答案。'}</p>
+                  <p className={revealed ? '' : 'recall-prompt'}>{revealed ? activeCard.body : t('recall.prompt')}</p>
                   <footer>
                     <button onClick={() => setRevealed((current) => !current)} type="button">
-                      {revealed ? 'Hide Answer' : 'Reveal Answer'}
+                      {revealed ? t('recall.hideAnswer') : t('recall.revealAnswer')}
                     </button>
                     {revealed ? (
                       <div className="recall-grade-actions">
-                        <button className="recall-grade recall-grade-again" onClick={() => gradeCard('again')} type="button">Again</button>
-                        <button className="recall-grade recall-grade-hard" onClick={() => gradeCard('hard')} type="button">Hard</button>
-                        <button className="recall-grade recall-grade-good" onClick={() => gradeCard('good')} type="button">Good</button>
-                        <button className="recall-grade recall-grade-easy" onClick={() => gradeCard('easy')} type="button">Easy</button>
+                        <button className="recall-grade recall-grade-again" onClick={() => gradeCard('again')} type="button">{t('recall.gradeAgain')}</button>
+                        <button className="recall-grade recall-grade-hard" onClick={() => gradeCard('hard')} type="button">{t('recall.gradeHard')}</button>
+                        <button className="recall-grade recall-grade-good" onClick={() => gradeCard('good')} type="button">{t('recall.gradeGood')}</button>
+                        <button className="recall-grade recall-grade-easy" onClick={() => gradeCard('easy')} type="button">{t('recall.gradeEasy')}</button>
                       </div>
                     ) : (
                       <button onClick={advanceQueue} type="button">
-                        Next Card
+                        {t('recall.nextCard')}
                         <RefreshCw size={16} />
                       </button>
                     )}
@@ -233,11 +233,11 @@ export default function RecallView({ detail, setView }) {
 
             {!editing && (
               <aside className="recall-revisions">
-                <strong><History size={15} /> 修订历史 · {revisions.length}</strong>
+                <strong><History size={15} /> {t('recall.revisionHistory', { count: revisions.length })}</strong>
                 {loadingRevisions ? (
-                  <p className="recall-revisions-empty">加载中…</p>
+                  <p className="recall-revisions-empty">{t('recall.loadingRevisions')}</p>
                 ) : revisions.length === 0 ? (
-                  <p className="recall-revisions-empty">暂无修订记录。编辑卡片后会在此留痕。</p>
+                  <p className="recall-revisions-empty">{t('recall.noRevisions')}</p>
                 ) : (
                   <ol className="recall-revision-list">
                     {revisions.slice().reverse().map((revision) => (
@@ -248,18 +248,18 @@ export default function RecallView({ detail, setView }) {
                         </div>
                         <div className="recall-revision-fields">
                           {revision.changedFields.map((field) => (
-                            <span key={field} className="recall-revision-field">{REVISION_FIELD_LABELS[field] ?? field}</span>
+                            <span key={field} className="recall-revision-field">{t(REVISION_FIELD_LABELS[field] ?? `recall.revisionField.${field}`)}</span>
                           ))}
                         </div>
                         {revision.changedFields.includes('title') && (
                           <p className="recall-revision-diff">
-                            <span>原标题</span>
+                            <span>{t('recall.originalTitle')}</span>
                             {revision.titleSnapshot}
                           </p>
                         )}
                         {revision.changedFields.includes('body') && (
                           <p className="recall-revision-diff">
-                            <span>原正文</span>
+                            <span>{t('recall.originalBody')}</span>
                             {revision.bodySnapshot}
                           </p>
                         )}

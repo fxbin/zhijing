@@ -23,12 +23,12 @@ export const knownViews = new Set([
 ]);
 
 export const materialFilterOptions = [
-  { key: 'all', label: 'All Materials' },
-  { key: 'link', label: 'Links' },
-  { key: 'text', label: 'Text' },
-  { key: 'question', label: 'Questions' },
-  { key: 'failed', label: 'Failed' },
-  { key: 'parsing', label: 'Parsing' },
+  { key: 'all', label: 'library.filter.all' },
+  { key: 'link', label: 'library.filter.link' },
+  { key: 'text', label: 'library.filter.text' },
+  { key: 'question', label: 'library.filter.question' },
+  { key: 'failed', label: 'library.filter.failed' },
+  { key: 'parsing', label: 'library.filter.parsing' },
 ];
 
 export const captureModeOptions = ['auto', 'link', 'text', 'batch'];
@@ -38,11 +38,11 @@ export const supportedImportExtensions = ['.md', '.markdown', '.txt'];
 export const maxImportedFileSize = 2 * 1024 * 1024;
 
 export const searchScopeOptions = [
-  { key: 'all', label: 'All' },
-  { key: 'knowledge_base', label: 'Knowledge Bases' },
-  { key: 'material', label: 'Materials' },
-  { key: 'card', label: 'Cards' },
-  { key: 'artifact', label: 'Artifacts' },
+  { key: 'all', label: 'search.scope.all' },
+  { key: 'knowledge_base', label: 'search.scope.knowledgeBase' },
+  { key: 'material', label: 'search.scope.material' },
+  { key: 'card', label: 'search.scope.card' },
+  { key: 'artifact', label: 'search.scope.artifact' },
 ];
 
 export const CITATION_SNIPPET_LIMIT = 280;

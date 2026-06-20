@@ -47,9 +47,9 @@ export default function WorkspaceView({ activity, isSubmitting, latestTask, mate
           </div>
         </div>
         <div className="chip-row">
-          <button type="button"># Project Research</button>
-          <button type="button"># Daily Notes</button>
-          <button type="button">+ More</button>
+          <button type="button"># {t('workspace.quickTagProjectResearch')}</button>
+          <button type="button"># {t('workspace.quickTagDailyNotes')}</button>
+          <button type="button">+ {t('workspace.moreTags')}</button>
         </div>
         {isSubmitting && (
           <div className="workspace-loading" aria-live="polite">

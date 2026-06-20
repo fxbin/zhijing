@@ -4,7 +4,8 @@
  */
 
 import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { Image as ImageIcon, Play, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { isImageUrl, isVideoUrl, proxyImageUrl } from '../utils/material';
 
 /**
@@ -17,15 +18,27 @@ import { isImageUrl, isVideoUrl, proxyImageUrl } from '../utils/material';
  * @returns {JSX.Element|null} 媒体预览区块
  */
 export default function MediaPreview({ urls, compact = false }) {
+  const { t } = useTranslation();
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewType, setPreviewType] = useState(null);
   const mediaUrls = (urls ?? []).filter(Boolean).slice(0, compact ? 4 : 6);
   if (mediaUrls.length === 0) return null;
 
   /**
+   * 探测媒体类型。
+   * @param {string} url - 媒体 URL
+   * @returns {'video'|'image'|'unknown'} 媒体类型
+   */
+  function detectMediaType(url) {
+    if (isVideoUrl(url)) return 'video';
+    if (isImageUrl(url)) return 'image';
+    return 'unknown';
+  }
+
+  /**
    * 打开 Lightbox 预览。
    * @param {string} url - 媒体 URL
-   * @param {string} type - 媒体类型，'image' 或 'video'
+   * @param {string} type - 媒体类型
    */
   function openPreview(url, type) {
     setPreviewUrl(url);
@@ -58,40 +71,34 @@ export default function MediaPreview({ urls, compact = false }) {
     <>
       <div className={`media-preview ${compact ? 'compact' : ''}`}>
         {mediaUrls.map((url, index) => {
-          if (isVideoUrl(url)) {
-            return (
-              <button
-                className="media-preview-video"
-                key={url}
-                onClick={() => openPreview(url, 'video')}
-                title={`预览视频 ${index + 1}`}
-                type="button"
-              >
-                <video
-                  src={url}
-                  preload="metadata"
-                  title={`Media ${index + 1}`}
-                />
-              </button>
-            );
-          }
-          if (isImageUrl(url)) {
-            return (
-              <button
-                className="media-preview-image"
-                key={url}
-                onClick={() => openPreview(url, 'image')}
-                title={`预览图片 ${index + 1}`}
-                type="button"
-              >
-                <img alt={`media ${index + 1}`} src={proxyImageUrl(url)} loading="lazy" />
-              </button>
-            );
-          }
+          const type = detectMediaType(url);
+          const title = type === 'video' ? t('media.previewVideo') : t('media.previewImage');
           return (
-            <a href={url} key={url} target="_blank" rel="noreferrer" title={`Open media ${index + 1}`}>
-              <span>Media {index + 1}</span>
-            </a>
+            <button
+              className={`media-preview-item ${type === 'video' ? 'media-preview-video' : 'media-preview-image'}`}
+              key={url}
+              onClick={() => openPreview(url, type)}
+              title={`${title} ${index + 1}`}
+              type="button"
+            >
+              {type === 'video' && (
+                <>
+                  <video src={url} preload="metadata" title={`${title} ${index + 1}`} />
+                  <span className="media-preview-play">
+                    <Play size={20} fill="currentColor" />
+                  </span>
+                </>
+              )}
+              {type === 'image' && (
+                <img alt={`${title} ${index + 1}`} src={proxyImageUrl(url)} loading="lazy" />
+              )}
+              {type === 'unknown' && (
+                <span className="media-preview-fallback">
+                  <ImageIcon size={24} />
+                  {t('media.mediaPreview')}
+                </span>
+              )}
+            </button>
           );
         })}
       </div>
@@ -109,7 +116,7 @@ export default function MediaPreview({ urls, compact = false }) {
           }}
         >
           <button
-            aria-label="关闭预览"
+            aria-label={t('media.closePreview')}
             className="media-lightbox-close"
             onClick={closePreview}
             type="button"
@@ -119,7 +126,7 @@ export default function MediaPreview({ urls, compact = false }) {
           {previewType === 'video' ? (
             <video controls src={previewUrl} autoPlay />
           ) : (
-            <img alt="媒体预览" src={proxyImageUrl(previewUrl)} />
+            <img alt={t('media.mediaPreview')} src={proxyImageUrl(previewUrl)} />
           )}
         </div>
       )}

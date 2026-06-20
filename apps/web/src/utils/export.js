@@ -4,6 +4,7 @@
  */
 
 import { formatPercent, safeFilename } from './format';
+import { formatDateTime } from './material';
 
 /**
  * 生成单个 Artifact 的 Markdown 文本。
@@ -18,7 +19,7 @@ export function artifactMarkdown(artifact, detail) {
     '',
     `- 知识库：${detail.title}`,
     `- 类型：${artifact.artifactType ?? 'summary'}`,
-    `- 生成时间：${new Date(artifact.createdAt).toLocaleString()}`,
+    `- 生成时间：${formatDateTime(artifact.createdAt)}`,
     `- 来源资料：${sourceCount}`,
     '',
     '---',

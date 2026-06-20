@@ -4,9 +4,11 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AlertTriangle } from 'lucide-react';
 import AdvancedOpsTabs from '../components/AdvancedOpsTabs';
 import EmptyState from '../components/EmptyState';
+import { formatDateTime } from '../utils/material';
 
 /**
  * 知识冲突解决视图组件
@@ -16,6 +18,7 @@ import EmptyState from '../components/EmptyState';
  * @returns {JSX.Element} 知识冲突解决视图
  */
 export default function KnowledgeConflictResolverView({ data, setView }) {
+  const { t } = useTranslation();
   const [groups, setGroups] = useState([]);
   const [auditEntries, setAuditEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -93,20 +96,20 @@ export default function KnowledgeConflictResolverView({ data, setView }) {
     <section className="page-main full advanced-page">
       <div className="advanced-head">
         <div>
-          <span>Conflict Resolver</span>
-          <h2>Review knowledge conflicts</h2>
+          <span>{t('conflicts.title')}</span>
+          <h2>{t('conflicts.heading')}</h2>
           <p>集中展示重复卡片与资料，支持选择保留项并合并删除重复项，所有操作写入审计记录。</p>
         </div>
-        <button onClick={() => setView('library')} type="button">Review library</button>
+        <button onClick={() => setView('library')} type="button">{t('conflicts.reviewLibrary')}</button>
       </div>
       <AdvancedOpsTabs active="conflicts" setView={setView} />
 
       {error && <div className="conflict-error">{error}</div>}
 
       {loading ? (
-        <EmptyState title="正在扫描冲突…" body="正在从全库聚合重复卡片与资料分组。" />
+        <EmptyState title={t('conflicts.scanning')} body={t('conflicts.scanningHint')} />
       ) : groups.length === 0 ? (
-        <EmptyState title="暂未发现可合并的重复" body="当出现标题或来源相同的卡片/资料时，会在此显示分组供合并。" />
+        <EmptyState title={t('conflicts.noConflicts')} body={t('conflicts.noConflictsHint')} />
       ) : (
         <div className="conflict-group-list">
           {groups.map((group) => (
@@ -150,7 +153,7 @@ export default function KnowledgeConflictResolverView({ data, setView }) {
         <div className="panel-title">
           <AlertTriangle size={20} />
           <div>
-            <span>Audit Trail</span>
+            <span>{t('conflicts.auditTrail')}</span>
             <h4>冲突解决审计</h4>
           </div>
         </div>
@@ -163,7 +166,7 @@ export default function KnowledgeConflictResolverView({ data, setView }) {
                 <div className="conflict-audit-head">
                   <span className="conflict-kind-badge">{typeLabelsMap[entry.kind] ?? entry.kind}</span>
                   <span className="conflict-audit-action">{entry.action === 'merge' ? '合并' : entry.action}</span>
-                  <time>{new Date(entry.createdAt).toLocaleString('zh-CN')}</time>
+                  <time>{formatDateTime(entry.createdAt)}</time>
                 </div>
                 <p>{entry.note}</p>
                 <div className="conflict-audit-ids">

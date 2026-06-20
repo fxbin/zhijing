@@ -18,6 +18,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useTaskStatusLabel, useTaskWorkflowLabel } from '../utils/i18nLabels';
+import { formatDateTime } from '../utils/material';
 
 /**
  * 后端 API 路径常量
@@ -94,6 +96,8 @@ const CREATE_FORM_STYLE = {
  */
 export default function SettingsView() {
   const { t } = useTranslation();
+  const taskStatusLabel = useTaskStatusLabel();
+  const taskWorkflowLabel = useTaskWorkflowLabel();
   const [profiles, setProfiles] = useState([]);
   const [activeProfileId, setActiveProfileId] = useState(null);
   const [selectedProfileId, setSelectedProfileId] = useState(null);
@@ -705,8 +709,8 @@ export default function SettingsView() {
                   <ShieldCheck size={22} />
                   <div>
                     <span>{t('settings.dataScale')}</span>
-                    <strong>{systemStats.knowledgeBases} KB · {systemStats.materials} materials</strong>
-                    <p>{systemStats.tasks} {t('settings.tasksRecorded')}</p>
+                    <strong>{t('settings.dataScaleCount', { kb: systemStats.knowledgeBases, materials: systemStats.materials })}</strong>
+                    <p>{t('settings.tasksRecorded', { count: systemStats.tasks })}</p>
                   </div>
                 </div>
                 {systemStats.recentTasks?.length > 0 && (
@@ -714,8 +718,8 @@ export default function SettingsView() {
                     <strong>{t('settings.recentTasks')}</strong>
                     {systemStats.recentTasks.map((task) => (
                       <div key={task.id} className="settings-task-row">
-                        <span>{task.workflow}</span>
-                        <span>{task.status}</span>
+                        <span>{taskWorkflowLabel(task.workflow)}</span>
+                        <span>{taskStatusLabel(task.status)}</span>
                       </div>
                     ))}
                   </div>
@@ -780,7 +784,7 @@ export default function SettingsView() {
               ) : (
                 <p>{t('settings.keyNotConfigured')}</p>
               )}
-              {updatedAt && <small>{t('settings.lastSaved')}: {new Date(updatedAt).toLocaleString('zh-CN')}</small>}
+              {updatedAt && <small>{t('settings.lastSaved')}: {formatDateTime(updatedAt)}</small>}
             </div>
           </div>
           <div className="status-card">

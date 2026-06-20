@@ -72,21 +72,21 @@ export default function GlobalAssetsDashboard({ data, setView }) {
   }, [filterLoaded, filterCardType, filterClaimStatus, filterSort, filterKeyword]);
 
   const metrics = [
-    { label: 'Knowledge bases', value: data.totals.knowledgeBases, body: '主题知识库' },
-    { label: 'Materials', value: data.totals.materials, body: '来源资料' },
-    { label: 'Cards', value: data.totals.cards, body: '结构化卡片' },
-    { label: 'Artifacts', value: data.totals.artifacts, body: '生成产物' },
-    { label: 'Tasks', value: data.totals.tasks, body: '近期任务' },
-    { label: 'Sourced cards', value: data.totals.sourcedCards, body: '有来源支撑' },
-    { label: 'Needs review', value: data.totals.reviewMaterials, body: '等待复核' },
-    { label: 'Duplicate signals', value: data.totals.duplicateSignals, body: '疑似重复' },
+    { id: 'knowledgeBases', label: t('assets.metric.knowledgeBases'), value: data.totals.knowledgeBases, body: t('assets.metric.knowledgeBasesBody') },
+    { id: 'materials', label: t('assets.metric.materials'), value: data.totals.materials, body: t('assets.metric.materialsBody') },
+    { id: 'cards', label: t('assets.metric.cards'), value: data.totals.cards, body: t('assets.metric.cardsBody') },
+    { id: 'artifacts', label: t('assets.metric.artifacts'), value: data.totals.artifacts, body: t('assets.metric.artifactsBody') },
+    { id: 'tasks', label: t('assets.metric.tasks'), value: data.totals.tasks, body: t('assets.metric.tasksBody') },
+    { id: 'sourcedCards', label: t('assets.metric.sourcedCards'), value: data.totals.sourcedCards, body: t('assets.metric.sourcedCardsBody') },
+    { id: 'needsReview', label: t('assets.metric.needsReview'), value: data.totals.reviewMaterials, body: t('assets.metric.needsReviewBody') },
+    { id: 'duplicateSignals', label: t('assets.metric.duplicateSignals'), value: data.totals.duplicateSignals, body: t('assets.metric.duplicateSignalsBody') },
   ];
 
   const CARD_TYPE_OPTIONS = ['all', 'concept', 'method', 'case', 'step', 'viewpoint', 'fact', 'question', 'general'];
   const CLAIM_STATUS_OPTIONS = ['all', 'ai_skeleton', 'sourced', 'disputed', 'verified'];
   const SORT_OPTIONS = [
-    { key: 'updated_desc', label: '最近更新' },
-    { key: 'title_asc', label: '标题 A→Z' },
+    { key: 'updated_desc', label: t('assets.sort.updatedDesc') },
+    { key: 'title_asc', label: t('assets.sort.titleAsc') },
   ];
 
   const matchesKeyword = (text) => filterKeyword.trim().length === 0
@@ -121,17 +121,17 @@ export default function GlobalAssetsDashboard({ data, setView }) {
     <section className="page-main full advanced-page">
       <div className="advanced-head">
         <div>
-          <span>Global Assets</span>
-          <h2>Knowledge asset dashboard</h2>
-          <p>把所有知识库、来源资料、卡片、产物和任务聚合到一个资产视角，先用于盘点和发现风险。</p>
+          <span>{t('assets.title')}</span>
+          <h2>{t('assets.subtitle')}</h2>
+          <p>{t('assets.description')}</p>
         </div>
-        <button onClick={() => setView('library')} type="button">Open Library</button>
+        <button onClick={() => setView('library')} type="button">{t('assets.openLibrary')}</button>
       </div>
       <AdvancedOpsTabs active="assets" setView={setView} />
 
       <div className="advanced-metric-grid">
         {metrics.map((metric) => (
-          <article className="advanced-metric-card" key={metric.label}>
+          <article className="advanced-metric-card" key={metric.id}>
             <span>{metric.label}</span>
             <strong>{metric.value}</strong>
             <small>{metric.body}</small>
@@ -142,33 +142,33 @@ export default function GlobalAssetsDashboard({ data, setView }) {
       <section className="assets-filter-bar">
         <div className="assets-filter-group">
           <label>
-            <span>卡片类型</span>
+            <span>{t('assets.filter.cardType')}</span>
             <select value={filterCardType} onChange={(event) => setFilterCardType(event.target.value)}>
               {CARD_TYPE_OPTIONS.map((option) => (
-                <option key={option} value={option}>{option === 'all' ? '全部' : cardTypeLabel(option)}</option>
+                <option key={option} value={option}>{option === 'all' ? t('assets.filter.all') : cardTypeLabel(option)}</option>
               ))}
             </select>
           </label>
           <label>
-            <span>证据状态</span>
+            <span>{t('assets.filter.claimStatus')}</span>
             <select value={filterClaimStatus} onChange={(event) => setFilterClaimStatus(event.target.value)}>
               {CLAIM_STATUS_OPTIONS.map((option) => (
-                <option key={option} value={option}>{option === 'all' ? '全部' : claimStatusLabel(option)}</option>
+                <option key={option} value={option}>{option === 'all' ? t('assets.filter.all') : claimStatusLabel(option)}</option>
               ))}
             </select>
           </label>
           <label>
-            <span>排序</span>
+            <span>{t('assets.filter.sort')}</span>
             <select value={filterSort} onChange={(event) => setFilterSort(event.target.value)}>
               {SORT_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
             </select>
           </label>
           <label className="assets-filter-keyword">
-            <span>关键词</span>
-            <input value={filterKeyword} onChange={(event) => setFilterKeyword(event.target.value)} placeholder="标题或正文搜索" />
+            <span>{t('assets.filter.keyword')}</span>
+            <input value={filterKeyword} onChange={(event) => setFilterKeyword(event.target.value)} placeholder={t('assets.search')} />
           </label>
         </div>
-        <button type="button" className="assets-filter-reset" onClick={resetFilter}>重置筛选</button>
+        <button type="button" className="assets-filter-reset" onClick={resetFilter}>{t('assets.resetFilter')}</button>
       </section>
 
       <div className="advanced-panel-grid">
@@ -176,17 +176,17 @@ export default function GlobalAssetsDashboard({ data, setView }) {
           <div className="panel-title">
             <Database size={20} />
             <div>
-              <span>Source Materials</span>
-              <h4>最近资料</h4>
+              <span>{t('assets.panel.materials')}</span>
+              <h4>{t('assets.panel.materialsSubtitle')}</h4>
             </div>
           </div>
           {filteredMaterials.length === 0 ? (
-            <EmptyState title="暂无资料资产" body="导入链接或文本后，会在这里汇总全局资料。" />
+            <EmptyState title={t('assets.noMaterials')} body={t('assets.noMaterialsHint')} />
           ) : (
             <div className="asset-list">
               {filteredMaterials.map((item, index) => (
                 <article key={item.id ?? `${item.title}-${index}`}>
-                  <span>{item.platform ?? item.source ?? item.type ?? 'material'}</span>
+                  <span>{item.platform ?? item.source ?? item.type ?? t('assets.materialFallback')}</span>
                   <strong>{item.title}</strong>
                   <small>{parseStatusLabel(item.parseStatus)} · {formatMaterialTime(item.createdAt)}</small>
                 </article>
@@ -199,12 +199,12 @@ export default function GlobalAssetsDashboard({ data, setView }) {
           <div className="panel-title">
             <Layers size={20} />
             <div>
-              <span>Knowledge Cards</span>
-              <h4>证据状态</h4>
+              <span>{t('assets.panel.cards')}</span>
+              <h4>{t('assets.panel.cardsSubtitle')}</h4>
             </div>
           </div>
           {filteredCards.length === 0 ? (
-            <EmptyState title="暂无知识卡片" body="调整筛选条件或生成主题后，卡片会成为跨库操作的基础。" />
+            <EmptyState title={t('assets.noCards')} body={t('assets.noCardsHint')} />
           ) : (
             <div className="asset-list">
               {filteredCards.slice(0, 5).map((card, index) => (
@@ -222,21 +222,21 @@ export default function GlobalAssetsDashboard({ data, setView }) {
           <div className="panel-title">
             <FileText size={20} />
             <div>
-              <span>Generated Artifacts</span>
-              <h4>产物资产</h4>
+              <span>{t('assets.panel.artifacts')}</span>
+              <h4>{t('assets.panel.artifactsSubtitle')}</h4>
             </div>
           </div>
           {data.allArtifacts.length === 0 ? (
-            <EmptyState title="暂无生成产物" body="运行 Kit 或提问后，研究摘要、主题库和行动清单会进入这里。" />
+            <EmptyState title={t('assets.noArtifacts')} body={t('assets.noArtifactsHint')} />
           ) : (
             <div className="artifact-strip-list">
               {data.allArtifacts.slice(0, 4).map((artifact, index) => (
                 <article key={artifact.id ?? `${artifact.title}-${index}`}>
                   <div>
                     <strong>{artifact.title}</strong>
-                    <span>{artifact.type ?? 'artifact'} · {artifact.sections?.length ?? 0} sections</span>
+                    <span>{artifact.type ?? t('assets.artifactFallback')} · {t('assets.sectionsCount', { count: artifact.sections?.length ?? 0 })}</span>
                   </div>
-                  <button onClick={() => setView('artifact')} type="button">Open</button>
+                  <button onClick={() => setView('artifact')} type="button">{t('common.open')}</button>
                 </article>
               ))}
             </div>

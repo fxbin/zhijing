@@ -104,25 +104,25 @@ export default function MultiEntityComparisonView({ data, setView }) {
     <section className="page-main full advanced-page">
       <div className="advanced-head">
         <div>
-          <span>Entity Comparison</span>
-          <h2>Compare knowledge entities</h2>
+          <span>{t('compare.title')}</span>
+          <h2>{t('compare.heading')}</h2>
           <p>把知识库当作第一版可比较实体，展示资料量、卡片量、产物量和来源健康度，并支持展开查看卡片明细。</p>
         </div>
-        <button onClick={() => setView('synthesis')} type="button">Synthesize</button>
+        <button onClick={() => setView('synthesis')} type="button">{t('compare.synthesize')}</button>
       </div>
       <AdvancedOpsTabs active="compare" setView={setView} />
 
       {rows.length === 0 ? (
-        <EmptyState title="暂无可对比实体" body="创建知识库后，会自动出现第一批对比维度。" />
+        <EmptyState title={t('compare.noEntities')} body={t('compare.noEntitiesHint')} />
       ) : (
         <>
           <section className="comparison-board">
             <div className="comparison-header">
-              <span>Entity</span>
-              <span>Materials</span>
-              <span>Cards</span>
-              <span>Artifacts</span>
-              <span>Source health</span>
+              <span>{t('compare.column.entity')}</span>
+              <span>{t('compare.column.materials')}</span>
+              <span>{t('compare.column.cards')}</span>
+              <span>{t('compare.column.artifacts')}</span>
+              <span>{t('compare.column.sourceHealth')}</span>
             </div>
             {rows.flatMap((row) => {
               const items = [
@@ -137,7 +137,7 @@ export default function MultiEntityComparisonView({ data, setView }) {
                   <div>
                     <strong>{row.title}</strong>
                     <small>
-                      {totalAssets(row)} total assets · {expandedId === row.id ? '点击收起' : '点击展开'}
+                      {t('compare.totalAssetsCount', { count: totalAssets(row) })} · {expandedId === row.id ? t('compare.collapse') : t('compare.expand')}
                     </small>
                   </div>
                   <span>{row.materials}</span>
@@ -182,11 +182,11 @@ export default function MultiEntityComparisonView({ data, setView }) {
 
           <section className="comparison-board">
             <div className="comparison-header">
-              <span>Card type</span>
-              <span>Count</span>
-              <span>Share</span>
+              <span>{t('compare.column.cardType')}</span>
+              <span>{t('compare.column.count')}</span>
+              <span>{t('compare.column.share')}</span>
               <span aria-hidden="true" />
-              <span>Distribution</span>
+              <span>{t('compare.column.distribution')}</span>
             </div>
             {typeRows.map((row) => (
               <article className="comparison-row" key={row.key}>

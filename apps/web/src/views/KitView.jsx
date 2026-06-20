@@ -5,66 +5,52 @@
  */
 
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CheckCircle2, Clock3 } from 'lucide-react';
 import { kitCards } from '../constants/artifact';
 
 /** Kit 分类配置：按用途分组展示 */
 const KIT_CATEGORIES = [
-  { id: 'research', label: '研究类', kitIds: ['learning_research', 'product_research'] },
-  { id: 'creation', label: '创作类', kitIds: ['content_creation'] },
-  { id: 'decomposition', label: '拆解类', kitIds: ['topic_decomposition'] },
+  { id: 'research', kitIds: ['learning_research', 'product_research'] },
+  { id: 'creation', kitIds: ['content_creation'] },
+  { id: 'decomposition', kitIds: ['topic_decomposition'] },
 ];
 
 /** Kit 运行时的标准步骤定义 */
 const KIT_RUN_STEPS = [
-  { id: 'read', title: '读取知识库', body: '加载资料、卡片与最近产物作为 Kit 输入。' },
-  { id: 'context', title: '整理上下文', body: '合并资料与卡片，构造模型可用的上下文。' },
-  { id: 'generate', title: '调用模型生成', body: '调用模型生成结构化产物。' },
-  { id: 'persist', title: '持久化产物', body: '保存产物到知识库并建立索引。' },
+  { id: 'read' },
+  { id: 'context' },
+  { id: 'generate' },
+  { id: 'persist' },
 ];
 
 /** 运行中进度面板默认激活的步骤索引（0 基） */
 const RUNNING_ACTIVE_STEP_INDEX = 2;
 
-/** 每个 Kit 的详细元信息：预期产物、步骤预览、所需时间估计 */
+/** 每个 Kit 的详细元信息：仅保留所需时间估计，其余文案通过 i18n 获取 */
 const KIT_META = {
-  learning_research: {
-    estimatedMinutes: 3,
-    expectedOutputs: ['主题研究摘要', '核心概念表', '待补资料清单'],
-    stepPreview: ['扫描资料与卡片', '抽取主题与概念', '汇总缺口并产出摘要'],
-  },
-  content_creation: {
-    estimatedMinutes: 4,
-    expectedOutputs: ['选题库', '标题方向', '内容结构建议', '风险提示'],
-    stepPreview: ['梳理素材脉络', '生成选题与标题', '编排内容结构与风险'],
-  },
-  product_research: {
-    estimatedMinutes: 5,
-    expectedOutputs: ['竞品对比', '用户痛点', '功能机会点', '下一步验证问题'],
-    stepPreview: ['提取竞品与痛点', '归纳机会点', '形成验证问题清单'],
-  },
-  topic_decomposition: {
-    estimatedMinutes: 3,
-    expectedOutputs: ['子主题树', '学习路径', '依赖关系'],
-    stepPreview: ['识别主题边界', '拆解子主题', '排序学习路径与依赖'],
-  },
+  learning_research: { estimatedMinutes: 3 },
+  content_creation: { estimatedMinutes: 4 },
+  product_research: { estimatedMinutes: 5 },
+  topic_decomposition: { estimatedMinutes: 3 },
 };
 
 /**
  * Kit 详情面板：展示步骤预览、预期产物和所需时间估计
  * @param {Object} props - 组件参数
- * @param {Object} props.meta - Kit 元信息
- * @param {string[]} props.meta.expectedOutputs - 预期产物列表
- * @param {string[]} props.meta.stepPreview - 步骤预览列表
- * @param {number} props.meta.estimatedMinutes - 预估耗时（分钟）
+ * @param {string} props.kitId - Kit 标识
+ * @param {number} props.estimatedMinutes - 预估耗时（分钟）
  * @returns {JSX.Element} Kit 详情面板
  */
-function KitDetailPanel({ meta }) {
+function KitDetailPanel({ kitId, estimatedMinutes }) {
+  const { t } = useTranslation();
+  const stepPreview = t(`kit.meta.${kitId}.stepPreview`, { returnObjects: true });
+  const expectedOutputs = t(`kit.meta.${kitId}.expectedOutputs`, { returnObjects: true });
   return (
     <>
-      <p><strong>步骤预览</strong>：{meta.stepPreview.join(' → ')}</p>
-      <p><strong>预期产物</strong>：{meta.expectedOutputs.join('、')}</p>
-      <p><strong>预计耗时</strong>：约 {meta.estimatedMinutes} 分钟</p>
+      <p><strong>{t('kit.detail.stepPreview')}</strong>：{Array.isArray(stepPreview) ? stepPreview.join(' → ') : ''}</p>
+      <p><strong>{t('kit.detail.expectedOutputs')}</strong>：{Array.isArray(expectedOutputs) ? expectedOutputs.join('、') : ''}</p>
+      <p><strong>{t('kit.detail.estimatedTime')}</strong>：{t('kit.detail.minutes', { count: estimatedMinutes })}</p>
     </>
   );
 }
@@ -72,16 +58,17 @@ function KitDetailPanel({ meta }) {
 /**
  * 运行中进度面板：展示步骤列表、当前步骤高亮和进度条
  * @param {Object} props - 组件参数
- * @param {Array<{id: string, title: string, body: string}>} props.steps - 步骤列表
+ * @param {Array<{id: string}>} props.steps - 步骤列表
  * @param {number} props.activeIndex - 当前激活步骤索引
  * @returns {JSX.Element} 运行中进度面板
  */
 function RunningKitPanel({ steps, activeIndex }) {
+  const { t } = useTranslation();
   return (
     <aside className="run-steps">
       <div className="section-title">
-        <h3>Kit 运行中</h3>
-        <button type="button">{steps.length} of {steps.length} Steps</button>
+        <h3>{t('kit.runningTitle')}</h3>
+        <button type="button">{t('kit.stepsCount', { current: steps.length, total: steps.length })}</button>
       </div>
       {steps.map((step, index) => {
         const state = index < activeIndex ? 'done' : index === activeIndex ? 'active' : 'waiting';
@@ -89,8 +76,8 @@ function RunningKitPanel({ steps, activeIndex }) {
           <article className={state} key={step.id}>
             {state === 'done' ? <CheckCircle2 size={22} /> : <Clock3 size={22} />}
             <div>
-              <h3>{index + 1}. {step.title}</h3>
-              <p>{step.body}</p>
+              <h3>{index + 1}. {t(`kit.step.${step.id}.title`)}</h3>
+              <p>{t(`kit.step.${step.id}.body`)}</p>
               {state === 'active' && (
                 <div className="progress">
                   <span />
@@ -115,6 +102,7 @@ function RunningKitPanel({ steps, activeIndex }) {
  * @returns {JSX.Element} Workflow Kits 视图
  */
 export default function KitView({ apiStatus, isRunningKit, onRunKit, selectedKnowledgeBaseId, setView }) {
+  const { t } = useTranslation();
   const [selectedKitId, setSelectedKitId] = useState(null);
   const canRun = apiStatus === 'online' && Boolean(selectedKnowledgeBaseId) && !isRunningKit;
 
@@ -133,8 +121,8 @@ export default function KitView({ apiStatus, isRunningKit, onRunKit, selectedKno
       <section className="page-main full">
         <div className="page-title-row">
           <div>
-            <h2>Workflow Kits</h2>
-            <p>Kit 正在运行，请稍候。完成后会自动跳转到产物预览。</p>
+            <h2>{t('kit.title')}</h2>
+            <p>{t('kit.runningSubtitle')}</p>
           </div>
         </div>
         <RunningKitPanel steps={KIT_RUN_STEPS} activeIndex={RUNNING_ACTIVE_STEP_INDEX} />
@@ -146,8 +134,8 @@ export default function KitView({ apiStatus, isRunningKit, onRunKit, selectedKno
     <section className="page-main full">
       <div className="page-title-row">
         <div>
-          <h2>Workflow Kits</h2>
-          <p>选择一个当前知识库的整理方式，生成可保存和导出的产物。</p>
+          <h2>{t('kit.title')}</h2>
+          <p>{t('kit.subtitle')}</p>
         </div>
       </div>
       {KIT_CATEGORIES.map((category) => {
@@ -156,7 +144,7 @@ export default function KitView({ apiStatus, isRunningKit, onRunKit, selectedKno
         return (
           <div key={category.id}>
             <div className="section-title">
-              <h3>{category.label}</h3>
+              <h3>{t(`kit.category.${category.id}`)}</h3>
             </div>
             <div className="kit-grid">
               {categoryKits.map((kit) => {
@@ -164,12 +152,12 @@ export default function KitView({ apiStatus, isRunningKit, onRunKit, selectedKno
                 const isSelected = kit.id === selectedKitId;
                 const meta = KIT_META[kit.id];
                 return (
-                  <article className="kit-card" key={kit.title} onClick={() => handleCardClick(kit.id)} role="presentation">
+                  <article className="kit-card" key={kit.id} onClick={() => handleCardClick(kit.id)} role="presentation">
                     <Icon size={30} />
-                    <span>{kit.status}</span>
-                    <h3>{kit.title}</h3>
-                    <p>{kit.body}</p>
-                    {isSelected && meta && <KitDetailPanel meta={meta} />}
+                    <span>{t('kit.status.ready')}</span>
+                    <h3>{t(`kit.${kit.id}.title`)}</h3>
+                    <p>{t(`kit.${kit.id}.body`)}</p>
+                    {isSelected && meta && <KitDetailPanel kitId={kit.id} estimatedMinutes={meta.estimatedMinutes} />}
                     <button
                       disabled={!canRun}
                       onClick={(event) => {
@@ -178,7 +166,7 @@ export default function KitView({ apiStatus, isRunningKit, onRunKit, selectedKno
                       }}
                       type="button"
                     >
-                      {isRunningKit ? 'Running...' : 'Run Kit'}
+                      {isRunningKit ? t('common.loading') : t('kit.runKit')}
                     </button>
                   </article>
                 );
@@ -187,7 +175,7 @@ export default function KitView({ apiStatus, isRunningKit, onRunKit, selectedKno
           </div>
         );
       })}
-      {!selectedKnowledgeBaseId && <p className="kit-hint">先创建或选择一个知识库，再运行 Kit。</p>}
+      {!selectedKnowledgeBaseId && <p className="kit-hint">{t('kit.selectKnowledgeBaseHint')}</p>}
     </section>
   );
 }

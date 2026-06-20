@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CheckCircle2, ClipboardList, Download, History, PackageCheck } from 'lucide-react';
 
 import {
@@ -12,6 +13,7 @@ import {
   downloadTextFile,
 } from '../utils/export';
 import { safeFilename } from '../utils/format';
+import { formatDateTime } from '../utils/material';
 
 /**
  * 导出视图，支持多格式导出、进度展示、历史记录和本地备份。
@@ -21,6 +23,7 @@ import { safeFilename } from '../utils/format';
  * @returns {JSX.Element} 导出视图
  */
 export default function ExportView({ detail, setView }) {
+  const { t } = useTranslation();
   const [format, setFormat] = useState('markdown');
   const [scope, setScope] = useState('all');
   const [includeArtifacts, setIncludeArtifacts] = useState(true);
@@ -39,9 +42,9 @@ export default function ExportView({ detail, setView }) {
     includeArtifacts,
   };
   const exportRows = [
-    { label: 'Knowledge cards', value: options.includeCards ? cards.length : 0 },
-    { label: 'Source materials', value: options.includeMaterials ? materials.length : 0 },
-    { label: 'Artifacts', value: options.includeArtifacts ? artifacts.length : 0 },
+    { id: 'cards', label: t('export.count.cards'), value: options.includeCards ? cards.length : 0 },
+    { id: 'materials', label: t('export.count.materials'), value: options.includeMaterials ? materials.length : 0 },
+    { id: 'artifacts', label: t('export.count.artifacts'), value: options.includeArtifacts ? artifacts.length : 0 },
   ];
 
   useEffect(() => {
@@ -152,20 +155,26 @@ export default function ExportView({ detail, setView }) {
     setProgress(0);
   }
 
+  const statusText = exportState === 'success'
+    ? t('export.status.ready')
+    : exportState === 'running'
+      ? t('export.status.running')
+      : t('export.status.idle');
+
   return (
     <section className="page-main full">
       <div className="export-workbench">
         <div className="export-head">
           <div>
-            <span>Export Management</span>
-            <h2>Archive current knowledge base</h2>
-            <p>把当前知识库导出为 Markdown、JSON 或可打印的 PDF。导出记录会写入本地数据库，便于追溯历史版本；当前版本不会上传任何内容到云端。</p>
+            <span>{t('export.title')}</span>
+            <h2>{t('export.subtitle')}</h2>
+            <p>{t('export.description')}</p>
           </div>
           <div className="export-head-actions">
-            <button onClick={() => setView('detail')} type="button">Back</button>
+            <button onClick={() => setView('detail')} type="button">{t('common.back')}</button>
             <button onClick={downloadBackup} type="button">
               <PackageCheck size={18} />
-              Backup JSON
+              {t('export.backupJson')}
             </button>
           </div>
         </div>
@@ -175,15 +184,15 @@ export default function ExportView({ detail, setView }) {
             <div className="panel-title">
               <Download size={20} />
               <div>
-                <span>Export Configuration</span>
-                <h4>格式与范围</h4>
+                <span>{t('export.configTitle')}</span>
+                <h4>{t('export.configSubtitle')}</h4>
               </div>
             </div>
             <div className="export-option-grid">
               {[
-                { key: 'markdown', label: 'Markdown', body: 'For PKM tools and readable archives.' },
-                { key: 'json', label: 'JSON', body: 'Raw structured backup for later import.' },
-                { key: 'pdf', label: 'PDF', body: 'Print-friendly archive via browser print.' },
+                { key: 'markdown', label: t('export.format.markdown'), body: t('export.format.markdownDesc') },
+                { key: 'json', label: t('export.format.json'), body: t('export.format.jsonDesc') },
+                { key: 'pdf', label: t('export.format.pdf'), body: t('export.format.pdfDesc') },
               ].map((option) => (
                 <button className={format === option.key ? 'active' : ''} key={option.key} onClick={() => setFormat(option.key)} type="button">
                   <strong>{option.label}</strong>
@@ -193,9 +202,9 @@ export default function ExportView({ detail, setView }) {
             </div>
             <div className="export-scope-row">
               {[
-                { key: 'all', label: 'All assets' },
-                { key: 'cards', label: 'Cards only' },
-                { key: 'materials', label: 'Materials only' },
+                { key: 'all', label: t('export.scope.all') },
+                { key: 'cards', label: t('export.scope.cards') },
+                { key: 'materials', label: t('export.scope.materials') },
               ].map((option) => (
                 <button className={scope === option.key ? 'active' : ''} key={option.key} onClick={() => setScope(option.key)} type="button">
                   {option.label}
@@ -204,15 +213,15 @@ export default function ExportView({ detail, setView }) {
             </div>
             <label className="export-checkbox">
               <input checked={includeArtifacts} onChange={(event) => setIncludeArtifacts(event.target.checked)} type="checkbox" />
-              Include generated artifacts
+              {t('export.includeArtifacts')}
             </label>
             <label className="export-checkbox">
               <input checked={useModal} onChange={(event) => setUseModal(event.target.checked)} type="checkbox" />
-              成功时使用模态弹层展示
+              {t('export.useModal')}
             </label>
             <label className="export-checkbox">
               <input checked={autoClose} onChange={(event) => setAutoClose(event.target.checked)} type="checkbox" />
-              成功后自动收起（约 3 秒）
+              {t('export.autoClose')}
             </label>
           </section>
 
@@ -220,14 +229,14 @@ export default function ExportView({ detail, setView }) {
             <div className="panel-title">
               <ClipboardList size={20} />
               <div>
-                <span>Export Progress</span>
-                <h4>{exportState === 'success' ? '导出已准备好' : exportState === 'running' ? '正在打包知识资产' : '等待开始'}</h4>
+                <span>{t('export.progressTitle')}</span>
+                <h4>{statusText}</h4>
               </div>
             </div>
             <div className="export-progress-bar"><span style={{ width: `${progress}%` }} /></div>
             <div className="export-counts">
               {exportRows.map((row) => (
-                <div key={row.label}>
+                <div key={row.id}>
                   <strong>{row.value}</strong>
                   <span>{row.label}</span>
                 </div>
@@ -237,24 +246,24 @@ export default function ExportView({ detail, setView }) {
               <div className="export-success-card">
                 <CheckCircle2 size={26} />
                 <div>
-                  <strong>导出成功</strong>
-                  <p>{lastExport?.filename ?? 'Export file'} 已生成，可以下载到本地或打印为 PDF。</p>
+                  <strong>{t('export.successTitle')}</strong>
+                  <p>{t('export.successBody', { filename: lastExport?.filename ?? t('export.exportFile') })}</p>
                 </div>
               </div>
             ) : (
-              <p>配置完成后开始导出。当前流程不会上传任何内容，只会在本地生成文件。</p>
+              <p>{t('export.idleHint')}</p>
             )}
             <div className="export-actions">
               <button disabled={exportState === 'running'} onClick={startExport} type="button">
-                {exportState === 'running' ? 'Exporting' : 'Start Export'}
+                {exportState === 'running' ? t('export.exporting') : t('export.startExport')}
               </button>
               {format === 'pdf' ? (
-                <button disabled={exportState !== 'success'} onClick={printPdf} type="button">打印为 PDF</button>
+                <button disabled={exportState !== 'success'} onClick={printPdf} type="button">{t('export.printPdf')}</button>
               ) : (
-                <button disabled={exportState !== 'success'} onClick={downloadLastExport} type="button">Download</button>
+                <button disabled={exportState !== 'success'} onClick={downloadLastExport} type="button">{t('export.download')}</button>
               )}
               {exportState === 'success' && autoClose && (
-                <button className="ghost" onClick={closeSuccess} type="button">收起</button>
+                <button className="ghost" onClick={closeSuccess} type="button">{t('export.collapse')}</button>
               )}
             </div>
           </section>
@@ -264,12 +273,12 @@ export default function ExportView({ detail, setView }) {
           <div className="panel-title">
             <History size={20} />
             <div>
-              <span>Export History</span>
-              <h4>{exportHistory.length > 0 ? `已记录 ${exportHistory.length} 次导出` : '尚无持久化记录'}</h4>
+              <span>{t('export.historyTitle')}</span>
+              <h4>{exportHistory.length > 0 ? t('export.historyCount', { count: exportHistory.length }) : t('export.noHistory')}</h4>
             </div>
           </div>
           {exportHistory.length === 0 ? (
-            <p className="export-history-empty">完成首次导出后，记录会出现在这里，便于追溯历史版本。记录保存在本地数据库，不会上传云端。</p>
+            <p className="export-history-empty">{t('export.historyEmpty')}</p>
           ) : (
             <ul className="export-history-list">
               {exportHistory.map((item) => (
@@ -277,7 +286,15 @@ export default function ExportView({ detail, setView }) {
                   <div>
                     <strong>{item.filename}</strong>
                     <span>
-                      {item.format.toUpperCase()} · {item.scope} · 卡片 {item.cardCount} · 资料 {item.materialCount} · 产物 {item.artifactCount}{item.includeArtifacts ? '' : '（不含产物）'} · {new Date(item.createdAt).toLocaleString()}
+                      {t('export.historyItem', {
+                        format: t(`export.formatLabel.${item.format}`),
+                        scope: t(`export.scope.${item.scope}`),
+                        cardCount: item.cardCount,
+                        materialCount: item.materialCount,
+                        artifactCount: item.artifactCount,
+                        artifactHint: item.includeArtifacts ? '' : t('export.withoutArtifacts'),
+                        time: formatDateTime(item.createdAt),
+                      })}
                     </span>
                   </div>
                 </li>
@@ -290,15 +307,15 @@ export default function ExportView({ detail, setView }) {
           <div className="export-modal-overlay" role="dialog" aria-modal="true">
             <div className="export-modal-card">
               <CheckCircle2 size={32} />
-              <strong>导出成功</strong>
-              <p>{lastExport?.filename ?? 'Export file'} 已生成。</p>
+              <strong>{t('export.successTitle')}</strong>
+              <p>{t('export.successBodyShort', { filename: lastExport?.filename ?? t('export.exportFile') })}</p>
               <div className="export-actions">
                 {format === 'pdf' ? (
-                  <button onClick={printPdf} type="button">打印为 PDF</button>
+                  <button onClick={printPdf} type="button">{t('export.printPdf')}</button>
                 ) : (
-                  <button onClick={downloadLastExport} type="button">Download</button>
+                  <button onClick={downloadLastExport} type="button">{t('export.download')}</button>
                 )}
-                <button className="ghost" onClick={closeSuccess} type="button">关闭</button>
+                <button className="ghost" onClick={closeSuccess} type="button">{t('common.close')}</button>
               </div>
             </div>
           </div>

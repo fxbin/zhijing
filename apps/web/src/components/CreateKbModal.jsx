@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { CircleX, Plus, Search, Sparkles } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { CREATE_KB_KITS } from '../constants/artifact';
 
@@ -17,6 +18,7 @@ import { CREATE_KB_KITS } from '../constants/artifact';
  * @returns {JSX.Element} 模态框
  */
 export default function CreateKbModal({ onClose, onSubmit, onCreateEmpty }) {
+  const { t } = useTranslation();
   const [theme, setTheme] = useState('');
   const [emptyTitle, setEmptyTitle] = useState('');
   const [emptySummary, setEmptySummary] = useState('');
@@ -43,21 +45,25 @@ export default function CreateKbModal({ onClose, onSubmit, onCreateEmpty }) {
         <header className="modal-head">
           <div className="modal-title">
             <Sparkles size={22} />
-            <h3>开启新的知识路径</h3>
+            <h3>{t('createKbModal.title')}</h3>
           </div>
-          <button className="modal-close" onClick={onClose} type="button" aria-label="关闭">
+          <button className="modal-close" onClick={onClose} type="button" aria-label={t('createKbModal.close')}>
             <CircleX size={20} />
           </button>
         </header>
         <div className="modal-body">
           <div className="modal-mode-tabs">
-            <button className={mode === 'ai' ? 'active' : ''} onClick={() => setMode('ai')} type="button">AI 自动生成</button>
-            <button className={mode === 'empty' ? 'active' : ''} onClick={() => setMode('empty')} type="button">创建空知识库</button>
+            <button className={mode === 'ai' ? 'active' : ''} onClick={() => setMode('ai')} type="button">
+              {t('createKbModal.mode.ai')}
+            </button>
+            <button className={mode === 'empty' ? 'active' : ''} onClick={() => setMode('empty')} type="button">
+              {t('createKbModal.mode.empty')}
+            </button>
           </div>
           {mode === 'ai' ? (
             <>
               <label className="modal-field">
-                <span>主题 / 目标</span>
+                <span>{t('createKbModal.themeLabel')}</span>
                 <div className="modal-input-row">
                   <Search size={18} />
                   <input
@@ -66,15 +72,15 @@ export default function CreateKbModal({ onClose, onSubmit, onCreateEmpty }) {
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') handleConfirm();
                     }}
-                    placeholder="例如：AI Agent 产品竞品分析"
+                    placeholder={t('createKbModal.titlePlaceholder')}
                     type="text"
                     value={theme}
                   />
                 </div>
-                <small>输入一个主题、链接或问题，系统将自动创建知识库并开始整理。</small>
+                <small>{t('createKbModal.themeHint')}</small>
               </label>
               <div className="modal-kits">
-                <p className="modal-kits-label">推荐路径</p>
+                <p className="modal-kits-label">{t('createKbModal.recommendedPaths')}</p>
                 <div className="modal-kit-grid">
                   {CREATE_KB_KITS.map((kit) => {
                     const Icon = kit.icon;
@@ -97,24 +103,24 @@ export default function CreateKbModal({ onClose, onSubmit, onCreateEmpty }) {
           ) : (
             <div className="modal-empty-form">
               <label className="modal-field">
-                <span>知识库标题</span>
+                <span>{t('createKbModal.kbTitleLabel')}</span>
                 <div className="modal-input-row">
                   <Plus size={18} />
                   <input
                     autoFocus
                     onChange={(event) => setEmptyTitle(event.target.value)}
-                    placeholder="例如：我的读书笔记"
+                    placeholder={t('createKbModal.authorPlaceholder')}
                     type="text"
                     value={emptyTitle}
                   />
                 </div>
-                <small>创建一个空知识库，后续再导入资料或运行 Kit。</small>
+                <small>{t('createKbModal.emptyHint')}</small>
               </label>
               <label className="modal-field">
-                <span>摘要（可选）</span>
+                <span>{t('createKbModal.summaryLabel')}</span>
                 <textarea
                   onChange={(event) => setEmptySummary(event.target.value)}
-                  placeholder="简单描述这个知识库的用途…"
+                  placeholder={t('createKbModal.descriptionPlaceholder')}
                   rows={3}
                   value={emptySummary}
                 />
@@ -123,14 +129,14 @@ export default function CreateKbModal({ onClose, onSubmit, onCreateEmpty }) {
           )}
         </div>
         <footer className="modal-foot">
-          <button className="btn-ghost" onClick={onClose} type="button">取消</button>
+          <button className="btn-ghost" onClick={onClose} type="button">{t('common.cancel')}</button>
           {mode === 'ai' ? (
             <button className="btn-primary" disabled={!theme.trim()} onClick={handleConfirm} type="button">
-              立即开启
+              {t('createKbModal.start')}
             </button>
           ) : (
             <button className="btn-primary" disabled={!emptyTitle.trim() || creating} onClick={handleCreateEmpty} type="button">
-              {creating ? '创建中…' : '创建空知识库'}
+              {creating ? t('common.creating') : t('createKbModal.createEmpty')}
             </button>
           )}
         </footer>

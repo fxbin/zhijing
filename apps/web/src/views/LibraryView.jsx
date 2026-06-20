@@ -15,8 +15,9 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { captureModeOptions, materialFilterOptions, maxImportedFileSize, supportedImportExtensions } from '../constants/options';
-import { statusLabels, typeLabels } from '../constants/labels';
+import { getIntakeKindLabel, getParseStatusLabel } from '../utils/i18nLabels';
 import {
   canParseMaterial,
   formatMaterialTime,
@@ -47,6 +48,7 @@ import ParseTimeline from '../components/ParseTimeline';
  * @returns {JSX.Element} 资料库视图
  */
 export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMutation, onParseMaterial, parsingMaterialId }) {
+  const { t } = useTranslation();
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState('all');
   const [searchValue, setSearchValue] = useState('');
@@ -61,7 +63,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
   const [isCapturing, setIsCapturing] = useState(false);
   const [isImportingFile, setIsImportingFile] = useState(false);
   const [mutatingMaterialId, setMutatingMaterialId] = useState(null);
-  const [status, setStatus] = useState('Loading materials...');
+  const [status, setStatus] = useState(t('library.status.loadingMaterials'));
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchProgress, setBatchProgress] = useState(null);
@@ -84,9 +86,9 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
       if (!response.ok) throw new Error('Material list unavailable.');
       const result = await response.json();
       setItems(result.materials ?? []);
-      setStatus('Materials synced.');
+      setStatus(t('library.status.materialsSynced'));
     } catch {
-      setStatus('API 未连接，暂时无法读取真实资料库。');
+      setStatus(t('library.status.apiDisconnectedLibrary'));
       setItems([]);
     } finally {
       setIsLoading(false);
@@ -105,11 +107,11 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
         const result = await response.json();
         if (!cancelled) {
           setItems(result.materials ?? []);
-          setStatus('Materials synced.');
+          setStatus(t('library.status.materialsSynced'));
         }
       } catch {
         if (!cancelled) {
-          setStatus('API 未连接，暂时无法读取真实资料库。');
+          setStatus(t('library.status.apiDisconnectedLibrary'));
           setItems([]);
         }
       } finally {
@@ -193,7 +195,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
     if (lifecycleStats.duplicateSignals > 0) {
       setDedupeNotice({
         count: lifecycleStats.duplicateSignals,
-        hint: '检测到重复资料，可在冲突解决面板批量合并。',
+        hint: t('library.dedupeNotice.hint'),
       });
     } else {
       setDedupeNotice(null);
@@ -205,7 +207,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
     if (!value || isCapturing || apiStatus !== 'online') return;
     setIsCapturing(true);
     const batchItems = captureMode === 'batch' ? splitBatchCaptureInput(value) : [];
-    setStatus(captureMode === 'batch' ? 'Capturing batch...' : 'Capturing material...');
+    setStatus(captureMode === 'batch' ? t('library.status.capturingBatch') : t('library.status.capturingMaterial'));
     try {
       if (captureMode === 'batch') {
         if (batchItems.length === 0) throw new Error('Empty batch.');
@@ -227,8 +229,8 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
         }
         if (lastResult) onCaptureResult(lastResult);
         setCaptureValue('');
-        setStatus(failed ? `${captured} 条已收集，${failed} 条失败。` : `${captured} 条资料已进入收集队列。`);
-        setCaptureSummary({ message: failed ? `${captured} 条已收集，${failed} 条失败。` : `${captured} 条资料已进入收集队列`, count: captured, at: Date.now() });
+        setStatus(failed ? t('library.status.captureBatchResultWithFailed', { captured, failed }) : t('library.status.captureBatchResultSuccess', { captured }));
+        setCaptureSummary({ message: failed ? t('library.status.captureBatchResultWithFailed', { captured, failed }) : t('library.status.captureBatchResultSuccess', { captured }), count: captured, at: Date.now() });
         await loadMaterials();
         return;
       }
@@ -242,10 +244,10 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
       onCaptureResult(result);
       setCaptureValue('');
       setStatus(result.message);
-      setCaptureSummary({ message: result.message || '资料已进入收集队列', count: 1, at: Date.now() });
+      setCaptureSummary({ message: result.message || t('library.status.materialCaptured'), count: 1, at: Date.now() });
       await loadMaterials();
     } catch {
-      setStatus('收集失败，请确认 API 正在运行。');
+      setStatus(t('library.status.captureFailed'));
     } finally {
       setIsCapturing(false);
     }
@@ -256,21 +258,21 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
     event.target.value = '';
     if (!file || isImportingFile) return;
     if (apiStatus !== 'online') {
-      setStatus('API 未连接，暂时无法导入本地文档。');
+      setStatus(t('library.status.apiDisconnectedImport'));
       return;
     }
     const lowerName = file.name.toLowerCase();
     const isSupported = supportedImportExtensions.some((extension) => lowerName.endsWith(extension));
     if (!isSupported) {
-      setStatus('目前仅支持 Markdown / TXT 文本文档导入。');
+      setStatus(t('library.status.unsupportedFileType'));
       return;
     }
     if (file.size > maxImportedFileSize) {
-      setStatus('文档过大，请先拆分到 2MB 以内再导入。');
+      setStatus(t('library.status.fileTooLarge'));
       return;
     }
     setIsImportingFile(true);
-    setStatus('Importing local document...');
+    setStatus(t('library.status.importingFile'));
     try {
       const text = (await file.text()).trim();
       if (!text) throw new Error('Empty file.');
@@ -283,10 +285,10 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
       const result = await response.json();
       onCaptureResult(result);
       setStatus(result.message);
-      setCaptureSummary({ message: result.message || '本地文档已进入收集队列', count: 1, at: Date.now() });
+      setCaptureSummary({ message: result.message || t('library.status.localFileCaptured'), count: 1, at: Date.now() });
       await loadMaterials();
     } catch {
-      setStatus('导入本地文档失败，请确认文件内容可读取。');
+      setStatus(t('library.status.importFileFailed'));
     } finally {
       setIsImportingFile(false);
     }
@@ -310,7 +312,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
   async function saveReview(item, markIngested) {
     if (!item?.id || apiStatus !== 'online' || mutatingMaterialId) return;
     setMutatingMaterialId(item.id);
-    setStatus(markIngested ? 'Completing material...' : 'Saving review draft...');
+    setStatus(markIngested ? t('library.status.completingMaterial') : t('library.status.savingReviewDraft'));
     try {
       const response = await fetch(`/api/materials/${item.id}/review`, {
         method: 'POST',
@@ -329,7 +331,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
       if (markIngested) setReviewingId(null);
       await loadMaterials();
     } catch {
-      setStatus('保存补全内容失败，请确认 API 正在运行。');
+      setStatus(t('library.status.saveReviewFailed'));
     } finally {
       setMutatingMaterialId(null);
     }
@@ -341,7 +343,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
     const newKnowledgeBaseTitle = (newBaseTitles[item.id] ?? item.title ?? '').trim();
     if (!target || (target === item.knowledgeBaseId && target !== '__new')) return;
     setMutatingMaterialId(item.id);
-    setStatus('Updating material assignment...');
+    setStatus(t('library.status.updatingAssignment'));
     try {
       const response = await fetch(`/api/materials/${item.id}/assign`, {
         method: 'POST',
@@ -357,7 +359,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
       setAssignDrafts((current) => ({ ...current, [item.id]: result.knowledgeBase.id }));
       await loadMaterials();
     } catch {
-      setStatus('移动资料失败，请确认目标知识库可用。');
+      setStatus(t('library.status.moveMaterialFailed'));
     } finally {
       setMutatingMaterialId(null);
     }
@@ -366,7 +368,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
   async function suggestAssignment(item) {
     if (!item?.id || apiStatus !== 'online' || mutatingMaterialId) return;
     setMutatingMaterialId(item.id);
-    setStatus('Finding assignment suggestion...');
+    setStatus(t('library.status.findingSuggestion'));
     try {
       const response = await fetch(`/api/materials/${item.id}/assignment-suggestions`);
       if (!response.ok) throw new Error('Suggestion failed.');
@@ -384,7 +386,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
       }));
       setStatus(result.message);
     } catch {
-      setStatus('生成归属建议失败，请稍后重试。');
+      setStatus(t('library.status.suggestionFailed'));
     } finally {
       setMutatingMaterialId(null);
     }
@@ -402,8 +404,8 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
     setDeleteConfirm(null);
     const snapshot = items;
     setIsBatchProcessing(true);
-    setBatchProgress({ done: 0, total: ids.length, action: '删除' });
-    setStatus(`正在删除 ${ids.length} 条资料...`);
+    setBatchProgress({ done: 0, total: ids.length, action: t('common.delete') });
+    setStatus(t('library.status.deletingMaterials', { count: ids.length }));
     const selectedSnapshot = new Set(ids);
     clearSelection();
     setItems((current) => current.filter((item) => !selectedSnapshot.has(item.id)));
@@ -417,14 +419,14 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
       } catch {
         failed += 1;
       }
-      setBatchProgress({ done: i + 1, total: ids.length, action: '删除' });
+      setBatchProgress({ done: i + 1, total: ids.length, action: t('common.delete') });
     }
     if (failed > 0) {
-      setStatus(`${ids.length - failed} 条已删除，${failed} 条失败，正在同步资料库。`);
+      setStatus(t('library.status.deletePartialFailed', { success: ids.length - failed, failed }));
       setItems(snapshot);
       await loadMaterials();
     } else {
-      setStatus(`${ids.length} 条资料已删除。`);
+      setStatus(t('library.status.deleteSuccess', { count: ids.length }));
     }
     setBatchProgress(null);
     setIsBatchProcessing(false);
@@ -435,12 +437,12 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
     if (ids.length === 0 || apiStatus !== 'online' || isBatchProcessing) return;
     const targets = items.filter((item) => selectedIds.has(item.id) && canParseMaterial(item));
     if (targets.length === 0) {
-      setStatus('所选资料暂无可重新解析的条目。');
+      setStatus(t('library.status.noReparseTargets'));
       return;
     }
     setIsBatchProcessing(true);
-    setBatchProgress({ done: 0, total: targets.length, action: '解析' });
-    setStatus(`正在重新解析 ${targets.length} 条资料...`);
+    setBatchProgress({ done: 0, total: targets.length, action: t('library.parse') });
+    setStatus(t('library.status.reparsingMaterials', { count: targets.length }));
     let failed = 0;
     for (let i = 0; i < targets.length; i += 1) {
       try {
@@ -448,10 +450,10 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
       } catch {
         failed += 1;
       }
-      setBatchProgress({ done: i + 1, total: targets.length, action: '解析' });
+      setBatchProgress({ done: i + 1, total: targets.length, action: t('library.parse') });
     }
     await loadMaterials();
-    setStatus(failed ? `${targets.length - failed} 条已重新解析，${failed} 条失败。` : `${targets.length} 条资料已重新解析。`);
+    setStatus(failed ? t('library.status.reparsePartialFailed', { success: targets.length - failed, failed }) : t('library.status.reparseSuccess', { count: targets.length }));
     setBatchProgress(null);
     setIsBatchProcessing(false);
   }
@@ -461,8 +463,8 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
     const ids = Array.from(selectedIds);
     if (ids.length === 0 || apiStatus !== 'online' || isBatchProcessing || !target) return;
     setIsBatchProcessing(true);
-    setBatchProgress({ done: 0, total: ids.length, action: '分配' });
-    setStatus(`正在移动 ${ids.length} 条资料...`);
+    setBatchProgress({ done: 0, total: ids.length, action: t('library.assign') });
+    setStatus(t('library.status.movingMaterials', { count: ids.length }));
     let failed = 0;
     for (let i = 0; i < ids.length; i += 1) {
       try {
@@ -477,10 +479,10 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
       } catch {
         failed += 1;
       }
-      setBatchProgress({ done: i + 1, total: ids.length, action: '分配' });
+      setBatchProgress({ done: i + 1, total: ids.length, action: t('library.assign') });
     }
     await loadMaterials();
-    setStatus(failed ? `${ids.length - failed} 条已移动，${failed} 条失败。` : `${ids.length} 条资料已移动。`);
+    setStatus(failed ? t('library.status.movePartialFailed', { success: ids.length - failed, failed }) : t('library.status.moveSuccess', { count: ids.length }));
     setBatchAssignTarget('');
     clearSelection();
     setBatchProgress(null);
@@ -491,21 +493,21 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
     <section className="page-main full">
       <div className="page-title-row">
         <div>
-          <h2>Material Repository</h2>
-          <p>把链接、文本和问题都收进同一个资料库，再按状态继续解析和整理。</p>
+          <h2>{t('library.title')}</h2>
+          <p>{t('library.subtitle')}</p>
         </div>
         <div className="library-stats">
-          <span>{counts.total} items</span>
-          <span>{counts.ingested ?? 0} ingested</span>
-          <span>{counts.failed ?? 0} failed</span>
+          <span>{t('library.itemsCount', { count: counts.total })}</span>
+          <span>{t('library.ingestedCount', { count: counts.ingested ?? 0 })}</span>
+          <span>{t('library.failedCount', { count: counts.failed ?? 0 })}</span>
         </div>
       </div>
 
       {dedupeNotice && (
         <div className="library-dedupe-notice">
           <AlertTriangle size={18} />
-          <span>检测到 {dedupeNotice.count} 组重复资料。{dedupeNotice.hint}</span>
-          <button type="button" onClick={() => setDedupeNotice(null)}>知道了</button>
+          <span>{t('library.dedupeNotice', { count: dedupeNotice.count })} {dedupeNotice.hint}</span>
+          <button type="button" onClick={() => setDedupeNotice(null)}>{t('library.dedupeNotice.dismiss')}</button>
         </div>
       )}
 
@@ -524,35 +526,35 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
       <section className="quick-capture-panel">
         <div className="capture-head">
           <div>
-            <span>Quick Capture</span>
-            <h3>Inbox</h3>
+            <span>{t('library.quickCapture')}</span>
+            <h3>{t('library.inbox')}</h3>
           </div>
           <div className="capture-mode">
             {captureModeOptions.map((mode) => (
               <button className={captureMode === mode ? 'active' : ''} key={mode} onClick={() => setCaptureMode(mode)} type="button">
-                {mode}
+                {t(`library.captureMode.${mode}`)}
               </button>
             ))}
           </div>
         </div>
         <div className="capture-box">
           <textarea
-            aria-label="快速收集资料"
+            aria-label={t('library.captureInputAria')}
             value={captureValue}
             onChange={(event) => setCaptureValue(event.target.value)}
-            placeholder={captureMode === 'batch' ? 'Paste one source, note, or question per line...' : captureMode === 'link' ? 'Paste a source link...' : 'Paste a note, question, or topic...'}
+            placeholder={captureMode === 'batch' ? t('library.capturePlaceholder.batch') : captureMode === 'link' ? t('library.capturePlaceholder.link') : t('library.capturePlaceholder.auto')}
           />
           <div className="capture-actions">
             <button disabled={apiStatus !== 'online' || isCapturing || !captureValue.trim()} onClick={capture} type="button">
               {isCapturing ? <Clock3 size={18} /> : <Send size={18} />}
-              Capture
+              {t('library.capture')}
             </button>
             <label className={`file-import-button ${apiStatus !== 'online' || isImportingFile ? 'disabled' : ''}`}>
               {isImportingFile ? <Clock3 size={18} /> : <Upload size={18} />}
-              Import
+              {t('library.import')}
               <input
                 accept=".md,.markdown,.txt,text/markdown,text/plain"
-                aria-label="导入本地文档"
+                aria-label={t('library.importDocument')}
                 disabled={apiStatus !== 'online' || isImportingFile}
                 onChange={importTextFile}
                 type="file"
@@ -569,31 +571,31 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
         <label className={`library-select-all ${allVisibleSelected ? 'is-checked' : ''} ${someVisibleSelected ? 'is-indeterminate' : ''}`}>
           <input
             type="checkbox"
-            aria-label="全选当前可见资料"
+            aria-label={t('library.selectAllVisible')}
             checked={allVisibleSelected}
             ref={(node) => { if (node) node.indeterminate = someVisibleSelected; }}
             onChange={toggleSelectAllVisible}
             disabled={filteredItems.length === 0}
           />
-          <span>{selectedIds.size > 0 ? `已选 ${selectedIds.size}` : '全选'}</span>
+          <span>{selectedIds.size > 0 ? t('library.selectedCount', { count: selectedIds.size }) : t('library.selectAll')}</span>
         </label>
         <div className="filter-bar">
           {materialFilterOptions.map((option) => (
             <button className={filter === option.key ? 'active' : ''} key={option.key} onClick={() => setFilter(option.key)} type="button">
-              {option.label}
+              {t(option.label)}
             </button>
           ))}
         </div>
         <label className="library-search">
           <Search size={18} />
-          <input aria-label="搜索资料" value={searchValue} onChange={(event) => setSearchValue(event.target.value)} placeholder="Search materials..." />
+          <input aria-label={t('library.searchMaterials')} value={searchValue} onChange={(event) => setSearchValue(event.target.value)} placeholder={t('library.searchPlaceholder')} />
         </label>
       </div>
 
       {selectedIds.size > 0 && (
         <div className="library-batch-bar">
           <div className="library-batch-info">
-            <strong>已选 {selectedIds.size}</strong>
+            <strong>{t('library.selectedCount', { count: selectedIds.size })}</strong>
             {batchProgress && (
               <span className="library-batch-progress">
                 {batchProgress.action} {batchProgress.done}/{batchProgress.total}
@@ -603,35 +605,35 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
           <div className="library-batch-actions">
             <button type="button" disabled={isBatchProcessing || apiStatus !== 'online'} onClick={reparseSelected}>
               <RefreshCw size={14} />
-              重新解析
+              {t('library.reparse')}
             </button>
             <select
-              aria-label="批量移动到知识库"
+              aria-label={t('library.moveToKb')}
               value={batchAssignTarget}
               onChange={(event) => setBatchAssignTarget(event.target.value)}
               disabled={isBatchProcessing || apiStatus !== 'online'}
             >
-              <option value="">移动到…</option>
+              <option value="">{t('library.moveTo')}</option>
               {knowledgeBases.map((base) => <option key={base.id ?? base.title} value={base.id}>{base.title}</option>)}
             </select>
             <button type="button" disabled={isBatchProcessing || apiStatus !== 'online' || !batchAssignTarget} onClick={assignSelected}>
-              移动
+              {t('library.move')}
             </button>
             <button type="button" className="danger" disabled={isBatchProcessing || apiStatus !== 'online'} onClick={requestDelete}>
               <Trash2 size={14} />
-              删除
+              {t('common.delete')}
             </button>
             <button type="button" disabled={isBatchProcessing} onClick={clearSelection}>
-              取消选择
+              {t('library.cancelSelection')}
             </button>
           </div>
         </div>
       )}
 
       {isLoading ? (
-        <EmptyState title="正在同步资料库" body="稍等一下，正在读取本地 API 里的资料。" />
+        <EmptyState title={t('library.syncing')} body={t('library.syncingHint')} />
       ) : filteredItems.length === 0 ? (
-        <EmptyState title="暂无匹配资料" body="换一个筛选条件，或先从上方收集一条链接/文本。" />
+        <EmptyState title={t('library.noMatch')} body={t('library.noMatchHint')} />
       ) : (
       <div className="library-grid">
         {filteredItems.map((item) => {
@@ -642,15 +644,15 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
               <label className="library-card-select">
                 <input
                   type="checkbox"
-                  aria-label={`选择 ${item.title}`}
+                  aria-label={t('library.selectMaterialWithTitle', { title: item.title })}
                   checked={selectedIds.has(item.id)}
                   onChange={() => toggleMaterialSelection(item.id)}
                 />
               </label>
               <Icon size={22} />
               <div className="material-meta">
-                <span>{typeLabels[item.type] ?? item.type}</span>
-                <span>{statusLabels[item.parseStatus] ?? item.parseStatus}</span>
+                <span>{getIntakeKindLabel(t, item.type)}</span>
+                <span>{getParseStatusLabel(t, item.parseStatus)}</span>
               </div>
             </div>
             <h3>{item.title}</h3>
@@ -659,79 +661,79 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
             {item.parseError && <p className="library-error">{item.parseError}</p>}
             <div className="tag-row">
               <span>{knowledgeBaseTitle(knowledgeBases, item.knowledgeBaseId)}</span>
-              <span>{item.platform ?? 'local'}</span>
+              <span>{item.platform ?? t('library.localPlatform')}</span>
               <span>{formatMaterialTime(item.createdAt)}</span>
-              {materialMediaUrls(item).length > 0 && <span>{materialMediaUrls(item).length} media</span>}
+              {materialMediaUrls(item).length > 0 && <span>{t('library.mediaCount', { count: materialMediaUrls(item).length })}</span>}
             </div>
             <MediaPreview urls={materialMediaUrls(item)} compact />
             <div className="assignment-row">
               <select
-                aria-label="选择资料归属知识库"
+                aria-label={t('library.selectKb')}
                 value={assignDrafts[item.id] ?? item.knowledgeBaseId ?? ''}
                 onChange={(event) => setAssignDrafts((current) => ({ ...current, [item.id]: event.target.value }))}
               >
-                <option value="">Move to...</option>
+                <option value="">{t('library.moveTo')}</option>
                 {knowledgeBases.map((base) => <option key={base.id ?? base.title} value={base.id}>{base.title}</option>)}
-                <option value="__new">New knowledge base</option>
+                <option value="__new">{t('library.newKnowledgeBase')}</option>
               </select>
               {(assignDrafts[item.id] ?? item.knowledgeBaseId) === '__new' && (
                 <input
-                  aria-label="新知识库标题"
+                  aria-label={t('library.newKbTitle')}
                   value={newBaseTitles[item.id] ?? item.title ?? ''}
                   onChange={(event) => setNewBaseTitles((current) => ({ ...current, [item.id]: event.target.value }))}
-                  placeholder="Knowledge base title"
+                  placeholder={t('library.titlePlaceholder')}
                 />
               )}
               <button disabled={apiStatus !== 'online' || mutatingMaterialId === item.id} onClick={() => assignMaterial(item)} type="button">
-                Assign
+                {t('library.assign')}
               </button>
               <button disabled={apiStatus !== 'online' || mutatingMaterialId === item.id} onClick={() => suggestAssignment(item)} type="button">
-                Suggest
+                {t('library.suggest')}
               </button>
             </div>
             {assignmentHints[item.id] && <p className="assignment-hint">{assignmentHints[item.id]}</p>}
             {reviewingId === item.id && (
               <div className="review-box">
                 <input
-                  aria-label="资料标题"
+                  aria-label={t('library.materialTitle')}
                   value={reviewDraft.title}
                   onChange={(event) => setReviewDraft((current) => ({ ...current, title: event.target.value }))}
-                  placeholder="Title"
+                  placeholder={t('library.materialTitlePlaceholder')}
                 />
                 <textarea
-                  aria-label="手动补充正文"
+                  aria-label={t('library.materialBody')}
                   value={reviewDraft.contentText}
                   onChange={(event) => setReviewDraft((current) => ({ ...current, contentText: event.target.value }))}
-                  placeholder="Paste or edit the material text..."
+                  placeholder={t('library.bodyPlaceholder')}
                 />
                 <textarea
-                  aria-label="手动补充媒体链接"
+                  aria-label={t('library.mediaLinks')}
                   value={reviewDraft.mediaUrls}
                   onChange={(event) => setReviewDraft((current) => ({ ...current, mediaUrls: event.target.value }))}
-                  placeholder="Media URLs, one per line..."
+                  placeholder={t('library.mediaPlaceholder')}
                 />
                 <div className="review-actions">
-                  <button disabled={mutatingMaterialId === item.id} onClick={() => saveReview(item, false)} type="button">Save Draft</button>
-                  <button disabled={mutatingMaterialId === item.id} onClick={() => saveReview(item, true)} type="button">Complete</button>
+                  <button disabled={mutatingMaterialId === item.id} onClick={() => saveReview(item, false)} type="button">{t('library.saveDraft')}</button>
+                  <button disabled={mutatingMaterialId === item.id} onClick={() => saveReview(item, true)} type="button">{t('library.complete')}</button>
                 </div>
               </div>
             )}
             <div className="library-card-actions">
               {materialSourceUrl(item) && (
                 <a href={materialSourceUrl(item)} target="_blank" rel="noreferrer">
-                  Open
+                  {t('library.open')}
                   <SquareArrowOutUpRight size={14} />
                 </a>
               )}
               {canParseMaterial(item) && (
                 <button disabled={parsingMaterialId === item.id} onClick={() => parseFromLibrary(item.id)} type="button">
                   <RefreshCw size={14} />
-                  {item.parseStatus === 'failed' ? 'Retry Parse' : 'Parse'}
+                  {item.parseStatus === 'failed' ? t('library.retryParse') : t('library.parse')}
                 </button>
               )}
               <button disabled={apiStatus !== 'online'} onClick={() => openReview(item)} type="button">
                 <FileText size={14} />
-                {reviewingId === item.id ? 'Close Review' : 'Review'}
+                {reviewingId === item.id ? t('library.closeReview') : t('library.review')}
               </button>
             </div>
           </article>
@@ -744,14 +746,14 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
           <div className="modal-card">
             <div className="modal-head">
               <AlertTriangle size={24} />
-              <h3>确认删除资料</h3>
+              <h3>{t('library.deleteConfirm.title')}</h3>
             </div>
-            <p>即将删除 <strong>{deleteConfirm.ids.length}</strong> 条资料。相关卡片将解除关联但不会删除，此操作不可撤销。</p>
+            <p>{t('library.deleteConfirm.body')} <strong>{deleteConfirm.ids.length}</strong> {t('library.deleteConfirm.materials')}</p>
             <div className="modal-actions">
-              <button type="button" onClick={() => setDeleteConfirm(null)}>取消</button>
+              <button type="button" onClick={() => setDeleteConfirm(null)}>{t('common.cancel')}</button>
               <button type="button" className="danger" onClick={confirmDelete}>
                 <Trash2 size={16} />
-                确认删除
+                {t('library.deleteConfirm.confirm')}
               </button>
             </div>
           </div>

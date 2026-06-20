@@ -4,8 +4,10 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CircleX, RefreshCw, Search, X } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
+import { formatTime } from '../utils/material';
 import {
   mapNodeMatches,
   buildMapLayout,
@@ -24,10 +26,11 @@ import {
  * @returns {JSX.Element} 知识地图视图
  */
 export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }) {
+  const { t } = useTranslation();
   const STORAGE_KEY_ZOOM = 'zhijing_map_zoom';
   const STORAGE_KEY_FILTER = 'zhijing_map_filter';
   const [map, setMap] = useState(null);
-  const [status, setStatus] = useState('选择一个知识库后生成地图。');
+  const [status, setStatus] = useState(t('maps.status.selectKnowledgeBase'));
   const [query, setQuery] = useState('');
   const [nodeFilter, setNodeFilter] = useState(() => {
     try {
@@ -70,13 +73,13 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
   useEffect(() => {
     if (!selectedKnowledgeBaseId || apiStatus !== 'online') {
       setMap(null);
-      setStatus(apiStatus === 'online' ? '选择一个知识库后生成地图。' : 'API 未连接，暂时无法生成知识地图。');
+      setStatus(apiStatus === 'online' ? t('maps.status.selectKnowledgeBase') : t('maps.status.apiOffline'));
       return;
     }
 
     let ignore = false;
     async function loadMap() {
-      setStatus('Loading knowledge map...');
+      setStatus(t('maps.status.loading'));
       try {
         const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/map`);
         if (!response.ok) throw new Error('Map unavailable.');
@@ -89,13 +92,13 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
               return acc;
             }, {}),
           );
-          setStatus(result.nodes?.length ? 'Knowledge map synced.' : '当前知识库还没有可生成地图的节点。');
+          setStatus(result.nodes?.length ? t('maps.status.synced') : t('maps.status.noNodes'));
           setSelectedNodeId(result.nodes?.[0]?.id ?? null);
         }
       } catch {
         if (!ignore) {
           setMap(null);
-          setStatus('知识地图读取失败，请确认 API 正在运行。');
+          setStatus(t('maps.status.loadFailed'));
         }
       }
     }
@@ -131,11 +134,17 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
     });
   const typeCounts = nodes.reduce((acc, node) => ({ ...acc, [node.kind]: (acc[node.kind] ?? 0) + 1 }), {});
   const filterOptions = [
-    { key: 'all', label: 'All Nodes', count: nodes.length },
-    { key: 'knowledge_base', label: 'Knowledge Base', count: typeCounts.knowledge_base ?? 0 },
-    { key: 'material', label: 'Materials', count: typeCounts.material ?? 0 },
-    { key: 'card', label: 'Cards', count: typeCounts.card ?? 0 },
+    { key: 'all', label: t('maps.filter.allNodes'), count: nodes.length },
+    { key: 'knowledge_base', label: t('maps.filter.knowledgeBase'), count: typeCounts.knowledge_base ?? 0 },
+    { key: 'material', label: t('maps.filter.materials'), count: typeCounts.material ?? 0 },
+    { key: 'card', label: t('maps.filter.cards'), count: typeCounts.card ?? 0 },
   ];
+  const relationTypeLabelMap = {
+    related_to: t('maps.relationType.relatedTo'),
+    derived_from: t('maps.relationType.derivedFrom'),
+    supports: t('maps.relationType.supports'),
+    contradicts: t('maps.relationType.contradicts'),
+  };
 
   /**
    * 将屏幕坐标转换为 SVG 内部坐标。
@@ -225,9 +234,9 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
         body: JSON.stringify({ positions: payload }),
       });
       if (!response.ok) throw new Error('Save node positions failed.');
-      setStatus('Knowledge map synced.');
+      setStatus(t('maps.status.synced'));
     } catch {
-      setStatus('节点位置保存失败，请确认 API 正在运行。');
+      setStatus(t('maps.status.saveFailed'));
     } finally {
       setPendingSave(false);
     }
@@ -262,10 +271,10 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
       <div className="knowledge-map-shell">
         <header className="knowledge-map-topbar">
           <div className="map-breadcrumb">
-            <button aria-label="返回知识库" onClick={() => setView('detail')} type="button"><CircleX size={18} /></button>
-            <span>Knowledge Base</span>
+            <button aria-label={t('maps.back')} onClick={() => setView('detail')} type="button"><CircleX size={18} /></button>
+            <span>{t('maps.breadcrumb.knowledgeBase')}</span>
             <span>/</span>
-            <strong>Full Map</strong>
+            <strong>{t('maps.fullMap')}</strong>
           </div>
           <div className="map-filter-bar">
             {filterOptions.map((option) => (
@@ -278,10 +287,10 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
           </div>
           <label className="map-search">
             <Search size={17} />
-            <input aria-label="搜索地图节点" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search nodes..." />
+            <input aria-label={t('maps.searchNodes')} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('maps.searchPlaceholder')} />
             {query && (
               <button
-                aria-label="清空搜索"
+                aria-label={t('maps.clearSearch')}
                 className="map-search-clear"
                 onClick={() => setQuery('')}
                 type="button"
@@ -293,29 +302,29 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
         </header>
 
         <div className="knowledge-map-board">
-          <section className="knowledge-map-canvas" aria-label="完整知识地图">
+          <section className="knowledge-map-canvas" aria-label={t('maps.canvas')}>
             {!map ? (
               <div className="map-empty-state">
-                <EmptyState title="暂无知识地图" body={status} />
+                <EmptyState title={t('maps.noMap')} body={status} />
               </div>
             ) : (
               <>
                 <div className="map-canvas-heading">
                   <div>
-                    <span>Knowledge Map</span>
-                    <h2>{selectedNode?.label ?? 'Knowledge Maps'}</h2>
-                    <p>{status} Updated {map.generatedAt ? new Date(map.generatedAt).toLocaleTimeString() : 'now'}.</p>
+                    <span>{t('maps.title')}</span>
+                    <h2>{selectedNode?.label ?? t('maps.knowledgeMaps')}</h2>
+                    <p>{t('maps.updatedAt', { time: map.generatedAt ? formatTime(map.generatedAt) : t('maps.now') })}</p>
                   </div>
                   <div className="map-stats-strip">
-                    <span>{nodes.length} nodes</span>
-                    <span>{edges.length} edges</span>
-                    <span>{map.stats?.sourcedCards ?? 0} sourced</span>
+                    <span>{nodes.length} {t('maps.nodes')}</span>
+                    <span>{edges.length} {t('maps.edges')}</span>
+                    <span>{map.stats?.sourcedCards ?? 0} {t('maps.sourced')}</span>
                   </div>
                 </div>
 
                 <div className="map-graph-viewport">
                   <svg
-                    aria-label="知识地图关系图"
+                    aria-label={t('maps.graph')}
                     className="map-graph-svg"
                     viewBox="0 0 1000 800"
                     role="img"
@@ -368,7 +377,7 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
                   </svg>
                   {layoutNodes.length === 0 && (
                     <div className="map-no-match">
-                      <EmptyState title="没有匹配节点" body="换一个关键词或切回 All Nodes 查看完整地图。" />
+                      <EmptyState title={t('maps.noMatchingNodes')} body={t('maps.noMatchingNodesHint')} />
                     </div>
                   )}
                 </div>
@@ -387,32 +396,32 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
                     </button>
                   ))}
                 </div>
-                <div className="map-floating-controls" aria-label="地图缩放控制">
-                  <button aria-label="放大" onClick={() => setZoom((value) => Math.min(value + 0.12, 1.36))} type="button">+</button>
-                  <button aria-label="重置视图" onClick={() => setZoom(1)} type="button"><RefreshCw size={16} /></button>
-                  <button aria-label="缩小" onClick={() => setZoom((value) => Math.max(value - 0.12, 0.76))} type="button">−</button>
+                <div className="map-floating-controls" aria-label={t('maps.zoomControls')}>
+                  <button aria-label={t('common.zoomIn')} onClick={() => setZoom((value) => Math.min(value + 0.12, 1.36))} type="button">+</button>
+                  <button aria-label={t('common.resetView')} onClick={() => setZoom(1)} type="button"><RefreshCw size={16} /></button>
+                  <button aria-label={t('common.zoomOut')} onClick={() => setZoom((value) => Math.max(value - 0.12, 0.76))} type="button">−</button>
                 </div>
               </>
             )}
           </section>
 
-          <aside className="map-detail-drawer" aria-label="节点详情">
+          <aside className="map-detail-drawer" aria-label={t('maps.nodeDetails')}>
             {!map || !selectedNode ? (
-              <EmptyState title="选择一个节点" body="点击地图里的节点后，这里会展示摘要、来源和关联关系。" />
+              <EmptyState title={t('maps.selectNode')} body={t('maps.selectNodeHint')} />
             ) : (
               <>
                 <div className="map-node-detail-head">
                   <span>{mapKindLabel(selectedNode.kind)}</span>
                   <h3>{selectedNode.label}</h3>
-                  <p>{selectedNode.summary || '这个节点暂时没有摘要。'}</p>
+                  <p>{selectedNode.summary || t('maps.noSummary')}</p>
                 </div>
                 <div className="map-node-confidence">
                   <div>
-                    <span>Status</span>
+                    <span>{t('maps.statusLabel')}</span>
                     <strong className={`map-status-badge ${statusMeta.tone}`}>{statusMeta.label}</strong>
                   </div>
                   <div>
-                    <span>Connections</span>
+                    <span>{t('maps.connections')}</span>
                     <strong>{connectedNodeCount}</strong>
                   </div>
                 </div>
@@ -428,7 +437,7 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
                 )}
                 <section className="map-relation-panel">
                   <div className="map-relation-head">
-                    <h4>Relations</h4>
+                    <h4>{t('maps.relations')}</h4>
                     <span className="map-relation-count">{visibleRelations.length}/{selectedRelations.length}</span>
                   </div>
                   {relationTypes.length > 2 && (
@@ -440,7 +449,7 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
                           onClick={() => setRelationFilter(type)}
                           type="button"
                         >
-                          {type === 'all' ? '全部' : type}
+                          {type === 'all' ? t('maps.all') : (relationTypeLabelMap[type] ?? type)}
                         </button>
                       ))}
                     </div>
@@ -462,60 +471,62 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
                             if ((event.key === 'Enter' || event.key === ' ') && other) setSelectedNodeId(other.id);
                           }}
                         >
-                          <span>{edge.relation}</span>
+                          <span>{relationTypeLabelMap[edge.relation] ?? edge.relation}</span>
                           <strong>{other?.label ?? edge.targetId}</strong>
-                          <p>{isOutgoing ? 'Outgoing relation' : 'Incoming relation'}</p>
+                          <p>{isOutgoing ? t('maps.outgoingRelation') : t('maps.incomingRelation')}</p>
                         </article>
                       );
                     })}
-                    {selectedRelations.length === 0 && <EmptyState title="暂无关系" body="导入资料并生成卡片后，会出现来源关系。" />}
+                    {selectedRelations.length === 0 && <EmptyState title={t('maps.noRelations')} body={t('maps.noRelationsHint')} />}
                     {selectedRelations.length > 0 && visibleRelations.length === 0 && (
-                      <EmptyState title="无匹配关系" body="切换过滤条件查看更多关系。" />
+                      <EmptyState title={t('maps.noMatchingRelations')} body={t('maps.noMatchingRelationsHint')} />
                     )}
                   </div>
                 </section>
                 <div className="map-drawer-actions">
-                  <button onClick={() => setView(selectedNode.kind === 'material' ? 'library' : 'detail')} type="button">Open context</button>
-                  <button type="button" onClick={() => setRelationEditor({ targetId: '', relation: 'related_to' })}>Add relation</button>
+                  <button onClick={() => setView(selectedNode.kind === 'material' ? 'library' : 'detail')} type="button">{t('maps.openContext')}</button>
+                  <button type="button" onClick={() => setRelationEditor({ targetId: '', relation: 'related_to' })}>{t('maps.addRelation')}</button>
                 </div>
                 {relationEditor && (
                   <div className="map-relation-editor">
-                    <h4>添加关系</h4>
+                    <h4>{t('maps.addRelationTitle')}</h4>
                     <label>
-                      <span>目标节点</span>
+                      <span>{t('maps.targetNode')}</span>
                       <select
                         value={relationEditor.targetId}
                         onChange={(event) => setRelationEditor((current) => ({ ...current, targetId: event.target.value }))}
                       >
-                        <option value="">选择节点...</option>
+                        <option value="">{t('maps.selectTargetNode')}</option>
                         {nodes.filter((node) => node.id !== selectedNode.id).map((node) => (
                           <option key={node.id} value={node.id}>{node.label}</option>
                         ))}
                       </select>
                     </label>
                     <label>
-                      <span>关系类型</span>
+                      <span>{t('maps.relationType')}</span>
                       <select
                         value={relationEditor.relation}
                         onChange={(event) => setRelationEditor((current) => ({ ...current, relation: event.target.value }))}
                       >
-                        <option value="related_to">related_to</option>
-                        <option value="derived_from">derived_from</option>
-                        <option value="supports">supports</option>
-                        <option value="contradicts">contradicts</option>
+                        <option value="related_to">{t('maps.relationType.relatedTo')}</option>
+                        <option value="derived_from">{t('maps.relationType.derivedFrom')}</option>
+                        <option value="supports">{t('maps.relationType.supports')}</option>
+                        <option value="contradicts">{t('maps.relationType.contradicts')}</option>
                       </select>
                     </label>
                     <div className="map-relation-editor-actions">
-                      <button type="button" onClick={() => setRelationEditor(null)}>取消</button>
+                      <button type="button" onClick={() => setRelationEditor(null)}>{t('common.cancel')}</button>
                       <button
                         type="button"
                         disabled={!relationEditor.targetId}
                         onClick={() => {
-                          setStatus(`关系编辑功能需要后端 API 支持，已记录：${selectedNode.label} → ${relationEditor.relation} → ${nodes.find((n) => n.id === relationEditor.targetId)?.label ?? ''}`);
+                          const targetNode = nodes.find((n) => n.id === relationEditor.targetId);
+                          const relationLabel = relationTypeLabelMap[relationEditor.relation] ?? relationEditor.relation;
+                          setStatus(t('maps.status.relationDraft', { source: selectedNode.label, relation: relationLabel, target: targetNode?.label ?? '' }));
                           setRelationEditor(null);
                         }}
                       >
-                        保存
+                        {t('common.save')}
                       </button>
                     </div>
                   </div>

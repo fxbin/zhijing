@@ -21,7 +21,7 @@ import {
   SquareArrowOutUpRight,
   Users,
 } from 'lucide-react';
-import { materialMediaUrls } from '../utils/material';
+import { formatDate, formatTime, materialMediaUrls } from '../utils/material';
 import { formatPercent } from '../utils/format';
 import { extractConceptTags, groupCardsByType } from '../utils/knowledge';
 import { useCardTypeLabel, useClaimStatusLabel, useIntakeKindLabel, useParseStatusLabel } from '../utils/i18nLabels';
@@ -186,7 +186,7 @@ export default function DetailView({
         </div>
         <h3>{card.title}</h3>
         <p>{card.body}</p>
-        <footer>{claimStatusLabel(card.claimStatus)} · {card.updatedAt ? new Date(card.updatedAt).toLocaleDateString() : 'today'}</footer>
+        <footer>{claimStatusLabel(card.claimStatus)} · {card.updatedAt ? formatDate(card.updatedAt) : t('detail.today')}</footer>
       </article>
     );
   }
@@ -224,45 +224,45 @@ export default function DetailView({
   return (
     <section className="page-grid">
       <div className="page-main">
-        <p className="breadcrumb">Workspace / {detail.title}</p>
+        <p className="breadcrumb">{t('detail.breadcrumb.workspace')}{t('detail.breadcrumb.separator')}{detail.title}</p>
         <div className="page-title-row">
           <div>
-            <span className="status-chip">In Progress</span>
+            <span className="status-chip">{t('detail.inProgress')}</span>
             <h2>{detail.title}</h2>
             <p>{detail.summary}</p>
           </div>
           <div className="page-title-actions">
-            <button onClick={() => setView('chat')} type="button">Chat</button>
-            <button onClick={() => setView('recall')} type="button">Recall</button>
-            <button onClick={() => setView('export')} type="button">Export</button>
-            <button onClick={() => setView('workflow')} type="button">Run Kit</button>
+            <button onClick={() => setView('chat')} type="button">{t('nav.chat')}</button>
+            <button onClick={() => setView('recall')} type="button">{t('nav.recall')}</button>
+            <button onClick={() => setView('export')} type="button">{t('nav.export')}</button>
+            <button onClick={() => setView('workflow')} type="button">{t('detail.runKit')}</button>
           </div>
         </div>
         {analytics && (
-          <section className="detail-metrics" aria-label="知识库指标">
+          <section className="detail-metrics" aria-label={t('detail.metrics')}>
             <article>
-              <span>Sources</span>
+              <span>{t('detail.metric.sources')}</span>
               <strong>{totals?.materials ?? materials.length}</strong>
             </article>
             <article>
-              <span>Cards</span>
+              <span>{t('detail.metric.cards')}</span>
               <strong>{totals?.cards ?? cards.length}</strong>
             </article>
             <article>
-              <span>Sourced</span>
+              <span>{t('detail.metric.sourced')}</span>
               <strong>{formatPercent(analytics.sourcedRatio)}</strong>
             </article>
             <article>
-              <span>Tasks</span>
+              <span>{t('detail.metric.tasks')}</span>
               <strong>{totals?.tasks ?? 0}</strong>
             </article>
           </section>
         )}
         {cards.length > 0 && (
-          <section className="detail-analysis" aria-label="卡片与来源分析">
+          <section className="detail-analysis" aria-label={t('detail.analysis')}>
             <div className="analysis-head">
               <BarChart3 size={18} />
-              <strong>卡片类型分布</strong>
+              <strong>{t('detail.typeDistribution')}</strong>
             </div>
             <div className="analysis-bars">
               {Object.entries(cardGroups).map(([type, group]) => {
@@ -273,21 +273,21 @@ export default function DetailView({
                     <div className="analysis-bar-track">
                       <div className={`analysis-bar-fill type-${type}`} style={{ width: `${ratio}%` }} />
                     </div>
-                    <span className="analysis-bar-count">{group.length} ({ratio}%)</span>
+                    <span className="analysis-bar-count">{t('detail.analysisBarCount', { count: group.length, ratio })}</span>
                   </div>
                 );
               })}
             </div>
             <div className="analysis-coverage">
-              <span>来源覆盖率</span>
+              <span>{t('detail.coverage')}</span>
               <strong>{formatPercent(cards.length > 0 ? cards.filter((card) => card.claimStatus === 'sourced').length / cards.length : 0)}</strong>
-              <small>{cards.filter((card) => card.claimStatus === 'sourced').length} / {cards.length} 张已溯源</small>
+              <small>{t('detail.sourcedCount', { sourced: cards.filter((card) => card.claimStatus === 'sourced').length, total: cards.length })}</small>
             </div>
           </section>
         )}
         <div className="detail-layout">
           <aside className="roadmap">
-            <h3>Roadmap</h3>
+            <h3>{t('detail.roadmap')}</h3>
             {roadmapCards.map((card, index) => (
               <div
                 className={`roadmap-node ${index === 0 ? 'active' : ''} ${card.claimStatus === 'sourced' ? 'done' : ''}`}
@@ -296,12 +296,12 @@ export default function DetailView({
                 onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') handleRoadmapNodeClick(card.id); }}
                 role="button"
                 tabIndex={0}
-                title="点击跳转到对应卡片"
+                title={t('detail.roadmapNodeTitle')}
               >
                 <span className="roadmap-index">{index + 1}</span>
                 <div className="roadmap-body">
                   <strong>{card.title}</strong>
-                  <small>{card.claimStatus === 'sourced' ? '已溯源' : 'AI 骨架，待补充来源'}</small>
+                  <small>{card.claimStatus === 'sourced' ? claimStatusLabel('sourced') : t('detail.pendingSource')}</small>
                 </div>
               </div>
             ))}
@@ -310,24 +310,24 @@ export default function DetailView({
             <div className="panel-title">
               <Users size={20} />
               <div>
-                <span>Entities</span>
-                <h4>实体清单</h4>
+                <span>{t('detail.entities')}</span>
+                <h4>{t('detail.entityList')}</h4>
               </div>
               <button
                 className="entity-extract-btn"
                 type="button"
                 onClick={extractEntitiesAction}
                 disabled={extracting || cards.length === 0}
-                title={cards.length === 0 ? '需要先生成知识卡片' : '从当前卡片中提取实体'}
+                title={cards.length === 0 ? t('detail.extractEntitiesDisabled') : t('detail.extractEntities')}
               >
-                {extracting ? '提取中…' : '提取实体'}
+                {extracting ? t('detail.extracting') : t('detail.extractEntities')}
               </button>
             </div>
             {entityError && <p className="entity-error">{entityError}</p>}
             {loadingEntities ? (
-              <p className="entity-empty">加载中…</p>
+              <p className="entity-empty">{t('common.loading')}</p>
             ) : entities.length === 0 ? (
-              <p className="entity-empty">暂无实体。点击「提取实体」从知识库卡片中识别人物、组织、概念、工具等。</p>
+              <p className="entity-empty">{t('detail.noEntities')}</p>
             ) : (
               <ul className="entity-list">
                 {entities.map((entity) => (
@@ -337,7 +337,7 @@ export default function DetailView({
                       <span className="entity-type-badge">{ENTITY_TYPE_LABELS[entity.type] ?? entity.type}</span>
                     </div>
                     <p>{entity.description}</p>
-                    <small>{entity.sourceCardIds.length} 张卡片提及</small>
+                    <small>{t('detail.mentionedInCards', { count: entity.sourceCardIds.length })}</small>
                   </li>
                 ))}
               </ul>
@@ -345,11 +345,11 @@ export default function DetailView({
           </section>
           <section className="feed">
             <div className="tabs">
-              <button className={feedMode === 'feed' ? 'active' : ''} onClick={() => setFeedMode('feed')} type="button">Structured Feed</button>
-              <button className={feedMode === 'cluster' ? 'active' : ''} onClick={() => setFeedMode('cluster')} type="button">Connections</button>
+              <button className={feedMode === 'feed' ? 'active' : ''} onClick={() => setFeedMode('feed')} type="button">{t('detail.structuredFeed')}</button>
+              <button className={feedMode === 'cluster' ? 'active' : ''} onClick={() => setFeedMode('cluster')} type="button">{t('detail.connections')}</button>
             </div>
             {cards.length === 0 ? (
-              <EmptyState title="暂无知识卡片" body="创建主题或导入资料后，这里会生成结构化卡片。" />
+              <EmptyState title={t('detail.noCards')} body={t('detail.noCardsHint')} />
             ) : feedMode === 'feed' ? (
               <>
                 <div className="feed-controls">
@@ -395,8 +395,7 @@ export default function DetailView({
                           key={type}
                           className={`feed-dist-segment type-${type}`}
                           style={{ width: `${ratio}%` }}
-                          title={`${cardTypeLabel(type)}: ${group.length} (${ratio}%)`}
-                        >
+                          title={t('detail.distributionTooltip', { label: cardTypeLabel(type), count: group.length, ratio })}>
                           <span className="feed-dist-label">{cardTypeLabel(type)}</span>
                           <span className="feed-dist-count">{group.length}</span>
                         </div>
@@ -432,7 +431,7 @@ export default function DetailView({
                             <div>
                               <i className={`feed-group-dot ${type}`} />
                               <strong>{cardTypeLabel(type)}</strong>
-                              <small>{group.length} 张</small>
+                          <small>{t('detail.cardCount', { count: group.length })}</small>
                             </div>
                             {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
                           </header>
@@ -458,7 +457,7 @@ export default function DetailView({
                     <header className="cluster-head">
                       <i className={`cluster-type-dot ${type}`} />
                       <strong>{cardTypeLabel(type)}</strong>
-                      <small>{group.length} 张</small>
+                      <small>{t('detail.cardCount', { count: group.length })}</small>
                     </header>
                     {group.map((card) => (
                       <article className={`knowledge-card type-${type}`} key={card.id ?? card.title}>
@@ -477,7 +476,7 @@ export default function DetailView({
               <div className="concept-tags">
                 <div className="concept-tags-head">
                   <Sparkles size={16} />
-                  <strong>Related Concepts</strong>
+                  <strong>{t('detail.relatedConcepts')}</strong>
                 </div>
                 <div className="concept-tag-list">
                   {conceptTags.map((tag) => (
@@ -486,7 +485,7 @@ export default function DetailView({
                 </div>
               </div>
             )}
-            {materials.length === 0 && <EmptyState title="暂无来源资料" body="保存链接后，来源会作为可追溯依据显示在这里。" />}
+            {materials.length === 0 && <EmptyState title={t('detail.noMaterials')} body={t('detail.noMaterialsHint')} />}
             {materials.map((material) => (
               <article className="source-strip" key={material.id ?? material.title}>
                 <BookOpen size={22} />
@@ -494,7 +493,7 @@ export default function DetailView({
                   <strong>{material.title}</strong>
                   <span>
                     {material.platform ?? intakeKindLabel(material.type)} · {parseStatusLabel(material.parseStatus)}
-                    {materialMediaUrls(material).length > 0 ? ` · ${materialMediaUrls(material).length} 个媒体` : ''}
+                    {materialMediaUrls(material).length > 0 ? ` · ${t('detail.mediaCount', { count: materialMediaUrls(material).length })}` : ''}
                   </span>
                   <MediaPreview urls={materialMediaUrls(material)} compact />
                 </div>
@@ -513,13 +512,13 @@ export default function DetailView({
         </div>
       </div>
       <aside className="assistant-panel">
-        <h3>AI Assistant</h3>
-        <p>当前知识库有 {detail.sourceCount ?? materials.length} 条资料、{detail.cardCount ?? cards.length} 张卡片。</p>
+        <h3>{t('detail.aiAssistant')}</h3>
+        <p>{t('detail.sourceOverview', { sources: detail.sourceCount ?? materials.length, cards: detail.cardCount ?? cards.length })}</p>
         {analytics && (
           <section className="source-health">
             <div>
-              <strong>Source Health</strong>
-              <span>{analytics.generatedAt ? new Date(analytics.generatedAt).toLocaleTimeString() : 'now'}</span>
+              <strong>{t('detail.sourceHealth')}</strong>
+              <span>{analytics.generatedAt ? formatTime(analytics.generatedAt) : t('detail.now')}</span>
             </div>
             <div className="health-list">
               {statusDistribution.map((item) => (
@@ -537,10 +536,10 @@ export default function DetailView({
         <div className="assistant-thread">
           <div className="assistant-message">
             <Sparkles size={19} />
-            <p>{artifacts[0]?.body ?? '我会基于当前知识库里的资料和卡片回答问题。'}</p>
+            <p>{artifacts[0]?.body ?? t('detail.answerHint')}</p>
           </div>
           {assistantAnswer?.question && <div className="chat-user">{assistantAnswer.question}</div>}
-          {assistantAnswer?.loading && <div className="assistant-message pending"><Clock3 size={19} /><p>正在整理当前知识库里的资料和卡片...</p></div>}
+          {assistantAnswer?.loading && <div className="assistant-message pending"><Clock3 size={19} /><p>{t('detail.loadingAnswer')}</p></div>}
           {assistantAnswer?.error && <div className="assistant-message failed"><CircleX size={19} /><p>{assistantAnswer.error}</p></div>}
           {assistantAnswer?.message && (
             <div className="assistant-message">
@@ -559,9 +558,9 @@ export default function DetailView({
                 )}
                 {assistantAnswer.citations && (
                   <div className="citation-list">
-                    <strong>引用来源</strong>
+                    <strong>{t('detail.citations')}</strong>
                     {latestCitations.length === 0 ? (
-                      <p>当前回答没有可用来源，属于 AI 骨架内容。</p>
+                      <p>{t('detail.noCitations')}</p>
                     ) : latestCitations.slice(0, 6).map((citation) => (
                       <SourceCitation key={citation.id} citation={citation} cards={cards} materials={materials} />
                     ))}
@@ -569,7 +568,7 @@ export default function DetailView({
                 )}
                 {assistantAnswer.artifact && (
                   <button className="assistant-link-button" onClick={() => onOpenArtifact(assistantAnswer.artifact)} type="button">
-                    Open Artifact
+                    {t('detail.openArtifact')}
                     <SquareArrowOutUpRight size={15} />
                   </button>
                 )}
@@ -578,10 +577,10 @@ export default function DetailView({
           )}
         </div>
         {questionHistory.length > 0 && (
-          <section className="question-history" aria-label="最近问题">
+          <section className="question-history" aria-label={t('detail.questionHistory')}>
             <div className="question-history-head">
               <History size={16} />
-              <strong>Recent Questions</strong>
+              <strong>{t('detail.questionHistory')}</strong>
             </div>
             {questionHistory.map((material) => (
               <button key={material.id ?? material.title} onClick={() => setAssistantQuestion(material.rawInput ?? material.title)} type="button">
@@ -592,16 +591,16 @@ export default function DetailView({
         )}
         <div className="assistant-input">
           <input
-            aria-label="向当前知识库提问"
+            aria-label={t('detail.askPlaceholderOnline')}
             disabled={!canAsk}
             onChange={(event) => setAssistantQuestion(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') onAsk();
             }}
-            placeholder={apiStatus === 'online' && selectedKnowledgeBaseId ? 'Ask this knowledge base...' : 'Select a synced knowledge base first'}
+            placeholder={apiStatus === 'online' && selectedKnowledgeBaseId ? t('detail.askPlaceholderOnline') : t('detail.askPlaceholderOffline')}
             value={assistantQuestion}
           />
-          <button disabled={!canAsk || !assistantQuestion.trim()} onClick={onAsk} title="Ask" type="button">
+          <button disabled={!canAsk || !assistantQuestion.trim()} onClick={onAsk} title={t('detail.askTitle')} type="button">
             <Send size={18} />
           </button>
         </div>

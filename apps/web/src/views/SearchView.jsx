@@ -4,6 +4,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Layers, Search, Sparkles } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { searchScopeOptions } from '../constants/options';
@@ -14,11 +15,12 @@ import { resultIcon } from '../utils/material';
  * @returns {JSX.Element} 搜索视图
  */
 export default function SearchView() {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState('all');
   const [results, setResults] = useState([]);
   const [counts, setCounts] = useState({});
-  const [status, setStatus] = useState('输入关键词后搜索当前知识库资产。');
+  const [status, setStatus] = useState(t('search.initialStatus'));
   const [isSearching, setIsSearching] = useState(false);
 
   const visibleResults = results.filter((result) => scope === 'all' || result.kind === scope);
@@ -42,7 +44,7 @@ export default function SearchView() {
     const buckets = {};
     for (const result of visibleResults) {
       const key = result.knowledgeBaseId ?? 'unassigned';
-      if (!buckets[key]) buckets[key] = { id: key, title: result.metadata?.knowledgeBaseTitle ?? `知识库 ${key.slice(0, 8)}`, count: 0, results: [] };
+      if (!buckets[key]) buckets[key] = { id: key, title: result.metadata?.knowledgeBaseTitle ?? t('search.unassignedKnowledgeBase', { id: key.slice(0, 8) }), count: 0, results: [] };
       buckets[key].count += 1;
       buckets[key].results.push(result);
     }
@@ -53,7 +55,7 @@ export default function SearchView() {
     const value = nextQuery.trim();
     if (!value || isSearching) return;
     setIsSearching(true);
-    setStatus('Searching...');
+    setStatus(t('search.status.searching'));
     try {
       const params = new URLSearchParams({ q: value, limit: '80' });
       const response = await fetch(`/api/search?${params.toString()}`);
@@ -61,9 +63,9 @@ export default function SearchView() {
       const body = await response.json();
       setResults(body.results ?? []);
       setCounts(body.counts ?? {});
-      setStatus((body.results ?? []).length ? `${body.results.length} results found.` : '没有找到匹配结果。');
+      setStatus((body.results ?? []).length ? t('search.resultsFound', { count: body.results.length }) : t('search.noResults'));
     } catch {
-      setStatus('搜索失败，请确认 API 正在运行。');
+      setStatus(t('search.status.failed'));
       setResults([]);
       setCounts({});
     } finally {
@@ -75,8 +77,8 @@ export default function SearchView() {
     <section className="page-main full">
       <div className="page-title-row">
         <div>
-          <h2>Semantic Search</h2>
-          <p>从知识库、资料、卡片和产物里快速定位线索。</p>
+          <h2>{t('search.title')}</h2>
+          <p>{t('search.subtitle')}</p>
         </div>
       </div>
 
@@ -84,23 +86,23 @@ export default function SearchView() {
         <div className="large-search">
           <Search size={24} />
           <input
-            aria-label="搜索知识资产"
+            aria-label={t('search.searchAssets')}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') runSearch();
             }}
-            placeholder="Search knowledge assets..."
+            placeholder={t('search.placeholder')}
           />
           <button disabled={isSearching || !query.trim()} onClick={() => runSearch()} type="button">
-            {isSearching ? 'Searching' : 'Search'}
+            {isSearching ? t('search.searching') : t('common.search')}
           </button>
         </div>
 
         <div className="search-scope-bar">
           {searchScopeOptions.map((option) => (
             <button className={scope === option.key ? 'active' : ''} key={option.key} onClick={() => setScope(option.key)} type="button">
-              {option.label}
+              {t(option.label)}
               {option.key !== 'all' && <span>{counts[option.key] ?? 0}</span>}
             </button>
           ))}
@@ -110,7 +112,7 @@ export default function SearchView() {
       <p className="search-status">{status}</p>
 
       {visibleResults.length === 0 && !isSearching ? (
-        <EmptyState title="暂无搜索结果" body="可以搜索主题名、资料内容、卡片标题或产物正文。" />
+        <EmptyState title={t('search.noResults')} body={t('search.noResultsHint')} />
       ) : (
         <div className="search-layout">
           <div className="search-results">
@@ -135,7 +137,7 @@ export default function SearchView() {
                       <Icon size={23} />
                       <div>
                         <div className="search-result-meta">
-                          <span>{result.kind.replace('_', ' ')}</span>
+                          <span>{t(`search.kind.${result.kind}`)}</span>
                           {Object.entries(result.metadata ?? {}).slice(0, 3).map(([key, value]) => (
                             <span key={key}>{String(value)}</span>
                           ))}
@@ -154,12 +156,12 @@ export default function SearchView() {
                 })}
           </div>
           {visibleResults.length > 0 && discoveryTags.length > 0 && (
-            <aside className="discovery-panel" aria-label="语义发现">
+            <aside className="discovery-panel" aria-label={t('search.discovery')}>
               <header className="discovery-head">
                 <Sparkles size={18} />
-                <strong>Semantic Discovery</strong>
+                <strong>{t('search.discovery')}</strong>
               </header>
-              <p>基于当前结果推荐的方向，点击直接发起搜索。</p>
+              <p>{t('search.discoveryHint')}</p>
               <div className="discovery-tags">
                 {discoveryTags.map((tag) => (
                   <button
@@ -179,14 +181,14 @@ export default function SearchView() {
                 <div className="discovery-clusters">
                   <header className="discovery-head">
                     <Layers size={18} />
-                    <strong>结果聚类</strong>
+                    <strong>{t('search.clustering')}</strong>
                   </header>
-                  <p>按知识库分组，查看结果分布。</p>
+                  <p>{t('search.clusteringHint')}</p>
                   <div className="cluster-list">
                     {resultClusters.map((cluster) => (
                       <div className="cluster-summary" key={cluster.id}>
                         <strong>{cluster.title}</strong>
-                        <span>{cluster.count} 项</span>
+                        <span>{t('search.clusterCount', { count: cluster.count })}</span>
                       </div>
                     ))}
                   </div>
