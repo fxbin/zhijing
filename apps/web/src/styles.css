@@ -1844,15 +1844,17 @@ button { cursor: pointer; }
 
 .feed-board {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   overflow-x: auto;
-  padding-bottom: 8px;
+  padding-bottom: 4px;
 }
 
 .feed-column {
   display: flex;
   flex-direction: column;
-  flex: 0 0 280px;
+  flex: 1 1 0;
+  min-width: 200px;
+  max-width: 360px;
   max-height: calc(100vh - 340px);
   border: 1px solid var(--line-soft);
   border-radius: 12px;
