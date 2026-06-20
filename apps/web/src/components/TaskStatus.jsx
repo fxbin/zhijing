@@ -12,7 +12,6 @@ import { useTaskStatusLabel, useTaskWorkflowLabel } from '../utils/i18nLabels';
  * @returns {JSX.Element|null} 任务状态区块
  */
 export default function TaskStatus({ task }) {
-  const { t } = useTranslation();
   const taskStatusLabel = useTaskStatusLabel();
   const taskWorkflowLabel = useTaskWorkflowLabel();
   if (!task) return null;
