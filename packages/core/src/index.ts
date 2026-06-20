@@ -5024,13 +5024,22 @@ function resolveMaterialConflict(keepId: string, dropIds: string[]): string {
       throw new KnowledgeCoreError(`Material ${dropId} not found.`, 404);
     }
   }
-  for (const card of repository.listCards(keepMaterial.knowledgeBaseId)) {
+  const affectedKnowledgeBaseIds = new Set<string>([keepMaterial.knowledgeBaseId]);
+  for (const card of repository.listCards()) {
     if (card.materialId && dropIds.includes(card.materialId)) {
+      affectedKnowledgeBaseIds.add(card.knowledgeBaseId);
       repository.updateCard({ ...card, materialId: keepId, updatedAt: new Date().toISOString() });
     }
   }
   for (const dropId of dropIds) {
+    const dropMaterial = repository.findMaterial(dropId);
+    if (dropMaterial) {
+      affectedKnowledgeBaseIds.add(dropMaterial.knowledgeBaseId);
+    }
     repository.deleteMaterial(dropId);
+  }
+  for (const knowledgeBaseId of affectedKnowledgeBaseIds) {
+    reconcileKnowledgeBaseStats(knowledgeBaseId);
   }
   return keepMaterial.knowledgeBaseId;
 }
