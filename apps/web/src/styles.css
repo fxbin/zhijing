@@ -1425,6 +1425,11 @@ button { cursor: pointer; }
   margin: 0 auto;
 }
 
+.page-grid.detail-page {
+  max-width: none;
+  margin: 0;
+}
+
 .page-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
@@ -1513,8 +1518,24 @@ button { cursor: pointer; }
 .detail-layout {
   display: grid;
   grid-template-columns: minmax(0, 310px) minmax(0, 1fr);
+  grid-template-rows: auto auto;
   gap: 32px;
   min-width: 0;
+}
+
+.detail-layout > .roadmap {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.detail-layout > .entity-panel {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.detail-layout > .feed {
+  grid-column: 2;
+  grid-row: 1 / -1;
 }
 
 .detail-metrics {
@@ -1926,16 +1947,18 @@ button { cursor: pointer; }
 }
 
 .feed-board {
-  display: grid;
-  grid-template-columns: repeat(var(--column-count, auto-fit), minmax(140px, 1fr));
-  gap: 10px;
+  display: flex;
+  gap: 16px;
   overflow-x: auto;
+  align-items: flex-start;
   padding-bottom: 4px;
 }
 
 .feed-column {
   display: flex;
+  flex: 0 0 280px;
   flex-direction: column;
+  width: 280px;
   min-width: 0;
   max-height: calc(100vh - 340px);
   border: 1px solid var(--line-soft);

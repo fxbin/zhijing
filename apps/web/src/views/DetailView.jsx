@@ -222,7 +222,7 @@ export default function DetailView({
   };
 
   return (
-    <section className="page-grid">
+    <section className="page-grid detail-page">
       <div className="page-main">
         <p className="breadcrumb">{t('detail.breadcrumb.workspace')}{t('detail.breadcrumb.separator')}{detail.title}</p>
         <div className="page-title-row">
@@ -404,10 +404,7 @@ export default function DetailView({
                   </div>
                 </div>
                 {feedViewMode === 'board' ? (
-                  <div
-                    className="feed-board"
-                    style={{ '--column-count': filteredSortedGroupEntries.length }}
-                  >
+                  <div className="feed-board">
                     {filteredSortedGroupEntries.map(([type, group]) => (
                       <section className="feed-column" key={type}>
                         <header className="feed-column-head">
