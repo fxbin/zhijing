@@ -158,6 +158,12 @@ export interface KnowledgeBaseSummary {
   updatedAt: string;
 }
 
+/**
+ * 资料归档状态。
+ * @author fxbin
+ */
+export type ArchiveStatus = 'active' | 'archived';
+
 export interface MaterialRecord {
   id: string;
   knowledgeBaseId: string;
@@ -172,6 +178,7 @@ export interface MaterialRecord {
   parseError?: string;
   createdAt: string;
   statusTimeline?: MaterialStatusTimeline;
+  archived?: boolean;
 }
 
 export interface CardRecall {
@@ -194,6 +201,7 @@ export interface KnowledgeCard {
   recall?: CardRecall;
   createdAt: string;
   updatedAt: string;
+  archived?: boolean;
 }
 
 export type CardRevisionField = 'title' | 'body' | 'type' | 'claimStatus';
@@ -455,6 +463,27 @@ export interface KnowledgeBaseDetail extends KnowledgeBaseSummary {
   artifacts: ArtifactRecord[];
 }
 
+/**
+ * 单条归档操作结果。
+ * @author fxbin
+ */
+export interface ArchiveItemResult {
+  id: string;
+  knowledgeBaseId: string;
+  kind: 'material' | 'card';
+  archived: boolean;
+}
+
+/**
+ * 归档列表聚合结果。
+ * @author fxbin
+ */
+export interface ArchivedItemsResult {
+  materials: MaterialRecord[];
+  cards: KnowledgeCard[];
+  knowledgeBases: KnowledgeBaseSummary[];
+}
+
 export interface AnalyticsDistributionItem {
   name: string;
   count: number;
@@ -514,6 +543,60 @@ export interface KnowledgeMapResult {
     cards: number;
     sourcedCards: number;
   };
+}
+
+export interface GlobalInsights {
+  generatedAt: string;
+  totals: {
+    knowledgeBases: number;
+    materials: number;
+    cards: number;
+    sourcedCards: number;
+    artifacts: number;
+    tasks: number;
+  };
+  growth: {
+    labels: string[];
+    data: number[];
+  };
+  sourceDistribution: {
+    name: string;
+    count: number;
+    ratio: number;
+  }[];
+  recentCards: {
+    id: string;
+    knowledgeBaseId: string;
+    knowledgeBaseTitle: string;
+    title: string;
+    type: CardType;
+    claimStatus: ClaimStatus;
+    createdAt: string;
+  }[];
+  mapPreview: {
+    nodeCount: number;
+    edgeCount: number;
+    knowledgeBaseCount: number;
+  };
+}
+
+export interface PathStep {
+  id: string;
+  order: number;
+  title: string;
+  description: string;
+  cardId?: string;
+  status: 'completed' | 'current' | 'locked';
+  type: CardType | 'general';
+}
+
+export interface KnowledgeBasePath {
+  knowledgeBaseId: string;
+  knowledgeBaseTitle: string;
+  generatedAt: string;
+  steps: PathStep[];
+  currentStepIndex: number;
+  completedCount: number;
 }
 
 export interface KnowledgeMapNodePosition {

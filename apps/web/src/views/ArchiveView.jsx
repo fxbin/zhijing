@@ -1,0 +1,199 @@
+/**
+ * 归档视图：管理已归档的资料与卡片，支持按知识库筛选与恢复。
+ * @module views/ArchiveView
+ */
+
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Archive, FileText, RotateCcw, StickyNote } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
+import { useCardTypeLabel } from '../utils/i18nLabels';
+import { formatDate } from '../utils/material';
+
+/**
+ * 归档视图组件。
+ * @param {object} props - 组件属性
+ * @param {string|null} props.selectedKnowledgeBaseId - 当前选中的知识库 ID
+ * @param {Function} props.setView - 视图切换回调
+ * @returns {JSX.Element} 归档视图
+ */
+export default function ArchiveView({ selectedKnowledgeBaseId, setView }) {
+  const { t } = useTranslation();
+  const cardTypeLabel = useCardTypeLabel();
+  const [items, setItems] = useState({ materials: [], cards: [], knowledgeBases: [] });
+  const [filterBaseId, setFilterBaseId] = useState(selectedKnowledgeBaseId ?? 'all');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [actionId, setActionId] = useState(null);
+
+  useEffect(() => {
+    setFilterBaseId(selectedKnowledgeBaseId ?? 'all');
+  }, [selectedKnowledgeBaseId]);
+
+  useEffect(() => {
+    let ignore = false;
+    async function loadArchive() {
+      setLoading(true);
+      setError('');
+      try {
+        const query = filterBaseId && filterBaseId !== 'all' ? `?knowledgeBaseId=${encodeURIComponent(filterBaseId)}` : '';
+        const response = await fetch(`/api/archive${query}`);
+        if (!response.ok) throw new Error('Archive unavailable.');
+        const payload = await response.json();
+        if (!ignore) setItems(payload);
+      } catch {
+        if (!ignore) setError(t('archive.loadError'));
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    }
+    loadArchive();
+    return () => { ignore = true; };
+  }, [filterBaseId, t]);
+
+  const allItems = useMemo(() => {
+    const materials = (items.materials ?? []).map((item) => ({ ...item, kind: 'material' }));
+    const cards = (items.cards ?? []).map((item) => ({ ...item, kind: 'card' }));
+    return [...materials, ...cards].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }, [items]);
+
+  const knowledgeBaseMap = useMemo(() => {
+    const map = new Map();
+    for (const base of items.knowledgeBases ?? []) {
+      map.set(base.id, base.title);
+    }
+    return map;
+  }, [items.knowledgeBases]);
+
+  async function restore(item) {
+    const endpoint = item.kind === 'material'
+      ? `/api/materials/${item.id}/unarchive`
+      : `/api/cards/${item.id}/unarchive`;
+    setActionId(item.id);
+    try {
+      const response = await fetch(endpoint, { method: 'POST' });
+      if (!response.ok) throw new Error('Restore failed.');
+      setItems((current) => ({
+        ...current,
+        materials: item.kind === 'material'
+          ? current.materials.filter((m) => m.id !== item.id)
+          : current.materials,
+        cards: item.kind === 'card'
+          ? current.cards.filter((c) => c.id !== item.id)
+          : current.cards,
+      }));
+    } catch {
+      setError(t('archive.restoreError'));
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="page-main full archive-page">
+        <div className="archive-header skeleton">
+          <div className="skeleton-line title" />
+          <div className="skeleton-line subtitle" />
+        </div>
+        <div className="archive-list skeleton">
+          <div className="archive-row skeleton" />
+          <div className="archive-row skeleton" />
+          <div className="archive-row skeleton" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page-main full archive-page">
+        <EmptyState
+          icon={Archive}
+          title={t('archive.errorTitle')}
+          body={error}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="page-main full archive-page">
+      <header className="archive-header">
+        <div>
+          <h1>{t('archive.title')}</h1>
+          <p>{t('archive.subtitle')}</p>
+        </div>
+        <div className="archive-toolbar">
+          <select
+            value={filterBaseId}
+            onChange={(event) => setFilterBaseId(event.target.value)}
+            aria-label={t('archive.filterLabel')}
+          >
+            <option value="all">{t('archive.allBases')}</option>
+            {items.knowledgeBases.map((base) => (
+              <option key={base.id} value={base.id}>{base.title}</option>
+            ))}
+          </select>
+        </div>
+      </header>
+
+      <section className="archive-stats">
+        <div className="stat-pill">
+          <FileText size={18} />
+          <span>{t('archive.materialCount', { count: items.materials.length })}</span>
+        </div>
+        <div className="stat-pill">
+          <StickyNote size={18} />
+          <span>{t('archive.cardCount', { count: items.cards.length })}</span>
+        </div>
+      </section>
+
+      {allItems.length === 0 ? (
+        <EmptyState
+          icon={Archive}
+          title={t('archive.emptyTitle')}
+          body={t('archive.emptyBody')}
+        />
+      ) : (
+        <ul className="archive-list">
+          {allItems.map((item) => {
+            const isMaterial = item.kind === 'material';
+            const Icon = isMaterial ? FileText : StickyNote;
+            const meta = isMaterial
+              ? [t('archive.kindMaterial'), item.platform || t('archive.local'), formatDate(item.createdAt)]
+              : [t('archive.kindCard'), cardTypeLabel(item.type), formatDate(item.createdAt)];
+            return (
+              <li key={`${item.kind}_${item.id}`} className="archive-row">
+                <div className="archive-row-icon">
+                  <Icon size={20} />
+                </div>
+                <div className="archive-row-body">
+                  <strong>{item.title}</strong>
+                  <span className="archive-row-meta">
+                    {meta.join(' · ')}
+                    {item.knowledgeBaseId && (
+                      <span className="archive-row-base">
+                        {' · '}
+                        {knowledgeBaseMap.get(item.knowledgeBaseId) ?? item.knowledgeBaseId}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <button
+                  className="archive-restore"
+                  disabled={actionId === item.id}
+                  onClick={() => restore(item)}
+                  type="button"
+                >
+                  <RotateCcw size={16} />
+                  {t('archive.restore')}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}

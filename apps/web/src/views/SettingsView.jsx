@@ -504,6 +504,88 @@ export default function SettingsView() {
     { key: 'dataControls', label: t('settings.dataControls'), icon: Database },
   ];
 
+  /**
+   * 渲染右侧上下文相关的状态摘要
+   * @returns {JSX.Element} 状态摘要面板
+   */
+  function renderStatusSidebar() {
+    if (activeSection === 'profiles') {
+      return (
+        <>
+          <div className="status-card">
+            <ShieldCheck size={25} />
+            <div>
+              <span>{t('settings.currentRuntime')}</span>
+              <strong>{formatDisplayName(provider) || t('settings.provider')} / {formatDisplayName(model) || t('settings.model')}</strong>
+              {hasApiKey ? (
+                <p>{t('settings.keyConfigured')} ({t(KEY_SOURCE_KEYS[keySource])})</p>
+              ) : (
+                <p>{t('settings.keyNotConfigured')}</p>
+              )}
+              {updatedAt && <small>{t('settings.lastSaved')}: {formatDateTime(updatedAt)}</small>}
+            </div>
+          </div>
+          <div className="status-card">
+            <Settings size={25} />
+            <div>
+              <span>{t('settings.policy')}</span>
+              <strong>{enabled ? t('settings.realModelFirst') : t('settings.mockOnly')}</strong>
+              <p>{fallbackToMock ? t('settings.fallbackHint') : t('settings.noFallbackHint')}</p>
+            </div>
+          </div>
+          <p className="settings-note">{status}</p>
+          {testResult && (
+            <div className={`test-result ${testResult.ok ? 'ok' : 'failed'}`}>
+              <strong>{testResult.ok ? t('settings.testPassed') : t('settings.testNotPassed')}</strong>
+              <p>{testResult.message}</p>
+              {testResult.sampleTitle && <small>{t('settings.returnedCard')}{testResult.sampleTitle}</small>}
+            </div>
+          )}
+        </>
+      );
+    }
+
+    if (activeSection === 'transparency') {
+      return (
+        <>
+          <div className="status-card">
+            <BarChart3 size={25} />
+            <div>
+              <span>{t('settings.systemTransparency')}</span>
+              <strong>{systemStats?.apiOnline ? t('settings.online') : t('settings.offline')}</strong>
+              <p>{t('settings.transparencyHint')}</p>
+            </div>
+          </div>
+          {systemStats && (
+            <div className="status-card">
+              <Database size={25} />
+              <div>
+                <span>{t('settings.dataScale')}</span>
+                <strong>{t('settings.dataScaleCount', { kb: systemStats.knowledgeBases, materials: systemStats.materials })}</strong>
+                <p>{t('settings.tasksRecorded', { count: systemStats.tasks })}</p>
+              </div>
+            </div>
+          )}
+          <p className="settings-note">{status}</p>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <div className="status-card">
+          <Database size={25} />
+          <div>
+            <span>{t('settings.dataSafety')}</span>
+            <strong>{t('settings.dataControls')}</strong>
+            <p>{t('settings.dataSafetyHint')}</p>
+          </div>
+        </div>
+        <p className="settings-note">{status}</p>
+      </>
+    );
+  }
+
   return (
     <section className="page-main full settings-page">
       <div className="page-title-row">
@@ -544,58 +626,7 @@ export default function SettingsView() {
               </div>
             </div>
 
-            <div className="settings-actions">
-              <button type="button" onClick={openCreateForm}>
-                <Plus size={16} />
-                {t('settings.createProfile')}
-              </button>
-            </div>
-
-            {profiles.length === 0 ? (
-              <p className="settings-note">{t('settings.noProfiles')}</p>
-            ) : (
-              <div className="settings-profile-list">
-                {profiles.map((profile) => (
-                  <div
-                    key={profile.id}
-                    className={`settings-profile-item ${selectedProfileId === profile.id ? 'selected' : ''}`}
-                  >
-                    <button
-                      className="settings-profile-info"
-                      onClick={() => selectProfile(profile.id)}
-                      type="button"
-                    >
-                      <Star size={22} fill={profile.isDefault ? 'currentColor' : 'none'} />
-                      <div>
-                        <strong>
-                          {profile.name}
-                          {profile.isDefault ? ` · ${t('settings.activated')}` : ''}
-                        </strong>
-                        <span>{formatDisplayName(profile.provider)} / {formatDisplayName(profile.model)}</span>
-                        <small>
-                          {profile.hasApiKey
-                            ? `${t('settings.keyConfigured')}（${t(KEY_SOURCE_KEYS[profile.keySource])}）`
-                            : t('settings.keyNotConfigured')}
-                        </small>
-                      </div>
-                    </button>
-                    <div className="settings-profile-actions">
-                      {!profile.isDefault && (
-                        <button type="button" onClick={() => activateProfile(profile.id)}>
-                          {t('settings.activate')}
-                        </button>
-                      )}
-                      <button type="button" className="danger" onClick={() => deleteProfile(profile.id)}>
-                        <Trash2 size={16} />
-                        {t('common.delete')}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {showCreateForm && (
+            {showCreateForm ? (
               <div style={CREATE_FORM_STYLE}>
                 <strong>{t('settings.createProfile')}</strong>
                 <label className="field-row">
@@ -640,75 +671,138 @@ export default function SettingsView() {
                   <button type="button" onClick={() => setShowCreateForm(false)}>{t('common.cancel')}</button>
                 </div>
               </div>
-            )}
-
-            {selectedProfile && !showCreateForm && (
-              <>
-                <div className="settings-toggles">
-                  <label className="field-row">
-                    <span>{t('settings.profileName')}</span>
-                    <input
-                      autoComplete="off"
-                      type="text"
-                      value={profileName}
-                      onChange={(event) => setProfileName(event.target.value)}
-                    />
-                  </label>
-                </div>
-
-                <label className="field-row">
-                  <span>{t('settings.provider')}</span>
-                  <select value={provider} onChange={(event) => changeProvider(event.target.value)}>
-                    {providerOptions.map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
-                  </select>
-                </label>
-
-                <label className="field-row">
-                  <span>{t('settings.model')}</span>
-                  <select value={model} onChange={(event) => setModel(event.target.value)}>
-                    {modelOptions.map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
-                  </select>
-                </label>
-
-                <label className="field-row">
-                  <span>{t('settings.apiKey')}</span>
-                  <div className="secret-input">
-                    <KeyRound size={18} />
-                    <input
-                      autoComplete="off"
-                      placeholder={hasApiKey ? t('settings.apiKeyPlaceholder.configured') : t('settings.apiKeyPlaceholder.empty')}
-                      type="password"
-                      value={apiKey}
-                      onChange={(event) => setApiKey(event.target.value)}
-                    />
+            ) : (
+              <div className="settings-profile-layout">
+                <div className="settings-profile-list-panel">
+                  <div className="settings-actions">
+                    <button type="button" onClick={openCreateForm}>
+                      <Plus size={16} />
+                      {t('settings.createProfile')}
+                    </button>
                   </div>
-                </label>
 
-                <div className="settings-toggles">
-                  <label>
-                    <input checked={enabled} onChange={(event) => setEnabled(event.target.checked)} type="checkbox" />
-                    {t('settings.enableRealModel')}
-                  </label>
-                  <label>
-                    <input checked={fallbackToMock} onChange={(event) => setFallbackToMock(event.target.checked)} type="checkbox" />
-                    {t('settings.fallbackToMock')}
-                  </label>
+                  {profiles.length === 0 ? (
+                    <p className="settings-note">{t('settings.noProfiles')}</p>
+                  ) : (
+                    <div className="settings-profile-list">
+                      {profiles.map((profile) => (
+                        <div
+                          key={profile.id}
+                          className={`settings-profile-item ${selectedProfileId === profile.id ? 'selected' : ''}`}
+                        >
+                          <button
+                            className="settings-profile-info"
+                            onClick={() => selectProfile(profile.id)}
+                            type="button"
+                          >
+                            <Star size={20} fill={profile.isDefault ? 'currentColor' : 'none'} />
+                            <div>
+                              <strong>
+                                {profile.name}
+                                {profile.isDefault ? ` · ${t('settings.activated')}` : ''}
+                              </strong>
+                              <span>{formatDisplayName(profile.provider)} / {formatDisplayName(profile.model)}</span>
+                              <small>
+                                {profile.hasApiKey
+                                  ? `${t('settings.keyConfigured')}（${t(KEY_SOURCE_KEYS[profile.keySource])}）`
+                                  : t('settings.keyNotConfigured')}
+                              </small>
+                            </div>
+                          </button>
+                          <div className="settings-profile-actions">
+                            {!profile.isDefault && (
+                              <button type="button" onClick={() => activateProfile(profile.id)}>
+                                {t('settings.activate')}
+                              </button>
+                            )}
+                            <button type="button" className="danger" onClick={() => deleteProfile(profile.id)}>
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                <div className="settings-actions settings-actions-primary">
-                  <button disabled={isSaving || !provider || !model} onClick={saveProfile} type="button">
-                    {isSaving ? t('common.saving') : t('common.save')}
-                  </button>
-                  <button disabled={isTesting || !provider || !model} onClick={testSettings} type="button">
-                    {isTesting ? t('settings.testingConnection') : t('settings.test')}
-                  </button>
+                <div className="settings-profile-form-panel">
+                  {selectedProfile ? (
+                    <>
+                      <div className="settings-form-section">
+                        <strong>{t('settings.basicInfo')}</strong>
+                        <label className="field-row">
+                          <span>{t('settings.profileName')}</span>
+                          <input
+                            autoComplete="off"
+                            type="text"
+                            value={profileName}
+                            onChange={(event) => setProfileName(event.target.value)}
+                          />
+                        </label>
+                        <label className="field-row">
+                          <span>{t('settings.provider')}</span>
+                          <select value={provider} onChange={(event) => changeProvider(event.target.value)}>
+                            {providerOptions.map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
+                          </select>
+                        </label>
+                        <label className="field-row">
+                          <span>{t('settings.model')}</span>
+                          <select value={model} onChange={(event) => setModel(event.target.value)}>
+                            {modelOptions.map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
+                          </select>
+                        </label>
+                      </div>
+
+                      <div className="settings-form-section">
+                        <strong>{t('settings.authentication')}</strong>
+                        <label className="field-row">
+                          <span>{t('settings.apiKey')}</span>
+                          <div className="secret-input">
+                            <KeyRound size={18} />
+                            <input
+                              autoComplete="off"
+                              placeholder={hasApiKey ? t('settings.apiKeyPlaceholder.configured') : t('settings.apiKeyPlaceholder.empty')}
+                              type="password"
+                              value={apiKey}
+                              onChange={(event) => setApiKey(event.target.value)}
+                            />
+                          </div>
+                        </label>
+                      </div>
+
+                      <div className="settings-form-section">
+                        <strong>{t('settings.policyGroup')}</strong>
+                        <div className="settings-toggles">
+                          <label>
+                            <input checked={enabled} onChange={(event) => setEnabled(event.target.checked)} type="checkbox" />
+                            {t('settings.enableRealModel')}
+                          </label>
+                          <label>
+                            <input checked={fallbackToMock} onChange={(event) => setFallbackToMock(event.target.checked)} type="checkbox" />
+                            {t('settings.fallbackToMock')}
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="settings-actions settings-actions-primary">
+                        <button disabled={isSaving || !provider || !model} onClick={saveProfile} type="button">
+                          {isSaving ? t('common.saving') : t('common.save')}
+                        </button>
+                        <button disabled={isTesting || !provider || !model} onClick={testSettings} type="button">
+                          {isTesting ? t('settings.testingConnection') : t('settings.test')}
+                        </button>
+                      </div>
+                      <div className="settings-actions settings-actions-danger">
+                        <button disabled={isSaving || !hasApiKey} onClick={clearKey} type="button">
+                          {t('settings.clearRuntimeKey')}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="settings-note">{t('settings.noProfileSelected')}</p>
+                  )}
                 </div>
-                <div className="settings-actions settings-actions-danger">
-                  <button disabled={isSaving || !hasApiKey} onClick={clearKey} type="button">
-                    {t('settings.clearRuntimeKey')}
-                  </button>
-                </div>
-              </>
+              </div>
             )}
           </section>
         )}
@@ -801,35 +895,7 @@ export default function SettingsView() {
         )}
 
         <aside className="settings-status">
-          <div className="status-card">
-            <ShieldCheck size={25} />
-            <div>
-              <span>{t('settings.currentRuntime')}</span>
-              <strong>{formatDisplayName(provider) || t('settings.provider')} / {formatDisplayName(model) || t('settings.model')}</strong>
-              {hasApiKey ? (
-                <p>{t('settings.keyConfigured')} ({t(KEY_SOURCE_KEYS[keySource])})</p>
-              ) : (
-                <p>{t('settings.keyNotConfigured')}</p>
-              )}
-              {updatedAt && <small>{t('settings.lastSaved')}: {formatDateTime(updatedAt)}</small>}
-            </div>
-          </div>
-          <div className="status-card">
-            <Settings size={25} />
-            <div>
-              <span>{t('settings.policy')}</span>
-              <strong>{enabled ? t('settings.realModelFirst') : t('settings.mockOnly')}</strong>
-              <p>{fallbackToMock ? t('settings.fallbackHint') : t('settings.noFallbackHint')}</p>
-            </div>
-          </div>
-          <p className="settings-note">{status}</p>
-          {testResult && (
-            <div className={`test-result ${testResult.ok ? 'ok' : 'failed'}`}>
-              <strong>{testResult.ok ? t('settings.testPassed') : t('settings.testNotPassed')}</strong>
-              <p>{testResult.message}</p>
-              {testResult.sampleTitle && <small>{t('settings.returnedCard')}{testResult.sampleTitle}</small>}
-            </div>
-          )}
+          {renderStatusSidebar()}
         </aside>
       </div>
     </section>

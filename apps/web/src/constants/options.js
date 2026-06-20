@@ -19,6 +19,8 @@ export const knownViews = new Set([
   'synthesis',
   'compare',
   'conflicts',
+  'insights',
+  'path',
   'settings',
 ]);
 

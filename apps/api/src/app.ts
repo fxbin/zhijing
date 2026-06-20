@@ -1,6 +1,8 @@
 import cors from '@fastify/cors';
 import Fastify from 'fastify';
 import {
+  archiveCard,
+  archiveMaterial,
   assignMaterialToKnowledgeBase,
   answerKnowledgeBaseQuestion,
   clearFilter,
@@ -15,6 +17,8 @@ import {
   extractEntities,
   generateCrossKbSynthesis,
   getDashboard,
+  getGlobalInsights,
+  getKnowledgeBasePath,
   getModelProviderSettings,
   getModelProviderSettingsV2,
   loadFilter,
@@ -28,6 +32,7 @@ import {
   initializeArtifactSections,
   intakeKnowledge,
   KnowledgeCoreError,
+  listArchivedItems,
   listArtifactRevisions,
   listConflictAuditEntries,
   listConflictGroups,
@@ -50,6 +55,8 @@ import {
   searchKnowledgeAssets,
   suggestMaterialAssignments,
   testModelProviderSettings,
+  unarchiveCard,
+  unarchiveMaterial,
   updateModelProviderProfile,
 } from '@zhijing/core';
 import type {
@@ -91,6 +98,8 @@ export function buildApi() {
   }));
 
   app.get('/api/dashboard', async () => getDashboard());
+
+  app.get('/api/insights', async () => getGlobalInsights());
 
   app.get<{ Querystring: { url?: string } }>('/api/proxy-image', async (request, reply) => {
     const imageUrl = request.query.url;
@@ -292,6 +301,14 @@ export function buildApi() {
     return analytics;
   });
 
+  app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/path', async (request, reply) => {
+    const path = getKnowledgeBasePath(request.params.id);
+    if (!path) {
+      return reply.code(404).send({ error: 'Knowledge base not found.' });
+    }
+    return path;
+  });
+
   app.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/api/knowledge-bases/:id/messages', async (request, reply) => {
     const limit = request.query.limit ? Number(request.query.limit) : undefined;
     const messages = await listMessages(request.params.id, limit);
@@ -338,6 +355,38 @@ export function buildApi() {
     const revisions = await listCardRevisions(request.params.id);
     return { revisions };
   });
+
+  app.post<{ Params: { id: string } }>('/api/cards/:id/archive', async (request, reply) => {
+    try {
+      return archiveCard(request.params.id);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'card archive failed');
+      return reply.code(500).send({ error: 'Card archive failed.' });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>('/api/cards/:id/unarchive', async (request, reply) => {
+    try {
+      return unarchiveCard(request.params.id);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'card unarchive failed');
+      return reply.code(500).send({ error: 'Card unarchive failed.' });
+    }
+  });
+
+  app.get<{
+    Querystring: {
+      knowledgeBaseId?: string;
+    };
+  }>('/api/archive', async (request) => listArchivedItems({
+    knowledgeBaseId: typeof request.query.knowledgeBaseId === 'string' ? request.query.knowledgeBaseId : undefined,
+  }));
 
   app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/exports', async (request, reply) => {
     const exports = await listExports(request.params.id);
@@ -671,6 +720,30 @@ export function buildApi() {
       }
       request.log.error({ error }, 'material delete failed');
       return reply.code(500).send({ error: 'Material delete failed.' });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>('/api/materials/:id/archive', async (request, reply) => {
+    try {
+      return archiveMaterial(request.params.id);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'material archive failed');
+      return reply.code(500).send({ error: 'Material archive failed.' });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>('/api/materials/:id/unarchive', async (request, reply) => {
+    try {
+      return unarchiveMaterial(request.params.id);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'material unarchive failed');
+      return reply.code(500).send({ error: 'Material unarchive failed.' });
     }
   });
 

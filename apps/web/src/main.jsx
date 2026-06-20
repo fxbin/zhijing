@@ -2,13 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './i18n';
 import {
+  Archive,
   Bell,
   CircleHelp,
   Database,
   FolderOpen,
   History,
   Layers,
+  Lightbulb,
   LogOut,
+  Map,
   Plus,
   Search,
   Settings,
@@ -41,6 +44,9 @@ import GlobalAssetsDashboard from './views/GlobalAssetsDashboard';
 import CrossKbSynthesisView from './views/CrossKbSynthesisView';
 import MultiEntityComparisonView from './views/MultiEntityComparisonView';
 import KnowledgeConflictResolverView from './views/KnowledgeConflictResolverView';
+import InsightsView from './views/InsightsView';
+import PathView from './views/PathView';
+import ArchiveView from './views/ArchiveView';
 import ChatView from './views/ChatView';
 import RecallView from './views/RecallView';
 import ExportView from './views/ExportView';
@@ -489,6 +495,9 @@ function App() {
     { key: 'library', label: t('nav.library'), icon: FolderOpen },
     { key: 'search', label: t('nav.search'), icon: Search },
     { key: 'assets', label: t('nav.assets'), icon: Layers },
+    { key: 'insights', label: t('nav.insights'), icon: Lightbulb },
+    { key: 'path', label: t('nav.path'), icon: Map },
+    { key: 'archive', label: t('nav.archive'), icon: Archive },
     { key: 'kits', label: t('nav.kits'), icon: Sparkles },
     { key: 'settings', label: t('nav.settings'), icon: Settings },
   ];
@@ -619,6 +628,9 @@ function App() {
           {view === 'synthesis' && <CrossKbSynthesisView data={advancedOpsData} setView={go} />}
           {view === 'compare' && <MultiEntityComparisonView data={advancedOpsData} setView={go} />}
           {view === 'conflicts' && <KnowledgeConflictResolverView data={advancedOpsData} setView={go} />}
+          {view === 'insights' && <InsightsView setView={go} />}
+          {view === 'path' && <PathView selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={go} />}
+          {view === 'archive' && <ArchiveView selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={go} />}
           {view === 'chat' && (
             <ChatView
               apiStatus={apiStatus}

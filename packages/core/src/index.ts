@@ -1,5 +1,7 @@
 import {
   type AgentTask,
+  type ArchiveItemResult,
+  type ArchivedItemsResult,
   type AssignMaterialRequest,
   type ArtifactRecord,
   type ArtifactRevision,
@@ -22,6 +24,7 @@ import {
   type ExportFormat,
   type ExportRecord,
   type ExportScope,
+  type GlobalInsights,
   type RecallGrade,
   classifyInput,
   type Entity,
@@ -34,8 +37,10 @@ import {
   type IntakeResult,
   type KnowledgeBaseAnalytics,
   type KnowledgeBaseDetail,
+  type KnowledgeBasePath,
   type KnowledgeMapResult,
   type KnowledgeMapNodePosition,
+  type PathStep,
   type SaveKnowledgeMapNodePositionsRequest,
   type KnowledgeBaseSummary,
   type KnowledgeCitation,
@@ -142,11 +147,17 @@ type KnowledgeRepository = {
   listMaterials(knowledgeBaseId?: string, limit?: number): MaterialRecord[];
   findCard(id: string): KnowledgeCard | undefined;
   deleteMaterial(id: string): void;
+  archiveMaterial(id: string): void;
+  unarchiveMaterial(id: string): void;
+  listArchivedMaterials(knowledgeBaseId?: string): MaterialRecord[];
   getNodePositions(knowledgeBaseId: string): Array<{ nodeId: string; x: number; y: number }>;
   saveNodePositions(knowledgeBaseId: string, positions: Array<{ nodeId: string; x: number; y: number }>): void;
   insertCards(cards: KnowledgeCard[]): void;
   updateCard(card: KnowledgeCard): void;
   listCards(knowledgeBaseId?: string): KnowledgeCard[];
+  archiveCard(id: string): void;
+  unarchiveCard(id: string): void;
+  listArchivedCards(knowledgeBaseId?: string): KnowledgeCard[];
   insertCardRevision(revision: CardRevision): void;
   listCardRevisions(cardId: string): CardRevision[];
   insertExportRecord(record: ExportRecord): void;
@@ -271,9 +282,10 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
   }
 
   listMaterials(knowledgeBaseId?: string, limit?: number) {
-    const materials = knowledgeBaseId
+    const materials = (knowledgeBaseId
       ? this.state.materials.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
-      : this.state.materials;
+      : this.state.materials
+    ).filter((item) => !item.archived);
     return typeof limit === 'number' ? materials.slice(0, limit) : materials;
   }
 
@@ -282,6 +294,29 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     for (const card of this.state.cards) {
       if (card.materialId === id) card.materialId = undefined;
     }
+  }
+
+  archiveMaterial(id: string) {
+    const material = this.findMaterial(id);
+    if (material) {
+      material.archived = true;
+      this.updateMaterial(material);
+    }
+  }
+
+  unarchiveMaterial(id: string) {
+    const material = this.findMaterial(id);
+    if (material) {
+      material.archived = false;
+      this.updateMaterial(material);
+    }
+  }
+
+  listArchivedMaterials(knowledgeBaseId?: string) {
+    const materials = knowledgeBaseId
+      ? this.state.materials.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
+      : this.state.materials;
+    return materials.filter((item) => item.archived);
   }
 
   getNodePositions(knowledgeBaseId: string) {
@@ -302,9 +337,33 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
   }
 
   listCards(knowledgeBaseId?: string) {
-    return knowledgeBaseId
+    const cards = knowledgeBaseId
       ? this.state.cards.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
       : this.state.cards;
+    return cards.filter((item) => !item.archived);
+  }
+
+  archiveCard(id: string) {
+    const card = this.findCard(id);
+    if (card) {
+      card.archived = true;
+      this.updateCard(card);
+    }
+  }
+
+  unarchiveCard(id: string) {
+    const card = this.findCard(id);
+    if (card) {
+      card.archived = false;
+      this.updateCard(card);
+    }
+  }
+
+  listArchivedCards(knowledgeBaseId?: string) {
+    const cards = knowledgeBaseId
+      ? this.state.cards.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
+      : this.state.cards;
+    return cards.filter((item) => item.archived);
   }
 
   insertCardRevision(revision: CardRevision) {
@@ -497,6 +556,7 @@ type MaterialRow = {
   parse_error: string | null;
   created_at: string;
   status_timeline_json: string | null;
+  archived: number;
 };
 
 type CardRow = {
@@ -510,6 +570,7 @@ type CardRow = {
   recall_json: string | null;
   created_at: string;
   updated_at: string;
+  archived: number;
 };
 
 type CardRevisionRow = {
@@ -631,8 +692,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   insertMaterial(material: MaterialRecord) {
     this.db.prepare(`
       INSERT INTO materials (
-        id, knowledge_base_id, type, raw_input, source_url, platform, title, content_text, media_urls_json, parse_status, parse_error, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, knowledge_base_id, type, raw_input, source_url, platform, title, content_text, media_urls_json, parse_status, parse_error, created_at, archived
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       material.id,
       material.knowledgeBaseId,
@@ -646,13 +707,14 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       material.parseStatus,
       material.parseError ?? null,
       material.createdAt,
+      material.archived ? 1 : 0,
     );
   }
 
   updateMaterial(material: MaterialRecord) {
     this.db.prepare(`
       UPDATE materials
-      SET knowledge_base_id = ?, type = ?, raw_input = ?, source_url = ?, platform = ?, title = ?, content_text = ?, media_urls_json = ?, parse_status = ?, parse_error = ?, created_at = ?
+      SET knowledge_base_id = ?, type = ?, raw_input = ?, source_url = ?, platform = ?, title = ?, content_text = ?, media_urls_json = ?, parse_status = ?, parse_error = ?, created_at = ?, archived = ?
       WHERE id = ?
     `).run(
       material.knowledgeBaseId,
@@ -666,6 +728,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       material.parseStatus,
       material.parseError ?? null,
       material.createdAt,
+      material.archived ? 1 : 0,
       material.id,
     );
   }
@@ -682,8 +745,23 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
   listMaterials(knowledgeBaseId?: string, limit?: number) {
     const rows = knowledgeBaseId
-      ? this.db.prepare('SELECT * FROM materials WHERE knowledge_base_id = ? ORDER BY created_at DESC').all(knowledgeBaseId)
-      : this.db.prepare(`SELECT * FROM materials ORDER BY created_at DESC${limit ? ` LIMIT ${limit}` : ''}`).all();
+      ? this.db.prepare('SELECT * FROM materials WHERE knowledge_base_id = ? AND archived = 0 ORDER BY created_at DESC').all(knowledgeBaseId)
+      : this.db.prepare(`SELECT * FROM materials WHERE archived = 0 ORDER BY created_at DESC${limit ? ` LIMIT ${limit}` : ''}`).all();
+    return (rows as MaterialRow[]).map(mapMaterial);
+  }
+
+  archiveMaterial(id: string) {
+    this.db.prepare('UPDATE materials SET archived = 1 WHERE id = ?').run(id);
+  }
+
+  unarchiveMaterial(id: string) {
+    this.db.prepare('UPDATE materials SET archived = 0 WHERE id = ?').run(id);
+  }
+
+  listArchivedMaterials(knowledgeBaseId?: string) {
+    const rows = knowledgeBaseId
+      ? this.db.prepare('SELECT * FROM materials WHERE knowledge_base_id = ? AND archived = 1 ORDER BY created_at DESC').all(knowledgeBaseId)
+      : this.db.prepare('SELECT * FROM materials WHERE archived = 1 ORDER BY created_at DESC').all();
     return (rows as MaterialRow[]).map(mapMaterial);
   }
 
@@ -741,13 +819,13 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   insertCards(cards: KnowledgeCard[]) {
     const insert = this.db.prepare(`
       INSERT INTO cards (
-        id, knowledge_base_id, material_id, type, title, body, claim_status, recall_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, knowledge_base_id, material_id, type, title, body, claim_status, recall_json, created_at, updated_at, archived
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     this.db.exec('BEGIN');
     try {
       for (const card of cards) {
-        insert.run(card.id, card.knowledgeBaseId, card.materialId ?? null, card.type, card.title, card.body, card.claimStatus, serializeCardRecall(card.recall), card.createdAt, card.updatedAt);
+        insert.run(card.id, card.knowledgeBaseId, card.materialId ?? null, card.type, card.title, card.body, card.claimStatus, serializeCardRecall(card.recall), card.createdAt, card.updatedAt, card.archived ? 1 : 0);
       }
       this.db.exec('COMMIT');
     } catch (error) {
@@ -759,7 +837,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   updateCard(card: KnowledgeCard) {
     this.db.prepare(`
       UPDATE cards
-      SET knowledge_base_id = ?, material_id = ?, type = ?, title = ?, body = ?, claim_status = ?, recall_json = ?, created_at = ?, updated_at = ?
+      SET knowledge_base_id = ?, material_id = ?, type = ?, title = ?, body = ?, claim_status = ?, recall_json = ?, created_at = ?, updated_at = ?, archived = ?
       WHERE id = ?
     `).run(
       card.knowledgeBaseId,
@@ -771,14 +849,30 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       serializeCardRecall(card.recall),
       card.createdAt,
       card.updatedAt,
+      card.archived ? 1 : 0,
       card.id,
     );
   }
 
   listCards(knowledgeBaseId?: string) {
     const rows = knowledgeBaseId
-      ? this.db.prepare('SELECT * FROM cards WHERE knowledge_base_id = ? ORDER BY updated_at DESC, created_at DESC').all(knowledgeBaseId)
-      : this.db.prepare('SELECT * FROM cards ORDER BY updated_at DESC, created_at DESC').all();
+      ? this.db.prepare('SELECT * FROM cards WHERE knowledge_base_id = ? AND archived = 0 ORDER BY updated_at DESC, created_at DESC').all(knowledgeBaseId)
+      : this.db.prepare('SELECT * FROM cards WHERE archived = 0 ORDER BY updated_at DESC, created_at DESC').all();
+    return (rows as CardRow[]).map(mapCard);
+  }
+
+  archiveCard(id: string) {
+    this.db.prepare('UPDATE cards SET archived = 1 WHERE id = ?').run(id);
+  }
+
+  unarchiveCard(id: string) {
+    this.db.prepare('UPDATE cards SET archived = 0 WHERE id = ?').run(id);
+  }
+
+  listArchivedCards(knowledgeBaseId?: string) {
+    const rows = knowledgeBaseId
+      ? this.db.prepare('SELECT * FROM cards WHERE knowledge_base_id = ? AND archived = 1 ORDER BY updated_at DESC, created_at DESC').all(knowledgeBaseId)
+      : this.db.prepare('SELECT * FROM cards WHERE archived = 1 ORDER BY updated_at DESC, created_at DESC').all();
     return (rows as CardRow[]).map(mapCard);
   }
 
@@ -1167,7 +1261,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         media_urls_json TEXT NOT NULL DEFAULT '[]',
         parse_status TEXT NOT NULL,
         parse_error TEXT,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        archived INTEGER NOT NULL DEFAULT 0
       );
 
       CREATE TABLE IF NOT EXISTS cards (
@@ -1180,7 +1275,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         claim_status TEXT NOT NULL,
         recall_json TEXT,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        archived INTEGER NOT NULL DEFAULT 0
       );
 
       CREATE TABLE IF NOT EXISTS card_revisions (
@@ -1270,6 +1366,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureConflictAuditTable();
     this.ensureModelProviderProfilesTable();
     this.ensureKnowledgeBaseNodePositionsTable();
+    this.ensureArchivedColumns();
   }
 
   private ensureMaterialMediaColumn() {
@@ -1426,6 +1523,24 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     `);
   }
 
+  /**
+   * 为 materials 与 cards 表幂等添加归档 archived 列及索引。
+   * @author fxbin
+   */
+  private ensureArchivedColumns() {
+    const materialColumns = this.db.prepare('PRAGMA table_info(materials)').all() as Array<{ name: string }>;
+    if (!materialColumns.some((column) => column.name === 'archived')) {
+      this.db.exec('ALTER TABLE materials ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;');
+    }
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_materials_archived ON materials(archived, knowledge_base_id);');
+
+    const cardColumns = this.db.prepare('PRAGMA table_info(cards)').all() as Array<{ name: string }>;
+    if (!cardColumns.some((column) => column.name === 'archived')) {
+      this.db.exec('ALTER TABLE cards ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;');
+    }
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_cards_archived ON cards(archived, knowledge_base_id);');
+  }
+
   private ensureArtifactSubtypeColumn() {
     const columns = this.db.prepare('PRAGMA table_info(artifacts)').all() as Array<{ name: string }>;
     if (!columns.some((column) => column.name === 'subtype')) {
@@ -1470,6 +1585,7 @@ function mapMaterial(row: MaterialRow): MaterialRecord {
     parseError: row.parse_error ?? undefined,
     createdAt: row.created_at,
     statusTimeline: parseStatusTimeline(row.status_timeline_json),
+    archived: row.archived === 1,
   };
 }
 
@@ -1532,6 +1648,7 @@ function mapCard(row: CardRow): KnowledgeCard {
     recall: parseCardRecall(row.recall_json),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    archived: row.archived === 1,
   };
 }
 
@@ -5176,6 +5293,78 @@ export function getDashboard() {
   };
 }
 
+/**
+ * 将资料加入归档。
+ * 已归档资料在日常列表、搜索、统计中默认不可见。
+ * @param {string} id - 资料 ID
+ * @returns {ArchiveItemResult} 归档结果
+ * @author fxbin
+ */
+export function archiveMaterial(id: string): ArchiveItemResult {
+  const material = repository.findMaterial(id);
+  if (!material) throw new KnowledgeCoreError('Material not found.', 404);
+  repository.archiveMaterial(id);
+  return { id, knowledgeBaseId: material.knowledgeBaseId, kind: 'material', archived: true };
+}
+
+/**
+ * 将资料从归档中恢复。
+ * @param {string} id - 资料 ID
+ * @returns {ArchiveItemResult} 恢复结果
+ * @author fxbin
+ */
+export function unarchiveMaterial(id: string): ArchiveItemResult {
+  const material = repository.findMaterial(id);
+  if (!material) throw new KnowledgeCoreError('Material not found.', 404);
+  repository.unarchiveMaterial(id);
+  return { id, knowledgeBaseId: material.knowledgeBaseId, kind: 'material', archived: false };
+}
+
+/**
+ * 将卡片加入归档。
+ * 已归档卡片在日常列表、搜索、统计中默认不可见。
+ * @param {string} id - 卡片 ID
+ * @returns {ArchiveItemResult} 归档结果
+ * @author fxbin
+ */
+export function archiveCard(id: string): ArchiveItemResult {
+  const card = repository.findCard(id);
+  if (!card) throw new KnowledgeCoreError('Card not found.', 404);
+  repository.archiveCard(id);
+  return { id, knowledgeBaseId: card.knowledgeBaseId, kind: 'card', archived: true };
+}
+
+/**
+ * 将卡片从归档中恢复。
+ * @param {string} id - 卡片 ID
+ * @returns {ArchiveItemResult} 恢复结果
+ * @author fxbin
+ */
+export function unarchiveCard(id: string): ArchiveItemResult {
+  const card = repository.findCard(id);
+  if (!card) throw new KnowledgeCoreError('Card not found.', 404);
+  repository.unarchiveCard(id);
+  return { id, knowledgeBaseId: card.knowledgeBaseId, kind: 'card', archived: false };
+}
+
+/**
+ * 获取全局或指定知识库下的归档资料与卡片列表。
+ * @param {Object} options - 查询选项
+ * @param {string} [options.knowledgeBaseId] - 可选知识库 ID
+ * @returns {ArchivedItemsResult} 归档列表
+ * @author fxbin
+ */
+export function listArchivedItems(options: { knowledgeBaseId?: string } = {}): ArchivedItemsResult {
+  const materials = repository.listArchivedMaterials(options.knowledgeBaseId);
+  const cards = repository.listArchivedCards(options.knowledgeBaseId);
+  const allBases = repository.listKnowledgeBases();
+  const baseIds = new Set([...materials.map((m) => m.knowledgeBaseId), ...cards.map((c) => c.knowledgeBaseId)]);
+  const knowledgeBases = options.knowledgeBaseId
+    ? allBases.filter((base) => base.id === options.knowledgeBaseId)
+    : allBases.filter((base) => baseIds.has(base.id));
+  return { materials, cards, knowledgeBases };
+}
+
 export async function getKnowledgeBaseAnalytics(id: string): Promise<KnowledgeBaseAnalytics | undefined> {
   const base = repository.findKnowledgeBase(id);
   if (!base) return undefined;
@@ -5290,6 +5479,136 @@ export async function getKnowledgeBaseAnalytics(id: string): Promise<KnowledgeBa
   } finally {
     connection.disconnectSync();
   }
+}
+
+export function getGlobalInsights(): GlobalInsights {
+  const bases = repository.listKnowledgeBases();
+  const materials = repository.listMaterials();
+  const cards = repository.listCards();
+  const artifacts = repository.listArtifacts();
+  const tasks = repository.listTasks();
+
+  const sourcedCards = cards.filter((card) => card.claimStatus === 'sourced').length;
+  const totalCards = cards.length;
+
+  const nowDate = new Date();
+  const labels: string[] = [];
+  const data: number[] = [];
+  for (let i = 29; i >= 0; i -= 1) {
+    const date = new Date(nowDate);
+    date.setDate(date.getDate() - i);
+    const dateKey = date.toISOString().slice(0, 10);
+    labels.push(dateKey);
+    const count = cards.filter((card) => card.createdAt.slice(0, 10) === dateKey).length;
+    data.push(count);
+  }
+
+  const platformCounts = new Map<string, number>();
+  for (const material of materials) {
+    const platform = material.platform?.trim() || 'unknown';
+    platformCounts.set(platform, (platformCounts.get(platform) ?? 0) + 1);
+  }
+  const sortedPlatforms = [...platformCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6);
+  const totalMaterials = materials.length || 1;
+  const sourceDistribution = sortedPlatforms.map(([name, count]) => ({
+    name,
+    count,
+    ratio: count / totalMaterials,
+  }));
+
+  const recentCards = cards
+    .slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 8)
+    .map((card) => {
+      const base = bases.find((b) => b.id === card.knowledgeBaseId);
+      return {
+        id: card.id,
+        knowledgeBaseId: card.knowledgeBaseId,
+        knowledgeBaseTitle: base?.title ?? card.knowledgeBaseId,
+        title: card.title,
+        type: card.type,
+        claimStatus: card.claimStatus,
+        createdAt: card.createdAt,
+      };
+    });
+
+  const nodeCount = bases.length + materials.length + cards.length;
+  const edgeCount = materials.length + cards.filter((card) => card.materialId).length;
+
+  return {
+    generatedAt: now(),
+    totals: {
+      knowledgeBases: bases.length,
+      materials: materials.length,
+      cards: totalCards,
+      sourcedCards,
+      artifacts: artifacts.length,
+      tasks: tasks.length,
+    },
+    growth: { labels, data },
+    sourceDistribution,
+    recentCards,
+    mapPreview: {
+      nodeCount,
+      edgeCount,
+      knowledgeBaseCount: bases.length,
+    },
+  };
+}
+
+export function getKnowledgeBasePath(id: string): KnowledgeBasePath | undefined {
+  const base = repository.findKnowledgeBase(id);
+  if (!base) return undefined;
+
+  const cards = repository.listCards(id).slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const steps: PathStep[] = [];
+  let firstIncompleteIndex = -1;
+
+  for (let i = 0; i < cards.length; i += 1) {
+    const card = cards[i];
+    const isCompleted = card.claimStatus === 'sourced' || card.claimStatus === 'user_confirmed';
+    if (!isCompleted && firstIncompleteIndex === -1) {
+      firstIncompleteIndex = i;
+    }
+  }
+
+  for (let i = 0; i < cards.length; i += 1) {
+    const card = cards[i];
+    const isCompleted = card.claimStatus === 'sourced' || card.claimStatus === 'user_confirmed';
+    let status: PathStep['status'];
+    if (isCompleted) {
+      status = 'completed';
+    } else if (i === firstIncompleteIndex) {
+      status = 'current';
+    } else {
+      status = 'locked';
+    }
+
+    steps.push({
+      id: `step_${card.id}`,
+      order: i + 1,
+      title: card.title,
+      description: card.body.slice(0, 120),
+      cardId: card.id,
+      status,
+      type: card.type,
+    });
+  }
+
+  const completedCount = steps.filter((step) => step.status === 'completed').length;
+  const currentStepIndex = steps.findIndex((step) => step.status === 'current');
+
+  return {
+    knowledgeBaseId: id,
+    knowledgeBaseTitle: base.title,
+    generatedAt: now(),
+    steps,
+    currentStepIndex: currentStepIndex === -1 ? steps.length : currentStepIndex,
+    completedCount,
+  };
 }
 
 async function distribution(connection: Awaited<ReturnType<typeof DuckDBConnection.create>>, table: string, column: string) {

@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  Archive,
   Clock3,
   FileText,
   RefreshCw,
@@ -158,6 +159,22 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
 
   function clearSelection() {
     setSelectedIds(new Set());
+  }
+
+  async function archiveSingleMaterial(id) {
+    try {
+      const response = await fetch(`/api/materials/${id}/archive`, { method: 'POST' });
+      if (!response.ok) throw new Error('Archive failed.');
+      setItems((current) => current.filter((item) => item.id !== id));
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+      if (onMaterialMutation) onMaterialMutation();
+    } catch {
+      setStatus(t('library.archiveFailed'));
+    }
   }
 
   const counts = items.reduce((acc, item) => {
