@@ -35,6 +35,8 @@ import {
   type KnowledgeBaseAnalytics,
   type KnowledgeBaseDetail,
   type KnowledgeMapResult,
+  type KnowledgeMapNodePosition,
+  type SaveKnowledgeMapNodePositionsRequest,
   type KnowledgeBaseSummary,
   type KnowledgeCitation,
   type KnowledgeCard,
@@ -126,6 +128,7 @@ type StoreState = {
   conflictAudit: ConflictAuditEntry[];
   modelProviderConfig?: PersistedModelProviderConfig;
   modelProviderProfiles: ModelProviderProfileRecord[];
+  nodePositions: Record<string, Array<{ nodeId: string; x: number; y: number }>>;
 };
 
 type KnowledgeRepository = {
@@ -139,6 +142,8 @@ type KnowledgeRepository = {
   listMaterials(knowledgeBaseId?: string, limit?: number): MaterialRecord[];
   findCard(id: string): KnowledgeCard | undefined;
   deleteMaterial(id: string): void;
+  getNodePositions(knowledgeBaseId: string): Array<{ nodeId: string; x: number; y: number }>;
+  saveNodePositions(knowledgeBaseId: string, positions: Array<{ nodeId: string; x: number; y: number }>): void;
   insertCards(cards: KnowledgeCard[]): void;
   updateCard(card: KnowledgeCard): void;
   listCards(knowledgeBaseId?: string): KnowledgeCard[];
@@ -228,6 +233,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     entities: [],
     conflictAudit: [],
     modelProviderProfiles: [],
+    nodePositions: {},
   };
 
   insertKnowledgeBase(base: KnowledgeBaseSummary) {
@@ -276,6 +282,14 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     for (const card of this.state.cards) {
       if (card.materialId === id) card.materialId = undefined;
     }
+  }
+
+  getNodePositions(knowledgeBaseId: string) {
+    return this.state.nodePositions[knowledgeBaseId] ?? [];
+  }
+
+  saveNodePositions(knowledgeBaseId: string, positions: Array<{ nodeId: string; x: number; y: number }>) {
+    this.state.nodePositions[knowledgeBaseId] = positions;
   }
 
   insertCards(cards: KnowledgeCard[]) {
@@ -678,6 +692,45 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     try {
       this.db.prepare('UPDATE cards SET material_id = NULL WHERE material_id = ?').run(id);
       this.db.prepare('DELETE FROM materials WHERE id = ?').run(id);
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  /**
+   * 读取知识库的节点拖拽位置。
+   * @param {string} knowledgeBaseId - 知识库 ID
+   * @returns {Array<{nodeId: string; x: number; y: number}>} 节点位置数组
+   */
+  getNodePositions(knowledgeBaseId: string) {
+    const rows = this.db
+      .prepare('SELECT node_id, x, y FROM knowledge_base_node_positions WHERE knowledge_base_id = ?')
+      .all(knowledgeBaseId) as Array<{ node_id: string; x: number; y: number }>;
+    return rows.map((row) => ({ nodeId: row.node_id, x: row.x, y: row.y }));
+  }
+
+  /**
+   * 保存或覆盖知识库的节点拖拽位置。
+   * @param {string} knowledgeBaseId - 知识库 ID
+   * @param {Array<{nodeId: string; x: number; y: number}>} positions - 节点位置数组
+   */
+  saveNodePositions(knowledgeBaseId: string, positions: Array<{ nodeId: string; x: number; y: number }>) {
+    const upsert = this.db.prepare(`
+      INSERT INTO knowledge_base_node_positions (knowledge_base_id, node_id, x, y, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(knowledge_base_id, node_id) DO UPDATE SET
+        x = excluded.x,
+        y = excluded.y,
+        updated_at = excluded.updated_at
+    `);
+    const timestamp = now();
+    this.db.exec('BEGIN');
+    try {
+      for (const position of positions) {
+        upsert.run(knowledgeBaseId, position.nodeId, position.x, position.y, timestamp);
+      }
       this.db.exec('COMMIT');
     } catch (error) {
       this.db.exec('ROLLBACK');
@@ -1216,6 +1269,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureEntitiesTable();
     this.ensureConflictAuditTable();
     this.ensureModelProviderProfilesTable();
+    this.ensureKnowledgeBaseNodePositionsTable();
   }
 
   private ensureMaterialMediaColumn() {
@@ -1356,6 +1410,20 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     if (!columns.some((column) => column.name === 'status_timeline_json')) {
       this.db.exec('ALTER TABLE materials ADD COLUMN status_timeline_json TEXT;');
     }
+  }
+
+  private ensureKnowledgeBaseNodePositionsTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS knowledge_base_node_positions (
+        knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+        node_id TEXT NOT NULL,
+        x REAL NOT NULL,
+        y REAL NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (knowledge_base_id, node_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_kb_node_positions_kb ON knowledge_base_node_positions(knowledge_base_id);
+    `);
   }
 
   private ensureArtifactSubtypeColumn() {
@@ -2106,6 +2174,12 @@ export function updateModelProviderProfile(profileId: string, input: UpdateModel
     updated.isDefault = true;
   } else if (input.isDefault === false && existing.isDefault) {
     updated.isDefault = false;
+    const remaining = repository.listModelProviderProfiles().filter((record) => record.id !== existing.id);
+    if (remaining.length > 0) {
+      const promoted: ModelProviderProfileRecord = { ...remaining[0], isDefault: true, updatedAt: now() };
+      repository.updateModelProviderProfile(promoted);
+      applyActiveProfileToRuntime(promoted);
+    }
   }
   repository.updateModelProviderProfile(updated);
   if (updated.isDefault) {
@@ -2338,7 +2412,7 @@ function createMaterial(base: KnowledgeBaseSummary, request: IntakeRequest, type
     rawInput: request.input.trim(),
     sourceUrl,
     platform,
-    title: type === 'link' ? titleFromLink(sourceUrl ?? request.input) : compactTitle(request.input),
+    title: type === 'link' ? titleFromLink(sourceUrl ?? request.input) : extractMaterialTitle(request.input),
     contentText: type === 'text' ? request.input.trim() : undefined,
     mediaUrls: [],
     parseStatus: initialStatus,
@@ -2350,6 +2424,13 @@ function createMaterial(base: KnowledgeBaseSummary, request: IntakeRequest, type
   repository.insertMaterial(material);
   repository.updateKnowledgeBase(base);
   return material;
+}
+
+function extractMaterialTitle(input: string) {
+  const lines = input.trim().split('\n').map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) return compactTitle(input);
+  const firstLine = lines[0].replace(/^#+\s*/, '').trim();
+  return compactTitle(firstLine || input);
 }
 
 function createCards(
@@ -2591,6 +2672,11 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
 
     const cards = createCards(knowledgeBase, material, value, generated.cards);
     const artifact = createArtifact(knowledgeBase, material, value, generated);
+
+    if (kind !== 'theme' && generated.summary) {
+      knowledgeBase.summary = generated.summary;
+      repository.updateKnowledgeBase(knowledgeBase);
+    }
 
     finishTask(task, {
       kind,
@@ -5033,12 +5119,48 @@ export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {
     generatedAt: now(),
     nodes,
     edges,
+    nodePositions: repository.getNodePositions(id),
     stats: {
       materials: materials.length,
       cards: cards.length,
       sourcedCards: cards.filter((card) => card.claimStatus === 'sourced').length,
     },
   };
+}
+
+/**
+ * 读取知识库的节点拖拽位置。
+ * @param {string} id - 知识库 ID
+ * @returns {KnowledgeMapNodePosition[]|undefined} 节点位置数组，知识库不存在时返回 undefined
+ */
+export function getKnowledgeBaseNodePositions(id: string): KnowledgeMapNodePosition[] | undefined {
+  const base = repository.findKnowledgeBase(id);
+  if (!base) return undefined;
+  return repository.getNodePositions(id);
+}
+
+/**
+ * 保存知识库的节点拖拽位置。
+ * @param {string} id - 知识库 ID
+ * @param {SaveKnowledgeMapNodePositionsRequest} request - 保存请求
+ * @returns {KnowledgeMapNodePosition[]} 保存后的节点位置数组
+ */
+export function saveKnowledgeBaseNodePositions(
+  id: string,
+  request: SaveKnowledgeMapNodePositionsRequest,
+): KnowledgeMapNodePosition[] {
+  const base = repository.findKnowledgeBase(id);
+  if (!base) throw new KnowledgeCoreError('Knowledge base not found.', 404);
+  const positions = (request.positions ?? []).filter(
+    (position): position is KnowledgeMapNodePosition =>
+      typeof position?.nodeId === 'string'
+      && typeof position?.x === 'number'
+      && typeof position?.y === 'number'
+      && Number.isFinite(position.x)
+      && Number.isFinite(position.y),
+  );
+  repository.saveNodePositions(id, positions);
+  return positions;
 }
 
 export function getTask(id: string) {

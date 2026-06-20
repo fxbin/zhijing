@@ -22,6 +22,8 @@ import {
   getKnowledgeBaseAnalytics,
   getKnowledgeBase,
   getKnowledgeMap,
+  getKnowledgeBaseNodePositions,
+  saveKnowledgeBaseNodePositions,
   getTask,
   initializeArtifactSections,
   intakeKnowledge,
@@ -59,6 +61,7 @@ import type {
   MaterialType,
   ParseStatus,
   RunKnowledgeKitRequest,
+  SaveKnowledgeMapNodePositionsRequest,
   SaveModelProviderSettingsRequest,
   TestModelProviderSettingsRequest,
   UpdateModelProviderProfileRequest,
@@ -88,6 +91,33 @@ export function buildApi() {
   }));
 
   app.get('/api/dashboard', async () => getDashboard());
+
+  app.get<{ Querystring: { url?: string } }>('/api/proxy-image', async (request, reply) => {
+    const imageUrl = request.query.url;
+    if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
+      return reply.code(400).send({ error: 'Invalid image URL.' });
+    }
+    try {
+      const response = await fetch(imageUrl, {
+        headers: {
+          Referer: '',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+      });
+      if (!response.ok) {
+        return reply.code(response.status).send({ error: 'Image fetch failed.' });
+      }
+      const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
+      const arrayBuffer = await response.arrayBuffer();
+      return reply
+        .header('Content-Type', contentType)
+        .header('Cache-Control', 'public, max-age=3600')
+        .send(Buffer.from(arrayBuffer));
+    } catch (error) {
+      request.log.error({ error, imageUrl }, 'proxy image failed');
+      return reply.code(502).send({ error: 'Image proxy failed.' });
+    }
+  });
 
   app.get('/api/settings/model-provider', async () => getModelProviderSettings());
 
@@ -493,6 +523,29 @@ export function buildApi() {
       return reply.code(404).send({ error: 'Knowledge base not found.' });
     }
     return map;
+  });
+
+  app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/node-positions', async (request, reply) => {
+    const positions = getKnowledgeBaseNodePositions(request.params.id);
+    if (positions === undefined) {
+      return reply.code(404).send({ error: 'Knowledge base not found.' });
+    }
+    return { positions };
+  });
+
+  app.put<{ Params: { id: string }; Body: SaveKnowledgeMapNodePositionsRequest }>('/api/knowledge-bases/:id/node-positions', async (request, reply) => {
+    try {
+      const positions = saveKnowledgeBaseNodePositions(request.params.id, {
+        positions: Array.isArray(request.body?.positions) ? request.body.positions : [],
+      });
+      return { positions };
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'save knowledge base node positions failed');
+      return reply.code(500).send({ error: 'Save node positions failed.' });
+    }
   });
 
   app.post<{ Params: { id: string }; Body: { question?: string } }>('/api/knowledge-bases/:id/ask', async (request, reply) => {

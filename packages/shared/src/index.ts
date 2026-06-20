@@ -508,6 +508,7 @@ export interface KnowledgeMapResult {
   generatedAt: string;
   nodes: KnowledgeMapNode[];
   edges: KnowledgeMapEdge[];
+  nodePositions: KnowledgeMapNodePosition[];
   stats: {
     materials: number;
     cards: number;
@@ -515,11 +516,21 @@ export interface KnowledgeMapResult {
   };
 }
 
+export interface KnowledgeMapNodePosition {
+  nodeId: string;
+  x: number;
+  y: number;
+}
+
+export interface SaveKnowledgeMapNodePositionsRequest {
+  positions: KnowledgeMapNodePosition[];
+}
+
 export function classifyInput(input: string): IntakeKind {
   const value = input.trim();
   if (/https?:\/\//i.test(value)) return 'link';
-  if (/[?？]|怎么|如何|why|what|how/i.test(value)) return 'question';
   if (value.length > 80 || value.includes('\n')) return 'text';
+  if (/[?？]|怎么|如何|why|what|how/i.test(value)) return 'question';
   return 'theme';
 }
 

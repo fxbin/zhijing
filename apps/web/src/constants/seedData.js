@@ -11,15 +11,19 @@ export const seedKnowledgeBases = [
 
 export const seedMaterials = [
   {
+    id: 'seed-xhs-1',
     source: 'XIAOHONGSHU',
+    platform: 'xiaohongshu',
     status: 'CLASSIFIED',
     title: 'Minimalist Desk Setup Inspiration for 2024',
     summary: 'A collection of clean, highly functional desk setups focusing on neutral tones, cable management, and ergonomic design principles.',
     tags: ['workspace', 'design'],
     time: '2h ago',
     state: 'ready',
+    mediaUrls: ['https://images.unsplash.com/photo-1499951360447-b19be8fe80f5?w=400&q=80'],
   },
   {
+    id: 'seed-text-1',
     source: 'TEXT SNIPPET',
     status: 'PROCESSING',
     title: '"The essence of strategy is choosing what not to do."',

@@ -3,7 +3,7 @@
  * @module components/MediaPreview
  */
 
-import { isImageUrl, isVideoUrl } from '../utils/material';
+import { isImageUrl, isVideoUrl, proxyImageUrl } from '../utils/material';
 
 /**
  * 媒体预览组件，展示图片缩略图、视频播放器或媒体链接。
@@ -32,7 +32,7 @@ export default function MediaPreview({ urls, compact = false }) {
         }
         return (
           <a href={url} key={url} target="_blank" rel="noreferrer" title={`Open media ${index + 1}`}>
-            {isImageUrl(url) ? <img alt={`media ${index + 1}`} src={url} loading="lazy" /> : <span>Media {index + 1}</span>}
+            {isImageUrl(url) ? <img alt={`media ${index + 1}`} src={proxyImageUrl(url)} loading="lazy" /> : <span>Media {index + 1}</span>}
           </a>
         );
       })}
