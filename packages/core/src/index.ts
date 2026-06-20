@@ -167,6 +167,7 @@ type KnowledgeRepository = {
   deleteSavedFilter(id: string): void;
   upsertEntity(record: Entity): void;
   listEntities(knowledgeBaseId: string): Entity[];
+  deleteEntity(id: string): void;
   deleteEntitiesByKnowledgeBase(knowledgeBaseId: string): void;
   deleteCard(id: string): void;
   insertConflictAudit(entry: ConflictAuditEntry): void;
@@ -416,6 +417,10 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
 
   listEntities(knowledgeBaseId: string) {
     return this.state.entities.filter((item) => item.knowledgeBaseId === knowledgeBaseId);
+  }
+
+  deleteEntity(id: string) {
+    this.state.entities = this.state.entities.filter((item) => item.id !== id);
   }
 
   deleteEntitiesByKnowledgeBase(knowledgeBaseId: string) {
@@ -985,6 +990,10 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   listEntities(knowledgeBaseId: string) {
     const rows = this.db.prepare('SELECT * FROM entities WHERE knowledge_base_id = ? ORDER BY updated_at DESC').all(knowledgeBaseId);
     return (rows as EntityRow[]).map(mapEntity);
+  }
+
+  deleteEntity(id: string) {
+    this.db.prepare('DELETE FROM entities WHERE id = ?').run(id);
   }
 
   deleteEntitiesByKnowledgeBase(knowledgeBaseId: string) {
@@ -3187,16 +3196,22 @@ function resolveMaterialAssignmentTarget(input: AssignMaterialRequest, material:
 
 function moveMaterialAssets(materialId: string, previousKnowledgeBaseId: string, nextKnowledgeBaseId: string) {
   if (previousKnowledgeBaseId === nextKnowledgeBaseId) return;
+  const movedCardIds = new Set<string>();
   for (const card of repository.listCards(previousKnowledgeBaseId)) {
     if (card.materialId !== materialId) continue;
     card.knowledgeBaseId = nextKnowledgeBaseId;
     card.updatedAt = now();
     repository.updateCard(card);
+    movedCardIds.add(card.id);
   }
   for (const artifact of repository.listArtifacts(previousKnowledgeBaseId)) {
     if (!artifact.sourceMaterialIds.includes(materialId)) continue;
     artifact.knowledgeBaseId = nextKnowledgeBaseId;
     repository.updateArtifact(artifact);
+  }
+  for (const entity of repository.listEntities(previousKnowledgeBaseId)) {
+    if (!entity.sourceCardIds.some((id) => movedCardIds.has(id))) continue;
+    repository.deleteEntity(entity.id);
   }
 }
 
