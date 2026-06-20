@@ -22,6 +22,18 @@ import { useTaskStatusLabel, useTaskWorkflowLabel } from '../utils/i18nLabels';
 import { formatDateTime } from '../utils/material';
 
 /**
+ * 将 ID 格式化为可读名称（deepseek-v3 → Deepseek V3）
+ * @param {string} id - 原始 ID
+ * @returns {string} 格式化后的名称
+ */
+function formatDisplayName(id) {
+  if (!id) return '';
+  return id
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+/**
  * 后端 API 路径常量
  */
 const API_PATHS = {
@@ -493,7 +505,7 @@ export default function SettingsView() {
   ];
 
   return (
-    <section className="page-main full">
+    <section className="page-main full settings-page">
       <div className="page-title-row">
         <div>
           <h2>{t('settings.title')}</h2>
@@ -542,28 +554,41 @@ export default function SettingsView() {
             {profiles.length === 0 ? (
               <p className="settings-note">{t('settings.noProfiles')}</p>
             ) : (
-              <div style={PROFILE_LIST_STYLE}>
+              <div className="settings-profile-list">
                 {profiles.map((profile) => (
                   <div
                     key={profile.id}
-                    className="status-card"
-                    style={selectedProfileId === profile.id ? PROFILE_CARD_SELECTED_STYLE : PROFILE_CARD_STYLE}
-                    onClick={() => selectProfile(profile.id)}
+                    className={`settings-profile-item ${selectedProfileId === profile.id ? 'selected' : ''}`}
                   >
-                    <Star size={22} fill={profile.isDefault ? 'currentColor' : 'none'} />
-                    <div>
-                      <span>{profile.name}{profile.isDefault ? ` · ${t('settings.activated')}` : ''}</span>
-                      <strong>{profile.provider} / {profile.model}</strong>
-                      <p>{profile.hasApiKey ? `${t('settings.keyConfigured')}（${t(KEY_SOURCE_KEYS[profile.keySource])}）` : t('settings.keyNotConfigured')}</p>
-                      <div className="settings-actions" onClick={(event) => event.stopPropagation()}>
-                        {!profile.isDefault && (
-                          <button type="button" onClick={() => activateProfile(profile.id)}>{t('settings.activate')}</button>
-                        )}
-                        <button type="button" className="danger" onClick={() => deleteProfile(profile.id)}>
-                          <Trash2 size={16} />
-                          {t('common.delete')}
-                        </button>
+                    <button
+                      className="settings-profile-info"
+                      onClick={() => selectProfile(profile.id)}
+                      type="button"
+                    >
+                      <Star size={22} fill={profile.isDefault ? 'currentColor' : 'none'} />
+                      <div>
+                        <strong>
+                          {profile.name}
+                          {profile.isDefault ? ` · ${t('settings.activated')}` : ''}
+                        </strong>
+                        <span>{formatDisplayName(profile.provider)} / {formatDisplayName(profile.model)}</span>
+                        <small>
+                          {profile.hasApiKey
+                            ? `${t('settings.keyConfigured')}（${t(KEY_SOURCE_KEYS[profile.keySource])}）`
+                            : t('settings.keyNotConfigured')}
+                        </small>
                       </div>
+                    </button>
+                    <div className="settings-profile-actions">
+                      {!profile.isDefault && (
+                        <button type="button" onClick={() => activateProfile(profile.id)}>
+                          {t('settings.activate')}
+                        </button>
+                      )}
+                      <button type="button" className="danger" onClick={() => deleteProfile(profile.id)}>
+                        <Trash2 size={16} />
+                        {t('common.delete')}
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -586,13 +611,13 @@ export default function SettingsView() {
                 <label className="field-row">
                   <span>{t('settings.provider')}</span>
                   <select value={newProfile.provider} onChange={(event) => changeNewProfileProvider(event.target.value)}>
-                    {providerOptions.map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
+                    {providerOptions.map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
                   </select>
                 </label>
                 <label className="field-row">
                   <span>{t('settings.model')}</span>
                   <select value={newProfile.model} onChange={(event) => setNewProfile((prev) => ({ ...prev, model: event.target.value }))}>
-                    {(providerOptions.find((item) => item.id === newProfile.provider)?.models ?? []).map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
+                    {(providerOptions.find((item) => item.id === newProfile.provider)?.models ?? []).map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
                   </select>
                 </label>
                 <label className="field-row">
@@ -634,14 +659,14 @@ export default function SettingsView() {
                 <label className="field-row">
                   <span>{t('settings.provider')}</span>
                   <select value={provider} onChange={(event) => changeProvider(event.target.value)}>
-                    {providerOptions.map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
+                    {providerOptions.map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
                   </select>
                 </label>
 
                 <label className="field-row">
                   <span>{t('settings.model')}</span>
                   <select value={model} onChange={(event) => setModel(event.target.value)}>
-                    {modelOptions.map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
+                    {modelOptions.map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
                   </select>
                 </label>
 
@@ -670,13 +695,15 @@ export default function SettingsView() {
                   </label>
                 </div>
 
-                <div className="settings-actions">
+                <div className="settings-actions settings-actions-primary">
                   <button disabled={isSaving || !provider || !model} onClick={saveProfile} type="button">
                     {isSaving ? t('common.saving') : t('common.save')}
                   </button>
                   <button disabled={isTesting || !provider || !model} onClick={testSettings} type="button">
                     {isTesting ? t('settings.testingConnection') : t('settings.test')}
                   </button>
+                </div>
+                <div className="settings-actions settings-actions-danger">
                   <button disabled={isSaving || !hasApiKey} onClick={clearKey} type="button">
                     {t('settings.clearRuntimeKey')}
                   </button>
@@ -778,7 +805,7 @@ export default function SettingsView() {
             <ShieldCheck size={25} />
             <div>
               <span>{t('settings.currentRuntime')}</span>
-              <strong>{provider || t('settings.provider')} / {model || t('settings.model')}</strong>
+              <strong>{formatDisplayName(provider) || t('settings.provider')} / {formatDisplayName(model) || t('settings.model')}</strong>
               {hasApiKey ? (
                 <p>{t('settings.keyConfigured')} ({t(KEY_SOURCE_KEYS[keySource])})</p>
               ) : (
