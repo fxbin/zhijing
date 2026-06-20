@@ -405,7 +405,10 @@ export default function DetailView({
                   </div>
                 </div>
                 {feedViewMode === 'board' ? (
-                  <div className="feed-board">
+                  <div
+                    className="feed-board"
+                    style={{ '--column-count': filteredSortedGroupEntries.length }}
+                  >
                     {filteredSortedGroupEntries.map(([type, group]) => (
                       <section className="feed-column" key={type}>
                         <header className="feed-column-head">
