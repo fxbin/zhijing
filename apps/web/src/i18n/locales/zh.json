@@ -17,6 +17,8 @@
   "nav.export": "导出",
   "nav.settings": "设置",
   "nav.logout": "退出",
+  "knowledgeBase.select": "选择知识库",
+  "knowledgeBase.switch": "切换知识库",
   "common.save": "保存",
   "common.cancel": "取消",
   "common.delete": "删除",

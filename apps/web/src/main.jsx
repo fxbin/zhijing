@@ -28,6 +28,7 @@ import { viewFromHash, classifyInput, workflowFromKind } from './utils/navigatio
 import SystemNotice from './components/SystemNotice';
 import TaskList from './components/TaskList';
 import CreateKbModal from './components/CreateKbModal';
+import KnowledgeBaseSwitcher from './components/KnowledgeBaseSwitcher';
 import WorkspaceView from './views/WorkspaceView';
 import DetailView from './views/DetailView';
 import LibraryView from './views/LibraryView';
@@ -520,30 +521,6 @@ function App() {
           })}
         </nav>
 
-        <section className="kb-stack" aria-label="知识库列表">
-          <div className="kb-stack-head">
-            <p>{t('nav.knowledgeBase')}</p>
-            <button className="kb-new-btn" onClick={() => setIsCreateKbOpen(true)} title={t('common.create')} type="button">
-              <Plus size={16} />
-            </button>
-          </div>
-          {knowledgeBases.length === 0 && <span className="nav-empty">{t('common.empty')}</span>}
-          {knowledgeBases.map((base, index) => (
-            <button
-              className={base.id === selectedKnowledgeBaseId || (!selectedKnowledgeBaseId && (base.active || index === 0)) ? 'selected' : ''}
-              key={base.id ?? base.title}
-              onClick={() => {
-                if (base.id) setSelectedKnowledgeBaseId(base.id);
-                go('detail');
-              }}
-              type="button"
-            >
-              <strong>{base.title}</strong>
-              <span>{formatBaseMeta(base)}</span>
-            </button>
-          ))}
-        </section>
-
         <div className="side-footer">
           <LanguageSwitcher />
           <button type="button"><CircleHelp size={22} />{t('nav.help')}</button>
@@ -553,11 +530,22 @@ function App() {
 
       <section className="workspace">
         <header className="top-bar">
-          <nav aria-label="工作区导航">
+          <div className="top-bar-left">
+            <KnowledgeBaseSwitcher
+              knowledgeBases={knowledgeBases}
+              onCreate={() => setIsCreateKbOpen(true)}
+              onSelect={(id) => {
+                setSelectedKnowledgeBaseId(id);
+                go('detail');
+              }}
+              selectedKnowledgeBaseId={selectedKnowledgeBaseId}
+            />
+            <nav aria-label="工作区导航">
             <button className={view === 'workspace' ? 'active' : ''} onClick={() => go('workspace')} type="button">{t('topBar.path')}</button>
             <button className={view === 'maps' ? 'active' : ''} onClick={() => go('maps')} type="button">{t('topBar.maps')}</button>
             <button className={view === 'export' ? 'active' : ''} onClick={() => go('export')} type="button">{t('topBar.archive')}</button>
           </nav>
+          </div>
           <div className="top-tools">
             <label className="search-pill">
               <Search size={18} />

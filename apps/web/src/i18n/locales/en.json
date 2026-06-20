@@ -17,6 +17,8 @@
   "nav.export": "Export",
   "nav.settings": "Settings",
   "nav.logout": "Logout",
+  "knowledgeBase.select": "Select Knowledge Base",
+  "knowledgeBase.switch": "Switch Knowledge Base",
   "common.save": "Save",
   "common.cancel": "Cancel",
   "common.delete": "Delete",
