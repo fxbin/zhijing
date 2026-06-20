@@ -4499,7 +4499,7 @@ button { cursor: pointer; }
 .library-grid,
 .kit-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 24px;
 }
 
@@ -6084,6 +6084,7 @@ button { cursor: pointer; }
 }
 
 .search-result-meta span {
+  overflow: hidden;
   border-radius: 6px;
   background: var(--surface-low);
   color: var(--muted);
@@ -6091,6 +6092,9 @@ button { cursor: pointer; }
   font-size: 11px;
   font-weight: 850;
   text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
 }
 
 .search-layout {
