@@ -168,6 +168,10 @@
   "detail.parseButton": "解析",
   "detail.retryButton": "重试",
   "detail.parsedButton": "已解析",
+  "detail.boardView": "看板",
   "detail.groupedView": "分组",
-  "detail.listView": "列表"
+  "detail.listView": "列表",
+  "detail.searchCards": "搜索卡片…",
+  "detail.allTypes": "全部类型",
+  "detail.allStatuses": "全部状态"
 }

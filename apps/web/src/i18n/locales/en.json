@@ -167,5 +167,11 @@
   "intakeKind.theme": "Theme",
   "detail.parseButton": "Parse",
   "detail.retryButton": "Retry",
-  "detail.parsedButton": "Parsed"
+  "detail.parsedButton": "Parsed",
+  "detail.boardView": "Board",
+  "detail.groupedView": "Grouped",
+  "detail.listView": "List",
+  "detail.searchCards": "Search cards…",
+  "detail.allTypes": "All types",
+  "detail.allStatuses": "All statuses"
 }

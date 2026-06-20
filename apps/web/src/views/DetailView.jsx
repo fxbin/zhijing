@@ -13,7 +13,9 @@ import {
   ChevronUp,
   CircleX,
   Clock3,
+  Filter,
   History,
+  Search,
   Send,
   Sparkles,
   SquareArrowOutUpRight,
@@ -71,8 +73,11 @@ export default function DetailView({
   const parseStatusLabel = useParseStatusLabel();
   const intakeKindLabel = useIntakeKindLabel();
   const [feedMode, setFeedMode] = useState('feed');
-  const [feedViewMode, setFeedViewMode] = useState('grouped');
+  const [feedViewMode, setFeedViewMode] = useState('board');
   const [collapsedGroups, setCollapsedGroups] = useState(new Set());
+  const [feedSearch, setFeedSearch] = useState('');
+  const [feedTypeFilter, setFeedTypeFilter] = useState('all');
+  const [feedStatusFilter, setFeedStatusFilter] = useState('all');
   const cards = detail.cards ?? [];
   const materials = detail.materials ?? [];
   const artifacts = detail.artifacts ?? [];
@@ -87,9 +92,24 @@ export default function DetailView({
   const statusDistribution = analytics?.materialStatusDistribution?.slice(0, 4) ?? [];
   const platformDistribution = analytics?.platformDistribution?.slice(0, 4) ?? [];
   const CARD_TYPE_ORDER = ['concept', 'method', 'case', 'step', 'viewpoint', 'fact', 'question', 'general'];
+  const CLAIM_STATUS_ORDER = ['ai_skeleton', 'sourced', 'verified', 'disputed'];
   const sortedGroupEntries = CARD_TYPE_ORDER
     .filter((type) => (cardGroups[type]?.length ?? 0) > 0)
     .map((type) => [type, cardGroups[type]]);
+
+  const filteredCards = cards.filter((card) => {
+    const searchTerm = feedSearch.trim().toLowerCase();
+    const matchesSearch = !searchTerm
+      || (card.title ?? '').toLowerCase().includes(searchTerm)
+      || (card.body ?? '').toLowerCase().includes(searchTerm);
+    const matchesType = feedTypeFilter === 'all' || card.type === feedTypeFilter;
+    const matchesStatus = feedStatusFilter === 'all' || card.claimStatus === feedStatusFilter;
+    return matchesSearch && matchesType && matchesStatus;
+  });
+  const filteredCardGroups = groupCardsByType(filteredCards);
+  const filteredSortedGroupEntries = CARD_TYPE_ORDER
+    .filter((type) => (filteredCardGroups[type]?.length ?? 0) > 0)
+    .map((type) => [type, filteredCardGroups[type]]);
 
   const [entities, setEntities] = useState([]);
   const [loadingEntities, setLoadingEntities] = useState(false);
@@ -143,6 +163,32 @@ export default function DetailView({
       else next.add(type);
       return next;
     });
+  }
+
+  /**
+   * 渲染单张知识卡片。
+   * @param {object} card - 卡片对象
+   * @param {string} [extraClass] - 额外 CSS 类
+   * @returns {JSX.Element}
+   */
+  function renderCard(card, extraClass = '') {
+    return (
+      <article
+        id={`card-${card.id}`}
+        className={`knowledge-card type-${card.type ?? 'general'} ${highlightedCardId === card.id ? 'highlighted' : ''} ${extraClass}`}
+        key={card.id ?? card.title}
+      >
+        <div className="card-head">
+          <span className="card-type-badge">{cardTypeLabel(card.type)}</span>
+          {card.claimStatus === 'sourced' && (
+            <span className="card-source-badge"><CheckCircle2 size={14} />{claimStatusLabel(card.claimStatus)}</span>
+          )}
+        </div>
+        <h3>{card.title}</h3>
+        <p>{card.body}</p>
+        <footer>{claimStatusLabel(card.claimStatus)} · {card.updatedAt ? new Date(card.updatedAt).toLocaleDateString() : 'today'}</footer>
+      </article>
+    );
   }
 
   async function extractEntitiesAction() {
@@ -307,9 +353,43 @@ export default function DetailView({
             ) : feedMode === 'feed' ? (
               <>
                 <div className="feed-controls">
+                  <div className="feed-filters">
+                    <label className="feed-search">
+                      <Search size={16} />
+                      <input
+                        placeholder={t('detail.searchCards')}
+                        type="text"
+                        value={feedSearch}
+                        onChange={(event) => setFeedSearch(event.target.value)}
+                      />
+                    </label>
+                    <label className="feed-filter-select">
+                      <Filter size={14} />
+                      <select value={feedTypeFilter} onChange={(event) => setFeedTypeFilter(event.target.value)}>
+                        <option value="all">{t('detail.allTypes')}</option>
+                        {CARD_TYPE_ORDER.map((type) => (
+                          <option key={type} value={type}>{cardTypeLabel(type)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="feed-filter-select">
+                      <CheckCircle2 size={14} />
+                      <select value={feedStatusFilter} onChange={(event) => setFeedStatusFilter(event.target.value)}>
+                        <option value="all">{t('detail.allStatuses')}</option>
+                        {CLAIM_STATUS_ORDER.map((status) => (
+                          <option key={status} value={status}>{claimStatusLabel(status)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="feed-view-toggle">
+                      <button className={feedViewMode === 'board' ? 'active' : ''} onClick={() => setFeedViewMode('board')} type="button">{t('detail.boardView')}</button>
+                      <button className={feedViewMode === 'grouped' ? 'active' : ''} onClick={() => setFeedViewMode('grouped')} type="button">{t('detail.groupedView')}</button>
+                      <button className={feedViewMode === 'list' ? 'active' : ''} onClick={() => setFeedViewMode('list')} type="button">{t('detail.listView')}</button>
+                    </div>
+                  </div>
                   <div className="feed-type-distribution">
-                    {sortedGroupEntries.map(([type, group]) => {
-                      const ratio = cards.length > 0 ? Math.round((group.length / cards.length) * 100) : 0;
+                    {filteredSortedGroupEntries.map(([type, group]) => {
+                      const ratio = filteredCards.length > 0 ? Math.round((group.length / filteredCards.length) * 100) : 0;
                       return (
                         <div
                           key={type}
@@ -323,14 +403,25 @@ export default function DetailView({
                       );
                     })}
                   </div>
-                  <div className="feed-view-toggle">
-                    <button className={feedViewMode === 'grouped' ? 'active' : ''} onClick={() => setFeedViewMode('grouped')} type="button">{t('detail.groupedView')}</button>
-                    <button className={feedViewMode === 'list' ? 'active' : ''} onClick={() => setFeedViewMode('list')} type="button">{t('detail.listView')}</button>
-                  </div>
                 </div>
-                {feedViewMode === 'grouped' ? (
+                {feedViewMode === 'board' ? (
+                  <div className="feed-board">
+                    {filteredSortedGroupEntries.map(([type, group]) => (
+                      <section className="feed-column" key={type}>
+                        <header className="feed-column-head">
+                          <i className={`feed-column-dot ${type}`} />
+                          <strong>{cardTypeLabel(type)}</strong>
+                          <small>{group.length}</small>
+                        </header>
+                        <div className="feed-column-body">
+                          {group.map((card) => renderCard(card, 'compact'))}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                ) : feedViewMode === 'grouped' ? (
                   <div className="feed-groups">
-                    {sortedGroupEntries.map(([type, group]) => {
+                    {filteredSortedGroupEntries.map(([type, group]) => {
                       const isCollapsed = collapsedGroups.has(type);
                       return (
                         <section className="feed-group" key={type}>
@@ -344,23 +435,7 @@ export default function DetailView({
                           </header>
                           {!isCollapsed && (
                             <div className="feed-group-body">
-                              {group.map((card) => (
-                                <article
-                                  id={`card-${card.id}`}
-                                  className={`knowledge-card type-${card.type ?? 'general'} ${highlightedCardId === card.id ? 'highlighted' : ''}`}
-                                  key={card.id ?? card.title}
-                                >
-                                  <div className="card-head">
-                                    <span className="card-type-badge">{cardTypeLabel(card.type)}</span>
-                                    {card.claimStatus === 'sourced' && (
-                                      <span className="card-source-badge"><CheckCircle2 size={14} />{claimStatusLabel(card.claimStatus)}</span>
-                                    )}
-                                  </div>
-                                  <h3>{card.title}</h3>
-                                  <p>{card.body}</p>
-                                  <footer>{claimStatusLabel(card.claimStatus)} · {card.updatedAt ? new Date(card.updatedAt).toLocaleDateString() : 'today'}</footer>
-                                </article>
-                              ))}
+                              {group.map((card) => renderCard(card))}
                             </div>
                           )}
                         </section>
@@ -369,23 +444,7 @@ export default function DetailView({
                   </div>
                 ) : (
                   <div className="feed-list">
-                    {cards.map((card) => (
-                      <article
-                        id={`card-${card.id}`}
-                        className={`knowledge-card type-${card.type ?? 'general'} ${highlightedCardId === card.id ? 'highlighted' : ''}`}
-                        key={card.id ?? card.title}
-                      >
-                        <div className="card-head">
-                          <span className="card-type-badge">{cardTypeLabel(card.type)}</span>
-                          {card.claimStatus === 'sourced' && (
-                            <span className="card-source-badge"><CheckCircle2 size={14} />{claimStatusLabel(card.claimStatus)}</span>
-                          )}
-                        </div>
-                        <h3>{card.title}</h3>
-                        <p>{card.body}</p>
-                        <footer>{claimStatusLabel(card.claimStatus)} · {card.updatedAt ? new Date(card.updatedAt).toLocaleDateString() : 'today'}</footer>
-                      </article>
-                    ))}
+                    {filteredCards.map((card) => renderCard(card))}
                   </div>
                 )}
               </>
