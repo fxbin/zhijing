@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import './i18n';
 import {
   Bell,
   CircleHelp,
@@ -43,13 +44,14 @@ import ChatView from './views/ChatView';
 import RecallView from './views/RecallView';
 import ExportView from './views/ExportView';
 import SettingsView from './views/SettingsView';
-import { I18nProvider, useI18n } from './i18n/I18nContext';
+import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from './components/LanguageSwitcher';
 
 function App() {
+  const { t, i18n } = useTranslation();
   const [view, setView] = useState(viewFromHash);
   const [query, setQuery] = useState('');
-  const [activity, setActivity] = useState('Ready to organize a theme, link, or question.');
+  const [activity, setActivity] = useState(t('activity.ready'));
   const [apiStatus, setApiStatus] = useState('checking');
   const [knowledgeBases, setKnowledgeBases] = useState(seedKnowledgeBases);
   const [materials, setMaterials] = useState(seedMaterials);
@@ -281,7 +283,7 @@ function App() {
     const value = (overrideValue ?? query).trim();
     if (!value || isSubmitting) return;
     setIsSubmitting(true);
-    setActivity(`${kind} captured. Creating task through local API...`);
+    setActivity(t('activity.captured'));
 
     try {
       const response = await fetch('/api/intake', {
@@ -295,7 +297,7 @@ function App() {
       }
 
       const result = await response.json();
-      setActivity(`${result.message} Task ${result.task.id} finished.`);
+      setActivity(`${result.message} ${t('activity.completed')} ${result.task.id}`);
       applyIntakeResult(result);
       setQuery('');
     } catch {
@@ -313,7 +315,7 @@ function App() {
       setLatestTaskId(null);
       setLatestTask(failedTask);
       setTasks((current) => [failedTask, ...current].slice(0, 8));
-      setActivity('API is not ready. Keep the idea here and start dev:api to run the real intake loop.');
+      setActivity(t('activity.apiUnavailable'));
     } finally {
       setIsSubmitting(false);
     }
@@ -324,7 +326,7 @@ function App() {
     if (!value || !selectedKnowledgeBaseId || apiStatus !== 'online' || isAsking) return;
     setIsAsking(true);
     setAssistantAnswer({ question: value, loading: true });
-    setActivity('Asking current knowledge base...');
+    setActivity(t('activity.askKnowledgeBase'));
 
     try {
       const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/ask`, {
@@ -338,7 +340,7 @@ function App() {
       }
 
       const result = await response.json();
-      setActivity(`${result.message} Task ${result.task.id} finished.`);
+      setActivity(`${result.message} ${t('activity.completed')} ${result.task.id}`);
       setLatestTaskId(result.task.id);
       setLatestTask(result.task);
       setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
@@ -384,7 +386,7 @@ function App() {
     } catch {
       setAssistantAnswer({
         question: value,
-        error: '当前无法完成提问，请确认 API 已启动且知识库可用。',
+        error: t('activity.askFailed'),
       });
     } finally {
       setIsAsking(false);
@@ -411,7 +413,7 @@ function App() {
   const runKnowledgeKit = async (kitId = 'learning_research') => {
     if (!selectedKnowledgeBaseId || apiStatus !== 'online' || isRunningKit) return null;
     setIsRunningKit(true);
-    setActivity('Running knowledge kit...');
+    setActivity(t('activity.runKit'));
 
     try {
       const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/kits/run`, {
@@ -421,7 +423,7 @@ function App() {
       });
       if (!response.ok) throw new Error('Kit run failed.');
       const result = await response.json();
-      setActivity(`${result.message} Task ${result.task.id} finished.`);
+      setActivity(`${result.message} ${t('activity.completed')} ${result.task.id}`);
       setLatestTaskId(result.task.id);
       setLatestTask(result.task);
       setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
@@ -435,7 +437,7 @@ function App() {
       setKitRunResult(result);
       return result;
     } catch {
-      setActivity('Kit 运行失败，请确认 API 已启动且当前知识库可用。');
+      setActivity(t('activity.kitFailed'));
       return null;
     } finally {
       setIsRunningKit(false);
@@ -445,7 +447,7 @@ function App() {
   const parseMaterial = async (materialId) => {
     if (!materialId || parsingMaterialId) return;
     setParsingMaterialId(materialId);
-    setActivity('Parsing saved source material...');
+    setActivity(t('activity.parseMaterial'));
 
     try {
       const response = await fetch(`/api/materials/${materialId}/parse`, {
@@ -474,7 +476,7 @@ function App() {
       if (result.artifact) setSelectedArtifact(result.artifact);
       return result;
     } catch {
-      setActivity('解析失败，原链接仍已保留，可稍后重试或手动补充正文。');
+      setActivity(t('activity.parseFailed'));
       return null;
     } finally {
       setParsingMaterialId(null);
@@ -482,12 +484,12 @@ function App() {
   };
 
   const navItems = [
-    { key: 'detail', label: 'Knowledge Base', icon: Database },
-    { key: 'library', label: 'Library', icon: FolderOpen },
-    { key: 'search', label: 'Search', icon: Search },
-    { key: 'assets', label: 'Assets', icon: Layers },
-    { key: 'kits', label: 'Insights', icon: Sparkles },
-    { key: 'settings', label: 'Settings', icon: Settings },
+    { key: 'detail', label: t('nav.knowledgeBase'), icon: Database },
+    { key: 'library', label: t('nav.library'), icon: FolderOpen },
+    { key: 'search', label: t('nav.search'), icon: Search },
+    { key: 'assets', label: t('nav.assets'), icon: Layers },
+    { key: 'kits', label: t('nav.insights'), icon: Sparkles },
+    { key: 'settings', label: t('nav.settings'), icon: Settings },
   ];
 
   return (
@@ -496,14 +498,14 @@ function App() {
         <div className="brand-row" onClick={() => go('workspace')} role="button" tabIndex={0}>
           <div className="brand-mark" aria-hidden="true"><span /></div>
           <div>
-            <h1>知径</h1>
+            <h1>{t('app.title')}</h1>
             <p>Knowledge Path</p>
           </div>
         </div>
 
         <button className="primary-create" onClick={() => go('workspace')} type="button">
           <Plus size={23} />
-          New Insight
+          {t('nav.createNote')}
         </button>
 
         <nav className="nav-list">
@@ -520,12 +522,12 @@ function App() {
 
         <section className="kb-stack" aria-label="知识库列表">
           <div className="kb-stack-head">
-            <p>Knowledge Bases</p>
-            <button className="kb-new-btn" onClick={() => setIsCreateKbOpen(true)} title="新建知识库" type="button">
+            <p>{t('nav.knowledgeBase')}</p>
+            <button className="kb-new-btn" onClick={() => setIsCreateKbOpen(true)} title={t('common.create')} type="button">
               <Plus size={16} />
             </button>
           </div>
-          {knowledgeBases.length === 0 && <span className="nav-empty">No knowledge bases yet</span>}
+          {knowledgeBases.length === 0 && <span className="nav-empty">{t('common.empty')}</span>}
           {knowledgeBases.map((base, index) => (
             <button
               className={base.id === selectedKnowledgeBaseId || (!selectedKnowledgeBaseId && (base.active || index === 0)) ? 'selected' : ''}
@@ -544,33 +546,33 @@ function App() {
 
         <div className="side-footer">
           <LanguageSwitcher />
-          <button type="button"><CircleHelp size={22} />Help</button>
-          <button type="button"><LogOut size={22} />Logout</button>
+          <button type="button"><CircleHelp size={22} />{t('nav.help')}</button>
+          <button type="button"><LogOut size={22} />{t('nav.logout')}</button>
         </div>
       </aside>
 
       <section className="workspace">
         <header className="top-bar">
           <nav aria-label="工作区导航">
-            <button className={view === 'workspace' ? 'active' : ''} onClick={() => go('workspace')} type="button">Path</button>
-            <button className={view === 'maps' ? 'active' : ''} onClick={() => go('maps')} type="button">Maps</button>
-            <button className={view === 'export' ? 'active' : ''} onClick={() => go('export')} type="button">Archive</button>
+            <button className={view === 'workspace' ? 'active' : ''} onClick={() => go('workspace')} type="button">{t('topBar.path')}</button>
+            <button className={view === 'maps' ? 'active' : ''} onClick={() => go('maps')} type="button">{t('topBar.maps')}</button>
+            <button className={view === 'export' ? 'active' : ''} onClick={() => go('export')} type="button">{t('topBar.archive')}</button>
           </nav>
           <div className="top-tools">
             <label className="search-pill">
               <Search size={18} />
-              <input placeholder="Search..." />
+              <input placeholder={t('topBar.search')} />
             </label>
             <button title="Notifications" type="button"><Bell size={22} /></button>
             <button title="History" type="button"><History size={22} /></button>
-            <button className="node-button" onClick={() => go('workflow')} type="button">Create Node</button>
+            <button className="node-button" onClick={() => go('workflow')} type="button">{t('topBar.createNode')}</button>
             <div className="avatar">U</div>
           </div>
         </header>
 
         <div className="canvas">
           {apiStatus === 'offline' && <SystemNotice status="offline" />}
-          {view === 'workspace' && <WorkspaceView activity={activity} isSubmitting={isSubmitting} latestTask={latestTask} materials={materials} query={query} setQuery={setQuery} setView={go} submit={submit} />}
+          {view === 'workspace' && <WorkspaceView activity={activity} isSubmitting={isSubmitting} latestTask={latestTask} materials={materials} query={query} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setQuery={setQuery} setView={go} submit={submit} />}
           {view === 'workspace' && <TaskList tasks={tasks} />}
           {view === 'detail' && (
             <DetailView
@@ -673,7 +675,7 @@ function App() {
               }
               await refreshDashboard();
             } catch (err) {
-              setActivity(err.message || '创建知识库失败');
+              setActivity(err.message || t('activity.createKnowledgeBaseFailed'));
             }
             setIsCreateKbOpen(false);
           }}
@@ -683,8 +685,4 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(
-  <I18nProvider>
-    <App />
-  </I18nProvider>
-);
+createRoot(document.getElementById('root')).render(<App />);

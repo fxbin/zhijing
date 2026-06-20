@@ -17,7 +17,7 @@ import {
   Star,
   Trash2,
 } from 'lucide-react';
-import { useI18n } from '../i18n/I18nContext';
+import { useTranslation } from 'react-i18next';
 
 /**
  * 后端 API 路径常量
@@ -30,12 +30,12 @@ const API_PATHS = {
 };
 
 /**
- * Key 来源中文标签
+ * Key 来源标签（在组件内通过 t() 动态获取）
  */
-const KEY_SOURCE_LABEL = {
-  none: '尚未配置 Key',
-  env: '环境变量',
-  runtime: '本次运行期',
+const KEY_SOURCE_KEYS = {
+  none: 'settings.keyNotConfigured',
+  env: 'common.envVar',
+  runtime: 'common.runtime',
 };
 
 /**
@@ -93,7 +93,7 @@ const CREATE_FORM_STYLE = {
  * @author fxbin
  */
 export default function SettingsView() {
-  const { t } = useI18n();
+  const { t } = useTranslation();
   const [profiles, setProfiles] = useState([]);
   const [activeProfileId, setActiveProfileId] = useState(null);
   const [selectedProfileId, setSelectedProfileId] = useState(null);
@@ -107,7 +107,7 @@ export default function SettingsView() {
   const [hasApiKey, setHasApiKey] = useState(false);
   const [keySource, setKeySource] = useState('none');
   const [updatedAt, setUpdatedAt] = useState(null);
-  const [status, setStatus] = useState('Loading model settings...');
+  const [status, setStatus] = useState(t('settings.loadingModelSettings'));
   const [systemStats, setSystemStats] = useState(null);
   const [dataAction, setDataAction] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -115,6 +115,7 @@ export default function SettingsView() {
   const [testResult, setTestResult] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newProfile, setNewProfile] = useState(EMPTY_PROFILE_FORM);
+  const [activeSection, setActiveSection] = useState('profiles');
 
   const activeProvider = providerOptions.find((item) => item.id === provider);
   const modelOptions = activeProvider?.models ?? [];
@@ -129,9 +130,9 @@ export default function SettingsView() {
         const result = await response.json();
         if (ignore) return;
         applyV2Settings(result);
-        setStatus('Model settings are ready.');
+        setStatus(t('settings.modelSettingsReady'));
       } catch {
-        if (!ignore) setStatus('API 未连接，暂时无法读取模型设置。');
+        if (!ignore) setStatus(t('settings.modelSettingsOffline'));
       }
     }
     loadSettings();
@@ -249,7 +250,7 @@ export default function SettingsView() {
       applyV2Settings(result, forceSelectId);
       return result;
     } catch {
-      setStatus('刷新 profile 列表失败。');
+      setStatus(t('settings.refreshProfilesFailed'));
       return null;
     }
   }
@@ -259,15 +260,15 @@ export default function SettingsView() {
    * @param {string} id - profile id
    */
   async function activateProfile(id) {
-    setStatus('正在激活 Profile...');
+    setStatus(t('settings.activatingProfile'));
     try {
       const response = await fetch(`${API_PATHS.profiles}/${id}/activate`, { method: 'POST' });
       if (!response.ok) throw new Error('Activate failed.');
       const result = await response.json();
-      setStatus(`已激活 Profile：${result.profile.name}`);
+      setStatus(`${t('settings.profileActivated')}：${result.profile.name}`);
       await refreshProfiles();
     } catch {
-      setStatus('激活失败，请确认 API 正在运行。');
+      setStatus(t('settings.activationFailed'));
     }
   }
 
@@ -278,17 +279,17 @@ export default function SettingsView() {
   async function deleteProfile(id) {
     const target = profiles.find((item) => item.id === id);
     if (!target) return;
-    if (!window.confirm(`确认删除 Profile「${target.name}」？此操作不可撤销。`)) return;
-    setStatus('正在删除 Profile...');
+    if (!window.confirm(t('settings.deleteProfileConfirm'))) return;
+    setStatus(t('settings.deletingProfile'));
     try {
       const response = await fetch(`${API_PATHS.profiles}/${id}`, { method: 'DELETE' });
       if (!response.ok) throw new Error('Delete failed.');
       const remaining = profiles.filter((item) => item.id !== id);
       const nextSelected = selectedProfileId === id ? (remaining[0]?.id ?? null) : selectedProfileId;
-      setStatus(`已删除 Profile：${target.name}`);
+      setStatus(`${t('settings.profileDeleted')}：${target.name}`);
       await refreshProfiles(nextSelected);
     } catch {
-      setStatus('删除失败，请确认 API 正在运行。');
+      setStatus(t('settings.deleteFailed'));
     }
   }
 
@@ -416,7 +417,7 @@ export default function SettingsView() {
     const providerValue = newProfile.provider;
     const modelValue = newProfile.model;
     if (!name || !providerValue || !modelValue) {
-      setStatus('name、provider、model 均为必填。');
+      setStatus(t('settings.requiredFields'));
       return;
     }
     setIsSaving(true);
@@ -437,10 +438,10 @@ export default function SettingsView() {
       }
       const result = await response.json();
       setShowCreateForm(false);
-      setStatus(`Profile「${result.profile.name}」已创建。`);
+      setStatus(`${t('settings.profileCreated')}：${result.profile.name}`);
       await refreshProfiles(result.profile.id);
     } catch (error) {
-      setStatus(error.message || '创建失败，请确认 API 正在运行。');
+      setStatus(t('settings.createFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -481,6 +482,12 @@ export default function SettingsView() {
     }
   }
 
+  const SETTINGS_TABS = [
+    { key: 'profiles', label: t('settings.profiles'), icon: PlugZap },
+    { key: 'transparency', label: t('settings.systemTransparency'), icon: BarChart3 },
+    { key: 'dataControls', label: t('settings.dataControls'), icon: Database },
+  ];
+
   return (
     <section className="page-main full">
       <div className="page-title-row">
@@ -490,168 +497,277 @@ export default function SettingsView() {
         </div>
       </div>
 
-      <div className="settings-grid">
-        <section className="settings-panel">
-          <div className="settings-panel-head">
-            <PlugZap size={24} />
-            <div>
-              <h3>{t('settings.profiles')}</h3>
-              <p>管理多组模型配置，点击 Profile 选中后可在下方编辑。激活的 Profile 会被新任务使用。</p>
-            </div>
-          </div>
-
-          <div className="settings-actions">
-            <button type="button" onClick={openCreateForm}>
-              <Plus size={16} />
-              {t('settings.createProfile')}
+      <div className="settings-tabs" role="tablist" aria-label={t('settings.title')}>
+        {SETTINGS_TABS.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeSection === tab.key;
+          return (
+            <button
+              key={tab.key}
+              aria-selected={isActive}
+              className={isActive ? 'active' : ''}
+              onClick={() => setActiveSection(tab.key)}
+              role="tab"
+              type="button"
+            >
+              <Icon size={18} />
+              {tab.label}
             </button>
-          </div>
+          );
+        })}
+      </div>
 
-          {profiles.length === 0 ? (
-            <p className="settings-note">暂无 Profile，请创建第一个 Profile。</p>
-          ) : (
-            <div style={PROFILE_LIST_STYLE}>
-              {profiles.map((profile) => (
-                <div
-                  key={profile.id}
-                  className="status-card"
-                  style={selectedProfileId === profile.id ? PROFILE_CARD_SELECTED_STYLE : PROFILE_CARD_STYLE}
-                  onClick={() => selectProfile(profile.id)}
-                >
-                  <Star size={22} fill={profile.isDefault ? 'currentColor' : 'none'} />
-                  <div>
-                    <span>{profile.name}{profile.isDefault ? ` · ${t('settings.activated')}` : ''}</span>
-                    <strong>{profile.provider} / {profile.model}</strong>
-                    <p>{profile.hasApiKey ? `${t('settings.keyConfigured')}（${KEY_SOURCE_LABEL[profile.keySource]}）` : t('settings.keyNotConfigured')}</p>
-                    <div className="settings-actions" onClick={(event) => event.stopPropagation()}>
-                      {!profile.isDefault && (
-                        <button type="button" onClick={() => activateProfile(profile.id)}>{t('settings.activate')}</button>
-                      )}
-                      <button type="button" className="danger" onClick={() => deleteProfile(profile.id)}>
-                        <Trash2 size={16} />
-                        {t('common.delete')}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {showCreateForm && (
-            <div style={CREATE_FORM_STYLE}>
-              <strong>新建 Profile</strong>
-              <label className="field-row">
-                <span>{t('settings.profileName')}</span>
-                <input
-                  autoComplete="off"
-                  placeholder="如：研究模式 / 创作模式"
-                  type="text"
-                  value={newProfile.name}
-                  onChange={(event) => setNewProfile((prev) => ({ ...prev, name: event.target.value }))}
-                />
-              </label>
-              <label className="field-row">
-                <span>{t('settings.provider')}</span>
-                <select value={newProfile.provider} onChange={(event) => changeNewProfileProvider(event.target.value)}>
-                  {providerOptions.map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
-                </select>
-              </label>
-              <label className="field-row">
-                <span>{t('settings.model')}</span>
-                <select value={newProfile.model} onChange={(event) => setNewProfile((prev) => ({ ...prev, model: event.target.value }))}>
-                  {(providerOptions.find((item) => item.id === newProfile.provider)?.models ?? []).map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
-                </select>
-              </label>
-              <label className="field-row">
-                <span>{t('settings.apiKey')}</span>
-                <div className="secret-input">
-                  <KeyRound size={18} />
-                  <input
-                    autoComplete="off"
-                    placeholder="可选，留空则使用环境变量"
-                    type="password"
-                    value={newProfile.apiKey}
-                    onChange={(event) => setNewProfile((prev) => ({ ...prev, apiKey: event.target.value }))}
-                  />
-                </div>
-              </label>
-              <div className="settings-actions">
-                <button type="button" disabled={isSaving} onClick={createProfile}>
-                  {isSaving ? 'Creating...' : t('common.create')}
-                </button>
-                <button type="button" onClick={() => setShowCreateForm(false)}>{t('common.cancel')}</button>
+      <div className="settings-grid">
+        {activeSection === 'profiles' && (
+          <section className="settings-panel">
+            <div className="settings-panel-head">
+              <PlugZap size={24} />
+              <div>
+                <h3>{t('settings.profiles')}</h3>
+                <p>{t('settings.profilesDesc')}</p>
               </div>
             </div>
-          )}
 
-          {selectedProfile && !showCreateForm && (
-            <>
-              <div className="settings-toggles">
+            <div className="settings-actions">
+              <button type="button" onClick={openCreateForm}>
+                <Plus size={16} />
+                {t('settings.createProfile')}
+              </button>
+            </div>
+
+            {profiles.length === 0 ? (
+              <p className="settings-note">{t('settings.noProfiles')}</p>
+            ) : (
+              <div style={PROFILE_LIST_STYLE}>
+                {profiles.map((profile) => (
+                  <div
+                    key={profile.id}
+                    className="status-card"
+                    style={selectedProfileId === profile.id ? PROFILE_CARD_SELECTED_STYLE : PROFILE_CARD_STYLE}
+                    onClick={() => selectProfile(profile.id)}
+                  >
+                    <Star size={22} fill={profile.isDefault ? 'currentColor' : 'none'} />
+                    <div>
+                      <span>{profile.name}{profile.isDefault ? ` · ${t('settings.activated')}` : ''}</span>
+                      <strong>{profile.provider} / {profile.model}</strong>
+                      <p>{profile.hasApiKey ? `${t('settings.keyConfigured')}（${t(KEY_SOURCE_KEYS[profile.keySource])}）` : t('settings.keyNotConfigured')}</p>
+                      <div className="settings-actions" onClick={(event) => event.stopPropagation()}>
+                        {!profile.isDefault && (
+                          <button type="button" onClick={() => activateProfile(profile.id)}>{t('settings.activate')}</button>
+                        )}
+                        <button type="button" className="danger" onClick={() => deleteProfile(profile.id)}>
+                          <Trash2 size={16} />
+                          {t('common.delete')}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {showCreateForm && (
+              <div style={CREATE_FORM_STYLE}>
+                <strong>{t('settings.createProfile')}</strong>
                 <label className="field-row">
                   <span>{t('settings.profileName')}</span>
                   <input
                     autoComplete="off"
+                    placeholder={t('settings.profileNameExample')}
                     type="text"
-                    value={profileName}
-                    onChange={(event) => setProfileName(event.target.value)}
+                    value={newProfile.name}
+                    onChange={(event) => setNewProfile((prev) => ({ ...prev, name: event.target.value }))}
                   />
                 </label>
-              </div>
-
-              <label className="field-row">
-                <span>{t('settings.provider')}</span>
-                <select value={provider} onChange={(event) => changeProvider(event.target.value)}>
-                  {providerOptions.map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
-                </select>
-              </label>
-
-              <label className="field-row">
-                <span>{t('settings.model')}</span>
-                <select value={model} onChange={(event) => setModel(event.target.value)}>
-                  {modelOptions.map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
-                </select>
-              </label>
-
-              <label className="field-row">
-                <span>{t('settings.apiKey')}</span>
-                <div className="secret-input">
-                  <KeyRound size={18} />
-                  <input
-                    autoComplete="off"
-                    placeholder={hasApiKey ? t('settings.apiKeyPlaceholder.configured') : t('settings.apiKeyPlaceholder.empty')}
-                    type="password"
-                    value={apiKey}
-                    onChange={(event) => setApiKey(event.target.value)}
-                  />
+                <label className="field-row">
+                  <span>{t('settings.provider')}</span>
+                  <select value={newProfile.provider} onChange={(event) => changeNewProfileProvider(event.target.value)}>
+                    {providerOptions.map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
+                  </select>
+                </label>
+                <label className="field-row">
+                  <span>{t('settings.model')}</span>
+                  <select value={newProfile.model} onChange={(event) => setNewProfile((prev) => ({ ...prev, model: event.target.value }))}>
+                    {(providerOptions.find((item) => item.id === newProfile.provider)?.models ?? []).map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
+                  </select>
+                </label>
+                <label className="field-row">
+                  <span>{t('settings.apiKey')}</span>
+                  <div className="secret-input">
+                    <KeyRound size={18} />
+                    <input
+                      autoComplete="off"
+                      placeholder={t('settings.apiKeyOptional')}
+                      type="password"
+                      value={newProfile.apiKey}
+                      onChange={(event) => setNewProfile((prev) => ({ ...prev, apiKey: event.target.value }))}
+                    />
+                  </div>
+                </label>
+                <div className="settings-actions">
+                  <button type="button" disabled={isSaving} onClick={createProfile}>
+                    {isSaving ? t('common.creating') : t('common.create')}
+                  </button>
+                  <button type="button" onClick={() => setShowCreateForm(false)}>{t('common.cancel')}</button>
                 </div>
-              </label>
-
-              <div className="settings-toggles">
-                <label>
-                  <input checked={enabled} onChange={(event) => setEnabled(event.target.checked)} type="checkbox" />
-                  {t('settings.enableRealModel')}
-                </label>
-                <label>
-                  <input checked={fallbackToMock} onChange={(event) => setFallbackToMock(event.target.checked)} type="checkbox" />
-                  {t('settings.fallbackToMock')}
-                </label>
               </div>
+            )}
 
-              <div className="settings-actions">
-                <button disabled={isSaving || !provider || !model} onClick={saveProfile} type="button">
-                  {isSaving ? 'Saving...' : t('common.save')}
-                </button>
-                <button disabled={isTesting || !provider || !model} onClick={testSettings} type="button">
-                  {isTesting ? 'Testing...' : t('common.test')}
-                </button>
-                <button disabled={isSaving || !hasApiKey} onClick={clearKey} type="button">
-                  {t('common.clear')} Key
-                </button>
+            {selectedProfile && !showCreateForm && (
+              <>
+                <div className="settings-toggles">
+                  <label className="field-row">
+                    <span>{t('settings.profileName')}</span>
+                    <input
+                      autoComplete="off"
+                      type="text"
+                      value={profileName}
+                      onChange={(event) => setProfileName(event.target.value)}
+                    />
+                  </label>
+                </div>
+
+                <label className="field-row">
+                  <span>{t('settings.provider')}</span>
+                  <select value={provider} onChange={(event) => changeProvider(event.target.value)}>
+                    {providerOptions.map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
+                  </select>
+                </label>
+
+                <label className="field-row">
+                  <span>{t('settings.model')}</span>
+                  <select value={model} onChange={(event) => setModel(event.target.value)}>
+                    {modelOptions.map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
+                  </select>
+                </label>
+
+                <label className="field-row">
+                  <span>{t('settings.apiKey')}</span>
+                  <div className="secret-input">
+                    <KeyRound size={18} />
+                    <input
+                      autoComplete="off"
+                      placeholder={hasApiKey ? t('settings.apiKeyPlaceholder.configured') : t('settings.apiKeyPlaceholder.empty')}
+                      type="password"
+                      value={apiKey}
+                      onChange={(event) => setApiKey(event.target.value)}
+                    />
+                  </div>
+                </label>
+
+                <div className="settings-toggles">
+                  <label>
+                    <input checked={enabled} onChange={(event) => setEnabled(event.target.checked)} type="checkbox" />
+                    {t('settings.enableRealModel')}
+                  </label>
+                  <label>
+                    <input checked={fallbackToMock} onChange={(event) => setFallbackToMock(event.target.checked)} type="checkbox" />
+                    {t('settings.fallbackToMock')}
+                  </label>
+                </div>
+
+                <div className="settings-actions">
+                  <button disabled={isSaving || !provider || !model} onClick={saveProfile} type="button">
+                    {isSaving ? t('common.saving') : t('common.save')}
+                  </button>
+                  <button disabled={isTesting || !provider || !model} onClick={testSettings} type="button">
+                    {isTesting ? t('settings.testingConnection') : t('settings.test')}
+                  </button>
+                  <button disabled={isSaving || !hasApiKey} onClick={clearKey} type="button">
+                    {t('settings.clearRuntimeKey')}
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
+        {activeSection === 'transparency' && (
+          <section className="settings-panel">
+            <div className="settings-panel-head">
+              <BarChart3 size={24} />
+              <div>
+                <h3>{t('settings.systemTransparency')}</h3>
+                <p>{t('settings.systemTransparency.desc')}</p>
               </div>
-            </>
-          )}
-        </section>
+            </div>
+            {systemStats ? (
+              <div className="settings-transparency">
+                <div className="status-card">
+                  <Database size={22} />
+                  <div>
+                    <span>{t('settings.apiStatus')}</span>
+                    <strong>{systemStats.apiOnline ? t('settings.online') : t('settings.offline')}</strong>
+                    <p>{systemStats.apiOnline ? t('settings.apiOnline') : t('settings.apiOffline')}</p>
+                  </div>
+                </div>
+                <div className="status-card">
+                  <ShieldCheck size={22} />
+                  <div>
+                    <span>{t('settings.dataScale')}</span>
+                    <strong>{systemStats.knowledgeBases} KB · {systemStats.materials} materials</strong>
+                    <p>{systemStats.tasks} {t('settings.tasksRecorded')}</p>
+                  </div>
+                </div>
+                {systemStats.recentTasks?.length > 0 && (
+                  <div className="settings-recent-tasks">
+                    <strong>{t('settings.recentTasks')}</strong>
+                    {systemStats.recentTasks.map((task) => (
+                      <div key={task.id} className="settings-task-row">
+                        <span>{task.workflow}</span>
+                        <span>{task.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="settings-note">{t('settings.loadingSystem')}</p>
+            )}
+          </section>
+        )}
+
+        {activeSection === 'dataControls' && (
+          <section className="settings-panel">
+            <div className="settings-panel-head">
+              <Database size={24} />
+              <div>
+                <h3>{t('settings.dataControls')}</h3>
+                <p>{t('settings.dataControls.desc')}</p>
+              </div>
+            </div>
+            <div className="settings-actions">
+              <button
+                type="button"
+                disabled={dataAction?.type === 'export' && dataAction?.loading}
+                onClick={exportAllData}
+              >
+                <Download size={16} />
+                {dataAction?.type === 'export' && dataAction?.loading ? t('settings.exporting') : t('settings.exportAll')}
+              </button>
+              <button
+                type="button"
+                className="danger"
+                onClick={clearLocalCache}
+              >
+                <Trash2 size={16} />
+                {t('settings.clearLocalCache')}
+              </button>
+            </div>
+            {dataAction?.type === 'export' && dataAction?.ok && (
+              <p className="settings-note">{t('settings.exportSuccess')}</p>
+            )}
+            {dataAction?.type === 'export' && dataAction?.ok === false && (
+              <p className="settings-note">{t('settings.exportFailed')}</p>
+            )}
+            {dataAction?.type === 'clear' && dataAction?.ok && (
+              <p className="settings-note">{t('settings.clearSuccess')} {dataAction.count} {t('settings.items')}</p>
+            )}
+            {dataAction?.type === 'clear' && dataAction?.ok === false && (
+              <p className="settings-note">{t('settings.clearFailed')}</p>
+            )}
+          </section>
+        )}
 
         <aside className="settings-status">
           <div className="status-card">
@@ -659,8 +775,12 @@ export default function SettingsView() {
             <div>
               <span>{t('settings.currentRuntime')}</span>
               <strong>{provider || t('settings.provider')} / {model || t('settings.model')}</strong>
-              <p>{hasApiKey ? `${t('settings.keyConfigured')}（${KEY_SOURCE_LABEL[keySource]}）` : t('settings.keyNotConfigured')}</p>
-              {updatedAt && <small>{t('settings.lastSaved')}：{new Date(updatedAt).toLocaleString('zh-CN')}</small>}
+              {hasApiKey ? (
+                <p>{t('settings.keyConfigured')} ({t(KEY_SOURCE_KEYS[keySource])})</p>
+              ) : (
+                <p>{t('settings.keyNotConfigured')}</p>
+              )}
+              {updatedAt && <small>{t('settings.lastSaved')}: {new Date(updatedAt).toLocaleString('zh-CN')}</small>}
             </div>
           </div>
           <div className="status-card">
@@ -680,91 +800,6 @@ export default function SettingsView() {
             </div>
           )}
         </aside>
-      </div>
-
-      <div className="settings-grid">
-        <section className="settings-panel">
-          <div className="settings-panel-head">
-            <BarChart3 size={24} />
-            <div>
-              <h3>{t('settings.systemTransparency')}</h3>
-              <p>{t('settings.systemTransparency.desc')}</p>
-            </div>
-          </div>
-          {systemStats ? (
-            <div className="settings-transparency">
-              <div className="status-card">
-                <Database size={22} />
-                <div>
-                  <span>{t('settings.apiStatus')}</span>
-                  <strong>{systemStats.apiOnline ? t('settings.online') : t('settings.offline')}</strong>
-                  <p>{systemStats.apiOnline ? t('settings.apiOnline') : t('settings.apiOffline')}</p>
-                </div>
-              </div>
-              <div className="status-card">
-                <ShieldCheck size={22} />
-                <div>
-                  <span>{t('settings.dataScale')}</span>
-                  <strong>{systemStats.knowledgeBases} KB · {systemStats.materials} materials</strong>
-                  <p>{systemStats.tasks} {t('settings.tasksRecorded')}</p>
-                </div>
-              </div>
-              {systemStats.recentTasks?.length > 0 && (
-                <div className="settings-recent-tasks">
-                  <strong>{t('settings.recentTasks')}</strong>
-                  {systemStats.recentTasks.map((task) => (
-                    <div key={task.id} className="settings-task-row">
-                      <span>{task.workflow}</span>
-                      <span>{task.status}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="settings-note">{t('settings.loadingSystem')}</p>
-          )}
-        </section>
-
-        <section className="settings-panel">
-          <div className="settings-panel-head">
-            <Database size={24} />
-            <div>
-              <h3>{t('settings.dataControls')}</h3>
-              <p>{t('settings.dataControls.desc')}</p>
-            </div>
-          </div>
-          <div className="settings-actions">
-            <button
-              type="button"
-              disabled={dataAction?.type === 'export' && dataAction?.loading}
-              onClick={exportAllData}
-            >
-              <Download size={16} />
-              {dataAction?.type === 'export' && dataAction?.loading ? t('settings.exporting') : t('settings.exportAll')}
-            </button>
-            <button
-              type="button"
-              className="danger"
-              onClick={clearLocalCache}
-            >
-              <Trash2 size={16} />
-              {t('settings.clearLocalCache')}
-            </button>
-          </div>
-          {dataAction?.type === 'export' && dataAction?.ok && (
-            <p className="settings-note">{t('settings.exportSuccess')}</p>
-          )}
-          {dataAction?.type === 'export' && dataAction?.ok === false && (
-            <p className="settings-note">{t('settings.exportFailed')}</p>
-          )}
-          {dataAction?.type === 'clear' && dataAction?.ok && (
-            <p className="settings-note">{t('settings.clearSuccess')} {dataAction.count} {t('settings.items')}</p>
-          )}
-          {dataAction?.type === 'clear' && dataAction?.ok === false && (
-            <p className="settings-note">{t('settings.clearFailed')}</p>
-          )}
-        </section>
       </div>
     </section>
   );

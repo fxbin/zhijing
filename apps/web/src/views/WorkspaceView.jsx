@@ -8,7 +8,7 @@ import EmptyState from '../components/EmptyState';
 import TaskStatus from '../components/TaskStatus';
 import RecentImports from '../components/RecentImports';
 import KnowledgeMapPanel from '../components/KnowledgeMapPanel';
-import { useI18n } from '../i18n/I18nContext';
+import { useTranslation } from 'react-i18next';
 
 /**
  * 工作区首页视图。
@@ -18,13 +18,14 @@ import { useI18n } from '../i18n/I18nContext';
  * @param {object} props.latestTask - 最近任务对象
  * @param {Array} props.materials - 最近导入资料列表
  * @param {string} props.query - 输入框当前值
+ * @param {string|null} props.selectedKnowledgeBaseId - 当前选中的知识库 ID
  * @param {(value: string) => void} props.setQuery - 设置输入值
  * @param {(view: string) => void} props.setView - 切换视图
  * @param {() => void} props.submit - 提交回调
  * @returns {JSX.Element} 工作区视图
  */
-export default function WorkspaceView({ activity, isSubmitting, latestTask, materials, query, setQuery, setView, submit }) {
-  const { t } = useI18n();
+export default function WorkspaceView({ activity, isSubmitting, latestTask, materials, query, selectedKnowledgeBaseId, setQuery, setView, submit }) {
+  const { t } = useTranslation();
   const hasContent = materials.length > 0 || latestTask;
   return (
     <>
@@ -76,7 +77,7 @@ export default function WorkspaceView({ activity, isSubmitting, latestTask, mate
         ) : (
           <>
             <RecentImports materials={materials} />
-            <KnowledgeMapPanel setView={setView} />
+            <KnowledgeMapPanel selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={setView} />
           </>
         )}
       </section>
