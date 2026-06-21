@@ -5,7 +5,6 @@
 
 import { Sparkles, SquareArrowOutUpRight } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
-import TaskList from '../components/TaskList';
 import RecentImports from '../components/RecentImports';
 import KnowledgeMapPanel from '../components/KnowledgeMapPanel';
 import { useTranslation } from 'react-i18next';
@@ -21,12 +20,11 @@ import { useTranslation } from 'react-i18next';
  * @param {(value: string) => void} props.setQuery - 设置输入值
  * @param {(view: string) => void} props.setView - 切换视图
  * @param {() => void} props.submit - 提交回调
- * @param {Array<object>} props.tasks - 任务列表
  * @returns {JSX.Element} 工作区视图
  */
-export default function WorkspaceView({ activity, isSubmitting, materials, query, selectedKnowledgeBaseId, setQuery, setView, submit, tasks }) {
+export default function WorkspaceView({ activity, isSubmitting, materials, query, selectedKnowledgeBaseId, setQuery, setView, submit }) {
   const { t } = useTranslation();
-  const hasContent = materials.length > 0 || tasks.length > 0;
+  const hasContent = materials.length > 0;
   return (
     <>
       <section className="hero">
@@ -47,9 +45,13 @@ export default function WorkspaceView({ activity, isSubmitting, materials, query
           </div>
         </div>
         <div className="chip-row">
-          <button type="button"># {t('workspace.quickTagProjectResearch')}</button>
-          <button type="button"># {t('workspace.quickTagDailyNotes')}</button>
-          <button type="button">+ {t('workspace.moreTags')}</button>
+          <button type="button" onClick={() => submit(`#${t('workspace.quickTagProjectResearch')}`)}>
+            # {t('workspace.quickTagProjectResearch')}
+          </button>
+          <button type="button" onClick={() => submit(`#${t('workspace.quickTagDailyNotes')}`)}>
+            # {t('workspace.quickTagDailyNotes')}
+          </button>
+          <button type="button" disabled>+ {t('workspace.moreTags')}</button>
         </div>
         {isSubmitting && (
           <div className="workspace-loading" aria-live="polite">
@@ -57,8 +59,7 @@ export default function WorkspaceView({ activity, isSubmitting, materials, query
             <span>{t('workspace.processing')}</span>
           </div>
         )}
-        {!isSubmitting && tasks.length > 0 && <TaskList tasks={tasks} />}
-        {!isSubmitting && tasks.length === 0 && activity && <p className="activity">{activity}</p>}
+        {!isSubmitting && activity && <p className="activity">{activity}</p>}
       </section>
 
       <section className="lower-grid">

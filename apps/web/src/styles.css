@@ -399,6 +399,82 @@ button { cursor: pointer; }
   font-weight: 700;
 }
 
+.notification-dropdown {
+  position: relative;
+}
+
+.notification-trigger {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--primary);
+  position: relative;
+}
+
+.notification-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--error);
+  color: white;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.notification-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  max-height: 420px;
+  overflow-y: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 16px 48px rgba(9, 20, 38, 0.18);
+  backdrop-filter: blur(12px);
+  padding: 14px;
+  z-index: 100;
+}
+
+.notification-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.notification-menu .task-panel {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.notification-menu .empty-state {
+  margin-top: 8px;
+}
+
+.chip-row button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .avatar {
   display: grid;
   place-items: center;

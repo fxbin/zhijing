@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client';
 import './i18n';
 import {
   Archive,
-  Bell,
   CircleHelp,
   Database,
   FolderOpen,
@@ -29,6 +28,7 @@ import {
 } from './utils/knowledge';
 import { viewFromHash, classifyInput, workflowFromKind } from './utils/navigation';
 import SystemNotice from './components/SystemNotice';
+import NotificationDropdown from './components/NotificationDropdown';
 import CreateKbModal from './components/CreateKbModal';
 import KnowledgeBaseSwitcher from './components/KnowledgeBaseSwitcher';
 import WorkspaceView from './views/WorkspaceView';
@@ -559,7 +559,7 @@ function App() {
               <Search size={18} />
               <input placeholder={t('common.search')} />
             </label>
-            <button title={t('common.notifications')} type="button"><Bell size={22} /></button>
+            <NotificationDropdown tasks={tasks} />
             <button title={t('common.history')} type="button"><History size={22} /></button>
             <button className="node-button" onClick={() => go('workflow')} type="button">{t('topBar.createNode')}</button>
             <div className="avatar">U</div>
@@ -568,7 +568,7 @@ function App() {
 
         <div className="canvas">
           {apiStatus === 'offline' && <SystemNotice status="offline" />}
-          {view === 'workspace' && <WorkspaceView activity={activity} isSubmitting={isSubmitting} materials={materials} query={query} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setQuery={setQuery} setView={go} submit={submit} tasks={tasks} />}
+          {view === 'workspace' && <WorkspaceView activity={activity} isSubmitting={isSubmitting} materials={materials} query={query} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setQuery={setQuery} setView={go} submit={submit} />}
           {view === 'detail' && (
             <DetailView
               apiStatus={apiStatus}
