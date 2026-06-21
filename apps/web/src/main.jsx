@@ -765,10 +765,13 @@ function App() {
               const result = await response.json();
               setCreateKbError(null);
               if (result.knowledgeBase?.id) {
+                setKnowledgeBases((current) => [
+                  result.knowledgeBase,
+                  ...current.filter((base) => base.id !== result.knowledgeBase.id),
+                ]);
                 setSelectedKnowledgeBaseId(result.knowledgeBase.id);
                 go('detail');
               }
-              await refreshDashboard();
               setIsCreateKbOpen(false);
             } catch (err) {
               setCreateKbError(err.message || t('activity.createKnowledgeBaseFailed'));
