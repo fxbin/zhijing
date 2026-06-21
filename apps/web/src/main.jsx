@@ -595,8 +595,6 @@ function App() {
             />
             <nav aria-label={t('nav.workspaceNav')}>
               <button className={view === 'workspace' ? 'active' : ''} onClick={() => go('workspace')} type="button">{t('nav.workspace')}</button>
-              <button className={view === 'maps' ? 'active' : ''} onClick={() => go('maps')} type="button">{t('nav.maps')}</button>
-              <button className={view === 'export' ? 'active' : ''} onClick={() => go('export')} type="button">{t('nav.export')}</button>
             </nav>
           </div>
           <div className="top-tools">
