@@ -66,45 +66,6 @@ const EMPTY_PROFILE_FORM = {
 };
 
 /**
- * Profile 卡片默认样式（复用 .status-card 的 grid 布局，通过 inline style 补充完整边框）
- */
-const PROFILE_CARD_STYLE = {
-  cursor: 'pointer',
-  border: '1px solid var(--line-soft)',
-  borderRadius: '10px',
-  padding: '16px',
-};
-
-/**
- * Profile 卡片选中样式
- */
-const PROFILE_CARD_SELECTED_STYLE = {
-  cursor: 'pointer',
-  border: '1px solid var(--primary)',
-  borderRadius: '10px',
-  background: 'rgba(216, 227, 251, 0.32)',
-  padding: '16px',
-};
-
-/**
- * Profile 列表容器样式
- */
-const PROFILE_LIST_STYLE = {
-  display: 'grid',
-  gap: '12px',
-};
-
-/**
- * 创建表单容器样式
- */
-const CREATE_FORM_STYLE = {
-  display: 'grid',
-  gap: '16px',
-  borderTop: '1px solid var(--line-soft)',
-  paddingTop: '18px',
-};
-
-/**
  * 设置视图组件：多 Profile 管理 + 系统透明度 + 数据控制 + 微信读书
  *
  * @param {object} props - 组件属性
@@ -765,7 +726,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed 
             </div>
 
             {showCreateForm ? (
-              <div style={CREATE_FORM_STYLE}>
+              <div className="settings-create-form">
                 <strong>{t('settings.createProfile')}</strong>
                 <label className="field-row">
                   <span>{t('settings.profileName')}</span>
