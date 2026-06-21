@@ -192,7 +192,9 @@ export default function ArchiveView({ selectedKnowledgeBaseId, setView }) {
                     {item.knowledgeBaseId && (
                       <span className="archive-row-base">
                         {' · '}
-                        {knowledgeBaseMap.get(item.knowledgeBaseId) ?? item.knowledgeBaseId}
+                        {knowledgeBaseMap.has(item.knowledgeBaseId)
+                          ? knowledgeBaseMap.get(item.knowledgeBaseId)
+                          : <span className="archive-row-base-deleted">{t('archive.deletedKnowledgeBase')}</span>}
                       </span>
                     )}
                   </span>

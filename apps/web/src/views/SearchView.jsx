@@ -16,11 +16,52 @@ import {
   TOP_SEARCH_STORAGE_KEY,
 } from '../constants/options';
 import { resultIcon } from '../utils/material';
+import {
+  getCardTypeLabel,
+  getClaimStatusLabel,
+  getIntakeKindLabel,
+  getParseStatusLabel,
+} from '../utils/i18nLabels';
 
 const RESULT_KIND_KNOWLEDGE_BASE = 'knowledge_base';
 const RESULT_KIND_MATERIAL = 'material';
 const RESULT_KIND_CARD = 'card';
 const RESULT_KIND_ARTIFACT = 'artifact';
+
+const SEARCH_META_MAX_ITEMS = 2;
+const SEARCH_META_FIELDS = [
+  { key: 'type', kind: RESULT_KIND_MATERIAL, labelKey: 'search.metaType', translate: (value, t) => getIntakeKindLabel(t, value) },
+  { key: 'type', kind: RESULT_KIND_CARD, labelKey: 'search.metaCardType', translate: (value, t) => getCardTypeLabel(t, value) },
+  { key: 'parseStatus', labelKey: 'search.metaParseStatus', translate: (value, t) => getParseStatusLabel(t, value) },
+  { key: 'claimStatus', labelKey: 'search.metaClaimStatus', translate: (value, t) => getClaimStatusLabel(t, value) },
+  { key: 'platform', labelKey: 'search.metaPlatform' },
+  { key: 'stage', labelKey: 'search.metaStage' },
+  { key: 'artifactType', labelKey: 'search.metaArtifactType' },
+  { key: 'cardCount', labelKey: 'search.metaCardCount' },
+  { key: 'sourceCount', labelKey: 'search.metaSourceCount' },
+];
+
+/**
+ * 依据白名单把搜索结果的 metadata 加工成「标签 + 取值」的可读条目。
+ * 仅保留对用户有意义的字段，跳过 match / score 等技术指标。
+ * @param {object} result - 单条搜索结果
+ * @param {Function} t - react-i18next 的 t 函数
+ * @returns {Array<{key: string, label: string, value: string}>} 可读元信息条目
+ */
+function buildSearchMetaEntries(result, t) {
+  const meta = result.metadata ?? {};
+  const entries = [];
+  for (const field of SEARCH_META_FIELDS) {
+    if (field.kind && result.kind !== field.kind) continue;
+    const raw = meta[field.key];
+    if (raw === undefined || raw === null || raw === '') continue;
+    const value = field.translate ? field.translate(raw, t) : String(raw);
+    if (!value) continue;
+    entries.push({ key: field.key, label: t(field.labelKey), value });
+    if (entries.length >= SEARCH_META_MAX_ITEMS) break;
+  }
+  return entries;
+}
 
 /**
  * 语义搜索视图组件
@@ -312,8 +353,11 @@ export default function SearchView({ setView, setSelectedKnowledgeBaseId, onOpen
                       <div>
                         <div className="search-result-meta">
                           <span>{t(`search.kind.${result.kind}`)}</span>
-                          {Object.entries(result.metadata ?? {}).slice(0, 3).map(([key, value]) => (
-                            <span key={key}>{String(value)}</span>
+                          {buildSearchMetaEntries(result, t).map((entry) => (
+                            <span key={entry.key} className="result-meta-item">
+                              <span className="result-meta-label">{entry.label}</span>
+                              {entry.value}
+                            </span>
                           ))}
                           {matchPercent > 0 && (
                             <span className="result-match">
