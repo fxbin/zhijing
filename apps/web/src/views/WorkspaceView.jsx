@@ -51,7 +51,6 @@ export default function WorkspaceView({ activity, isSubmitting, materials, query
           <button type="button" onClick={() => submit(`#${t('workspace.quickTagDailyNotes')}`)}>
             # {t('workspace.quickTagDailyNotes')}
           </button>
-          <button type="button" disabled>+ {t('workspace.moreTags')}</button>
         </div>
         {isSubmitting && (
           <div className="workspace-loading" aria-live="polite">
@@ -62,26 +61,28 @@ export default function WorkspaceView({ activity, isSubmitting, materials, query
         {!isSubmitting && activity && <p className="activity">{activity}</p>}
       </section>
 
-      <section className="lower-grid">
-        {isSubmitting && !hasContent ? (
-          <>
-            <div className="recent-panel skeleton">
-              <div className="workspace-skeleton-bar" />
-              <div className="workspace-skeleton-bar short" />
-              <div className="workspace-skeleton-bar" />
-            </div>
-            <div className="map-panel skeleton">
-              <div className="workspace-skeleton-bar" />
-              <div className="workspace-skeleton-bar short" />
-            </div>
-          </>
-        ) : (
-          <>
-            <RecentImports materials={materials} onViewAll={() => setView('library')} />
-            <KnowledgeMapPanel selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={setView} />
-          </>
-        )}
-      </section>
+      {(hasContent || isSubmitting) && (
+        <section className="lower-grid">
+          {isSubmitting && !hasContent ? (
+            <>
+              <div className="recent-panel skeleton">
+                <div className="workspace-skeleton-bar" />
+                <div className="workspace-skeleton-bar short" />
+                <div className="workspace-skeleton-bar" />
+              </div>
+              <div className="map-panel skeleton">
+                <div className="workspace-skeleton-bar" />
+                <div className="workspace-skeleton-bar short" />
+              </div>
+            </>
+          ) : (
+            <>
+              <RecentImports materials={materials} onViewAll={() => setView('library')} />
+              <KnowledgeMapPanel selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={setView} />
+            </>
+          )}
+        </section>
+      )}
 
       {!isSubmitting && !hasContent && (
         <section className="workspace-empty-guide">

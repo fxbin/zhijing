@@ -994,6 +994,7 @@
   "archive.local": "本地",
   "archive.restore": "恢复",
   "archive.restoreError": "恢复失败，请重试",
+  "archive.restoreSuccess": "已恢复",
   "archive.emptyTitle": "归档为空",
   "archive.emptyBody": "被归档的资料和卡片会暂存于此，可随时恢复。",
   "archive.errorTitle": "归档加载失败",

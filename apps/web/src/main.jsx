@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './i18n';
 import {
@@ -514,15 +514,15 @@ function App() {
   };
 
   const navItems = [
-    { key: 'detail', label: t('nav.knowledgeBase'), icon: Database },
-    { key: 'library', label: t('nav.library'), icon: FolderOpen },
-    { key: 'search', label: t('nav.search'), icon: Search },
-    { key: 'assets', label: t('nav.assets'), icon: Layers },
-    { key: 'insights', label: t('nav.insights'), icon: Lightbulb },
-    { key: 'path', label: t('nav.path'), icon: Map },
-    { key: 'archive', label: t('nav.archive'), icon: Archive },
-    { key: 'kits', label: t('nav.kits'), icon: Sparkles },
-    { key: 'settings', label: t('nav.settings'), icon: Settings },
+    { key: 'detail', label: t('nav.knowledgeBase'), icon: Database, group: 'core' },
+    { key: 'library', label: t('nav.library'), icon: FolderOpen, group: 'core' },
+    { key: 'search', label: t('nav.search'), icon: Search, group: 'core' },
+    { key: 'assets', label: t('nav.assets'), icon: Layers, group: 'insight' },
+    { key: 'insights', label: t('nav.insights'), icon: Lightbulb, group: 'insight' },
+    { key: 'path', label: t('nav.path'), icon: Map, group: 'insight' },
+    { key: 'archive', label: t('nav.archive'), icon: Archive, group: 'tools' },
+    { key: 'kits', label: t('nav.kits'), icon: Sparkles, group: 'tools' },
+    { key: 'settings', label: t('nav.settings'), icon: Settings, group: 'tools' },
   ];
 
   return (
@@ -542,13 +542,17 @@ function App() {
         </button>
 
         <nav className="nav-list">
-          {navItems.map((item) => {
+          {navItems.map((item, index) => {
             const Icon = item.icon;
+            const showDivider = index > 0 && item.group !== navItems[index - 1].group;
             return (
-              <button className={view === item.key ? 'active' : ''} key={item.key} onClick={() => go(item.key)} type="button">
-                <Icon size={22} />
-                {item.label}
-              </button>
+              <Fragment key={item.key}>
+                {showDivider && <div className="nav-divider" aria-hidden="true" />}
+                <button className={view === item.key ? 'active' : ''} onClick={() => go(item.key)} type="button">
+                  <Icon size={22} />
+                  {item.label}
+                </button>
+              </Fragment>
             );
           })}
         </nav>

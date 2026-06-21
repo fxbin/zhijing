@@ -600,7 +600,6 @@ export default function DetailView({
                 </div>
               </div>
             )}
-            {materials.length === 0 && <EmptyState title={t('detail.noMaterials')} body={t('detail.noMaterialsHint')} />}
             {materials.map((material) => (
               <article className="source-strip" key={material.id ?? material.title}>
                 <BookOpen size={22} />
@@ -626,6 +625,7 @@ export default function DetailView({
             ))}
           </section>
         </div>
+        {materials.length === 0 && <EmptyState title={t('detail.noMaterials')} body={t('detail.noMaterialsHint')} />}
       </div>
       <AIChatShell layout={layout} title={t('detail.aiAssistant')}>
         <p>{t('detail.sourceOverview', { sources: detail.sourceCount ?? materials.length, cards: detail.cardCount ?? cards.length })}</p>

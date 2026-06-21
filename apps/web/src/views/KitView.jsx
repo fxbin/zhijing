@@ -152,7 +152,19 @@ export default function KitView({ apiStatus, isRunningKit, onRunKit, selectedKno
                 const isSelected = kit.id === selectedKitId;
                 const meta = KIT_META[kit.id];
                 return (
-                  <article className="kit-card" key={kit.id} onClick={() => handleCardClick(kit.id)} role="presentation">
+                  <article
+                    className="kit-card"
+                    key={kit.id}
+                    onClick={() => handleCardClick(kit.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        handleCardClick(kit.id);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
                     <Icon size={30} />
                     <span>{t('kit.status.ready')}</span>
                     <h3>{t(`kit.${kit.id}.title`)}</h3>

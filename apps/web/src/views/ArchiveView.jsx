@@ -5,10 +5,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Archive, FileText, RotateCcw, StickyNote } from 'lucide-react';
+import { Archive, CheckCircle2, FileText, RotateCcw, StickyNote } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { useCardTypeLabel } from '../utils/i18nLabels';
 import { formatDate } from '../utils/material';
+
+/** 恢复成功提示的自动消失时长（毫秒） */
+const RESTORE_FEEDBACK_MS = 2000;
 
 /**
  * 归档视图组件。
@@ -25,6 +28,8 @@ export default function ArchiveView({ selectedKnowledgeBaseId, setView }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionId, setActionId] = useState(null);
+  const [restoreSuccessId, setRestoreSuccessId] = useState(null);
+  const [restoreErrorId, setRestoreErrorId] = useState(null);
 
   useEffect(() => {
     setFilterBaseId(selectedKnowledgeBaseId ?? 'all');
@@ -70,6 +75,7 @@ export default function ArchiveView({ selectedKnowledgeBaseId, setView }) {
       ? `/api/materials/${item.id}/unarchive`
       : `/api/cards/${item.id}/unarchive`;
     setActionId(item.id);
+    setRestoreErrorId((current) => (current === item.id ? null : current));
     try {
       const response = await fetch(endpoint, { method: 'POST' });
       if (!response.ok) throw new Error('Restore failed.');
@@ -82,8 +88,12 @@ export default function ArchiveView({ selectedKnowledgeBaseId, setView }) {
           ? current.cards.filter((c) => c.id !== item.id)
           : current.cards,
       }));
+      setRestoreSuccessId(item.id);
+      setTimeout(() => {
+        setRestoreSuccessId((current) => (current === item.id ? null : current));
+      }, RESTORE_FEEDBACK_MS);
     } catch {
-      setError(t('archive.restoreError'));
+      setRestoreErrorId(item.id);
     } finally {
       setActionId(null);
     }
@@ -149,6 +159,13 @@ export default function ArchiveView({ selectedKnowledgeBaseId, setView }) {
         </div>
       </section>
 
+      {restoreSuccessId && (
+        <div className="archive-feedback" role="status">
+          <CheckCircle2 size={16} />
+          <span>{t('archive.restoreSuccess')}</span>
+        </div>
+      )}
+
       {allItems.length === 0 ? (
         <EmptyState
           icon={Archive}
@@ -179,6 +196,9 @@ export default function ArchiveView({ selectedKnowledgeBaseId, setView }) {
                       </span>
                     )}
                   </span>
+                  {restoreErrorId === item.id && (
+                    <span className="archive-row-error" role="alert">{t('archive.restoreError')}</span>
+                  )}
                 </div>
                 <button
                   className="archive-restore"

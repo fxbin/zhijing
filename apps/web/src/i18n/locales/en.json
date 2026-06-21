@@ -948,6 +948,7 @@
   "archive.local": "Local",
   "archive.restore": "Restore",
   "archive.restoreError": "Restore failed, please retry",
+  "archive.restoreSuccess": "Restored",
   "archive.emptyTitle": "Archive is empty",
   "archive.emptyBody": "Archived materials and cards are kept here and can be restored anytime.",
   "archive.errorTitle": "Archive failed to load",
