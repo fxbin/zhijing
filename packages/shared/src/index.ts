@@ -176,10 +176,15 @@ export interface MaterialRecord {
   mediaUrls?: string[];
   parseStatus: ParseStatus;
   parseError?: string;
+  transcript?: string;
+  transcriptStatus?: MaterialTranscriptStatus;
+  transcriptError?: string;
   createdAt: string;
   statusTimeline?: MaterialStatusTimeline;
   archived?: boolean;
 }
+
+export type MaterialTranscriptStatus = 'pending' | 'done' | 'failed' | 'skipped';
 
 export interface CardRecall {
   dueAt: string;

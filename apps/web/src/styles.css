@@ -2675,6 +2675,53 @@ button { cursor: pointer; }
   opacity: 0.55;
 }
 
+.material-transcript {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px dashed var(--line-soft);
+  background: rgba(248, 249, 255, 0.72);
+}
+
+.material-transcript strong {
+  font-size: 13px;
+  color: var(--scholar);
+}
+
+.material-transcript .transcript-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.material-transcript .transcript-body {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  color: var(--primary);
+}
+
+.material-transcript .transcript-pending,
+.material-transcript .transcript-skipped,
+.material-transcript .transcript-error {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.material-transcript .transcript-pending {
+  color: var(--scholar);
+}
+
+.material-transcript .transcript-skipped {
+  color: var(--muted);
+}
+
+.material-transcript .transcript-error {
+  color: var(--error);
+}
+
 .assistant-panel {
   position: sticky;
   top: 88px;

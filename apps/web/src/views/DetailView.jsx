@@ -496,6 +496,22 @@ export default function DetailView({
                     {materialMediaUrls(material).length > 0 ? ` · ${t('detail.mediaCount', { count: materialMediaUrls(material).length })}` : ''}
                   </span>
                   <MediaPreview urls={materialMediaUrls(material)} compact />
+                  {material.transcriptStatus && (
+                    <div className="material-transcript">
+                      <strong>{t('detail.transcriptTitle')}</strong>
+                      {material.transcriptStatus === 'pending' && <p className="transcript-pending">{t('detail.transcriptPending')}</p>}
+                      {material.transcriptStatus === 'done' && (
+                        <>
+                          <p className="transcript-meta">{t('detail.transcriptFromVideo')}</p>
+                          <p className="transcript-body">{material.transcript || t('detail.transcriptEmpty')}</p>
+                        </>
+                      )}
+                      {material.transcriptStatus === 'failed' && (
+                        <p className="transcript-error">{t('detail.transcriptFailed')}：{material.transcriptError}</p>
+                      )}
+                      {material.transcriptStatus === 'skipped' && <p className="transcript-skipped">{t('detail.transcriptSkipped')}</p>}
+                    </div>
+                  )}
                 </div>
                 {material.type === 'link' && (
                   <button

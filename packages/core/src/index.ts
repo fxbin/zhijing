@@ -53,6 +53,7 @@ import {
   type MaterialParseQueueResult,
   type MaterialRecord,
   type MaterialStatusTimeline,
+  type MaterialTranscriptStatus,
   type MaterialReviewResult,
   type ModelProviderSettings,
   type ModelProviderSettingsV2,
@@ -85,8 +86,12 @@ import {
 import { DuckDBConnection } from '@duckdb/node-api';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
+import { readFile, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import os from 'node:os';
 
 type PersistedModelProviderConfig = Partial<{
   provider: string;
@@ -559,6 +564,9 @@ type MaterialRow = {
   media_urls_json: string | null;
   parse_status: MaterialRecord['parseStatus'];
   parse_error: string | null;
+  transcript: string | null;
+  transcript_status: MaterialRecord['transcriptStatus'] | null;
+  transcript_error: string | null;
   created_at: string;
   status_timeline_json: string | null;
   archived: number;
@@ -697,8 +705,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   insertMaterial(material: MaterialRecord) {
     this.db.prepare(`
       INSERT INTO materials (
-        id, knowledge_base_id, type, raw_input, source_url, platform, title, content_text, media_urls_json, parse_status, parse_error, created_at, archived
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, knowledge_base_id, type, raw_input, source_url, platform, title, content_text, media_urls_json, parse_status, parse_error, transcript, transcript_status, transcript_error, created_at, archived
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       material.id,
       material.knowledgeBaseId,
@@ -711,6 +719,9 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       JSON.stringify(material.mediaUrls ?? []),
       material.parseStatus,
       material.parseError ?? null,
+      material.transcript ?? null,
+      material.transcriptStatus ?? null,
+      material.transcriptError ?? null,
       material.createdAt,
       material.archived ? 1 : 0,
     );
@@ -719,7 +730,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   updateMaterial(material: MaterialRecord) {
     this.db.prepare(`
       UPDATE materials
-      SET knowledge_base_id = ?, type = ?, raw_input = ?, source_url = ?, platform = ?, title = ?, content_text = ?, media_urls_json = ?, parse_status = ?, parse_error = ?, created_at = ?, archived = ?
+      SET knowledge_base_id = ?, type = ?, raw_input = ?, source_url = ?, platform = ?, title = ?, content_text = ?, media_urls_json = ?, parse_status = ?, parse_error = ?, transcript = ?, transcript_status = ?, transcript_error = ?, created_at = ?, archived = ?
       WHERE id = ?
     `).run(
       material.knowledgeBaseId,
@@ -732,6 +743,9 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       JSON.stringify(material.mediaUrls ?? []),
       material.parseStatus,
       material.parseError ?? null,
+      material.transcript ?? null,
+      material.transcriptStatus ?? null,
+      material.transcriptError ?? null,
       material.createdAt,
       material.archived ? 1 : 0,
       material.id,
@@ -1366,6 +1380,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     `);
     this.ensureMaterialMediaColumn();
     this.ensureMaterialStatusTimelineColumn();
+    this.ensureMaterialTranscriptColumns();
     this.ensureArtifactSubtypeColumn();
     this.ensureArtifactSectionsColumn();
     this.ensureCardRecallColumn();
@@ -1382,6 +1397,19 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     const columns = this.db.prepare('PRAGMA table_info(materials)').all() as Array<{ name: string }>;
     if (!columns.some((column) => column.name === 'media_urls_json')) {
       this.db.exec("ALTER TABLE materials ADD COLUMN media_urls_json TEXT NOT NULL DEFAULT '[]';");
+    }
+  }
+
+  private ensureMaterialTranscriptColumns() {
+    const columns = this.db.prepare('PRAGMA table_info(materials)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'transcript')) {
+      this.db.exec('ALTER TABLE materials ADD COLUMN transcript TEXT;');
+    }
+    if (!columns.some((column) => column.name === 'transcript_status')) {
+      this.db.exec('ALTER TABLE materials ADD COLUMN transcript_status TEXT;');
+    }
+    if (!columns.some((column) => column.name === 'transcript_error')) {
+      this.db.exec('ALTER TABLE materials ADD COLUMN transcript_error TEXT;');
     }
   }
 
@@ -1592,6 +1620,9 @@ function mapMaterial(row: MaterialRow): MaterialRecord {
     mediaUrls: parseJsonStringArray(row.media_urls_json),
     parseStatus: row.parse_status,
     parseError: row.parse_error ?? undefined,
+    transcript: row.transcript ?? undefined,
+    transcriptStatus: row.transcript_status ?? undefined,
+    transcriptError: row.transcript_error ?? undefined,
     createdAt: row.created_at,
     statusTimeline: parseStatusTimeline(row.status_timeline_json),
     archived: row.archived === 1,
@@ -3496,6 +3527,10 @@ async function applyParsedMaterialResult(
   material.parseError = parsed.reviewReason;
   repository.updateMaterial(material);
 
+  if (material.parseStatus === 'ingested' && material.mediaUrls.some(isVideoMediaUrl) && !material.transcriptStatus) {
+    scheduleMaterialTranscription(material);
+  }
+
   const base = repository.findKnowledgeBase(material.knowledgeBaseId);
   if (!base) {
     throw new KnowledgeCoreError('Knowledge base not found.', 404);
@@ -4402,6 +4437,184 @@ function touchKnowledgeBase(knowledgeBaseId: string) {
   if (!base) return;
   base.updatedAt = now();
   repository.updateKnowledgeBase(base);
+}
+
+const execFileAsync = promisify(execFile);
+
+const WHISPER_COMMAND_CANDIDATES = ['whisper', 'whisper-cli', 'whisper.cpp'];
+const MIN_CPU_CORES_FOR_TRANSCRIPTION = 4;
+const MIN_MEMORY_BYTES_FOR_TRANSCRIPTION = 4 * 1024 * 1024 * 1024;
+const AUDIO_SAMPLE_RATE = '16000';
+const MONO_CHANNELS = '1';
+const WHISPER_MODEL_TINY = 'tiny';
+const TRANSCRIBE_LANGUAGE_CHINESE = 'Chinese';
+const OUTPUT_FORMAT_TXT = 'txt';
+const VIDEO_URL_INDICATORS = ['/video/', 'sns-video', '.mp4', '.mov', '.webm', '.mkv', '.avi'];
+
+/**
+ * 判断媒体 URL 是否为视频
+ * @author fxbin
+ */
+function isVideoMediaUrl(url: string): boolean {
+  return VIDEO_URL_INDICATORS.some((indicator) => url.toLowerCase().includes(indicator));
+}
+
+/**
+ * 检测命令是否存在于系统 PATH
+ * @author fxbin
+ */
+async function commandExists(command: string): Promise<boolean> {
+  const checkCommand = process.platform === 'win32' ? 'where' : 'which';
+  try {
+    await execFileAsync(checkCommand, [command]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 查找可用的本地 whisper 命令
+ * @author fxbin
+ */
+async function findWhisperCommand(): Promise<string | undefined> {
+  for (const command of WHISPER_COMMAND_CANDIDATES) {
+    if (await commandExists(command)) {
+      return command;
+    }
+  }
+  return undefined;
+}
+
+let cachedTranscriptionCapability: { available: boolean; reason?: string } | undefined;
+
+/**
+ * 检测本地视频语音转写能力
+ * 需要同时满足：ffmpeg 可用、whisper 可用、CPU 核心数足够、内存足够
+ * @author fxbin
+ */
+export async function detectTranscriptionCapability(): Promise<{ available: boolean; reason?: string }> {
+  if (cachedTranscriptionCapability) {
+    return cachedTranscriptionCapability;
+  }
+
+  if (!(await commandExists('ffmpeg'))) {
+    cachedTranscriptionCapability = { available: false, reason: '未检测到 ffmpeg，无法从视频中提取音频' };
+    return cachedTranscriptionCapability;
+  }
+
+  if (!(await findWhisperCommand())) {
+    cachedTranscriptionCapability = { available: false, reason: '未检测到本地 whisper 命令（whisper / whisper-cli / whisper.cpp），无法转写' };
+    return cachedTranscriptionCapability;
+  }
+
+  if (os.cpus().length < MIN_CPU_CORES_FOR_TRANSCRIPTION) {
+    cachedTranscriptionCapability = { available: false, reason: `CPU 核心数不足（本地 ASR 建议至少 ${MIN_CPU_CORES_FOR_TRANSCRIPTION} 核）` };
+    return cachedTranscriptionCapability;
+  }
+
+  if (os.totalmem() < MIN_MEMORY_BYTES_FOR_TRANSCRIPTION) {
+    cachedTranscriptionCapability = { available: false, reason: '内存不足（本地 ASR 建议至少 4GB）' };
+    return cachedTranscriptionCapability;
+  }
+
+  cachedTranscriptionCapability = { available: true };
+  return cachedTranscriptionCapability;
+}
+
+/**
+ * 对含有视频的资料进行本地语音转写
+ * @author fxbin
+ */
+export async function transcribeMaterialVideo(material: MaterialRecord): Promise<{ transcript: string; status: MaterialTranscriptStatus; error?: string }> {
+  const capability = await detectTranscriptionCapability();
+  if (!capability.available) {
+    return { transcript: '', status: 'skipped', error: capability.reason };
+  }
+
+  const videoUrl = material.mediaUrls?.find(isVideoMediaUrl);
+  if (!videoUrl) {
+    return { transcript: '', status: 'skipped', error: '未找到可识别的视频文件' };
+  }
+
+  const whisperCommand = await findWhisperCommand();
+  if (!whisperCommand) {
+    return { transcript: '', status: 'skipped', error: '未检测到本地 whisper 命令' };
+  }
+
+  const workId = randomUUID();
+  const audioPath = join(os.tmpdir(), `zhijing-${workId}.wav`);
+  const outputDir = join(os.tmpdir(), `zhijing-${workId}-whisper`);
+
+  try {
+    await execFileAsync('ffmpeg', [
+      '-y',
+      '-i',
+      videoUrl,
+      '-vn',
+      '-acodec',
+      'pcm_s16le',
+      '-ar',
+      AUDIO_SAMPLE_RATE,
+      '-ac',
+      MONO_CHANNELS,
+      audioPath,
+    ]);
+
+    await execFileAsync(whisperCommand, [
+      audioPath,
+      '--model',
+      WHISPER_MODEL_TINY,
+      '--language',
+      TRANSCRIBE_LANGUAGE_CHINESE,
+      '--output_format',
+      OUTPUT_FORMAT_TXT,
+      '--output_dir',
+      outputDir,
+    ]);
+
+    const txtPath = join(outputDir, `zhijing-${workId}.txt`);
+    const transcript = await readFile(txtPath, 'utf-8');
+
+    return { transcript: transcript.trim(), status: 'done' };
+  } catch (error) {
+    return {
+      transcript: '',
+      status: 'failed',
+      error: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    await unlink(audioPath).catch(() => undefined);
+  }
+}
+
+/**
+ * 异步调度视频资料转写，不阻塞解析流程
+ * @author fxbin
+ */
+async function scheduleMaterialTranscription(material: MaterialRecord) {
+  material.transcriptStatus = 'pending';
+  repository.updateMaterial(material);
+
+  try {
+    const result = await transcribeMaterialVideo(material);
+    material.transcript = result.transcript;
+    material.transcriptStatus = result.status;
+    material.transcriptError = result.error;
+    repository.updateMaterial(material);
+  } catch (error) {
+    material.transcriptStatus = 'failed';
+    material.transcriptError = error instanceof Error ? error.message : String(error);
+    repository.updateMaterial(material);
+  }
+}
+
+/**
+ * 清除本地转写能力缓存，用于测试
+ * @author fxbin
+ */
+export function resetTranscriptionCapabilityCache() {
+  cachedTranscriptionCapability = undefined;
 }
 
 export function listKnowledgeBases() {
