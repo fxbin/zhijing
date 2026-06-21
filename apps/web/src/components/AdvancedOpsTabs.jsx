@@ -1,13 +1,16 @@
 /**
  * 高级运维标签页组件：资产/综合/对比/冲突视图的导航标签。
  * @module components/AdvancedOpsTabs
+ * @author fxbin
  */
 
+import { useTranslation } from 'react-i18next';
+
 const TAB_ITEMS = [
-  { key: 'assets', label: 'Assets' },
-  { key: 'synthesis', label: 'Synthesis' },
-  { key: 'compare', label: 'Compare' },
-  { key: 'conflicts', label: 'Conflicts' },
+  { key: 'assets', labelKey: 'advancedOps.assets' },
+  { key: 'synthesis', labelKey: 'advancedOps.synthesis' },
+  { key: 'compare', labelKey: 'advancedOps.compare' },
+  { key: 'conflicts', labelKey: 'advancedOps.conflicts' },
 ];
 
 /**
@@ -18,6 +21,7 @@ const TAB_ITEMS = [
  * @returns {JSX.Element} 标签页导航
  */
 export default function AdvancedOpsTabs({ active, setView }) {
+  const { t } = useTranslation();
   return (
     <nav className="advanced-ops-tabs">
       {TAB_ITEMS.map((tab) => (
@@ -27,7 +31,7 @@ export default function AdvancedOpsTabs({ active, setView }) {
           onClick={() => setView(tab.key)}
           type="button"
         >
-          {tab.label}
+          {t(tab.labelKey)}
         </button>
       ))}
     </nav>

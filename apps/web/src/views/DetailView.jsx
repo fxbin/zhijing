@@ -317,26 +317,26 @@ export default function DetailView({
       const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/entities/extract`, { method: 'POST' });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
-        setEntityError(payload.error ?? '实体提取失败');
+        setEntityError(payload.error ?? t('detail.entityExtractFailed'));
         return;
       }
       const payload = await response.json();
       setEntities(payload.entities ?? []);
     } catch {
-      setEntityError('网络错误，实体提取失败');
+      setEntityError(t('detail.entityNetworkError'));
     } finally {
       setExtracting(false);
     }
   }
 
   const ENTITY_TYPE_LABELS = {
-    person: '人物',
-    organization: '组织',
-    concept: '概念',
-    tool: '工具',
-    place: '地点',
-    event: '事件',
-    other: '其他',
+    person: 'detail.entityType.person',
+    organization: 'detail.entityType.organization',
+    concept: 'detail.entityType.concept',
+    tool: 'detail.entityType.tool',
+    place: 'detail.entityType.location',
+    event: 'detail.entityType.event',
+    other: 'detail.entityType.other',
   };
 
   return (
@@ -452,7 +452,7 @@ export default function DetailView({
                   <li key={entity.id} className="entity-item">
                     <div className="entity-head">
                       <strong>{entity.name}</strong>
-                      <span className="entity-type-badge">{ENTITY_TYPE_LABELS[entity.type] ?? entity.type}</span>
+                      <span className="entity-type-badge">{ENTITY_TYPE_LABELS[entity.type] ? t(ENTITY_TYPE_LABELS[entity.type]) : entity.type}</span>
                     </div>
                     <p>{entity.description}</p>
                     <small>{t('detail.mentionedInCards', { count: entity.sourceCardIds.length })}</small>
