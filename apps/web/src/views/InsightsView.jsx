@@ -254,6 +254,7 @@ export default function InsightsView({ setView }) {
                 <span>{t('insights.mapNodes', { count: insights.mapPreview.nodeCount })}</span>
                 <span>{t('insights.mapEdges', { count: insights.mapPreview.edgeCount })}</span>
               </div>
+              <span className="map-preview-hint">{t('insights.mapPreviewHint')}</span>
             </div>
           </div>
         </section>

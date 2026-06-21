@@ -912,6 +912,7 @@
   "insights.mapTitle": "Knowledge Map Preview",
   "insights.mapBody": "Currently tracking {{count}} active nodes across {{kbCount}} knowledge bases.",
   "insights.mapAction": "Explore Map",
+  "insights.mapPreviewHint": "Illustration",
   "insights.mapNodes": "{{count}} nodes",
   "insights.mapEdges": "{{count}} edges",
   "insights.metric.knowledgeBases": "Knowledge Bases",

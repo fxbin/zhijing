@@ -468,7 +468,7 @@ export default function DetailView({
             </div>
             {cards.length === 0 ? (
               <EmptyState title={t('detail.noCards')} body={t('detail.noCardsHint')} />
-            ) : feedMode === 'feed' ? (
+            ) : (
               <>
                 <div className="feed-controls">
                   <div className="feed-filters">
@@ -499,93 +499,101 @@ export default function DetailView({
                         ))}
                       </select>
                     </label>
-                    <div className="feed-view-toggle">
-                      <button className={feedViewMode === 'board' ? 'active' : ''} onClick={() => setFeedViewMode('board')} type="button">{t('detail.boardView')}</button>
-                      <button className={feedViewMode === 'grouped' ? 'active' : ''} onClick={() => setFeedViewMode('grouped')} type="button">{t('detail.groupedView')}</button>
-                      <button className={feedViewMode === 'list' ? 'active' : ''} onClick={() => setFeedViewMode('list')} type="button">{t('detail.listView')}</button>
+                    {feedMode === 'feed' && (
+                      <div className="feed-view-toggle">
+                        <button className={feedViewMode === 'board' ? 'active' : ''} onClick={() => setFeedViewMode('board')} type="button">{t('detail.boardView')}</button>
+                        <button className={feedViewMode === 'grouped' ? 'active' : ''} onClick={() => setFeedViewMode('grouped')} type="button">{t('detail.groupedView')}</button>
+                        <button className={feedViewMode === 'list' ? 'active' : ''} onClick={() => setFeedViewMode('list')} type="button">{t('detail.listView')}</button>
+                      </div>
+                    )}
+                  </div>
+                  {feedMode === 'feed' && (
+                    <div className="feed-type-distribution">
+                      {filteredSortedGroupEntries.map(([type, group]) => {
+                        const ratio = filteredCards.length > 0 ? Math.round((group.length / filteredCards.length) * 100) : 0;
+                        return (
+                          <div
+                            key={type}
+                            className={`feed-dist-segment type-${type}`}
+                            style={{ width: `${ratio}%` }}
+                            title={t('detail.distributionTooltip', { label: cardTypeLabel(type), count: group.length, ratio })}>
+                            <span className="feed-dist-label">{cardTypeLabel(type)}</span>
+                            <span className="feed-dist-count">{group.length}</span>
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
-                  <div className="feed-type-distribution">
-                    {filteredSortedGroupEntries.map(([type, group]) => {
-                      const ratio = filteredCards.length > 0 ? Math.round((group.length / filteredCards.length) * 100) : 0;
-                      return (
-                        <div
-                          key={type}
-                          className={`feed-dist-segment type-${type}`}
-                          style={{ width: `${ratio}%` }}
-                          title={t('detail.distributionTooltip', { label: cardTypeLabel(type), count: group.length, ratio })}>
-                          <span className="feed-dist-label">{cardTypeLabel(type)}</span>
-                          <span className="feed-dist-count">{group.length}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  )}
                 </div>
-                {feedViewMode === 'board' ? (
-                  <div className="feed-board">
+                {feedMode === 'feed' ? (
+                  <>
+                    {feedViewMode === 'board' ? (
+                      <div className="feed-board">
+                        {filteredSortedGroupEntries.map(([type, group]) => (
+                          <section className="feed-column" key={type}>
+                            <header className="feed-column-head">
+                              <i className={`feed-column-dot ${type}`} />
+                              <strong>{cardTypeLabel(type)}</strong>
+                              <small>{group.length}</small>
+                            </header>
+                            <div className="feed-column-body">
+                              {group.map((card) => renderCard(card, 'compact'))}
+                            </div>
+                          </section>
+                        ))}
+                      </div>
+                    ) : feedViewMode === 'grouped' ? (
+                      <div className="feed-groups">
+                        {filteredSortedGroupEntries.map(([type, group]) => {
+                          const isCollapsed = collapsedGroups.has(type);
+                          return (
+                            <section className="feed-group" key={type}>
+                              <header className="feed-group-head" onClick={() => toggleGroup(type)}>
+                                <div>
+                                  <i className={`feed-group-dot ${type}`} />
+                                  <strong>{cardTypeLabel(type)}</strong>
+                                  <small>{t('detail.cardCount', { count: group.length })}</small>
+                                </div>
+                                {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                              </header>
+                              {!isCollapsed && (
+                                <div className="feed-group-body">
+                                  {group.map((card) => renderCard(card))}
+                                </div>
+                              )}
+                            </section>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="feed-list">
+                        {filteredCards.map((card) => renderCard(card))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="card-cluster">
                     {filteredSortedGroupEntries.map(([type, group]) => (
-                      <section className="feed-column" key={type}>
-                        <header className="feed-column-head">
-                          <i className={`feed-column-dot ${type}`} />
+                      <section className="cluster-group" key={type}>
+                        <header className="cluster-head">
+                          <i className={`cluster-type-dot ${type}`} />
                           <strong>{cardTypeLabel(type)}</strong>
-                          <small>{group.length}</small>
+                          <small>{t('detail.cardCount', { count: group.length })}</small>
                         </header>
-                        <div className="feed-column-body">
-                          {group.map((card) => renderCard(card, 'compact'))}
-                        </div>
+                        {group.map((card) => (
+                          <article className={`knowledge-card type-${type}`} key={card.id ?? card.title}>
+                            <h3>{card.title}</h3>
+                            <p>{card.body}</p>
+                            {card.claimStatus === 'sourced' && (
+                              <span className="card-source-badge"><CheckCircle2 size={14} />{claimStatusLabel(card.claimStatus)}</span>
+                            )}
+                          </article>
+                        ))}
                       </section>
                     ))}
                   </div>
-                ) : feedViewMode === 'grouped' ? (
-                  <div className="feed-groups">
-                    {filteredSortedGroupEntries.map(([type, group]) => {
-                      const isCollapsed = collapsedGroups.has(type);
-                      return (
-                        <section className="feed-group" key={type}>
-                          <header className="feed-group-head" onClick={() => toggleGroup(type)}>
-                            <div>
-                              <i className={`feed-group-dot ${type}`} />
-                              <strong>{cardTypeLabel(type)}</strong>
-                          <small>{t('detail.cardCount', { count: group.length })}</small>
-                            </div>
-                            {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-                          </header>
-                          {!isCollapsed && (
-                            <div className="feed-group-body">
-                              {group.map((card) => renderCard(card))}
-                            </div>
-                          )}
-                        </section>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="feed-list">
-                    {filteredCards.map((card) => renderCard(card))}
-                  </div>
                 )}
               </>
-            ) : (
-              <div className="card-cluster">
-                {Object.entries(cardGroups).map(([type, group]) => (
-                  <section className="cluster-group" key={type}>
-                    <header className="cluster-head">
-                      <i className={`cluster-type-dot ${type}`} />
-                      <strong>{cardTypeLabel(type)}</strong>
-                      <small>{t('detail.cardCount', { count: group.length })}</small>
-                    </header>
-                    {group.map((card) => (
-                      <article className={`knowledge-card type-${type}`} key={card.id ?? card.title}>
-                        <h3>{card.title}</h3>
-                        <p>{card.body}</p>
-                        {card.claimStatus === 'sourced' && (
-                          <span className="card-source-badge"><CheckCircle2 size={14} />{claimStatusLabel(card.claimStatus)}</span>
-                        )}
-                      </article>
-                    ))}
-                  </section>
-                ))}
-              </div>
             )}
             {cards.length > 0 && conceptTags.length > 0 && (
               <div className="concept-tags">

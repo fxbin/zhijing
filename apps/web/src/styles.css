@@ -7974,6 +7974,13 @@ button { cursor: pointer; }
   color: var(--muted);
 }
 
+.insights-grid .map-preview-hint {
+  align-self: center;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
 .path-page {
   display: flex;
   flex-direction: column;

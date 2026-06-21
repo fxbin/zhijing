@@ -958,6 +958,7 @@
   "insights.mapTitle": "知识地图预览",
   "insights.mapBody": "当前共有 {{count}} 个活跃节点，分布在 {{kbCount}} 个知识库中。",
   "insights.mapAction": "探索地图",
+  "insights.mapPreviewHint": "示意图",
   "insights.mapNodes": "{{count}} 节点",
   "insights.mapEdges": "{{count}} 关系",
   "insights.metric.knowledgeBases": "知识库",
