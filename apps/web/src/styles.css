@@ -7572,6 +7572,11 @@ button { cursor: pointer; }
   height: 52px;
   border-radius: 50%;
   box-shadow: var(--shadow);
+  cursor: grab;
+}
+
+.ai-chat-shell-floating-marker.ai-chat-shell-dragging {
+  cursor: grabbing;
 }
 
 .ai-chat-shell-floating-marker svg {

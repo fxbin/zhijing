@@ -7,13 +7,47 @@
 import { useCallback, useEffect, useState } from 'react';
 
 const DEFAULT_STORAGE_KEY = 'zhijing-chat-layout';
+const MARKER_SIZE_PX = 52;
+const VIEWPORT_MARGIN_PX = 24;
+const SIDEBAR_WIDTH_PX = 240;
 
 const DEFAULT_LAYOUT = {
   mode: 'sidebar',
   minimized: false,
-  position: { x: 24, y: 96 },
+  position: { x: VIEWPORT_MARGIN_PX, y: 96 },
   size: { width: 380, height: 640 },
 };
+
+/**
+ * 获取悬浮球的默认可见位置（右下角，避开左侧导航栏）。
+ * @returns {{ x: number; y: number }} 默认位置
+ */
+function getDefaultMarkerPosition() {
+  if (typeof window === 'undefined') {
+    return DEFAULT_LAYOUT.position;
+  }
+  return {
+    x: Math.max(SIDEBAR_WIDTH_PX, window.innerWidth - MARKER_SIZE_PX - VIEWPORT_MARGIN_PX),
+    y: Math.max(VIEWPORT_MARGIN_PX, window.innerHeight - MARKER_SIZE_PX - VIEWPORT_MARGIN_PX),
+  };
+}
+
+/**
+ * 将悬浮球位置限制在可视区域内。
+ * @param {{ x: number; y: number }} position - 目标位置
+ * @returns {{ x: number; y: number }} 限制后的位置
+ */
+function clampMarkerPosition(position) {
+  if (typeof window === 'undefined') {
+    return position;
+  }
+  const maxX = window.innerWidth - MARKER_SIZE_PX - VIEWPORT_MARGIN_PX;
+  const maxY = window.innerHeight - MARKER_SIZE_PX - VIEWPORT_MARGIN_PX;
+  return {
+    x: Math.max(SIDEBAR_WIDTH_PX, Math.min(maxX, position.x)),
+    y: Math.max(VIEWPORT_MARGIN_PX, Math.min(maxY, position.y)),
+  };
+}
 
 /**
  * 从 localStorage 加载布局状态。
@@ -27,23 +61,29 @@ function loadLayout(key) {
   try {
     const raw = window.localStorage.getItem(key);
     if (!raw) {
-      return DEFAULT_LAYOUT;
+      return {
+        ...DEFAULT_LAYOUT,
+        position: getDefaultMarkerPosition(),
+      };
     }
     const parsed = JSON.parse(raw);
     return {
       mode: parsed.mode === 'floating' ? 'floating' : 'sidebar',
       minimized: Boolean(parsed.minimized),
-      position: {
-        x: Number.isFinite(parsed.position?.x) ? parsed.position.x : DEFAULT_LAYOUT.position.x,
-        y: Number.isFinite(parsed.position?.y) ? parsed.position.y : DEFAULT_LAYOUT.position.y,
-      },
+      position: clampMarkerPosition({
+        x: Number.isFinite(parsed.position?.x) ? parsed.position.x : getDefaultMarkerPosition().x,
+        y: Number.isFinite(parsed.position?.y) ? parsed.position.y : getDefaultMarkerPosition().y,
+      }),
       size: {
         width: Number.isFinite(parsed.size?.width) ? parsed.size.width : DEFAULT_LAYOUT.size.width,
         height: Number.isFinite(parsed.size?.height) ? parsed.size.height : DEFAULT_LAYOUT.size.height,
       },
     };
   } catch {
-    return DEFAULT_LAYOUT;
+    return {
+      ...DEFAULT_LAYOUT,
+      position: getDefaultMarkerPosition(),
+    };
   }
 }
 
@@ -95,7 +135,7 @@ export function useChatLayout(storageKey = DEFAULT_STORAGE_KEY) {
   }, []);
 
   const setPosition = useCallback((position) => {
-    setLayout((prev) => ({ ...prev, position }));
+    setLayout((prev) => ({ ...prev, position: clampMarkerPosition(position) }));
   }, []);
 
   const setSize = useCallback((size) => {

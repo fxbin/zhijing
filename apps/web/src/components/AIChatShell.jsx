@@ -1,17 +1,19 @@
 /**
  * AI 对话外壳组件。
- * 提供可切换的右侧边栏/自由悬浮两种布局、最小化到标记、拖拽定位的能力。
+ * 提供可切换的右侧边栏/自由悬浮两种布局、最小化到悬浮球、拖拽定位的能力。
  * @module components/AIChatShell
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { Minimize2, Move, PanelRight, Sparkles } from 'lucide-react';
 
+const DRAG_CLICK_THRESHOLD_PX = 4;
+
 /**
  * AI 对话外壳。
  * @param {object} props - 组件属性
  * @param {string} [props.title] - 面板标题
- * @param {import('react').ReactNode} [props.markerIcon] - 最小化标记图标
+ * @param {import('react').ReactNode} [props.markerIcon] - 最小化悬浮球图标
  * @param {import('react').ReactNode} props.children - 对话内容
  * @param {string} [props.className=''] - 额外 CSS 类
  * @param {object} props.layout - useChatLayout 返回的布局状态与操作
@@ -34,8 +36,14 @@ export default function AIChatShell({
     setPosition,
   } = layout;
 
-  const headerRef = useRef(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const dragRef = useRef({
+    active: false,
+    startX: 0,
+    startY: 0,
+    moved: false,
+    isMarker: false,
+  });
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
@@ -44,10 +52,19 @@ export default function AIChatShell({
     }
 
     /**
-     * 处理鼠标移动，更新悬浮面板位置。
+     * 处理鼠标移动，更新面板或悬浮球位置。
      * @param {MouseEvent} event - 鼠标事件
      */
     function handleMouseMove(event) {
+      const current = dragRef.current;
+      if (!current.active) {
+        return;
+      }
+      const dx = event.clientX - current.startX;
+      const dy = event.clientY - current.startY;
+      if (Math.abs(dx) > DRAG_CLICK_THRESHOLD_PX || Math.abs(dy) > DRAG_CLICK_THRESHOLD_PX) {
+        current.moved = true;
+      }
       setPosition({
         x: event.clientX - dragOffsetRef.current.x,
         y: event.clientY - dragOffsetRef.current.y,
@@ -55,10 +72,23 @@ export default function AIChatShell({
     }
 
     /**
-     * 处理鼠标松开，结束拖拽。
+     * 处理鼠标松开，结束拖拽并判断是否为点击。
      */
     function handleMouseUp() {
+      const current = dragRef.current;
+      const wasMarker = current.isMarker;
+      const didMove = current.moved;
+      dragRef.current = {
+        active: false,
+        startX: 0,
+        startY: 0,
+        moved: false,
+        isMarker: false,
+      };
       setIsDragging(false);
+      if (wasMarker && !didMove) {
+        toggleMinimized();
+      }
     }
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -67,10 +97,30 @@ export default function AIChatShell({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, setPosition]);
+  }, [isDragging, setPosition, toggleMinimized]);
 
   /**
-   * 处理头部按下，启动拖拽。
+   * 开始拖拽面板头部或悬浮球。
+   * @param {import('react').MouseEvent} event - 鼠标事件
+   * @param {boolean} isMarker - 是否拖拽悬浮球
+   */
+  function startDrag(event, isMarker) {
+    dragRef.current = {
+      active: true,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+      isMarker,
+    };
+    dragOffsetRef.current = {
+      x: event.clientX - position.x,
+      y: event.clientY - position.y,
+    };
+    setIsDragging(true);
+  }
+
+  /**
+   * 处理头部按下，启动面板拖拽。
    * @param {import('react').MouseEvent} event - 鼠标事件
    */
   function handleHeaderMouseDown(event) {
@@ -80,39 +130,32 @@ export default function AIChatShell({
     if (event.target.closest('button')) {
       return;
     }
-    setIsDragging(true);
-    dragOffsetRef.current = {
-      x: event.clientX - position.x,
-      y: event.clientY - position.y,
-    };
+    startDrag(event, false);
+  }
+
+  /**
+   * 处理悬浮球按下，启动拖拽。
+   * @param {import('react').MouseEvent} event - 鼠标事件
+   */
+  function handleMarkerMouseDown(event) {
+    event.preventDefault();
+    startDrag(event, true);
   }
 
   const defaultMarker = markerIcon ?? <Sparkles size={20} />;
 
   if (minimized) {
-    if (mode === 'sidebar') {
-      return (
-        <button
-          className={`ai-chat-shell-marker ai-chat-shell-sidebar-marker ${className}`}
-          onClick={toggleMinimized}
-          title={title}
-          type="button"
-        >
-          {defaultMarker}
-        </button>
-      );
-    }
-
     return (
-      <button
-        className={`ai-chat-shell-marker ai-chat-shell-floating-marker ${className}`}
-        onClick={toggleMinimized}
+      <div
+        className={`ai-chat-shell-marker ai-chat-shell-floating-marker ${isDragging ? 'ai-chat-shell-dragging' : ''} ${className}`}
+        onMouseDown={handleMarkerMouseDown}
+        role="button"
         style={{ left: position.x, top: position.y }}
+        tabIndex={0}
         title={title}
-        type="button"
       >
         {defaultMarker}
-      </button>
+      </div>
     );
   }
 
@@ -129,7 +172,6 @@ export default function AIChatShell({
       style={shellStyle}
     >
       <header
-        ref={headerRef}
         className="ai-chat-shell-header"
         onMouseDown={handleHeaderMouseDown}
       >
