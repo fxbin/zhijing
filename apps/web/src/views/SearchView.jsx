@@ -7,14 +7,30 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { History, Layers, Search, Sparkles } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
-import { searchScopeOptions, SEARCH_HISTORY_MAX_COUNT, SEARCH_HISTORY_STORAGE_KEY, TOP_SEARCH_EVENT, TOP_SEARCH_STORAGE_KEY } from '../constants/options';
+import {
+  searchScopeOptions,
+  SEARCH_HISTORY_MAX_COUNT,
+  SEARCH_HISTORY_STORAGE_KEY,
+  PATH_CARD_ID_STORAGE_KEY,
+  TOP_SEARCH_EVENT,
+  TOP_SEARCH_STORAGE_KEY,
+} from '../constants/options';
 import { resultIcon } from '../utils/material';
+
+const RESULT_KIND_KNOWLEDGE_BASE = 'knowledge_base';
+const RESULT_KIND_MATERIAL = 'material';
+const RESULT_KIND_CARD = 'card';
+const RESULT_KIND_ARTIFACT = 'artifact';
 
 /**
  * 语义搜索视图组件
+ * @param {object} props - 组件属性
+ * @param {Function} [props.setView] - 视图切换回调
+ * @param {Function} [props.setSelectedKnowledgeBaseId] - 选中知识库回调
+ * @param {Function} [props.onOpenArtifact] - 打开产物详情回调
  * @returns {JSX.Element} 搜索视图
  */
-export default function SearchView() {
+export default function SearchView({ setView, setSelectedKnowledgeBaseId, onOpenArtifact }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState('all');
@@ -128,6 +144,70 @@ export default function SearchView() {
     }
   }
 
+  /**
+   * 构造打开产物所需的最小可用对象。
+   * @param {object} result - 搜索结果（kind=artifact）
+   * @returns {object} 最小可用的 artifact 对象
+   */
+  function buildArtifactFallback(result) {
+    return {
+      id: result.id,
+      knowledgeBaseId: result.knowledgeBaseId ?? null,
+      title: result.title,
+      body: result.preview ?? '',
+      artifactType: result.metadata?.artifactType ?? 'summary',
+      subtype: 'generic',
+      sourceMaterialIds: [],
+      createdAt: '',
+    };
+  }
+
+  /**
+   * 处理搜索结果卡片点击：根据结果类型跳转到对应详情视图。
+   * @param {object} result - 搜索结果对象
+   */
+  function handleResultClick(result) {
+    if (!result || !setView) return;
+    const targetKnowledgeBaseId = result.knowledgeBaseId ?? result.id;
+    if (result.kind === RESULT_KIND_KNOWLEDGE_BASE) {
+      if (setSelectedKnowledgeBaseId) setSelectedKnowledgeBaseId(result.id);
+      setView('detail');
+      return;
+    }
+    if (result.kind === RESULT_KIND_MATERIAL) {
+      if (setSelectedKnowledgeBaseId && targetKnowledgeBaseId) setSelectedKnowledgeBaseId(targetKnowledgeBaseId);
+      setView('library');
+      return;
+    }
+    if (result.kind === RESULT_KIND_CARD) {
+      if (setSelectedKnowledgeBaseId && targetKnowledgeBaseId) setSelectedKnowledgeBaseId(targetKnowledgeBaseId);
+      sessionStorage.setItem(PATH_CARD_ID_STORAGE_KEY, result.id);
+      setView('detail');
+      return;
+    }
+    if (result.kind === RESULT_KIND_ARTIFACT) {
+      if (setSelectedKnowledgeBaseId && targetKnowledgeBaseId) setSelectedKnowledgeBaseId(targetKnowledgeBaseId);
+      if (onOpenArtifact) {
+        onOpenArtifact(buildArtifactFallback(result), { label: 'search', from: 'search' });
+        return;
+      }
+      setView('artifact');
+      return;
+    }
+  }
+
+  /**
+   * 处理搜索结果卡片键盘事件：Enter / Space 触发跳转。
+   * @param {Event} event - 键盘事件
+   * @param {object} result - 搜索结果对象
+   */
+  function handleResultKeyDown(event, result) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handleResultClick(result);
+    }
+  }
+
   return (
     <section className="page-main full">
       <div className="page-title-row">
@@ -217,8 +297,17 @@ export default function SearchView() {
                   const matchPercent = maxScore > 0
                     ? Math.round((Number(result.score) / maxScore) * 100)
                     : 0;
+                  const navigateTitle = t('search.openResult', { defaultValue: result.title });
                   return (
-                    <article className="search-result-card" key={`${result.kind}-${result.id}`}>
+                    <article
+                      className="search-result-card clickable"
+                      key={`${result.kind}-${result.id}`}
+                      onClick={() => handleResultClick(result)}
+                      onKeyDown={(event) => handleResultKeyDown(event, result)}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={navigateTitle}
+                    >
                       <Icon size={23} />
                       <div>
                         <div className="search-result-meta">

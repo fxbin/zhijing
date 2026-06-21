@@ -722,6 +722,7 @@
   "search.initialStatus": "Enter keywords to start searching",
   "search.noResults": "No search results",
   "search.noResultsHint": "Search theme names, material content, card titles, or artifact bodies.",
+  "search.openResult": "Open {{title}}",
   "search.placeholder": "Search knowledge assets...",
   "search.resultsFound": "{{count}} results found",
   "search.scope.all": "All",

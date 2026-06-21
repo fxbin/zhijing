@@ -740,6 +740,7 @@
   "search.initialStatus": "输入关键词开始搜索",
   "search.noResults": "暂无搜索结果",
   "search.noResultsHint": "可以搜索主题名、资料内容、卡片标题或产物正文。",
+  "search.openResult": "打开 {{title}}",
   "search.placeholder": "搜索知识资产...",
   "search.resultsFound": "找到 {{count}} 条结果",
   "search.scope.all": "全部",

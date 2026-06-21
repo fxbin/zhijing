@@ -26,9 +26,10 @@ const PREVIEW_LIMIT_ARTIFACTS = 4;
  * @param {object} props - 组件属性
  * @param {object} props.data - 高级运维聚合数据
  * @param {function} props.setView - 视图切换函数
+ * @param {(artifact: object) => void} props.onOpenArtifact - 打开指定产物的回调，传入当前点击的产物对象
  * @returns {JSX.Element} 资产仪表盘
  */
-export default function GlobalAssetsDashboard({ data, setView }) {
+export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact }) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
   const claimStatusLabel = useClaimStatusLabel();
@@ -279,7 +280,7 @@ export default function GlobalAssetsDashboard({ data, setView }) {
                       <strong>{artifact.title}</strong>
                       <span>{artifact.type ?? t('assets.artifactFallback')} · {t('assets.sectionsCount', { count: artifact.sections?.length ?? 0 })}</span>
                     </div>
-                    <button onClick={() => setView('artifact')} type="button">{t('common.open')}</button>
+                    <button onClick={() => onOpenArtifact(artifact)} type="button">{t('common.open')}</button>
                   </article>
                 ))}
               </div>

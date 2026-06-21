@@ -655,7 +655,13 @@ function App() {
               parsingMaterialId={parsingMaterialId}
             />
           )}
-          {view === 'search' && <SearchView />}
+          {view === 'search' && (
+            <SearchView
+              setView={go}
+              setSelectedKnowledgeBaseId={setSelectedKnowledgeBaseId}
+              onOpenArtifact={openArtifact}
+            />
+          )}
           {view === 'kits' && (
             <KitView
               apiStatus={apiStatus}
@@ -679,7 +685,7 @@ function App() {
           )}
           {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={knowledgeBaseDetail} setView={go} artifactOrigin={artifactOrigin} onClearOrigin={() => setArtifactOrigin(null)} onArtifactUpdate={handleArtifactUpdate} />}
           {view === 'maps' && <MapsView apiStatus={apiStatus} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={go} />}
-          {view === 'assets' && <GlobalAssetsDashboard data={advancedOpsData} setView={go} />}
+          {view === 'assets' && <GlobalAssetsDashboard data={advancedOpsData} setView={go} onOpenArtifact={openArtifact} />}
           {view === 'synthesis' && <CrossKbSynthesisView data={advancedOpsData} setView={go} />}
           {view === 'compare' && <MultiEntityComparisonView data={advancedOpsData} setView={go} />}
           {view === 'conflicts' && <KnowledgeConflictResolverView data={advancedOpsData} setView={go} />}

@@ -185,7 +185,7 @@ export default function DetailView({
   const conceptTags = extractConceptTags(cards);
   const cardGroups = groupCardsByType(cards);
   const canAsk = apiStatus === 'online' && Boolean(selectedKnowledgeBaseId) && !isAsking;
-  const latestAnswerCards = assistantAnswer?.cards?.slice(0, 2) ?? [];
+  const latestAnswerCards = assistantAnswer?.cards ?? [];
   const latestCitations = assistantAnswer?.citations ?? [];
   const questionHistory = materials.filter((material) => material.type === 'question').slice(0, 3);
   const totals = analytics?.totals;
