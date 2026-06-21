@@ -4036,22 +4036,45 @@ function extractXiaohongshuImageTokenPath(imageUrl: string) {
 function xiaohongshuVideoUrls(video: unknown) {
   const record = asRecord(video);
   if (!record) return [];
-  const originVideoKey = stringValue(asRecord(record.consumer)?.originVideoKey);
-  const generated = originVideoKey ? [`https://sns-video-bd.xhscdn.com/${originVideoKey}`] : [];
+
+  const urls: string[] = [];
+
+  const originVideoKey = stringValue(
+    record.originVideoKey ??
+    asRecord(record.consumer)?.originVideoKey ??
+    asRecord(record.video)?.originVideoKey
+  );
+  if (originVideoKey) {
+    urls.push(`https://sns-video-bd.xhscdn.com/${originVideoKey}`);
+  }
+
+  const directUrl = stringValue(
+    record.url ??
+    record.videoUrl ??
+    asRecord(record.video)?.url ??
+    asRecord(record.video)?.videoUrl
+  );
+  if (directUrl) {
+    urls.push(directUrl);
+  }
+
   const stream = asRecord(asRecord(record.media)?.stream);
-  const streamUrls = ['h264', 'h265', 'h266']
+  const streamUrls = ['h264', 'h265', 'h266', 'av1']
     .flatMap((key) => arrayValue(stream?.[key]))
     .flatMap((item) => {
       const itemRecord = asRecord(item);
       return [
         stringValue(itemRecord?.masterUrl),
+        stringValue(itemRecord?.url),
         ...arrayValue(itemRecord?.backupUrls).map(stringValue),
       ];
     })
     .filter((url): url is string => Boolean(url))
     .map(normalizeHttpUrl)
     .filter((url): url is string => Boolean(url));
-  return uniqueStrings([...generated, ...streamUrls]);
+  urls.push(...streamUrls);
+
+  return uniqueStrings(urls.map(normalizeHttpUrl).filter((url): url is string => Boolean(url)));
 }
 
 function normalizeHttpUrl(value: string | undefined) {
