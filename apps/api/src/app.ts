@@ -17,6 +17,7 @@ import {
   extractEntities,
   generateCrossKbSynthesis,
   getDashboard,
+  getTranscriptionCapabilityReport,
   getGlobalInsights,
   getKnowledgeBasePath,
   getModelProviderSettings,
@@ -647,6 +648,15 @@ export function buildApi() {
       return reply.code(404).send({ error: 'Task not found.' });
     }
     return task;
+  });
+
+  app.get('/api/transcription/capability', async (request, reply) => {
+    try {
+      return await getTranscriptionCapabilityReport();
+    } catch (error) {
+      request.log.error({ error }, 'transcription capability check failed');
+      return reply.code(500).send({ error: 'Transcription capability check failed.' });
+    }
   });
 
   app.post<{ Params: { id: string } }>('/api/materials/:id/parse', async (request, reply) => {

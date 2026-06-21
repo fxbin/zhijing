@@ -4486,7 +4486,63 @@ async function findWhisperCommand(): Promise<string | undefined> {
   return undefined;
 }
 
-let cachedTranscriptionCapability: { available: boolean; reason?: string } | undefined;
+export interface TranscriptionCapabilityReport {
+  available: boolean;
+  ffmpegAvailable: boolean;
+  whisperAvailable: boolean;
+  whisperCommand?: string;
+  cpuCores: number;
+  totalMemoryBytes: number;
+  platform: string;
+  reasons: string[];
+}
+
+let cachedTranscriptionCapability: TranscriptionCapabilityReport | undefined;
+
+const BYTES_PER_GB = 1024 * 1024 * 1024;
+
+/**
+ * 获取本地视频语音转写能力详细报告
+ * @author fxbin
+ */
+export async function getTranscriptionCapabilityReport(): Promise<TranscriptionCapabilityReport> {
+  if (cachedTranscriptionCapability) {
+    return cachedTranscriptionCapability;
+  }
+
+  const report: TranscriptionCapabilityReport = {
+    available: true,
+    ffmpegAvailable: await commandExists('ffmpeg'),
+    whisperAvailable: false,
+    cpuCores: os.cpus().length,
+    totalMemoryBytes: os.totalmem(),
+    platform: process.platform,
+    reasons: [],
+  };
+
+  const whisperCommand = await findWhisperCommand();
+  if (whisperCommand) {
+    report.whisperAvailable = true;
+    report.whisperCommand = whisperCommand;
+  }
+
+  if (!report.ffmpegAvailable) {
+    report.reasons.push('未检测到 ffmpeg，无法从视频中提取音频');
+  }
+  if (!report.whisperAvailable) {
+    report.reasons.push('未检测到本地 whisper 命令（whisper / whisper-cli / whisper.cpp），无法转写');
+  }
+  if (report.cpuCores < MIN_CPU_CORES_FOR_TRANSCRIPTION) {
+    report.reasons.push(`CPU 核心数不足（当前 ${report.cpuCores} 核，建议至少 ${MIN_CPU_CORES_FOR_TRANSCRIPTION} 核）`);
+  }
+  if (report.totalMemoryBytes < MIN_MEMORY_BYTES_FOR_TRANSCRIPTION) {
+    report.reasons.push(`内存不足（当前 ${(report.totalMemoryBytes / BYTES_PER_GB).toFixed(1)}GB，建议至少 4GB）`);
+  }
+
+  report.available = report.reasons.length === 0;
+  cachedTranscriptionCapability = report;
+  return report;
+}
 
 /**
  * 检测本地视频语音转写能力
@@ -4494,32 +4550,11 @@ let cachedTranscriptionCapability: { available: boolean; reason?: string } | und
  * @author fxbin
  */
 export async function detectTranscriptionCapability(): Promise<{ available: boolean; reason?: string }> {
-  if (cachedTranscriptionCapability) {
-    return cachedTranscriptionCapability;
+  const report = await getTranscriptionCapabilityReport();
+  if (report.available) {
+    return { available: true };
   }
-
-  if (!(await commandExists('ffmpeg'))) {
-    cachedTranscriptionCapability = { available: false, reason: '未检测到 ffmpeg，无法从视频中提取音频' };
-    return cachedTranscriptionCapability;
-  }
-
-  if (!(await findWhisperCommand())) {
-    cachedTranscriptionCapability = { available: false, reason: '未检测到本地 whisper 命令（whisper / whisper-cli / whisper.cpp），无法转写' };
-    return cachedTranscriptionCapability;
-  }
-
-  if (os.cpus().length < MIN_CPU_CORES_FOR_TRANSCRIPTION) {
-    cachedTranscriptionCapability = { available: false, reason: `CPU 核心数不足（本地 ASR 建议至少 ${MIN_CPU_CORES_FOR_TRANSCRIPTION} 核）` };
-    return cachedTranscriptionCapability;
-  }
-
-  if (os.totalmem() < MIN_MEMORY_BYTES_FOR_TRANSCRIPTION) {
-    cachedTranscriptionCapability = { available: false, reason: '内存不足（本地 ASR 建议至少 4GB）' };
-    return cachedTranscriptionCapability;
-  }
-
-  cachedTranscriptionCapability = { available: true };
-  return cachedTranscriptionCapability;
+  return { available: false, reason: report.reasons.join('；') };
 }
 
 /**

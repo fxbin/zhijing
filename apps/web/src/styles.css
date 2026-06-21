@@ -2722,6 +2722,49 @@ button { cursor: pointer; }
   color: var(--error);
 }
 
+.transcript-report-toggle {
+  margin-top: 8px;
+  padding: 4px 0;
+  background: transparent;
+  border: none;
+  color: var(--scholar);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.transcript-report-toggle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.transcript-report {
+  margin: 10px 0 0 0;
+  padding: 10px 12px 10px 28px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.transcript-report li {
+  margin: 2px 0;
+}
+
+.transcript-report-reasons {
+  margin-top: 6px;
+  color: var(--error);
+}
+
+.transcript-report-reasons ul {
+  margin: 4px 0 0 0;
+  padding-left: 18px;
+}
+
+.transcript-report-reasons li {
+  margin: 2px 0;
+}
+
 .assistant-panel {
   position: sticky;
   top: 88px;
