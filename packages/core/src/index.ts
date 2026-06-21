@@ -3992,10 +3992,12 @@ function extractXiaohongshuTags(note: Record<string, unknown>) {
 }
 
 function extractXiaohongshuMediaUrls(note: Record<string, unknown>) {
-  const imageUrls = arrayValue(note.imageList).flatMap(xiaohongshuImageUrls);
   const videoUrls = xiaohongshuVideoUrls(note.video);
-  const mediaUrls = uniqueStrings([...imageUrls, ...videoUrls]);
-  return mediaUrls.length ? mediaUrls : uniqueStrings(collectMediaUrls(note));
+  if (videoUrls.length) {
+    return [videoUrls[0]];
+  }
+  const imageUrls = arrayValue(note.imageList).flatMap(xiaohongshuImageUrls);
+  return imageUrls.length ? uniqueStrings(imageUrls) : uniqueStrings(collectMediaUrls(note));
 }
 
 function xiaohongshuImageUrls(image: unknown) {
