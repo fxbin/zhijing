@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './i18n';
 import {
   Archive,
+  BookOpen,
   CircleHelp,
   Database,
   FolderOpen,
@@ -50,6 +51,7 @@ import ChatView from './views/ChatView';
 import RecallView from './views/RecallView';
 import ExportView from './views/ExportView';
 import SettingsView from './views/SettingsView';
+import WeReadView from './views/WeReadView';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from './components/LanguageSwitcher';
 
@@ -78,6 +80,7 @@ function App() {
   const [isRunningKit, setIsRunningKit] = useState(false);
   const [kitRunResult, setKitRunResult] = useState(null);
   const [isCreateKbOpen, setIsCreateKbOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState(null);
   const kind = useMemo(() => (query.trim() ? classifyInput(query.trim()) : 'Theme, Link, or Question'), [query]);
   const advancedOpsData = useMemo(() => buildAdvancedOpsData({
     knowledgeBases,
@@ -90,6 +93,25 @@ function App() {
     const handleHashChange = () => setView(viewFromHash());
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  useEffect(() => {
+    function handleNavigate(event) {
+      const detail = event.detail ?? {};
+      if (detail.view) {
+        setView(detail.view);
+        if (detail.view === 'settings' && detail.section) {
+          setSettingsSection(detail.section);
+          window.location.hash = 'settings';
+        } else if (detail.view === 'workspace') {
+          window.history.replaceState(null, '', window.location.pathname);
+        } else {
+          window.location.hash = detail.view;
+        }
+      }
+    }
+    window.addEventListener('zhijing:navigate', handleNavigate);
+    return () => window.removeEventListener('zhijing:navigate', handleNavigate);
   }, []);
 
   useEffect(() => {
@@ -492,6 +514,7 @@ function App() {
   const navItems = [
     { key: 'detail', label: t('nav.knowledgeBase'), icon: Database },
     { key: 'library', label: t('nav.library'), icon: FolderOpen },
+    { key: 'weread', label: t('nav.weread'), icon: BookOpen },
     { key: 'search', label: t('nav.search'), icon: Search },
     { key: 'assets', label: t('nav.assets'), icon: Layers },
     { key: 'insights', label: t('nav.insights'), icon: Lightbulb },
@@ -646,7 +669,8 @@ function App() {
           )}
           {view === 'recall' && <RecallView detail={knowledgeBaseDetail} setView={go} />}
           {view === 'export' && <ExportView detail={knowledgeBaseDetail} setView={go} />}
-          {view === 'settings' && <SettingsView />}
+          {view === 'weread' && <WeReadView />}
+          {view === 'settings' && <SettingsView initialSection={settingsSection} onSectionConsumed={() => setSettingsSection(null)} />}
         </div>
       </section>
       {isCreateKbOpen && (

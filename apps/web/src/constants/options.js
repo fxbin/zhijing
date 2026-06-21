@@ -22,6 +22,7 @@ export const knownViews = new Set([
   'insights',
   'path',
   'settings',
+  'weread',
 ]);
 
 export const materialFilterOptions = [

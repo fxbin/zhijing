@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import {
   BarChart3,
+  BookOpen,
   Database,
   Download,
   KeyRound,
@@ -102,11 +103,15 @@ const CREATE_FORM_STYLE = {
 };
 
 /**
- * 设置视图组件：多 Profile 管理 + 系统透明度 + 数据控制
+ * 设置视图组件：多 Profile 管理 + 系统透明度 + 数据控制 + 微信读书
+ *
+ * @param {object} props - 组件属性
+ * @param {string|null} props.initialSection - 初始激活的设置分区
+ * @param {() => void} props.onSectionConsumed - 初始分区消费后的回调
  * @returns {JSX.Element} 设置视图
  * @author fxbin
  */
-export default function SettingsView() {
+export default function SettingsView({ initialSection = null, onSectionConsumed }) {
   const { t } = useTranslation();
   const taskStatusLabel = useTaskStatusLabel();
   const taskWorkflowLabel = useTaskWorkflowLabel();
@@ -132,6 +137,11 @@ export default function SettingsView() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newProfile, setNewProfile] = useState(EMPTY_PROFILE_FORM);
   const [activeSection, setActiveSection] = useState('profiles');
+  const [wereadApiKey, setWereadApiKey] = useState('');
+  const [wereadConfigured, setWereadConfigured] = useState(false);
+  const [wereadSaving, setWereadSaving] = useState(false);
+  const [wereadTesting, setWereadTesting] = useState(false);
+  const [wereadTestResult, setWereadTestResult] = useState(null);
 
   const activeProvider = providerOptions.find((item) => item.id === provider);
   const modelOptions = activeProvider?.models ?? [];
@@ -156,6 +166,34 @@ export default function SettingsView() {
       ignore = true;
     };
   }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    async function loadWeReadSettings() {
+      try {
+        const response = await fetch('/api/weread/settings');
+        if (!response.ok) throw new Error('WeRead settings unavailable.');
+        const result = await response.json();
+        if (ignore) return;
+        setWereadConfigured(result.configured);
+      } catch {
+        if (!ignore) setWereadConfigured(false);
+      }
+    }
+    loadWeReadSettings();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (initialSection) {
+      setActiveSection(initialSection);
+      if (onSectionConsumed) {
+        onSectionConsumed();
+      }
+    }
+  }, [initialSection, onSectionConsumed]);
 
   useEffect(() => {
     let ignore = false;
@@ -407,6 +445,52 @@ export default function SettingsView() {
   }
 
   /**
+   * 保存微信读书 API Key
+   */
+  async function saveWeReadKey() {
+    const value = wereadApiKey.trim();
+    if (!value || wereadSaving) return;
+    setWereadSaving(true);
+    setWereadTestResult(null);
+    try {
+      const response = await fetch('/api/weread/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: value }),
+      });
+      if (!response.ok) throw new Error('Save failed.');
+      setWereadConfigured(true);
+      setWereadApiKey('');
+      setStatus(t('settings.weread.saveSuccess'));
+    } catch {
+      setStatus(t('settings.weread.saveFailed'));
+    } finally {
+      setWereadSaving(false);
+    }
+  }
+
+  /**
+   * 测试微信读书 API Key 连接
+   */
+  async function testWeReadKey() {
+    if (wereadTesting) return;
+    setWereadTesting(true);
+    setWereadTestResult(null);
+    try {
+      const response = await fetch('/api/weread/settings/test', { method: 'POST' });
+      if (!response.ok) throw new Error('Test failed.');
+      const result = await response.json();
+      setWereadTestResult(result);
+      setStatus(result.ok ? t('settings.weread.testSuccess') : t('settings.weread.testFailed'));
+    } catch {
+      setWereadTestResult({ ok: false, error: t('settings.weread.testFailed') });
+      setStatus(t('settings.weread.testFailed'));
+    } finally {
+      setWereadTesting(false);
+    }
+  }
+
+  /**
    * 打开创建 Profile 表单，并初始化默认值
    */
   function openCreateForm() {
@@ -500,6 +584,7 @@ export default function SettingsView() {
 
   const SETTINGS_TABS = [
     { key: 'profiles', label: t('settings.profiles'), icon: PlugZap },
+    { key: 'weread', label: t('settings.weread.title'), icon: BookOpen },
     { key: 'transparency', label: t('settings.systemTransparency'), icon: BarChart3 },
     { key: 'dataControls', label: t('settings.dataControls'), icon: Database },
   ];
@@ -541,6 +626,28 @@ export default function SettingsView() {
               {testResult.sampleTitle && <small>{t('settings.returnedCard')}{testResult.sampleTitle}</small>}
             </div>
           )}
+        </>
+      );
+    }
+
+    if (activeSection === 'weread') {
+      return (
+        <>
+          <div className="status-card">
+            <BookOpen size={25} />
+            <div>
+              <span>{t('settings.weread.title')}</span>
+              <strong>{wereadConfigured ? t('settings.weread.configured') : t('settings.weread.notConfigured')}</strong>
+              <p>{t('settings.weread.hint')}</p>
+            </div>
+          </div>
+          {wereadTestResult && (
+            <div className={`test-result ${wereadTestResult.ok ? 'ok' : 'failed'}`}>
+              <strong>{wereadTestResult.ok ? t('settings.testPassed') : t('settings.testNotPassed')}</strong>
+              {wereadTestResult.error && <p>{wereadTestResult.error}</p>}
+            </div>
+          )}
+          <p className="settings-note">{status}</p>
         </>
       );
     }
@@ -804,6 +911,43 @@ export default function SettingsView() {
                 </div>
               </div>
             )}
+          </section>
+        )}
+
+        {activeSection === 'weread' && (
+          <section className="settings-panel">
+            <div className="settings-panel-head">
+              <BookOpen size={24} />
+              <div>
+                <h3>{t('settings.weread.title')}</h3>
+                <p>{t('settings.weread.desc')}</p>
+              </div>
+            </div>
+            <div className="settings-form-section">
+              <strong>{t('settings.weread.apiKey')}</strong>
+              <label className="field-row">
+                <span>{t('settings.weread.apiKeyLabel')}</span>
+                <div className="secret-input">
+                  <KeyRound size={18} />
+                  <input
+                    autoComplete="off"
+                    placeholder={wereadConfigured ? t('settings.weread.apiKeyPlaceholder.configured') : t('settings.weread.apiKeyPlaceholder.empty')}
+                    type="password"
+                    value={wereadApiKey}
+                    onChange={(event) => setWereadApiKey(event.target.value)}
+                  />
+                </div>
+              </label>
+              <p className="settings-note">{t('settings.weread.apiKeyHint')}</p>
+            </div>
+            <div className="settings-actions settings-actions-primary">
+              <button disabled={wereadSaving || !wereadApiKey.trim()} onClick={saveWeReadKey} type="button">
+                {wereadSaving ? t('common.saving') : t('common.save')}
+              </button>
+              <button disabled={wereadTesting || !wereadConfigured} onClick={testWeReadKey} type="button">
+                {wereadTesting ? t('settings.testingConnection') : t('settings.test')}
+              </button>
+            </div>
           </section>
         )}
 
