@@ -370,7 +370,12 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
     if (!item?.id || apiStatus !== 'online' || mutatingMaterialId) return;
     const target = assignDrafts[item.id] ?? item.knowledgeBaseId ?? '';
     const newKnowledgeBaseTitle = (newBaseTitles[item.id] ?? item.title ?? '').trim();
-    if (!target || (target === item.knowledgeBaseId && target !== '__new')) return;
+    if (!target) return;
+    if (target === item.knowledgeBaseId && target !== '__new') {
+      setStatus(t('library.status.alreadyInThisKb'));
+      setAssignDrafts((current) => ({ ...current, [item.id]: undefined }));
+      return;
+    }
     setMutatingMaterialId(item.id);
     setStatus(t('library.status.updatingAssignment'));
     try {
@@ -439,6 +444,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
     clearSelection();
     setItems((current) => current.filter((item) => !selectedSnapshot.has(item.id)));
     let failed = 0;
+    const failedIds = [];
     for (let i = 0; i < ids.length; i += 1) {
       try {
         const response = await fetch(`/api/materials/${ids[i]}`, { method: 'DELETE' });
@@ -447,12 +453,14 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
         onMaterialMutation?.(result);
       } catch {
         failed += 1;
+        failedIds.push(ids[i]);
       }
       setBatchProgress({ done: i + 1, total: ids.length, action: t('common.delete') });
     }
     if (failed > 0) {
       setStatus(t('library.status.deletePartialFailed', { success: ids.length - failed, failed }));
       setItems(snapshot);
+      setSelectedIds(new Set(failedIds));
       await loadMaterials();
     } else {
       setStatus(t('library.status.deleteSuccess', { count: ids.length }));
