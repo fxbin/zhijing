@@ -591,6 +591,14 @@ button { cursor: pointer; }
   opacity: 0.58;
 }
 
+.command-box.command-box-offline {
+  opacity: 0.72;
+}
+
+.command-box.command-box-offline input {
+  cursor: not-allowed;
+}
+
 .chip-row {
   gap: 14px;
   flex-wrap: wrap;
@@ -923,6 +931,17 @@ button { cursor: pointer; }
   gap: 10px;
   padding: 16px 24px 20px;
   border-top: 1px solid var(--line-soft);
+}
+
+.modal-error {
+  margin: 12px 24px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(217, 83, 79, 0.35);
+  background: rgba(217, 83, 79, 0.08);
+  color: #d9534f;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .btn-ghost {
@@ -2616,6 +2635,13 @@ button { cursor: pointer; }
 .settings-profile-list {
   display: grid;
   gap: 10px;
+}
+
+.settings-create-form {
+  display: grid;
+  gap: 16px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 18px;
 }
 
 .settings-profile-item {
@@ -6492,6 +6518,20 @@ button { cursor: pointer; }
   max-width: 180px;
 }
 
+.search-result-meta .result-meta-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  text-transform: none;
+  font-weight: 600;
+}
+
+.search-result-meta .result-meta-label {
+  font-weight: 400;
+  opacity: 0.7;
+  font-size: 10px;
+}
+
 .search-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
@@ -8741,6 +8781,12 @@ button { cursor: pointer; }
 .archive-row-base {
   color: var(--primary);
   font-weight: 700;
+}
+
+.archive-row-base-deleted {
+  color: var(--muted);
+  font-weight: 500;
+  font-style: italic;
 }
 
 .archive-row-error {
