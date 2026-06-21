@@ -74,6 +74,18 @@ import type {
   UpdateModelProviderProfileRequest,
 } from '@zhijing/shared';
 
+const DEFAULT_ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+];
+
+function resolveAllowedOrigins(): string[] {
+  const raw = process.env.ZHIJING_ALLOWED_ORIGINS;
+  if (!raw) return DEFAULT_ALLOWED_ORIGINS;
+  const origins = raw.split(',').map((item) => item.trim()).filter(Boolean);
+  return origins.length > 0 ? origins : DEFAULT_ALLOWED_ORIGINS;
+}
+
 export function buildApi() {
   const app = Fastify({
     logger: {
@@ -82,7 +94,7 @@ export function buildApi() {
   });
 
   app.register(cors, {
-    origin: true,
+    origin: resolveAllowedOrigins(),
   });
 
   app.get('/health', async () => ({
