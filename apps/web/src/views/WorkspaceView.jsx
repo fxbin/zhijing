@@ -77,7 +77,7 @@ export default function WorkspaceView({ activity, isSubmitting, materials, query
           </>
         ) : (
           <>
-            <RecentImports materials={materials} />
+            <RecentImports materials={materials} onViewAll={() => setView('library')} />
             <KnowledgeMapPanel selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={setView} />
           </>
         )}

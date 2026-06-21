@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { Check, Lock, MapPin, Route, Sparkles } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { useCardTypeLabel } from '../utils/i18nLabels';
+import { PATH_CARD_ID_STORAGE_KEY } from '../constants/options';
 
 /**
  * 路径视图组件。
@@ -88,6 +89,16 @@ export default function PathView({ selectedKnowledgeBaseId, setView }) {
 
   const progressRatio = path.steps.length > 0 ? path.completedCount / path.steps.length : 0;
 
+  /**
+   * 点击路径步骤时记录目标卡片 ID 并跳转到详情视图。
+   * @param {string} cardId - 步骤对应的卡片 ID
+   */
+  function handleStepClick(cardId) {
+    if (!cardId) return;
+    sessionStorage.setItem(PATH_CARD_ID_STORAGE_KEY, cardId);
+    setView('detail');
+  }
+
   return (
     <div className="page-main full path-page">
       <header className="path-header">
@@ -121,9 +132,9 @@ export default function PathView({ selectedKnowledgeBaseId, setView }) {
             <div
               key={step.id}
               className={`path-step ${step.status}`}
-              onClick={() => step.cardId && setView(`detail`)}
+              onClick={() => handleStepClick(step.cardId)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && step.cardId) setView('detail');
+                if (event.key === 'Enter') handleStepClick(step.cardId);
               }}
               role={step.cardId ? 'button' : undefined}
               tabIndex={step.cardId ? 0 : undefined}

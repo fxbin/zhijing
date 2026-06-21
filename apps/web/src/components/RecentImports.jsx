@@ -22,7 +22,14 @@ function resolveXiaohongshuCover(item) {
   return urls.find((url) => isImageUrl(url));
 }
 
-export default function RecentImports({ materials }) {
+/**
+ * 最近导入资料组件。
+ * @param {object} props - 组件属性
+ * @param {Array<object>} props.materials - 最近导入资料列表
+ * @param {() => void} props.onViewAll - 点击「查看全部」回调
+ * @returns {JSX.Element} 最近导入面板
+ */
+export default function RecentImports({ materials, onViewAll }) {
   const { t } = useTranslation();
   const parseStatusLabel = useParseStatusLabel();
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -42,7 +49,7 @@ export default function RecentImports({ materials }) {
       <div className="section-title">
         <Upload size={22} />
         <h3>{t('recentImports.title')}</h3>
-        <button type="button">{t('common.viewAll')}</button>
+        <button type="button" onClick={onViewAll}>{t('common.viewAll')}</button>
       </div>
       <div className="material-list">
         {materials.length === 0 ? (

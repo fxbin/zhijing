@@ -31,8 +31,11 @@ import SourceCitation from '../components/SourceCitation';
 import TaskStatus from '../components/TaskStatus';
 import AIChatShell from '../components/AIChatShell';
 import { useChatLayout } from '../hooks/useChatLayout';
+import { PATH_CARD_ID_STORAGE_KEY } from '../constants/options';
 
 const BYTES_PER_GB = 1024 * 1024 * 1024;
+
+const HIGHLIGHT_TIMEOUT_MS = 2000;
 
 /**
  * 资料视频字幕面板：展示转写状态，并在跳过时提供机器能力检测报告。
@@ -236,6 +239,24 @@ export default function DetailView({
   }, [selectedKnowledgeBaseId]);
 
   /**
+   * 挂载时读取路径视图传递的卡片 ID，滚动并高亮对应卡片。
+   * 依赖 cards：当卡片列表加载完成后触发，触发后清除存储键避免重复高亮。
+   */
+  useEffect(() => {
+    const cardId = sessionStorage.getItem(PATH_CARD_ID_STORAGE_KEY);
+    if (!cardId) return;
+    if (cards.length === 0) return;
+    sessionStorage.removeItem(PATH_CARD_ID_STORAGE_KEY);
+    setHighlightedCardId(cardId);
+    const element = document.getElementById(`card-${cardId}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    const timer = setTimeout(() => setHighlightedCardId(null), HIGHLIGHT_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [cards]);
+
+  /**
    * 点击 Roadmap 节点后滚动并高亮对应卡片。
    * @param {string} cardId - 卡片 ID
    */
@@ -245,7 +266,7 @@ export default function DetailView({
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-    const timer = setTimeout(() => setHighlightedCardId(null), 2000);
+    const timer = setTimeout(() => setHighlightedCardId(null), HIGHLIGHT_TIMEOUT_MS);
     return () => clearTimeout(timer);
   }
 
