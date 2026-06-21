@@ -92,6 +92,17 @@ import { DatabaseSync } from 'node:sqlite';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import os from 'node:os';
+import {
+  buildWeReadMaterialMarkdown,
+  WeReadClient,
+  WeReadError,
+  type WeReadBookInfo,
+  type WeReadBookmarkList,
+  type WeReadReviewList,
+  type WeReadShelf,
+  type WeReadShelfBook,
+  type WeReadImportResult,
+} from './weread.js';
 
 type PersistedModelProviderConfig = Partial<{
   provider: string;
@@ -197,6 +208,9 @@ type KnowledgeRepository = {
   updateModelProviderProfile(record: ModelProviderProfileRecord): void;
   deleteModelProviderProfile(id: string): void;
   clearModelProviderProfileDefault(): void;
+  readWeReadApiKey(): string | null;
+  writeWeReadApiKey(apiKey: string): void;
+  deleteWeReadApiKey(): void;
 };
 
 type GeneratedCard = {
@@ -252,6 +266,8 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     modelProviderProfiles: [],
     nodePositions: {},
   };
+
+  private wereadApiKey: string | null = null;
 
   insertKnowledgeBase(base: KnowledgeBaseSummary) {
     this.state.knowledgeBases.unshift(base);
@@ -538,6 +554,18 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
       if (record.isDefault) record.isDefault = false;
     }
   }
+
+  readWeReadApiKey(): string | null {
+    return this.wereadApiKey;
+  }
+
+  writeWeReadApiKey(apiKey: string) {
+    this.wereadApiKey = apiKey;
+  }
+
+  deleteWeReadApiKey() {
+    this.wereadApiKey = null;
+  }
 }
 
 type KnowledgeBaseRow = {
@@ -663,6 +691,12 @@ type ModelProviderProfileRow = {
   fallback_to_mock: number;
   is_default: number;
   created_at: string;
+  updated_at: string;
+};
+
+type WeReadSettingsRow = {
+  id: string;
+  api_key: string;
   updated_at: string;
 };
 
@@ -1258,6 +1292,37 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.db.prepare('UPDATE model_provider_profiles SET is_default = 0 WHERE is_default = 1').run();
   }
 
+  /**
+   * 读取微信读书 API Key 配置。
+   * @returns {string | null} API Key，未配置时返回 null
+   * @author fxbin
+   */
+  readWeReadApiKey(): string | null {
+    const row = this.db.prepare('SELECT * FROM weread_settings WHERE id = ?').get('default') as WeReadSettingsRow | undefined;
+    return row?.api_key ?? null;
+  }
+
+  /**
+   * 保存或更新微信读书 API Key 配置。
+   * @param {string} apiKey - 微信读书 API Key
+   * @author fxbin
+   */
+  writeWeReadApiKey(apiKey: string) {
+    this.db.prepare(`
+      INSERT INTO weread_settings (id, api_key, updated_at)
+      VALUES ('default', ?, ?)
+      ON CONFLICT(id) DO UPDATE SET api_key = excluded.api_key, updated_at = excluded.updated_at
+    `).run(apiKey, new Date().toISOString());
+  }
+
+  /**
+   * 删除微信读书 API Key 配置。
+   * @author fxbin
+   */
+  deleteWeReadApiKey() {
+    this.db.prepare('DELETE FROM weread_settings WHERE id = ?').run('default');
+  }
+
   private migrate() {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS knowledge_bases (
@@ -1370,6 +1435,12 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         created_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS weread_settings (
+        id TEXT PRIMARY KEY,
+        api_key TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_materials_knowledge_base_id ON materials(knowledge_base_id);
       CREATE INDEX IF NOT EXISTS idx_cards_knowledge_base_id ON cards(knowledge_base_id);
       CREATE INDEX IF NOT EXISTS idx_card_revisions_card_id ON card_revisions(card_id, version);
@@ -1378,6 +1449,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       CREATE INDEX IF NOT EXISTS idx_artifacts_knowledge_base_id ON artifacts(knowledge_base_id);
       CREATE INDEX IF NOT EXISTS idx_messages_knowledge_base_id ON messages(knowledge_base_id);
     `);
+    this.ensureWeReadSettingsTable();
     this.ensureMaterialMediaColumn();
     this.ensureMaterialStatusTimelineColumn();
     this.ensureMaterialTranscriptColumns();
@@ -1576,6 +1648,20 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       this.db.exec('ALTER TABLE cards ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;');
     }
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_cards_archived ON cards(archived, knowledge_base_id);');
+  }
+
+  /**
+   * 为微信读书配置表做向后兼容：若旧库没有 weread_settings 表则创建。
+   * @author fxbin
+   */
+  private ensureWeReadSettingsTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS weread_settings (
+        id TEXT PRIMARY KEY,
+        api_key TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
   }
 
   private ensureArtifactSubtypeColumn() {
@@ -5910,6 +5996,138 @@ export function getKnowledgeBasePath(id: string): KnowledgeBasePath | undefined 
     steps,
     currentStepIndex: currentStepIndex === -1 ? steps.length : currentStepIndex,
     completedCount,
+  };
+}
+
+export { WeReadError };
+export type { WeReadShelf, WeReadShelfBook, WeReadImportResult };
+
+/**
+ * 获取微信读书配置状态。
+ *
+ * @returns 是否已配置 API Key
+ */
+export function getWeReadSettings(): { configured: boolean } {
+  return { configured: Boolean(repository.readWeReadApiKey()) };
+}
+
+/**
+ * 保存微信读书 API Key。
+ *
+ * @param apiKey - 微信读书 API Key
+ */
+export function saveWeReadSettings(apiKey: string): void {
+  const trimmed = apiKey.trim();
+  if (!trimmed) {
+    throw new KnowledgeCoreError('API Key 不能为空', 400);
+  }
+  repository.writeWeReadApiKey(trimmed);
+}
+
+/**
+ * 删除微信读书 API Key 配置。
+ */
+export function deleteWeReadSettings(): void {
+  repository.deleteWeReadApiKey();
+}
+
+/**
+ * 测试微信读书 API Key 是否可用。
+ *
+ * @returns 测试结果，失败时附带原因
+ */
+export async function testWeReadConnection(): Promise<{ ok: boolean; error?: string }> {
+  const apiKey = repository.readWeReadApiKey();
+  if (!apiKey) {
+    return { ok: false, error: '未配置微信读书 API Key' };
+  }
+  try {
+    const client = new WeReadClient(apiKey);
+    await client.getShelf();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof WeReadError ? error.message : '连接测试失败' };
+  }
+}
+
+/**
+ * 拉取当前用户的微信读书书架。
+ *
+ * @returns 书架数据（含电子书和有声书）
+ * @throws {KnowledgeCoreError} 未配置 API Key 时抛出
+ */
+export async function getWeReadShelf(): Promise<WeReadShelf> {
+  const apiKey = repository.readWeReadApiKey();
+  if (!apiKey) {
+    throw new KnowledgeCoreError('未配置微信读书 API Key', 400);
+  }
+  const client = new WeReadClient(apiKey);
+  return client.getShelf();
+}
+
+/**
+ * 导入单本微信读书书籍的笔记与划线为知径 material。
+ *
+ * @param bookId - 微信读书书籍 ID
+ * @param knowledgeBaseId - 可选目标知识库 ID，未提供时自动创建/复用默认知识库
+ * @returns 导入结果
+ */
+export async function importWeReadBook(bookId: string, knowledgeBaseId?: string): Promise<WeReadImportResult> {
+  const apiKey = repository.readWeReadApiKey();
+  if (!apiKey) {
+    throw new KnowledgeCoreError('未配置微信读书 API Key', 400);
+  }
+
+  const client = new WeReadClient(apiKey);
+  const [bookInfo, bookmarks, reviews] = await Promise.all([
+    client.getBookInfo(bookId),
+    client.getBookmarkList(bookId),
+    client.getReviewList(bookId),
+  ]);
+
+  const contentText = buildWeReadMaterialMarkdown(bookInfo, bookmarks, reviews);
+  const base = (knowledgeBaseId ? repository.findKnowledgeBase(knowledgeBaseId) : undefined) ?? upsertDefaultKnowledgeBase(bookInfo.title);
+
+  const timestamp = now();
+  const material: MaterialRecord = {
+    id: id('mat'),
+    knowledgeBaseId: base.id,
+    type: 'text',
+    rawInput: contentText,
+    sourceUrl: `weread://reading?bId=${bookId}`,
+    platform: 'weread',
+    title: `《${bookInfo.title}》阅读笔记`,
+    contentText,
+    mediaUrls: bookInfo.cover ? [bookInfo.cover] : [],
+    parseStatus: 'ingested',
+    createdAt: timestamp,
+    statusTimeline: { capturedAt: timestamp, ingestedAt: timestamp },
+  };
+
+  base.sourceCount += 1;
+  base.updatedAt = timestamp;
+  repository.insertMaterial(material);
+  repository.updateKnowledgeBase(base);
+
+  const generation = await generateKnowledge('material_summary', contentText, {
+    kind: 'text',
+    knowledgeBaseId: base.id,
+    materialId: material.id,
+    hasSourceMaterial: true,
+    parseStatus: material.parseStatus,
+  });
+  const generated = generation.output;
+
+  createCards(base, material, contentText, generated.cards);
+  createArtifact(base, material, contentText, generated);
+  touchKnowledgeBase(base.id);
+
+  return {
+    materialId: material.id,
+    title: material.title,
+    contentText,
+    bookmarkCount: bookmarks.updated?.length ?? 0,
+    reviewCount: reviews.reviews?.length ?? 0,
   };
 }
 

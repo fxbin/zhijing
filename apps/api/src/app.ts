@@ -22,6 +22,9 @@ import {
   getKnowledgeBasePath,
   getModelProviderSettings,
   getModelProviderSettingsV2,
+  getWeReadSettings,
+  getWeReadShelf,
+  importWeReadBook,
   loadFilter,
   recordExport,
   getKnowledgeBaseAnalytics,
@@ -53,9 +56,11 @@ import {
   runKnowledgeKit,
   saveFilter,
   saveModelProviderSettings,
+  saveWeReadSettings,
   searchKnowledgeAssets,
   suggestMaterialAssignments,
   testModelProviderSettings,
+  testWeReadConnection,
   unarchiveCard,
   unarchiveMaterial,
   updateModelProviderProfile,
@@ -783,6 +788,62 @@ export function buildApi() {
     } catch (error) {
       request.log.error({ error }, 'intake failed');
       return reply.code(500).send({ error: 'Intake failed.' });
+    }
+  });
+
+  app.get('/api/weread/settings', async () => getWeReadSettings());
+
+  app.put<{ Body: { apiKey?: string } }>('/api/weread/settings', async (request, reply) => {
+    const apiKey = typeof request.body?.apiKey === 'string' ? request.body.apiKey.trim() : '';
+    if (!apiKey) {
+      return reply.code(400).send({ error: 'API Key is required.' });
+    }
+    try {
+      saveWeReadSettings(apiKey);
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'save weread settings failed');
+      return reply.code(500).send({ error: 'Save WeRead settings failed.' });
+    }
+  });
+
+  app.post('/api/weread/settings/test', async (request, reply) => {
+    try {
+      return await testWeReadConnection();
+    } catch (error) {
+      request.log.error({ error }, 'test weread connection failed');
+      return reply.code(500).send({ ok: false, error: 'Test connection failed.' });
+    }
+  });
+
+  app.get('/api/weread/shelf', async (request, reply) => {
+    try {
+      return await getWeReadShelf();
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'fetch weread shelf failed');
+      return reply.code(500).send({ error: 'Failed to fetch WeRead shelf.' });
+    }
+  });
+
+  app.post<{ Body: { bookId?: string; knowledgeBaseId?: string } }>('/api/weread/import', async (request, reply) => {
+    const bookId = typeof request.body?.bookId === 'string' ? request.body.bookId.trim() : '';
+    if (!bookId) {
+      return reply.code(400).send({ error: 'bookId is required.' });
+    }
+    try {
+      return await importWeReadBook(bookId, request.body?.knowledgeBaseId);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'import weread book failed');
+      return reply.code(500).send({ error: 'Failed to import WeRead book.' });
     }
   });
 
