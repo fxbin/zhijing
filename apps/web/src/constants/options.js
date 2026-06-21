@@ -56,3 +56,7 @@ export const TOP_SEARCH_STORAGE_KEY = 'zhijing:topSearch';
 export const TOP_SEARCH_EVENT = 'zhijing:top-search';
 
 export const PATH_CARD_ID_STORAGE_KEY = 'zhijing:pathCardId';
+
+export const SEARCH_HISTORY_STORAGE_KEY = 'zhijing:searchHistory';
+
+export const SEARCH_HISTORY_MAX_COUNT = 5;

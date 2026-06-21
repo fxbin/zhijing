@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import {
+  AlertTriangle,
   BarChart3,
   BookOpen,
   Database,
@@ -142,6 +143,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed 
   const [wereadSaving, setWereadSaving] = useState(false);
   const [wereadTesting, setWereadTesting] = useState(false);
   const [wereadTestResult, setWereadTestResult] = useState(null);
+  const [profileToDelete, setProfileToDelete] = useState(null);
 
   const activeProvider = providerOptions.find((item) => item.id === provider);
   const modelOptions = activeProvider?.models ?? [];
@@ -327,13 +329,24 @@ export default function SettingsView({ initialSection = null, onSectionConsumed 
   }
 
   /**
-   * 删除指定 profile
+   * 打开删除 Profile 确认弹窗
    * @param {string} id - profile id
    */
-  async function deleteProfile(id) {
+  function requestDeleteProfile(id) {
     const target = profiles.find((item) => item.id === id);
     if (!target) return;
-    if (!window.confirm(t('settings.deleteProfileConfirm'))) return;
+    setProfileToDelete(id);
+  }
+
+  /**
+   * 确认删除当前待删除的 Profile
+   */
+  async function confirmDeleteProfile() {
+    if (!profileToDelete) return;
+    const id = profileToDelete;
+    const target = profiles.find((item) => item.id === id);
+    setProfileToDelete(null);
+    if (!target) return;
     setStatus(t('settings.deletingProfile'));
     try {
       const response = await fetch(`${API_PATHS.profiles}/${id}`, { method: 'DELETE' });
@@ -822,7 +835,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed 
                                 {t('settings.activate')}
                               </button>
                             )}
-                            <button type="button" className="danger" onClick={() => deleteProfile(profile.id)}>
+                            <button type="button" className="danger" onClick={() => requestDeleteProfile(profile.id)}>
                               <Trash2 size={15} />
                             </button>
                           </div>
@@ -908,6 +921,36 @@ export default function SettingsView({ initialSection = null, onSectionConsumed 
                   ) : (
                     <p className="settings-note">{t('settings.noProfileSelected')}</p>
                   )}
+                </div>
+              </div>
+            )}
+
+            {profileToDelete && (
+              <div
+                className="modal-overlay"
+                role="dialog"
+                aria-modal="true"
+                onClick={(event) => {
+                  if (event.target === event.currentTarget) {
+                    setProfileToDelete(null);
+                  }
+                }}
+              >
+                <div className="modal-card">
+                  <div className="modal-head">
+                    <AlertTriangle size={24} />
+                    <h3>{t('settings.deleteProfileTitle')}</h3>
+                  </div>
+                  <div className="modal-body">
+                    <p>{t('settings.deleteProfileConfirm')}</p>
+                    <div className="modal-actions">
+                      <button type="button" onClick={() => setProfileToDelete(null)}>{t('common.cancel')}</button>
+                      <button type="button" className="danger" onClick={confirmDeleteProfile}>
+                        <Trash2 size={16} />
+                        {t('common.delete')}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

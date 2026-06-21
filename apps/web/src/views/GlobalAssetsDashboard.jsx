@@ -12,6 +12,15 @@ import EmptyState from '../components/EmptyState';
 import { formatMaterialTime } from '../utils/material';
 import { useCardTypeLabel, useClaimStatusLabel, useParseStatusLabel } from '../utils/i18nLabels';
 
+/** 资料列表预览条数，超出后显示「显示全部」按钮。 */
+const PREVIEW_LIMIT_MATERIALS = 5;
+
+/** 卡片列表预览条数，超出后显示「显示全部」按钮。 */
+const PREVIEW_LIMIT_CARDS = 5;
+
+/** 产物列表预览条数，超出后通过「显示全部」跳转到资料库。 */
+const PREVIEW_LIMIT_ARTIFACTS = 4;
+
 /**
  * 全局资产仪表盘，展示聚合指标、筛选器和资产列表。
  * @param {object} props - 组件属性
@@ -29,6 +38,8 @@ export default function GlobalAssetsDashboard({ data, setView }) {
   const [filterSort, setFilterSort] = useState('updated_desc');
   const [filterKeyword, setFilterKeyword] = useState('');
   const [filterLoaded, setFilterLoaded] = useState(false);
+  const [expandedMaterials, setExpandedMaterials] = useState(false);
+  const [expandedCards, setExpandedCards] = useState(false);
 
   useEffect(() => {
     if (filterLoaded) return;
@@ -102,8 +113,17 @@ export default function GlobalAssetsDashboard({ data, setView }) {
     });
 
   const filteredMaterials = data.allMaterials
-    .filter((material) => matchesKeyword(material.title))
-    .slice(0, 5);
+    .filter((material) => matchesKeyword(material.title));
+
+  const displayedMaterials = expandedMaterials
+    ? filteredMaterials
+    : filteredMaterials.slice(0, PREVIEW_LIMIT_MATERIALS);
+
+  const displayedCards = expandedCards
+    ? filteredCards
+    : filteredCards.slice(0, PREVIEW_LIMIT_CARDS);
+
+  const displayedArtifacts = data.allArtifacts.slice(0, PREVIEW_LIMIT_ARTIFACTS);
 
   async function resetFilter() {
     setFilterCardType('all');
@@ -183,15 +203,26 @@ export default function GlobalAssetsDashboard({ data, setView }) {
           {filteredMaterials.length === 0 ? (
             <EmptyState title={t('assets.noMaterials')} body={t('assets.noMaterialsHint')} />
           ) : (
-            <div className="asset-list">
-              {filteredMaterials.map((item, index) => (
-                <article key={item.id ?? `${item.title}-${index}`}>
-                  <span>{item.platform ?? item.source ?? item.type ?? t('assets.materialFallback')}</span>
-                  <strong>{item.title}</strong>
-                  <small>{parseStatusLabel(item.parseStatus)} · {formatMaterialTime(item.createdAt)}</small>
-                </article>
-              ))}
-            </div>
+            <>
+              <div className="asset-list">
+                {displayedMaterials.map((item, index) => (
+                  <article key={item.id ?? `${item.title}-${index}`}>
+                    <span>{item.platform ?? item.source ?? item.type ?? t('assets.materialFallback')}</span>
+                    <strong>{item.title}</strong>
+                    <small>{parseStatusLabel(item.parseStatus)} · {formatMaterialTime(item.createdAt)}</small>
+                  </article>
+                ))}
+              </div>
+              {filteredMaterials.length > PREVIEW_LIMIT_MATERIALS && (
+                <button
+                  type="button"
+                  className="asset-show-all"
+                  onClick={() => setExpandedMaterials((prev) => !prev)}
+                >
+                  {expandedMaterials ? t('compare.collapse') : t('common.showAll')}
+                </button>
+              )}
+            </>
           )}
         </section>
 
@@ -206,15 +237,26 @@ export default function GlobalAssetsDashboard({ data, setView }) {
           {filteredCards.length === 0 ? (
             <EmptyState title={t('assets.noCards')} body={t('assets.noCardsHint')} />
           ) : (
-            <div className="asset-list">
-              {filteredCards.slice(0, 5).map((card, index) => (
-                <article key={card.id ?? `${card.title}-${index}`}>
-                  <span>{cardTypeLabel(card.type)}</span>
-                  <strong>{card.title}</strong>
-                  <small>{claimStatusLabel(card.claimStatus)}</small>
-                </article>
-              ))}
-            </div>
+            <>
+              <div className="asset-list">
+                {displayedCards.map((card, index) => (
+                  <article key={card.id ?? `${card.title}-${index}`}>
+                    <span>{cardTypeLabel(card.type)}</span>
+                    <strong>{card.title}</strong>
+                    <small>{claimStatusLabel(card.claimStatus)}</small>
+                  </article>
+                ))}
+              </div>
+              {filteredCards.length > PREVIEW_LIMIT_CARDS && (
+                <button
+                  type="button"
+                  className="asset-show-all"
+                  onClick={() => setExpandedCards((prev) => !prev)}
+                >
+                  {expandedCards ? t('compare.collapse') : t('common.showAll')}
+                </button>
+              )}
+            </>
           )}
         </section>
 
@@ -229,17 +271,28 @@ export default function GlobalAssetsDashboard({ data, setView }) {
           {data.allArtifacts.length === 0 ? (
             <EmptyState title={t('assets.noArtifacts')} body={t('assets.noArtifactsHint')} />
           ) : (
-            <div className="artifact-strip-list">
-              {data.allArtifacts.slice(0, 4).map((artifact, index) => (
-                <article key={artifact.id ?? `${artifact.title}-${index}`}>
-                  <div>
-                    <strong>{artifact.title}</strong>
-                    <span>{artifact.type ?? t('assets.artifactFallback')} · {t('assets.sectionsCount', { count: artifact.sections?.length ?? 0 })}</span>
-                  </div>
-                  <button onClick={() => setView('artifact')} type="button">{t('common.open')}</button>
-                </article>
-              ))}
-            </div>
+            <>
+              <div className="artifact-strip-list">
+                {displayedArtifacts.map((artifact, index) => (
+                  <article key={artifact.id ?? `${artifact.title}-${index}`}>
+                    <div>
+                      <strong>{artifact.title}</strong>
+                      <span>{artifact.type ?? t('assets.artifactFallback')} · {t('assets.sectionsCount', { count: artifact.sections?.length ?? 0 })}</span>
+                    </div>
+                    <button onClick={() => setView('artifact')} type="button">{t('common.open')}</button>
+                  </article>
+                ))}
+              </div>
+              {data.allArtifacts.length > PREVIEW_LIMIT_ARTIFACTS && (
+                <button
+                  type="button"
+                  className="asset-show-all"
+                  onClick={() => setView('library')}
+                >
+                  {t('common.showAll')}
+                </button>
+              )}
+            </>
           )}
         </section>
       </div>

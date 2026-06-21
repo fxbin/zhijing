@@ -5,9 +5,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Layers, Search, Sparkles } from 'lucide-react';
+import { History, Layers, Search, Sparkles } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
-import { searchScopeOptions, TOP_SEARCH_EVENT, TOP_SEARCH_STORAGE_KEY } from '../constants/options';
+import { searchScopeOptions, SEARCH_HISTORY_MAX_COUNT, SEARCH_HISTORY_STORAGE_KEY, TOP_SEARCH_EVENT, TOP_SEARCH_STORAGE_KEY } from '../constants/options';
 import { resultIcon } from '../utils/material';
 
 /**
@@ -22,8 +22,41 @@ export default function SearchView() {
   const [counts, setCounts] = useState({});
   const [status, setStatus] = useState(t('search.initialStatus'));
   const [isSearching, setIsSearching] = useState(false);
+  const [searchHistory, setSearchHistory] = useState([]);
+
+  /**
+   * 从 localStorage 读取最近搜索历史
+   * @returns {string[]} 搜索历史数组
+   */
+  function readSearchHistory() {
+    try {
+      const raw = localStorage.getItem(SEARCH_HISTORY_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * 将搜索词保存到最近搜索历史（去重、最新排前、限制条数）
+   * @param {string} value 搜索词
+   */
+  function saveSearchHistory(value) {
+    try {
+      const history = readSearchHistory();
+      const next = [value, ...history.filter((item) => item !== value)].slice(0, SEARCH_HISTORY_MAX_COUNT);
+      localStorage.setItem(SEARCH_HISTORY_STORAGE_KEY, JSON.stringify(next));
+      setSearchHistory(next);
+    } catch {
+      // localStorage 不可用时静默忽略
+    }
+  }
 
   useEffect(() => {
+    setSearchHistory(readSearchHistory());
+
     const triggerSearch = (value) => {
       if (!value) return;
       setQuery(value);
@@ -85,6 +118,7 @@ export default function SearchView() {
       setResults(body.results ?? []);
       setCounts(body.counts ?? {});
       setStatus((body.results ?? []).length ? t('search.resultsFound', { count: body.results.length }) : t('search.noResults'));
+      saveSearchHistory(value);
     } catch {
       setStatus(t('search.status.failed'));
       setResults([]);
@@ -132,9 +166,39 @@ export default function SearchView() {
 
       <p className="search-status">{status}</p>
 
-      {visibleResults.length === 0 && !isSearching ? (
+      {!query.trim() && results.length === 0 && !isSearching && (
+        <section className="recent-searches" aria-label={t('search.recentSearches')}>
+          <header className="discovery-head">
+            <History size={18} />
+            <strong>{t('search.recentSearches')}</strong>
+          </header>
+          {searchHistory.length === 0 ? (
+            <p>{t('search.noRecentSearches')}</p>
+          ) : (
+            <div className="discovery-tags">
+              {searchHistory.map((item) => (
+                <button
+                  className="discovery-tag"
+                  key={item}
+                  onClick={() => {
+                    setQuery(item);
+                    runSearch(item);
+                  }}
+                  type="button"
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {query.trim() && visibleResults.length === 0 && !isSearching && (
         <EmptyState title={t('search.noResults')} body={t('search.noResultsHint')} />
-      ) : (
+      )}
+
+      {(visibleResults.length > 0 || isSearching) && (
         <div className="search-layout">
           <div className="search-results">
             {isSearching
