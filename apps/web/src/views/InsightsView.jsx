@@ -118,6 +118,37 @@ export default function InsightsView({ setView }) {
         <p>{t('insights.subtitle')}</p>
       </header>
 
+      <section className="insights-metrics-grid">
+        <article className="insights-metric-card">
+          <Layers size={22} />
+          <div>
+            <strong>{totals.knowledgeBases}</strong>
+            <span>{t('insights.metric.knowledgeBases')}</span>
+          </div>
+        </article>
+        <article className="insights-metric-card">
+          <BookOpen size={22} />
+          <div>
+            <strong>{totals.materials}</strong>
+            <span>{t('insights.metric.materials')}</span>
+          </div>
+        </article>
+        <article className="insights-metric-card">
+          <Lightbulb size={22} />
+          <div>
+            <strong>{totals.cards}</strong>
+            <span>{t('insights.metric.cards')}</span>
+          </div>
+        </article>
+        <article className="insights-metric-card">
+          <FileText size={22} />
+          <div>
+            <strong>{totals.artifacts}</strong>
+            <span>{t('insights.metric.artifacts')}</span>
+          </div>
+        </article>
+      </section>
+
       <div className="insights-grid">
         <section className="bento-card growth-card">
           <div className="bento-head">
@@ -168,41 +199,6 @@ export default function InsightsView({ setView }) {
               ))}
             </div>
           )}
-        </section>
-
-        <section className="bento-card metrics-card">
-          <div className="metric-row">
-            <div className="metric-cell">
-              <Layers size={22} />
-              <div>
-                <strong>{totals.knowledgeBases}</strong>
-                <span>{t('insights.metric.knowledgeBases')}</span>
-              </div>
-            </div>
-            <div className="metric-cell">
-              <BookOpen size={22} />
-              <div>
-                <strong>{totals.materials}</strong>
-                <span>{t('insights.metric.materials')}</span>
-              </div>
-            </div>
-          </div>
-          <div className="metric-row">
-            <div className="metric-cell">
-              <Lightbulb size={22} />
-              <div>
-                <strong>{totals.cards}</strong>
-                <span>{t('insights.metric.cards')}</span>
-              </div>
-            </div>
-            <div className="metric-cell">
-              <FileText size={22} />
-              <div>
-                <strong>{totals.artifacts}</strong>
-                <span>{t('insights.metric.artifacts')}</span>
-              </div>
-            </div>
-          </div>
         </section>
 
         <section className="bento-card recent-card">
