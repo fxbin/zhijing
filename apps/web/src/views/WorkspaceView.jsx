@@ -5,7 +5,7 @@
 
 import { Sparkles, SquareArrowOutUpRight } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
-import TaskStatus from '../components/TaskStatus';
+import TaskList from '../components/TaskList';
 import RecentImports from '../components/RecentImports';
 import KnowledgeMapPanel from '../components/KnowledgeMapPanel';
 import { useTranslation } from 'react-i18next';
@@ -15,18 +15,18 @@ import { useTranslation } from 'react-i18next';
  * @param {object} props - 组件属性
  * @param {string} props.activity - 最近活动文案
  * @param {boolean} props.isSubmitting - 是否正在提交
- * @param {object} props.latestTask - 最近任务对象
- * @param {Array} props.materials - 最近导入资料列表
+ * @param {Array<object>} props.materials - 最近导入资料列表
  * @param {string} props.query - 输入框当前值
  * @param {string|null} props.selectedKnowledgeBaseId - 当前选中的知识库 ID
  * @param {(value: string) => void} props.setQuery - 设置输入值
  * @param {(view: string) => void} props.setView - 切换视图
  * @param {() => void} props.submit - 提交回调
+ * @param {Array<object>} props.tasks - 任务列表
  * @returns {JSX.Element} 工作区视图
  */
-export default function WorkspaceView({ activity, isSubmitting, latestTask, materials, query, selectedKnowledgeBaseId, setQuery, setView, submit }) {
+export default function WorkspaceView({ activity, isSubmitting, materials, query, selectedKnowledgeBaseId, setQuery, setView, submit, tasks }) {
   const { t } = useTranslation();
-  const hasContent = materials.length > 0 || latestTask;
+  const hasContent = materials.length > 0 || tasks.length > 0;
   return (
     <>
       <section className="hero">
@@ -57,8 +57,8 @@ export default function WorkspaceView({ activity, isSubmitting, latestTask, mate
             <span>{t('workspace.processing')}</span>
           </div>
         )}
-        {!isSubmitting && activity && <p className="activity">{activity}</p>}
-        <TaskStatus task={latestTask} />
+        {!isSubmitting && tasks.length > 0 && <TaskList tasks={tasks} />}
+        {!isSubmitting && tasks.length === 0 && activity && <p className="activity">{activity}</p>}
       </section>
 
       <section className="lower-grid">

@@ -570,8 +570,7 @@ button { cursor: pointer; }
   max-width: 1000px;
 }
 
-.system-notice,
-.task-panel {
+.system-notice {
   max-width: 1000px;
   margin: 0 auto 24px;
 }
@@ -912,10 +911,12 @@ button { cursor: pointer; }
 }
 
 .task-panel {
+  width: min(100%, 780px);
+  margin: 16px auto 0;
   border: 1px solid var(--line-soft);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.68);
-  padding: 22px;
+  padding: 18px 20px;
 }
 
 .task-panel .section-title {
@@ -928,18 +929,17 @@ button { cursor: pointer; }
 }
 
 .task-row {
-  display: grid;
-  grid-template-columns: 92px minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
   gap: 14px;
   border: 1px solid var(--line-soft);
   border-radius: 9px;
   background: rgba(255, 255, 255, 0.76);
-  padding: 12px 14px;
+  padding: 10px 14px;
 }
 
-.task-row > span {
-  justify-self: start;
+.task-row-status {
+  flex-shrink: 0;
   border-radius: 999px;
   background: var(--surface-high);
   color: var(--primary);
@@ -949,29 +949,50 @@ button { cursor: pointer; }
   text-transform: uppercase;
 }
 
-.task-row.succeeded > span {
+.task-row.succeeded .task-row-status {
   background: rgba(109, 254, 156, 0.28);
   color: var(--sage-text);
 }
 
-.task-row.failed > span {
+.task-row.failed .task-row-status {
   background: #ffdad6;
   color: var(--error);
 }
 
+.task-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
 .task-row strong,
 .task-row small {
-  display: block;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.task-row small,
-.task-row time {
+.task-row strong {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--primary);
+}
+
+.task-row small {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   color: var(--muted);
   font-size: 12px;
+}
+
+.task-row time {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .empty-state {
@@ -8217,11 +8238,12 @@ button { cursor: pointer; }
     flex: 1;
   }
   .task-row {
-    grid-template-columns: 1fr;
-    align-items: start;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
   }
   .task-row time {
-    justify-self: start;
+    margin-left: 0;
   }
   .detail-layout {
     gap: 22px;

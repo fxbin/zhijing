@@ -29,7 +29,6 @@ import {
 } from './utils/knowledge';
 import { viewFromHash, classifyInput, workflowFromKind } from './utils/navigation';
 import SystemNotice from './components/SystemNotice';
-import TaskList from './components/TaskList';
 import CreateKbModal from './components/CreateKbModal';
 import KnowledgeBaseSwitcher from './components/KnowledgeBaseSwitcher';
 import WorkspaceView from './views/WorkspaceView';
@@ -569,8 +568,7 @@ function App() {
 
         <div className="canvas">
           {apiStatus === 'offline' && <SystemNotice status="offline" />}
-          {view === 'workspace' && <WorkspaceView activity={activity} isSubmitting={isSubmitting} latestTask={latestTask} materials={materials} query={query} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setQuery={setQuery} setView={go} submit={submit} />}
-          {view === 'workspace' && <TaskList tasks={tasks} />}
+          {view === 'workspace' && <WorkspaceView activity={activity} isSubmitting={isSubmitting} materials={materials} query={query} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setQuery={setQuery} setView={go} submit={submit} tasks={tasks} />}
           {view === 'detail' && (
             <DetailView
               apiStatus={apiStatus}
