@@ -3,7 +3,7 @@
  * @module utils/material
  */
 
-import { FileText, FolderOpen, Link2 } from 'lucide-react';
+import { ClipboardList, FileText, FolderOpen, Link2 } from 'lucide-react';
 
 import i18n from '../i18n';
 import { PARSE_STAGE_LABELS } from '../constants/labels';
