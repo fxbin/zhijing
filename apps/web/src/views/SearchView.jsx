@@ -3,11 +3,11 @@
  * 语义搜索视图：支持跨知识库资产搜索、结果聚类与语义发现标签。
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Layers, Search, Sparkles } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
-import { searchScopeOptions } from '../constants/options';
+import { searchScopeOptions, TOP_SEARCH_EVENT, TOP_SEARCH_STORAGE_KEY } from '../constants/options';
 import { resultIcon } from '../utils/material';
 
 /**
@@ -22,6 +22,27 @@ export default function SearchView() {
   const [counts, setCounts] = useState({});
   const [status, setStatus] = useState(t('search.initialStatus'));
   const [isSearching, setIsSearching] = useState(false);
+
+  useEffect(() => {
+    const triggerSearch = (value) => {
+      if (!value) return;
+      setQuery(value);
+      runSearch(value);
+    };
+
+    const stored = sessionStorage.getItem(TOP_SEARCH_STORAGE_KEY);
+    if (stored) {
+      sessionStorage.removeItem(TOP_SEARCH_STORAGE_KEY);
+      triggerSearch(stored);
+    }
+
+    const handleTopSearch = (event) => {
+      sessionStorage.removeItem(TOP_SEARCH_STORAGE_KEY);
+      triggerSearch(event.detail);
+    };
+    window.addEventListener(TOP_SEARCH_EVENT, handleTopSearch);
+    return () => window.removeEventListener(TOP_SEARCH_EVENT, handleTopSearch);
+  }, []);
 
   const visibleResults = results.filter((result) => scope === 'all' || result.kind === scope);
   const maxScore = visibleResults.reduce((max, result) => Math.max(max, Number(result.score) || 0), 0);

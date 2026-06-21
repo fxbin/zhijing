@@ -12,14 +12,17 @@ import {
   Lightbulb,
   LogOut,
   Map,
+  Menu,
   Plus,
   Search,
   Settings,
   Sparkles,
+  X,
 } from 'lucide-react';
 import './styles.css';
 
 import { seedKnowledgeBases, seedMaterials } from './constants/seedData';
+import { TOP_SEARCH_EVENT, TOP_SEARCH_STORAGE_KEY } from './constants/options';
 import { materialFromApi } from './utils/material';
 import {
   formatBaseMeta,
@@ -81,6 +84,8 @@ function App() {
   const [kitRunResult, setKitRunResult] = useState(null);
   const [isCreateKbOpen, setIsCreateKbOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState(null);
+  const [navOpen, setNavOpen] = useState(false);
+  const [topSearchQuery, setTopSearchQuery] = useState('');
   const kind = useMemo(() => (query.trim() ? classifyInput(query.trim()) : 'Theme, Link, or Question'), [query]);
   const advancedOpsData = useMemo(() => buildAdvancedOpsData({
     knowledgeBases,
@@ -243,6 +248,7 @@ function App() {
 
   const go = (nextView) => {
     setView(nextView);
+    setNavOpen(false);
     if (nextView === 'workspace') {
       window.history.replaceState(null, '', window.location.pathname);
       return;
@@ -526,7 +532,7 @@ function App() {
 
   return (
     <main className="app-frame">
-      <aside className="side-nav" aria-label={t('nav.main')}>
+      <aside className={`side-nav${navOpen ? ' nav-open' : ''}`} aria-label={t('nav.main')}>
         <div className="brand-row" onClick={() => go('workspace')} role="button" tabIndex={0}>
           <div className="brand-mark" aria-hidden="true"><span /></div>
           <div>
@@ -557,11 +563,30 @@ function App() {
           <button type="button"><CircleHelp size={22} />{t('nav.help')}</button>
           <button type="button"><LogOut size={22} />{t('nav.logout')}</button>
         </div>
+
+        <button
+          className="nav-close-button"
+          onClick={() => setNavOpen(false)}
+          type="button"
+          aria-label={t('common.close')}
+        >
+          <X size={22} />
+        </button>
       </aside>
+
+      {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
 
       <section className="workspace">
         <header className="top-bar">
           <div className="top-bar-left">
+            <button
+              className="nav-menu-button"
+              onClick={() => setNavOpen(true)}
+              type="button"
+              aria-label={t('nav.menu')}
+            >
+              <Menu size={22} />
+            </button>
             <KnowledgeBaseSwitcher
               knowledgeBases={knowledgeBases}
               onCreate={() => setIsCreateKbOpen(true)}
@@ -580,7 +605,19 @@ function App() {
           <div className="top-tools">
             <label className="search-pill">
               <Search size={18} />
-              <input placeholder={t('common.search')} />
+              <input
+                placeholder={t('common.search')}
+                value={topSearchQuery}
+                onChange={(event) => setTopSearchQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && topSearchQuery.trim()) {
+                    const value = topSearchQuery.trim();
+                    sessionStorage.setItem(TOP_SEARCH_STORAGE_KEY, value);
+                    window.dispatchEvent(new CustomEvent(TOP_SEARCH_EVENT, { detail: value }));
+                    go('search');
+                  }
+                }}
+              />
             </label>
             <NotificationDropdown tasks={tasks} />
             <button title={t('common.history')} type="button"><History size={22} /></button>

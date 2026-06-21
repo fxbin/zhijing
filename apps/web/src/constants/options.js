@@ -21,6 +21,7 @@ export const knownViews = new Set([
   'conflicts',
   'insights',
   'path',
+  'archive',
   'settings',
   'weread',
 ]);
@@ -49,3 +50,7 @@ export const searchScopeOptions = [
 ];
 
 export const CITATION_SNIPPET_LIMIT = 280;
+
+export const TOP_SEARCH_STORAGE_KEY = 'zhijing:topSearch';
+
+export const TOP_SEARCH_EVENT = 'zhijing:top-search';
