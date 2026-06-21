@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { History, Pencil, RefreshCw, Save } from 'lucide-react';
+import { Database, History, Pencil, RefreshCw, Save } from 'lucide-react';
 
 import EmptyState from '../components/EmptyState';
 import { REVISION_FIELD_LABELS } from '../constants/labels';
@@ -16,10 +16,17 @@ import { useCardTypeLabel, useClaimStatusLabel } from '../utils/i18nLabels';
  * 主动回忆视图，支持卡片队列、揭示答案、四档评分和内容编辑。
  * @param {object} props - 组件属性
  * @param {object} props.detail - 知识库详情
+ * @param {object[]} [props.knowledgeBases=[]] - 全量知识库列表（用于全局入口选择）
+ * @param {(knowledgeBaseId: string) => void} [props.onSelectKnowledgeBase] - 选择知识库回调
  * @param {function} props.setView - 视图切换函数
  * @returns {JSX.Element} 回忆视图
  */
-export default function RecallView({ detail, setView }) {
+export default function RecallView({
+  detail,
+  knowledgeBases = [],
+  onSelectKnowledgeBase,
+  setView,
+}) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
   const claimStatusLabel = useClaimStatusLabel();
@@ -77,6 +84,41 @@ export default function RecallView({ detail, setView }) {
     loadRevisions();
     return () => { ignore = true; };
   }, [activeCard?.id]);
+
+  if (!detail?.id) {
+    return (
+      <section className="page-main full">
+        <div className="recall-workbench">
+          <div className="recall-head">
+            <button className="back-button" onClick={() => setView('workspace')} type="button">
+              ←
+              {t('common.back')}
+            </button>
+            <span>{t('recall.activeRecall')}</span>
+            <h2>{t('recall.selectKnowledgeBase')}</h2>
+          </div>
+          {knowledgeBases.length === 0 ? (
+            <EmptyState title={t('recall.noKnowledgeBases')} body={t('common.empty')} icon={Database} />
+          ) : (
+            <div className="kb-picker-grid">
+              {knowledgeBases.map((kb) => (
+                <button
+                  key={kb.id}
+                  className="kb-picker-card"
+                  onClick={() => onSelectKnowledgeBase?.(kb.id)}
+                  type="button"
+                >
+                  <Database size={18} />
+                  <strong>{kb.title}</strong>
+                  {kb.summary && <span>{kb.summary}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  }
 
   function startEdit() {
     if (!activeCard) return;

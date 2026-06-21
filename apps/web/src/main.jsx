@@ -9,6 +9,7 @@ import {
   Lightbulb,
   Map,
   Menu,
+  MessageCircle,
   Plus,
   Search,
   Settings,
@@ -517,6 +518,7 @@ function App() {
     { key: 'detail', label: t('nav.knowledgeBase'), icon: Database, group: 'core' },
     { key: 'library', label: t('nav.library'), icon: FolderOpen, group: 'core' },
     { key: 'search', label: t('nav.search'), icon: Search, group: 'core' },
+    { key: 'chat', label: t('nav.chat'), icon: MessageCircle, group: 'core' },
     { key: 'assets', label: t('nav.assets'), icon: Layers, group: 'insight' },
     { key: 'insights', label: t('nav.insights'), icon: Lightbulb, group: 'insight' },
     { key: 'path', label: t('nav.path'), icon: Map, group: 'insight' },
@@ -691,15 +693,30 @@ function App() {
               assistantQuestion={assistantQuestion}
               detail={knowledgeBaseDetail}
               isAsking={isAsking}
+              knowledgeBases={knowledgeBases}
               messages={knowledgeBaseMessages}
               onAsk={askKnowledgeBase}
               onOpenArtifact={openArtifact}
+              onSelectKnowledgeBase={(id) => {
+                setSelectedKnowledgeBaseId(id);
+                go('chat');
+              }}
               selectedKnowledgeBaseId={selectedKnowledgeBaseId}
               setAssistantQuestion={setAssistantQuestion}
               setView={go}
             />
           )}
-          {view === 'recall' && <RecallView detail={knowledgeBaseDetail} setView={go} />}
+          {view === 'recall' && (
+            <RecallView
+              detail={knowledgeBaseDetail}
+              knowledgeBases={knowledgeBases}
+              onSelectKnowledgeBase={(id) => {
+                setSelectedKnowledgeBaseId(id);
+                go('recall');
+              }}
+              setView={go}
+            />
+          )}
           {view === 'export' && <ExportView detail={knowledgeBaseDetail} setView={go} />}
           {view === 'weread' && <WeReadView />}
           {view === 'settings' && <SettingsView initialSection={settingsSection} onSectionConsumed={() => setSettingsSection(null)} />}

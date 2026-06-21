@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import {
   CircleX,
   Clock3,
+  Database,
   Send,
   Sparkles,
   SquareArrowOutUpRight,
@@ -15,6 +16,7 @@ import { formatPercent } from '../utils/format';
 import { useCardTypeLabel } from '../utils/i18nLabels';
 import { useChatLayout } from '../hooks/useChatLayout';
 import AIChatShell from '../components/AIChatShell';
+import EmptyState from '../components/EmptyState';
 import SourceCitation from '../components/SourceCitation';
 
 /**
@@ -25,9 +27,11 @@ import SourceCitation from '../components/SourceCitation';
  * @param {string} props.assistantQuestion - 当前问题输入
  * @param {object} props.detail - 知识库详情
  * @param {boolean} props.isAsking - 是否正在提问
+ * @param {object[]} [props.knowledgeBases=[]] - 全量知识库列表（用于全局入口选择）
  * @param {object[]} [props.messages=[]] - 历史消息列表
  * @param {() => void} props.onAsk - 提问回调
  * @param {(artifact: object, meta?: object) => void} props.onOpenArtifact - 打开产物回调
+ * @param {(knowledgeBaseId: string) => void} [props.onSelectKnowledgeBase] - 选择知识库回调
  * @param {string} props.selectedKnowledgeBaseId - 当前选中知识库 ID
  * @param {(value: string) => void} props.setAssistantQuestion - 设置问题输入
  * @param {(view: string) => void} props.setView - 切换视图
@@ -39,9 +43,11 @@ export default function ChatView({
   assistantQuestion,
   detail,
   isAsking,
+  knowledgeBases = [],
   messages = [],
   onAsk,
   onOpenArtifact,
+  onSelectKnowledgeBase,
   selectedKnowledgeBaseId,
   setAssistantQuestion,
   setView,
@@ -59,6 +65,41 @@ export default function ChatView({
     { key: 'chat.starterPrompt.missingSources' },
     { key: 'chat.starterPrompt.actionList' },
   ];
+
+  if (!selectedKnowledgeBaseId) {
+    return (
+      <section className="page-main full">
+        <div className="recall-workbench">
+          <div className="recall-head">
+            <button className="back-button" onClick={() => setView('workspace')} type="button">
+              ←
+              {t('common.back')}
+            </button>
+            <span>{t('chat.title')}</span>
+            <h2>{t('chat.selectKnowledgeBase')}</h2>
+          </div>
+          {knowledgeBases.length === 0 ? (
+            <EmptyState title={t('chat.noKnowledgeBases')} body={t('common.empty')} icon={Database} />
+          ) : (
+            <div className="kb-picker-grid">
+              {knowledgeBases.map((kb) => (
+                <button
+                  key={kb.id}
+                  className="kb-picker-card"
+                  onClick={() => onSelectKnowledgeBase?.(kb.id)}
+                  type="button"
+                >
+                  <Database size={18} />
+                  <strong>{kb.title}</strong>
+                  {kb.summary && <span>{kb.summary}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="page-main full">
