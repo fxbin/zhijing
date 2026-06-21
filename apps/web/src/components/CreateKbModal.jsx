@@ -12,12 +12,13 @@ import { CREATE_KB_KITS } from '../constants/artifact';
 /**
  * 创建知识库模态框，双模式：AI 自动生成 / 创建空知识库。
  * @param {object} props - 组件属性
+ * @param {string|null} props.error - 创建空知识库失败时的错误文案，传入则在弹窗内展示
  * @param {function} props.onClose - 关闭模态框回调
  * @param {function} props.onSubmit - 提交主题回调（AI 模式）
  * @param {function} props.onCreateEmpty - 创建空知识库回调（标题, 摘要）
  * @returns {JSX.Element} 模态框
  */
-export default function CreateKbModal({ onClose, onSubmit, onCreateEmpty }) {
+export default function CreateKbModal({ error, onClose, onSubmit, onCreateEmpty }) {
   const { t } = useTranslation();
   const [theme, setTheme] = useState('');
   const [emptyTitle, setEmptyTitle] = useState('');
@@ -127,6 +128,7 @@ export default function CreateKbModal({ onClose, onSubmit, onCreateEmpty }) {
               </label>
             </div>
           )}
+          {error && <p className="modal-error" role="alert">{error}</p>}
         </div>
         <footer className="modal-foot">
           <button className="btn-ghost" onClick={onClose} type="button">{t('common.cancel')}</button>

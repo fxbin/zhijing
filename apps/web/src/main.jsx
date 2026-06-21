@@ -80,6 +80,7 @@ function App() {
   const [isRunningKit, setIsRunningKit] = useState(false);
   const [kitRunResult, setKitRunResult] = useState(null);
   const [isCreateKbOpen, setIsCreateKbOpen] = useState(false);
+  const [createKbError, setCreateKbError] = useState(null);
   const [settingsSection, setSettingsSection] = useState(null);
   const [navOpen, setNavOpen] = useState(false);
   const [topSearchQuery, setTopSearchQuery] = useState('');
@@ -96,6 +97,15 @@ function App() {
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
+
+  useEffect(() => {
+    if (!navOpen) {
+      document.body.style.overflow = '';
+      return () => { document.body.style.overflow = ''; };
+    }
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, [navOpen]);
 
   useEffect(() => {
     function handleNavigate(event) {
@@ -586,7 +596,7 @@ function App() {
             </button>
             <KnowledgeBaseSwitcher
               knowledgeBases={knowledgeBases}
-              onCreate={() => setIsCreateKbOpen(true)}
+              onCreate={() => { setCreateKbError(null); setIsCreateKbOpen(true); }}
               onSelect={(id) => {
                 setSelectedKnowledgeBaseId(id);
                 go('detail');
@@ -628,7 +638,7 @@ function App() {
 
         <div className="canvas">
           {apiStatus === 'offline' && <SystemNotice status="offline" />}
-          {view === 'workspace' && <WorkspaceView activity={activity} isSubmitting={isSubmitting} materials={materials} query={query} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setQuery={setQuery} setView={go} submit={submit} />}
+          {view === 'workspace' && <WorkspaceView activity={activity} apiStatus={apiStatus} isSubmitting={isSubmitting} materials={materials} query={query} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setQuery={setQuery} setView={go} submit={submit} />}
           {view === 'detail' && (
             <DetailView
               apiStatus={apiStatus}
@@ -734,8 +744,10 @@ function App() {
       </section>
       {isCreateKbOpen && (
         <CreateKbModal
-          onClose={() => setIsCreateKbOpen(false)}
+          error={createKbError}
+          onClose={() => { setCreateKbError(null); setIsCreateKbOpen(false); }}
           onSubmit={(theme) => {
+            setCreateKbError(null);
             setIsCreateKbOpen(false);
             submit(theme);
           }}
@@ -751,15 +763,16 @@ function App() {
                 throw new Error(body.error || '创建失败');
               }
               const result = await response.json();
+              setCreateKbError(null);
               if (result.knowledgeBase?.id) {
                 setSelectedKnowledgeBaseId(result.knowledgeBase.id);
                 go('detail');
               }
               await refreshDashboard();
+              setIsCreateKbOpen(false);
             } catch (err) {
-              setActivity(err.message || t('activity.createKnowledgeBaseFailed'));
+              setCreateKbError(err.message || t('activity.createKnowledgeBaseFailed'));
             }
-            setIsCreateKbOpen(false);
           }}
         />
       )}
