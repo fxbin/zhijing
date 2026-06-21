@@ -220,7 +220,6 @@ export default function WeReadView() {
                 <a
                   className="button ghost"
                   href={`weread://reading?bId=${book.bookId}`}
-                  onClick={(event) => event.preventDefault()}
                   title={t('weread.openInApp')}
                 >
                   <ExternalLink size={14} />

@@ -488,6 +488,7 @@
   "library.filter.text": "Text",
   "library.import": "Import",
   "library.importDocument": "Import local document",
+  "library.importFromWeread": "Import from WeRead",
   "library.inbox": "Inbox",
   "library.ingestedCount": "{{count}} ingested",
   "library.itemsCount": "{{count}} items",

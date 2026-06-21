@@ -4224,6 +4224,26 @@ button { cursor: pointer; }
   text-transform: uppercase;
 }
 
+.library-import-weread-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--primary);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--primary);
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.library-import-weread-button:hover {
+  background: var(--primary);
+  color: #fff;
+}
+
 .quick-capture-panel {
   display: grid;
   gap: 14px;

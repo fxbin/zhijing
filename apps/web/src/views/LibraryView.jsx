@@ -1,12 +1,14 @@
 /**
  * @module views/LibraryView
  * @description 资料库视图，提供资料收集、筛选、批量操作、解析、复核与归属管理。
+ * @author fxbin
  */
 
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Archive,
+  BookOpen,
   Clock3,
   FileText,
   RefreshCw,
@@ -38,17 +40,24 @@ import MediaPreview from '../components/MediaPreview';
 import ParseTimeline from '../components/ParseTimeline';
 
 /**
+ * 资料库搜索防抖时长（毫秒），避免用户每输入一个字符就触发一次请求。
+ */
+const SEARCH_DEBOUNCE_MS = 300;
+
+/**
  * 资料库视图组件
  * @param {Object} props - 组件参数
  * @param {string} props.apiStatus - API 连接状态
  * @param {Array} props.knowledgeBases - 知识库列表
  * @param {Function} props.onCaptureResult - 收集结果回调
  * @param {Function} props.onMaterialMutation - 资料变更回调
+ * @param {Function} props.onNavigate - 视图跳转回调，用于跳转到其他视图（如微信读书导入）
  * @param {Function} props.onParseMaterial - 解析资料回调
  * @param {string} props.parsingMaterialId - 正在解析的资料 ID
  * @returns {JSX.Element} 资料库视图
+ * @author fxbin
  */
-export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMutation, onParseMaterial, parsingMaterialId }) {
+export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMutation, onNavigate, onParseMaterial, parsingMaterialId }) {
   const { t } = useTranslation();
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState('all');
@@ -98,32 +107,35 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
 
   useEffect(() => {
     let cancelled = false;
-    async function run() {
-      setIsLoading(true);
-      try {
-        const params = new URLSearchParams({ limit: '180' });
-        if (searchValue.trim()) params.set('q', searchValue.trim());
-        const response = await fetch(`/api/materials?${params.toString()}`);
-        if (!response.ok) throw new Error('Material list unavailable.');
-        const result = await response.json();
-        if (!cancelled) {
-          setItems(result.materials ?? []);
-          setStatus(t('library.status.materialsSynced'));
+    const timer = setTimeout(() => {
+      async function run() {
+        setIsLoading(true);
+        try {
+          const params = new URLSearchParams({ limit: '180' });
+          if (searchValue.trim()) params.set('q', searchValue.trim());
+          const response = await fetch(`/api/materials?${params.toString()}`);
+          if (!response.ok) throw new Error('Material list unavailable.');
+          const result = await response.json();
+          if (!cancelled) {
+            setItems(result.materials ?? []);
+            setStatus(t('library.status.materialsSynced'));
+          }
+        } catch {
+          if (!cancelled) {
+            setStatus(t('library.status.apiDisconnectedLibrary'));
+            setItems([]);
+          }
+        } finally {
+          if (!cancelled) setIsLoading(false);
         }
-      } catch {
-        if (!cancelled) {
-          setStatus(t('library.status.apiDisconnectedLibrary'));
-          setItems([]);
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false);
       }
-    }
-    run();
+      run();
+    }, SEARCH_DEBOUNCE_MS);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
-  }, [searchValue]);
+  }, [searchValue, t]);
 
   const filteredItems = items.filter((item) => {
     if (filter === 'all') return true;
@@ -517,6 +529,16 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
           <span>{t('library.itemsCount', { count: counts.total })}</span>
           <span>{t('library.ingestedCount', { count: counts.ingested ?? 0 })}</span>
           <span>{t('library.failedCount', { count: counts.failed ?? 0 })}</span>
+          {onNavigate && (
+            <button
+              type="button"
+              className="library-import-weread-button"
+              onClick={() => onNavigate('weread')}
+            >
+              <BookOpen size={16} />
+              {t('library.importFromWeread')}
+            </button>
+          )}
         </div>
       </div>
 

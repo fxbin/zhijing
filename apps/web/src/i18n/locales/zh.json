@@ -505,6 +505,7 @@
   "library.filter.text": "文本",
   "library.import": "导入",
   "library.importDocument": "导入本地文档",
+  "library.importFromWeread": "从微信读书导入",
   "library.inbox": "收件箱",
   "library.ingestedCount": "{{count}} 已入库",
   "library.itemsCount": "{{count}} 项",

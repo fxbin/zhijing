@@ -3,14 +3,10 @@ import { createRoot } from 'react-dom/client';
 import './i18n';
 import {
   Archive,
-  BookOpen,
-  CircleHelp,
   Database,
   FolderOpen,
-  History,
   Layers,
   Lightbulb,
-  LogOut,
   Map,
   Menu,
   Plus,
@@ -520,7 +516,6 @@ function App() {
   const navItems = [
     { key: 'detail', label: t('nav.knowledgeBase'), icon: Database },
     { key: 'library', label: t('nav.library'), icon: FolderOpen },
-    { key: 'weread', label: t('nav.weread'), icon: BookOpen },
     { key: 'search', label: t('nav.search'), icon: Search },
     { key: 'assets', label: t('nav.assets'), icon: Layers },
     { key: 'insights', label: t('nav.insights'), icon: Lightbulb },
@@ -560,8 +555,6 @@ function App() {
 
         <div className="side-footer">
           <LanguageSwitcher />
-          <button type="button"><CircleHelp size={22} />{t('nav.help')}</button>
-          <button type="button"><LogOut size={22} />{t('nav.logout')}</button>
         </div>
 
         <button
@@ -620,7 +613,6 @@ function App() {
               />
             </label>
             <NotificationDropdown tasks={tasks} />
-            <button title={t('common.history')} type="button"><History size={22} /></button>
             <button className="node-button" onClick={() => go('workflow')} type="button">{t('topBar.createNode')}</button>
             <div className="avatar">U</div>
           </div>
@@ -654,6 +646,7 @@ function App() {
               knowledgeBases={knowledgeBases}
               onCaptureResult={applyIntakeResult}
               onMaterialMutation={applyMaterialMutation}
+              onNavigate={go}
               onParseMaterial={parseMaterial}
               parsingMaterialId={parsingMaterialId}
             />
