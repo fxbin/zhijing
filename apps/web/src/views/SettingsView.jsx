@@ -16,6 +16,7 @@ import {
   Plus,
   Settings,
   ShieldCheck,
+  Sparkles,
   Star,
   Trash2,
 } from 'lucide-react';
@@ -600,6 +601,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed 
     { key: 'weread', label: t('settings.weread.title'), icon: BookOpen },
     { key: 'transparency', label: t('settings.systemTransparency'), icon: BarChart3 },
     { key: 'dataControls', label: t('settings.dataControls'), icon: Database },
+    { key: 'kits', label: t('kit.title'), icon: Sparkles },
   ];
 
   /**
@@ -686,6 +688,22 @@ export default function SettingsView({ initialSection = null, onSectionConsumed 
               </div>
             </div>
           )}
+          <p className="settings-note">{status}</p>
+        </>
+      );
+    }
+
+    if (activeSection === 'kits') {
+      return (
+        <>
+          <div className="status-card">
+            <Sparkles size={25} />
+            <div>
+              <span>{t('kit.title')}</span>
+              <strong>{t('kit.subtitle')}</strong>
+              <p>{t('kit.selectKnowledgeBaseHint')}</p>
+            </div>
+          </div>
           <p className="settings-note">{status}</p>
         </>
       );
@@ -1078,6 +1096,28 @@ export default function SettingsView({ initialSection = null, onSectionConsumed 
             {dataAction?.type === 'clear' && dataAction?.ok === false && (
               <p className="settings-note">{t('settings.clearFailed')}</p>
             )}
+          </section>
+        )}
+
+        {activeSection === 'kits' && (
+          <section className="settings-panel">
+            <div className="settings-panel-head">
+              <Sparkles size={24} />
+              <div>
+                <h3>{t('kit.title')}</h3>
+                <p>{t('kit.subtitle')}</p>
+              </div>
+            </div>
+            <div className="settings-actions settings-actions-primary">
+              <button
+                disabled={!setView}
+                onClick={() => setView && setView('kits')}
+                type="button"
+              >
+                <Sparkles size={16} />
+                {t('kit.runKit')}
+              </button>
+            </div>
           </section>
         )}
 

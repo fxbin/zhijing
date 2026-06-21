@@ -520,10 +520,8 @@ function App() {
     { key: 'search', label: t('nav.search'), icon: Search, group: 'core' },
     { key: 'chat', label: t('nav.chat'), icon: MessageCircle, group: 'core' },
     { key: 'assets', label: t('nav.assets'), icon: Layers, group: 'insight' },
-    { key: 'insights', label: t('nav.insights'), icon: Lightbulb, group: 'insight' },
     { key: 'path', label: t('nav.path'), icon: Map, group: 'insight' },
     { key: 'archive', label: t('nav.archive'), icon: Archive, group: 'tools' },
-    { key: 'kits', label: t('nav.kits'), icon: Sparkles, group: 'tools' },
     { key: 'settings', label: t('nav.settings'), icon: Settings, group: 'tools' },
   ];
 
@@ -600,12 +598,18 @@ function App() {
             </nav>
           </div>
           <div className="top-tools">
-            <label className="search-pill">
+            <button
+              type="button"
+              className="search-pill"
+              onClick={() => go('search')}
+              aria-label={t('common.search')}
+            >
               <Search size={18} />
               <input
                 placeholder={t('common.search')}
                 value={topSearchQuery}
                 onChange={(event) => setTopSearchQuery(event.target.value)}
+                onClick={(event) => event.stopPropagation()}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && topSearchQuery.trim()) {
                     const value = topSearchQuery.trim();
@@ -615,7 +619,7 @@ function App() {
                   }
                 }}
               />
-            </label>
+            </button>
             <NotificationDropdown tasks={tasks} />
             <button className="node-button" onClick={() => go('workflow')} type="button">{t('topBar.createNode')}</button>
             <div className="avatar">U</div>
@@ -725,7 +729,7 @@ function App() {
           )}
           {view === 'export' && <ExportView detail={knowledgeBaseDetail} setView={go} />}
           {view === 'weread' && <WeReadView />}
-          {view === 'settings' && <SettingsView initialSection={settingsSection} onSectionConsumed={() => setSettingsSection(null)} />}
+          {view === 'settings' && <SettingsView initialSection={settingsSection} onSectionConsumed={() => setSettingsSection(null)} setView={go} />}
         </div>
       </section>
       {isCreateKbOpen && (
