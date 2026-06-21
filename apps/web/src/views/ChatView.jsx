@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { formatPercent } from '../utils/format';
 import { useCardTypeLabel } from '../utils/i18nLabels';
+import { useChatLayout } from '../hooks/useChatLayout';
+import AIChatShell from '../components/AIChatShell';
 import SourceCitation from '../components/SourceCitation';
 
 /**
@@ -46,6 +48,7 @@ export default function ChatView({
 }) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
+  const layout = useChatLayout();
   const cards = detail.cards ?? [];
   const materials = detail.materials ?? [];
   const latestAnswerCards = assistantAnswer?.cards?.slice(0, 3) ?? [];
@@ -59,7 +62,7 @@ export default function ChatView({
 
   return (
     <section className="page-main full">
-      <div className="chat-workbench">
+      <div className={`chat-workbench ${layout.mode === 'floating' ? 'ai-chat-floating' : ''}`}>
         <aside className="chat-context-panel">
           <button className="back-button" onClick={() => setView('detail')} type="button">
             ←
@@ -83,7 +86,7 @@ export default function ChatView({
           </div>
         </aside>
 
-        <section className="chat-main-panel">
+        <AIChatShell layout={layout} title={t('chat.title')} className="chat-main-panel">
           <div className="chat-thread-head">
             <Sparkles size={24} />
             <div>
@@ -185,7 +188,7 @@ export default function ChatView({
               {isAsking ? <Clock3 size={18} /> : <Send size={18} />}
             </button>
           </div>
-        </section>
+        </AIChatShell>
       </div>
     </section>
   );

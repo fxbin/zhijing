@@ -29,6 +29,8 @@ import EmptyState from '../components/EmptyState';
 import MediaPreview from '../components/MediaPreview';
 import SourceCitation from '../components/SourceCitation';
 import TaskStatus from '../components/TaskStatus';
+import AIChatShell from '../components/AIChatShell';
+import { useChatLayout } from '../hooks/useChatLayout';
 
 /**
  * 知识库详情视图。
@@ -70,6 +72,7 @@ export default function DetailView({
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
   const claimStatusLabel = useClaimStatusLabel();
+  const layout = useChatLayout();
   const parseStatusLabel = useParseStatusLabel();
   const intakeKindLabel = useIntakeKindLabel();
   const [feedMode, setFeedMode] = useState('feed');
@@ -222,7 +225,7 @@ export default function DetailView({
   };
 
   return (
-    <section className="page-grid detail-page">
+    <section className={`page-grid detail-page ${layout.mode === 'floating' ? 'ai-chat-floating' : ''}`}>
       <div className="page-main">
         <p className="breadcrumb">{t('detail.breadcrumb.workspace')}{t('detail.breadcrumb.separator')}{detail.title}</p>
         <div className="page-title-row">
@@ -508,8 +511,7 @@ export default function DetailView({
           </section>
         </div>
       </div>
-      <aside className="assistant-panel">
-        <h3>{t('detail.aiAssistant')}</h3>
+      <AIChatShell layout={layout} title={t('detail.aiAssistant')}>
         <p>{t('detail.sourceOverview', { sources: detail.sourceCount ?? materials.length, cards: detail.cardCount ?? cards.length })}</p>
         {analytics && (
           <section className="source-health">
@@ -601,7 +603,7 @@ export default function DetailView({
             <Send size={18} />
           </button>
         </div>
-      </aside>
+      </AIChatShell>
     </section>
   );
 }
