@@ -3623,7 +3623,16 @@ function checkParseThrottle(material: MaterialRecord) {
 }
 
 function recordParseAttempt(material: MaterialRecord) {
-  platformParseTimestamps.set(material.platform ?? 'web', Date.now());
+  const platform = material.platform ?? 'web';
+  const now = Date.now();
+  platformParseTimestamps.set(platform, now);
+  for (const [key, lastParsedAt] of platformParseTimestamps) {
+    if (key === platform) continue;
+    const intervalMs = parseThrottleMs(key);
+    if (intervalMs <= 0 || now - lastParsedAt >= intervalMs) {
+      platformParseTimestamps.delete(key);
+    }
+  }
 }
 
 function parseThrottleMs(platform: string | undefined) {
