@@ -23,6 +23,8 @@ const TAB_BOOKS = 'books';
 const TAB_ALBUMS = 'albums';
 const TAB_ARCHIVE = 'archive';
 const TAB_REVIEW = 'review';
+const TAB_STATS = 'stats';
+const TAB_RECOMMEND = 'recommend';
 
 const SORT_RECENT = 'recent';
 const SORT_TITLE = 'title';
@@ -70,7 +72,15 @@ const YEAR_SECONDS = 31536000;
 
 const FINISHED_FLAG = 1;
 
-const wereadWebBookUrl = (bookId) => `https://weread.qq.com/web/reader/${bookId}`;
+const wereadWebBookUrl = (book) => {
+  if (book?.bookIdLong) {
+    return `https://weread.qq.com/web/reader/${book.bookIdLong}`;
+  }
+  if (book?.title) {
+    return `https://weread.qq.com/#search/${encodeURIComponent(book.title)}`;
+  }
+  return 'https://weread.qq.com';
+};
 
 /**
  * 格式化相对时间
@@ -866,10 +876,11 @@ function WeReadPreviewDrawer({ book, mode, batchCount, onClose, onImport, t }) {
  * @param {Function} props.onImport - 导入回调
  * @param {Function} props.t - i18n 翻译函数
  */
-function WeReadRecommendPanel({ knowledgeBaseId, onImport, t }) {
+function WeReadRecommendPanel({ knowledgeBaseId, onImport, t, forceExpanded }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
+  const isCollapsed = forceExpanded ? false : collapsed;
 
   useEffect(() => {
     let alive = true;
@@ -903,17 +914,19 @@ function WeReadRecommendPanel({ knowledgeBaseId, onImport, t }) {
   };
 
   return (
-    <div className={`weread-recommend-band${collapsed ? ' is-collapsed' : ''}`}>
+    <div className={`weread-recommend-band${isCollapsed ? ' is-collapsed' : ''}`}>
       <div className="weread-recommend-head">
         <h3>
           <BookOpen size={16} />
           {t('weread.recommendTitle')}
         </h3>
-        <button type="button" className="weread-stats-toggle" onClick={() => setCollapsed((p) => !p)}>
-          {collapsed ? t('weread.statsExpand') : t('weread.statsCollapse')}
-        </button>
+        {!forceExpanded && (
+          <button type="button" className="weread-stats-toggle" onClick={() => setCollapsed((p) => !p)}>
+            {isCollapsed ? t('weread.statsExpand') : t('weread.statsCollapse')}
+          </button>
+        )}
       </div>
-      {!collapsed && (
+      {!isCollapsed && (
         <div className="weread-recommend-list">
           {data.recommendations.map((rec) => {
             const theme = CATEGORY_THEME_MAP[rec.theme] || CATEGORY_THEME_MAP.general;
@@ -940,7 +953,7 @@ function WeReadRecommendPanel({ knowledgeBaseId, onImport, t }) {
                 <div className="weread-recommend-actions">
                   <a
                     className="weread-icon-btn"
-                    href={wereadWebBookUrl(rec.bookId)}
+                    href={wereadWebBookUrl(rec)}
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label={t('weread.openInApp')}
@@ -1442,7 +1455,7 @@ export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseI
         author={book.author}
         category={book.category}
         meta={meta}
-        webUrl={wereadWebBookUrl(book.bookId)}
+        webUrl={wereadWebBookUrl(book)}
         cardState={cardState}
         result={result}
         selecting={selecting && activeTab === TAB_BOOKS}
@@ -1519,25 +1532,25 @@ export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseI
         >
           {t('weread.review')} <span className="weread-tab-count">{configured === false ? '—' : reviewBooks.length}</span>
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === TAB_RECOMMEND}
+          className={activeTab === TAB_RECOMMEND ? 'is-active' : ''}
+          onClick={() => setActiveTab(TAB_RECOMMEND)}
+        >
+          {t('weread.recommend')}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === TAB_STATS}
+          className={activeTab === TAB_STATS ? 'is-active' : ''}
+          onClick={() => setActiveTab(TAB_STATS)}
+        >
+          {t('weread.stats')}
+        </button>
       </nav>
-
-      {configured && !error && (
-        <WeReadStatsBand
-          stats={stats}
-          collapsed={statsCollapsed}
-          onToggleCollapse={handleToggleStatsCollapse}
-          onKpiClick={handleKpiClick}
-          t={t}
-        />
-      )}
-
-      {configured && !error && (
-        <WeReadRecommendPanel
-          knowledgeBaseId={selectedKnowledgeBaseId}
-          onImport={(book) => handleImport(book)}
-          t={t}
-        />
-      )}
 
       {error && (
         <div className="weread-error" role="alert">
@@ -1805,6 +1818,25 @@ export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseI
               </div>
             </>
           )
+        )}
+
+        {configured && !error && activeTab === TAB_STATS && (
+          <WeReadStatsBand
+            stats={stats}
+            collapsed={false}
+            onToggleCollapse={() => setActiveTab(TAB_BOOKS)}
+            onKpiClick={handleKpiClick}
+            t={t}
+          />
+        )}
+
+        {configured && !error && activeTab === TAB_RECOMMEND && (
+          <WeReadRecommendPanel
+            knowledgeBaseId={selectedKnowledgeBaseId}
+            onImport={(book) => handleImport(book)}
+            t={t}
+            forceExpanded
+          />
         )}
       </div>
 

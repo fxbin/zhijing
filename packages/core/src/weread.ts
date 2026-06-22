@@ -14,6 +14,7 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
 export type WeReadShelfBook = {
   bookId: string;
+  bookIdLong?: string;
   title: string;
   author: string;
   cover?: string;
@@ -52,6 +53,7 @@ export type WeReadShelf = {
 
 export type WeReadBookMetaRow = {
   bookId: string;
+  bookIdLong: string | null;
   title: string;
   author: string;
   cover: string | null;
@@ -113,6 +115,7 @@ export type WeReadRecommendReason = 'coverage_gap' | 'depth' | 'card_linked';
 
 export type WeReadRecommendation = {
   bookId: string;
+  bookIdLong: string | null;
   title: string;
   author: string;
   cover: string | null;

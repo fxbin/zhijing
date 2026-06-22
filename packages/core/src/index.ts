@@ -595,6 +595,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
       seenIds.add(book.bookId);
       const existing = this.wereadBookMeta.find((row) => row.bookId === book.bookId);
       if (existing) {
+        existing.bookIdLong = book.bookIdLong ?? null;
         existing.title = book.title;
         existing.author = book.author;
         existing.cover = book.cover ?? null;
@@ -608,6 +609,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
       } else {
         this.wereadBookMeta.push({
           bookId: book.bookId,
+          bookIdLong: book.bookIdLong ?? null,
           title: book.title,
           author: book.author,
           cover: book.cover ?? null,
@@ -1821,6 +1823,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS weread_book_meta (
         book_id TEXT PRIMARY KEY,
+        book_id_long TEXT,
         title TEXT NOT NULL,
         author TEXT,
         cover TEXT,
@@ -1840,6 +1843,10 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       CREATE INDEX IF NOT EXISTS idx_weread_book_meta_read_update_time ON weread_book_meta(read_update_time DESC);
       CREATE INDEX IF NOT EXISTS idx_weread_book_meta_material_id ON weread_book_meta(material_id);
     `);
+    const columns = this.db.prepare('PRAGMA table_info(weread_book_meta)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'book_id_long')) {
+      this.db.exec('ALTER TABLE weread_book_meta ADD COLUMN book_id_long TEXT;');
+    }
   }
 
   private ensureWeReadSyncStateTable() {
@@ -1859,15 +1866,16 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     const seenIds = new Set<string>();
     const upsertStmt = this.db.prepare(`
       INSERT INTO weread_book_meta (
-        book_id, title, author, cover, category,
+        book_id, book_id_long, title, author, cover, category,
         finish_reading, read_update_time, secret, archive_year,
         present_on_shelf, first_seen_at, last_synced_at
       ) VALUES (
-        @bookId, @title, @author, @cover, @category,
+        @bookId, @bookIdLong, @title, @author, @cover, @category,
         @finishReading, @readUpdateTime, @secret, @archiveYear,
         1, @nowIso, @nowIso
       )
       ON CONFLICT(book_id) DO UPDATE SET
+        book_id_long = @bookIdLong,
         title = @title,
         author = @author,
         cover = @cover,
@@ -1883,6 +1891,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       seenIds.add(book.bookId);
       upsertStmt.run({
         bookId: book.bookId,
+        bookIdLong: book.bookIdLong ?? null,
         title: book.title,
         author: book.author,
         cover: book.cover ?? null,
@@ -1903,7 +1912,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
   readWeReadBookMetaList(): WeReadBookMetaRow[] {
     return this.db.prepare(`
-      SELECT book_id AS bookId, title, author, cover, category,
+      SELECT book_id AS bookId, book_id_long AS bookIdLong, title, author, cover, category,
              finish_reading AS finishReading, read_update_time AS readUpdateTime,
              secret, archive_year AS archiveYear, present_on_shelf AS presentOnShelf,
              material_id AS materialId, bookmark_count AS bookmarkCount,
@@ -6020,12 +6029,12 @@ export function getTask(id: string) {
   return repository.findTask(id);
 }
 
-export function getDashboard() {
+export function getDashboard(knowledgeBaseId?: string) {
   return {
     knowledgeBases: repository.listKnowledgeBases(),
-    materials: repository.listMaterials(undefined, 6),
+    materials: repository.listMaterials(knowledgeBaseId, 6),
     tasks: repository.listTasks(6),
-    artifacts: repository.listArtifacts(undefined, 6),
+    artifacts: repository.listArtifacts(knowledgeBaseId, 6),
   };
 }
 
@@ -6452,13 +6461,17 @@ export async function importWeReadBook(bookId: string, knowledgeBaseId?: string)
   const contentText = buildWeReadMaterialMarkdown(bookInfo, bookmarks, reviews);
   const base = (knowledgeBaseId ? repository.findKnowledgeBase(knowledgeBaseId) : undefined) ?? upsertDefaultKnowledgeBase(bookInfo.title);
 
+  const metaRow = repository.readWeReadBookMetaList().find((row) => row.bookId === bookId);
+  const readerId = metaRow?.bookIdLong ?? bookId;
+  const sourceUrl = `https://weread.qq.com/web/reader/${readerId}`;
+
   const timestamp = now();
   const material: MaterialRecord = {
     id: id('mat'),
     knowledgeBaseId: base.id,
     type: 'text',
     rawInput: contentText,
-    sourceUrl: `https://weread.qq.com/web/reader/${bookId}`,
+    sourceUrl,
     platform: 'weread',
     title: `《${bookInfo.title}》阅读笔记`,
     contentText,
@@ -6680,6 +6693,7 @@ export function computeWeReadRecommendations(knowledgeBaseId?: string): WeReadRe
         reason: 'coverage_gap',
         reasonText: `知识库在${gap.theme}主题下有 ${gap.kbCount} 张卡片，书架有 ${gap.shelfCount} 本，建议补充`,
         theme: gap.theme,
+        bookIdLong: book.bookIdLong,
       });
     }
   }
@@ -6708,6 +6722,7 @@ export function computeWeReadRecommendations(knowledgeBaseId?: string): WeReadRe
         reason: 'depth',
         reasonText: `你已导入同主题书籍笔记，推荐继续深入阅读`,
         theme,
+        bookIdLong: book.bookIdLong,
       });
     }
   }
@@ -6733,6 +6748,7 @@ export function computeWeReadRecommendations(knowledgeBaseId?: string): WeReadRe
         reason: 'card_linked',
         reasonText: `与已导入的《${book.title}》同属${theme}主题，可补充知识体系`,
         theme,
+        bookIdLong: candidate.bookIdLong,
       });
     }
   }
