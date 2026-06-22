@@ -954,6 +954,7 @@
   "weread.statsActive30": "近30天读过",
   "weread.statsCategoryDist": "分类分布",
   "weread.statsYearTrend": "归档分布",
+  "weread.statsMonthlyActivity": "月度阅读节奏",
   "weread.statsSyncedAt": "上次同步：{{time}}",
   "weread.statsSyncFailed": "同步失败：{{error}}",
   "weread.statsUnits": "本",

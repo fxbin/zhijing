@@ -52,6 +52,9 @@ const CATEGORY_CHART_LIMIT = 6;
 const YEAR_CHART_MAX_BARS = 8;
 const YEAR_BAR_MIN_HEIGHT_PX = 8;
 const YEAR_BAR_MAX_HEIGHT_PX = 80;
+const MONTH_CHART_MAX_BARS = 12;
+const MONTH_BAR_MIN_HEIGHT_PX = 8;
+const MONTH_BAR_MAX_HEIGHT_PX = 80;
 
 const MS_PER_SECOND = 1000;
 const PERCENT_BASE = 100;
@@ -354,6 +357,12 @@ function WeReadStatsBand({ stats, collapsed, onToggleCollapse, onKpiClick, t }) 
     : 0;
   const latestYear = yearBars.length > 0 ? yearBars[yearBars.length - 1].year : null;
 
+  const monthBars = (stats.monthlyActivity || []).slice(-MONTH_CHART_MAX_BARS);
+  const maxMonthCount = monthBars.length > 0
+    ? Math.max(...monthBars.map((m) => m.count))
+    : 0;
+  const latestMonth = monthBars.length > 0 ? monthBars[monthBars.length - 1].month : null;
+
   const kpiItems = [
     {
       key: FILTER_ALL,
@@ -485,6 +494,31 @@ function WeReadStatsBand({ stats, collapsed, onToggleCollapse, onKpiClick, t }) 
                           style={{ height: `${height}px` }}
                         />
                         <span className="weread-stats-yearbar-label">{y.year}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {monthBars.length > 0 && (
+              <div className="weread-stats-chart-box">
+                <div className="weread-stats-chart-title">{t('weread.statsMonthlyActivity')}</div>
+                <div className="weread-stats-yearbars">
+                  {monthBars.map((m) => {
+                    const height = maxMonthCount > 0
+                      ? Math.max(MONTH_BAR_MIN_HEIGHT_PX, Math.round((m.count / maxMonthCount) * MONTH_BAR_MAX_HEIGHT_PX))
+                      : MONTH_BAR_MIN_HEIGHT_PX;
+                    const isLatest = m.month === latestMonth;
+                    const monthLabel = m.month.slice(5);
+                    return (
+                      <div className="weread-stats-yearbar-col" key={m.month}>
+                        <span className="weread-stats-yearbar-num">{m.count}</span>
+                        <span
+                          className={`weread-stats-yearbar${isLatest ? ' is-latest' : ''}`}
+                          style={{ height: `${height}px` }}
+                        />
+                        <span className="weread-stats-yearbar-label">{monthLabel}</span>
                       </div>
                     );
                   })}

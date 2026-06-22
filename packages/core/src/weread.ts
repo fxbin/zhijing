@@ -87,6 +87,11 @@ export type WeReadRecentBook = {
   finishReading: boolean;
 };
 
+export type WeReadMonthlyActivity = {
+  month: string;
+  count: number;
+};
+
 export type WeReadStatsResponse = {
   totalBooks: number;
   finishedBooks: number;
@@ -94,6 +99,7 @@ export type WeReadStatsResponse = {
   importedToZhijing: number;
   categoryDistribution: WeReadCategorySlice[];
   archiveYearTrend: WeReadYearTrend[];
+  monthlyActivity: WeReadMonthlyActivity[];
   recentReading: {
     activeLast7Days: number;
     activeLast30Days: number;

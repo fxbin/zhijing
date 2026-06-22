@@ -922,6 +922,7 @@
   "weread.statsActive30": "Read (30d)",
   "weread.statsCategoryDist": "Category Distribution",
   "weread.statsYearTrend": "Archive Distribution",
+  "weread.statsMonthlyActivity": "Monthly Reading Rhythm",
   "weread.statsSyncedAt": "Last synced: {{time}}",
   "weread.statsSyncFailed": "Sync failed: {{error}}",
   "weread.statsUnits": "books",

@@ -108,6 +108,7 @@ import {
   type WeReadStatsResponse,
   type WeReadCategorySlice,
   type WeReadYearTrend,
+  type WeReadMonthlyActivity,
   type WeReadRecentBook,
   type WeReadPreviewNote,
   type WeReadPreviewResult,
@@ -676,6 +677,18 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
       .map(([year, count]) => ({ year, count }))
       .sort((a, b) => (a.year ?? '').localeCompare(b.year ?? ''));
 
+    const monthMap = new Map<string, number>();
+    for (const row of rows) {
+      if (row.readUpdateTime && row.readUpdateTime > 0) {
+        const date = new Date(row.readUpdateTime * 1000);
+        const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        monthMap.set(month, (monthMap.get(month) ?? 0) + 1);
+      }
+    }
+    const monthlyActivity: WeReadMonthlyActivity[] = Array.from(monthMap.entries())
+      .map(([month, count]) => ({ month, count }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+
     const topBooks: WeReadRecentBook[] = rows
       .filter((row) => row.readUpdateTime !== null)
       .sort((a, b) => (b.readUpdateTime ?? 0) - (a.readUpdateTime ?? 0))
@@ -696,6 +709,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
       importedToZhijing,
       categoryDistribution,
       archiveYearTrend,
+      monthlyActivity,
       recentReading: { activeLast7Days, activeLast30Days, topBooks },
       lastSyncedAt: this.wereadSyncState?.lastFullSyncAt ?? null,
       lastSyncError: this.wereadSyncState?.lastSyncError ?? null,
@@ -1963,6 +1977,12 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       GROUP BY 1 ORDER BY year ASC
     `).all() as WeReadYearTrend[];
 
+    const monthRows = this.db.prepare(`
+      SELECT strftime('%Y-%m', read_update_time, 'unixepoch') AS month, COUNT(*) AS count
+      FROM weread_book_meta WHERE present_on_shelf = 1 AND read_update_time IS NOT NULL
+      GROUP BY 1 ORDER BY month ASC
+    `).all() as WeReadMonthlyActivity[];
+
     const topBookRows = this.db.prepare(`
       SELECT book_id AS bookId, title, author, cover,
              read_update_time AS readUpdateTime, finish_reading AS finishReading
@@ -1979,6 +1999,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       importedToZhijing: totals.importedToZhijing,
       categoryDistribution: categoryRows,
       archiveYearTrend: yearRows,
+      monthlyActivity: monthRows,
       recentReading: {
         activeLast7Days: totals.activeLast7Days,
         activeLast30Days: totals.activeLast30Days,
@@ -6335,6 +6356,7 @@ export type {
   WeReadStatsResponse,
   WeReadCategorySlice,
   WeReadYearTrend,
+  WeReadMonthlyActivity,
   WeReadRecentBook,
   WeReadPreviewNote,
   WeReadPreviewResult,
