@@ -7609,8 +7609,8 @@ button { cursor: pointer; }
 .ai-chat-shell-controls button {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border: 1px solid var(--line-soft);
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.72);
