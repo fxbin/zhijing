@@ -599,7 +599,6 @@ function App() {
               onCreate={() => { setCreateKbError(null); setIsCreateKbOpen(true); }}
               onSelect={(id) => {
                 setSelectedKnowledgeBaseId(id);
-                go('detail');
               }}
               selectedKnowledgeBaseId={selectedKnowledgeBaseId}
             />

@@ -6454,7 +6454,7 @@ export async function importWeReadBook(bookId: string, knowledgeBaseId?: string)
     knowledgeBaseId: base.id,
     type: 'text',
     rawInput: contentText,
-    sourceUrl: `https://weread.qq.com/#bot/book/${bookId}`,
+    sourceUrl: `https://weread.qq.com/web/reader/${bookId}`,
     platform: 'weread',
     title: `《${bookInfo.title}》阅读笔记`,
     contentText,

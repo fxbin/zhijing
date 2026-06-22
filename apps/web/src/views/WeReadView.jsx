@@ -70,7 +70,7 @@ const YEAR_SECONDS = 31536000;
 
 const FINISHED_FLAG = 1;
 
-const wereadWebBookUrl = (bookId) => `https://weread.qq.com/#bot/book/${bookId}`;
+const wereadWebBookUrl = (bookId) => `https://weread.qq.com/web/reader/${bookId}`;
 
 /**
  * 格式化相对时间
