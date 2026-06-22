@@ -580,11 +580,14 @@ export default function DetailView({
                         </header>
                         {group.map((card) => (
                           <article className={`knowledge-card type-${type}`} key={card.id ?? card.title}>
+                            <div className="card-head">
+                              <span className="card-type-badge">{cardTypeLabel(card.type)}</span>
+                              {card.claimStatus === 'sourced' && (
+                                <span className="card-source-badge"><CheckCircle2 size={14} />{claimStatusLabel(card.claimStatus)}</span>
+                              )}
+                            </div>
                             <h3>{card.title}</h3>
                             <p>{card.body}</p>
-                            {card.claimStatus === 'sourced' && (
-                              <span className="card-source-badge"><CheckCircle2 size={14} />{claimStatusLabel(card.claimStatus)}</span>
-                            )}
                           </article>
                         ))}
                       </section>
