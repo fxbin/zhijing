@@ -1672,6 +1672,44 @@ button { cursor: pointer; }
   grid-row: 1 / -1;
 }
 
+.detail-guide {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding: 12px 16px;
+  border: 1px solid var(--question, #D4944A);
+  border-left-width: 3px;
+  border-radius: 10px;
+  background: rgba(212, 148, 74, 0.08);
+  color: var(--text, #1f2937);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.detail-guide-text {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.detail-guide-action {
+  flex: 0 0 auto;
+  padding: 6px 14px;
+  border: 1px solid var(--question, #D4944A);
+  border-radius: 7px;
+  background: var(--question, #D4944A);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.detail-guide-action:hover {
+  opacity: 0.9;
+}
+
 .detail-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

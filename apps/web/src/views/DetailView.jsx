@@ -186,6 +186,12 @@ export default function DetailView({
   const cardGroups = groupCardsByType(cards);
   const canAsk = apiStatus === 'online' && Boolean(selectedKnowledgeBaseId) && !isAsking;
   const latestAnswerCards = assistantAnswer?.cards ?? [];
+  const pendingSourceCount = cards.filter((card) => card.claimStatus !== 'sourced').length;
+  const guideMessage = materials.length === 0
+    ? t('detail.guideNoMaterials')
+    : (pendingSourceCount > 0 && cards.length > 0 && pendingSourceCount / cards.length >= 0.5
+        ? t('detail.guideLowSourcing', { pending: pendingSourceCount })
+        : null);
   const latestCitations = assistantAnswer?.citations ?? [];
   const questionHistory = materials.filter((material) => material.type === 'question').slice(0, 3);
   const totals = analytics?.totals;
@@ -354,6 +360,14 @@ export default function DetailView({
             <button onClick={() => setView('workflow')} type="button">{t('detail.runKit')}</button>
           </div>
         </div>
+        {guideMessage && (
+          <aside className="detail-guide" role="status" aria-label={t('detail.guideTitle')}>
+            <span className="detail-guide-text">{guideMessage}</span>
+            <button type="button" onClick={() => setView('library')} className="detail-guide-action">
+              {t('detail.guideAction')}
+            </button>
+          </aside>
+        )}
         {analytics && (
           <section className="detail-metrics" aria-label={t('detail.metrics')}>
             <article>
