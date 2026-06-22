@@ -8276,6 +8276,17 @@ button { cursor: pointer; }
     width: auto;
     max-height: none;
   }
+  .ai-chat-shell-sidebar {
+    position: fixed;
+    top: auto;
+    right: 16px;
+    bottom: 16px;
+    left: auto;
+    width: min(360px, calc(100vw - 32px));
+    max-height: 60vh;
+    z-index: 50;
+    box-shadow: 0 8px 24px rgba(9, 20, 38, 0.12);
+  }
   .settings-profile-layout {
     grid-template-columns: 260px minmax(0, 1fr);
     gap: 18px;
