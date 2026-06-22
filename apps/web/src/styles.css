@@ -2818,11 +2818,33 @@ button { cursor: pointer; }
 }
 
 .knowledge-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
   margin-top: 22px;
   padding-top: 14px;
   border-top: 1px solid var(--line-soft);
   color: var(--muted);
   font-size: 13px;
+}
+
+.card-source-action {
+  padding: 4px 10px;
+  border: 1px solid var(--question, #D4944A);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--question, #D4944A);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.card-source-action:hover {
+  background: var(--question, #D4944A);
+  color: #fff;
 }
 
 .source-strip {

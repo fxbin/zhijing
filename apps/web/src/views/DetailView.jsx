@@ -311,7 +311,18 @@ export default function DetailView({
         </div>
         <h3>{card.title}</h3>
         <p>{card.body}</p>
-        <footer>{claimStatusLabel(card.claimStatus)} · {card.updatedAt ? formatDate(card.updatedAt) : t('detail.today')}</footer>
+        <footer>
+          <span>{claimStatusLabel(card.claimStatus)} · {card.updatedAt ? formatDate(card.updatedAt) : t('detail.today')}</span>
+          {card.claimStatus !== 'sourced' && (
+            <button
+              type="button"
+              className="card-source-action"
+              onClick={() => setView('library')}
+            >
+              {t('detail.guideAction')}
+            </button>
+          )}
+        </footer>
       </article>
     );
   }
