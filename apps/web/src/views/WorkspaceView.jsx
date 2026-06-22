@@ -80,7 +80,11 @@ export default function WorkspaceView({ activity, apiStatus, isSubmitting, mater
             </>
           ) : (
             <>
-              <RecentImports materials={materials} onViewAll={() => setView('library')} />
+              <RecentImports
+                materials={materials}
+                onViewAll={() => setView('library')}
+                onViewDetail={onViewMaterialDetail}
+              />
               <KnowledgeMapPanel selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={setView} />
             </>
           )}

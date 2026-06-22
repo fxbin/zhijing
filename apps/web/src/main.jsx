@@ -130,7 +130,10 @@ function App() {
     let ignore = false;
     async function loadDashboard() {
       try {
-        const response = await fetch('/api/dashboard');
+        const url = selectedKnowledgeBaseId
+          ? `/api/dashboard?knowledgeBaseId=${encodeURIComponent(selectedKnowledgeBaseId)}`
+          : '/api/dashboard';
+        const response = await fetch(url);
         if (!response.ok) throw new Error('Dashboard unavailable.');
         const dashboard = await response.json();
         if (ignore) return;
@@ -142,8 +145,8 @@ function App() {
         setMaterials(nextMaterials.map(materialFromApi));
         setTasks(nextTasks);
         setSelectedKnowledgeBaseId((current) => {
-          if (current && nextKnowledgeBases.some((base) => base.id === current)) return current;
-          return nextKnowledgeBases[0]?.id ?? null;
+          if (current || nextKnowledgeBases.length === 0) return current;
+          return nextKnowledgeBases[0].id;
         });
         if (nextTasks.length) {
           setLatestTaskId(nextTasks[0].id);
@@ -160,7 +163,7 @@ function App() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [selectedKnowledgeBaseId]);
 
   useEffect(() => {
     if (!selectedKnowledgeBaseId) {
@@ -318,6 +321,10 @@ function App() {
       };
     });
     if (result.artifact) setSelectedArtifact(result.artifact);
+  };
+
+  const handleViewMaterialDetail = (material) => {
+    go('library');
   };
 
   const submit = async (overrideValue) => {
@@ -637,7 +644,7 @@ function App() {
 
         <div className="canvas">
           {apiStatus === 'offline' && <SystemNotice status="offline" />}
-          {view === 'workspace' && <WorkspaceView activity={activity} apiStatus={apiStatus} isSubmitting={isSubmitting} materials={materials} query={query} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setQuery={setQuery} setView={go} submit={submit} />}
+          {view === 'workspace' && <WorkspaceView activity={activity} apiStatus={apiStatus} isSubmitting={isSubmitting} materials={materials} query={query} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setQuery={setQuery} setView={go} submit={submit} onViewMaterialDetail={handleViewMaterialDetail} />}
           {view === 'detail' && (
             <DetailView
               apiStatus={apiStatus}

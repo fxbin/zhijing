@@ -11,6 +11,8 @@ import EmptyState from './EmptyState';
 import { useParseStatusLabel } from '../utils/i18nLabels';
 import { materialMediaUrls, isImageUrl, isVideoUrl, proxyImageUrl } from '../utils/material';
 
+const SUMMARY_MAX_CHARS = 300;
+
 /**
  * 判断材料是否为小红书且包含可展示的图片封面。
  * @param {object} item - 材料对象
@@ -41,7 +43,7 @@ function isXiaohongshuVideoNote(item) {
  * @param {() => void} props.onViewAll - 点击「查看全部」回调
  * @returns {JSX.Element} 最近导入面板
  */
-export default function RecentImports({ materials, onViewAll }) {
+export default function RecentImports({ materials, onViewAll, onViewDetail }) {
   const { t } = useTranslation();
   const parseStatusLabel = useParseStatusLabel();
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -54,6 +56,19 @@ export default function RecentImports({ materials, onViewAll }) {
   function platformLabel(item) {
     const key = item.platform ?? 'material';
     return t(`platform.${key}`);
+  }
+
+  /**
+   * 截断摘要文本到指定长度。
+   * @param {string} text - 原始文本
+   * @returns {string} 截断后的文本
+   */
+  function truncateSummary(text) {
+    if (!text) return '';
+    const cleaned = text.replace(/\s+/g, ' ').trim();
+    return cleaned.length > SUMMARY_MAX_CHARS
+      ? `${cleaned.slice(0, SUMMARY_MAX_CHARS)}...`
+      : cleaned;
   }
 
   return (
@@ -69,8 +84,22 @@ export default function RecentImports({ materials, onViewAll }) {
         ) : materials.map((item, index) => {
           const coverUrl = resolveXiaohongshuCover(item);
           const isVideo = isXiaohongshuVideoNote(item);
+          const truncatedSummary = truncateSummary(item.summary);
+          const hasMore = item.summary && item.summary.replace(/\s+/g, ' ').trim().length > SUMMARY_MAX_CHARS;
           return (
-            <article className={`material-card ${item.state}`} key={item.id ?? `recent-${index}`}>
+            <article
+              className={`material-card ${item.state}${onViewDetail ? ' is-clickable' : ''}`}
+              key={item.id ?? `recent-${index}`}
+              onClick={onViewDetail ? () => onViewDetail(item) : undefined}
+              role={onViewDetail ? 'button' : undefined}
+              tabIndex={onViewDetail ? 0 : undefined}
+              onKeyDown={onViewDetail ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onViewDetail(item);
+                }
+              } : undefined}
+            >
               <div className="material-meta">
                 <span>{platformLabel(item)}</span>
                 <span>{parseStatusLabel(item.parseStatus ?? item.status)}</span>
@@ -81,7 +110,10 @@ export default function RecentImports({ materials, onViewAll }) {
                 <button
                   aria-label={t('recentImports.viewCover')}
                   className={`material-cover-thumb${isVideo ? ' is-video' : ''}`}
-                  onClick={() => setPreviewUrl(coverUrl)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPreviewUrl(coverUrl);
+                  }}
                   type="button"
                 >
                   <img alt={item.title} loading="lazy" src={proxyImageUrl(coverUrl)} />
@@ -92,7 +124,19 @@ export default function RecentImports({ materials, onViewAll }) {
                   )}
                 </button>
               )}
-              <p>{item.summary}</p>
+              <p>{truncatedSummary}</p>
+              {hasMore && onViewDetail && (
+                <button
+                  type="button"
+                  className="material-read-more"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onViewDetail(item);
+                  }}
+                >
+                  {t('recentImports.readMore')}
+                </button>
+              )}
               <div className="tag-row">{item.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
             </article>
           );

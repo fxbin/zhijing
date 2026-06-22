@@ -23,7 +23,7 @@ export function materialFromApi(item) {
     title: item.title ?? 'Untitled material',
     summary: item.contentText || item.rawInput || 'Saved source material.',
     tags: [item.type ?? 'material', status],
-    time: 'just now',
+    time: formatMaterialTime(item.createdAt),
     state: status === 'failed' ? 'failed' : status === 'parsing' ? 'processing' : 'ready',
   };
 }
