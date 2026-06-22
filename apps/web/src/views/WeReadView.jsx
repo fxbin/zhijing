@@ -468,13 +468,11 @@ function WeReadStatsBand({ stats, collapsed, onToggleCollapse, onKpiClick, t }) 
               </div>
             </div>
 
-            <div className="weread-stats-chart-box">
-              <div className="weread-stats-chart-title">{t('weread.statsYearTrend')}</div>
-              <div className="weread-stats-yearbars">
-                {yearBars.length === 0 ? (
-                  <span className="weread-metatag weread-metatag--empty">{t('weread.previewEmpty')}</span>
-                ) : (
-                  yearBars.map((y) => {
+            {yearBars.length > 0 && (
+              <div className="weread-stats-chart-box">
+                <div className="weread-stats-chart-title">{t('weread.statsYearTrend')}</div>
+                <div className="weread-stats-yearbars">
+                  {yearBars.map((y) => {
                     const height = maxYearCount > 0
                       ? Math.max(YEAR_BAR_MIN_HEIGHT_PX, Math.round((y.count / maxYearCount) * YEAR_BAR_MAX_HEIGHT_PX))
                       : YEAR_BAR_MIN_HEIGHT_PX;
@@ -489,10 +487,10 @@ function WeReadStatsBand({ stats, collapsed, onToggleCollapse, onKpiClick, t }) 
                         <span className="weread-stats-yearbar-label">{y.year}</span>
                       </div>
                     );
-                  })
-                )}
+                  })}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
