@@ -744,7 +744,6 @@ function App() {
               selectedKnowledgeBaseId={selectedKnowledgeBaseId}
               onOpenKnowledgeBase={(id) => {
                 if (id && id !== selectedKnowledgeBaseId) setSelectedKnowledgeBaseId(id);
-                go('detail');
               }}
             />
           )}
