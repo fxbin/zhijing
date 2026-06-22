@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   BarChart3,
   BookOpen,
+  Cpu,
   Database,
   Download,
   KeyRound,
@@ -71,10 +72,11 @@ const EMPTY_PROFILE_FORM = {
  * @param {object} props - 组件属性
  * @param {string|null} props.initialSection - 初始激活的设置分区
  * @param {() => void} props.onSectionConsumed - 初始分区消费后的回调
+ * @param {string} props.browserAiStatus - 浏览器内置 AI 模型状态（checking/ready/need_download/no_api/no_model）
  * @returns {JSX.Element} 设置视图
  * @author fxbin
  */
-export default function SettingsView({ initialSection = null, onSectionConsumed }) {
+export default function SettingsView({ initialSection = null, onSectionConsumed, browserAiStatus = 'checking' }) {
   const { t } = useTranslation();
   const taskStatusLabel = useTaskStatusLabel();
   const taskWorkflowLabel = useTaskWorkflowLabel();
@@ -602,6 +604,24 @@ export default function SettingsView({ initialSection = null, onSectionConsumed 
               {testResult.sampleTitle && <small>{t('settings.returnedCard')}{testResult.sampleTitle}</small>}
             </div>
           )}
+          <div className={`status-card browser-ai-card browser-ai-card--${browserAiStatus}`}>
+            <Cpu size={25} />
+            <div>
+              <span>{t('settings.browserAi.title')}</span>
+              <strong>
+                {browserAiStatus === 'ready' && t('settings.browserAi.ready')}
+                {browserAiStatus === 'need_download' && t('settings.browserAi.needDownload')}
+                {browserAiStatus === 'checking' && t('settings.browserAi.checking')}
+                {(browserAiStatus === 'no_api' || browserAiStatus === 'no_model') && t('settings.browserAi.unavailable')}
+              </strong>
+              <p>
+                {browserAiStatus === 'ready' && t('settings.browserAi.readyHint')}
+                {browserAiStatus === 'need_download' && t('settings.browserAi.needDownloadHint')}
+                {browserAiStatus === 'checking' && t('settings.browserAi.checkingHint')}
+                {(browserAiStatus === 'no_api' || browserAiStatus === 'no_model') && t('settings.browserAi.unavailableHint')}
+              </p>
+            </div>
+          </div>
         </>
       );
     }

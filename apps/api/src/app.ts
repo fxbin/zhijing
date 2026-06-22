@@ -121,7 +121,12 @@ export function buildApi() {
     timestamp: new Date().toISOString(),
   }));
 
-  app.get('/api/dashboard', async () => getDashboard());
+  app.get<{ Querystring: { knowledgeBaseId?: string } }>('/api/dashboard', async (request) => {
+    const kbId = typeof request.query.knowledgeBaseId === 'string' && request.query.knowledgeBaseId.trim()
+      ? request.query.knowledgeBaseId.trim()
+      : undefined;
+    return getDashboard(kbId);
+  });
 
   app.get('/api/insights', async () => getGlobalInsights());
 

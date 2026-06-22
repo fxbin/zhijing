@@ -1263,6 +1263,66 @@ button { cursor: pointer; }
   background: rgba(44, 95, 141, 0.16);
 }
 
+.material-ai-summary {
+  margin: 4px 0 10px;
+}
+
+.material-ai-summary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid rgba(107, 142, 127, 0.3);
+  border-radius: 6px;
+  background: rgba(107, 142, 127, 0.08);
+  color: var(--sage-green, #6B8E7F);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.material-ai-summary-btn:hover:not(:disabled) {
+  background: rgba(107, 142, 127, 0.16);
+  border-color: rgba(107, 142, 127, 0.5);
+}
+
+.material-ai-summary-btn:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.material-ai-summary-result {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(107, 142, 127, 0.08);
+  border-left: 3px solid var(--sage-green, #6B8E7F);
+}
+
+.material-ai-summary-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sage-green, #6B8E7F);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.material-ai-summary-result p {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.material-ai-summary-error {
+  margin: 6px 0 0;
+  color: var(--danger, #C44545);
+  font-size: 12px;
+}
+
 .tag-row {
   display: flex;
   gap: 10px;
@@ -2533,6 +2593,52 @@ button { cursor: pointer; }
   font-size: 12px;
   font-weight: 850;
   text-transform: uppercase;
+}
+
+.browser-ai-card {
+  position: relative;
+  padding-left: 16px;
+}
+
+.browser-ai-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--muted);
+}
+
+.browser-ai-card--ready::before {
+  background: var(--sage-green, #6B8E7F);
+}
+
+.browser-ai-card--ready svg {
+  color: var(--sage-green, #6B8E7F);
+}
+
+.browser-ai-card--need_download::before {
+  background: var(--question, #D4944A);
+}
+
+.browser-ai-card--need_download svg {
+  color: var(--question, #D4944A);
+}
+
+.browser-ai-card--checking::before {
+  background: var(--muted);
+}
+
+.browser-ai-card--no_api::before,
+.browser-ai-card--no_model::before {
+  background: var(--danger, #C44545);
+}
+
+.browser-ai-card--no_api svg,
+.browser-ai-card--no_model svg {
+  color: var(--danger, #C44545);
 }
 
 .field-row input[type="text"],

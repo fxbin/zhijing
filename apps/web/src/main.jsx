@@ -61,6 +61,7 @@ function App() {
   const [query, setQuery] = useState('');
   const [activity, setActivity] = useState(t('activity.ready'));
   const [apiStatus, setApiStatus] = useState('checking');
+  const [browserAiStatus, setBrowserAiStatus] = useState('checking');
   const [knowledgeBases, setKnowledgeBases] = useState(seedKnowledgeBases);
   const [materials, setMaterials] = useState(seedMaterials);
   const [tasks, setTasks] = useState([]);
@@ -124,6 +125,21 @@ function App() {
     }
     window.addEventListener('zhijing:navigate', handleNavigate);
     return () => window.removeEventListener('zhijing:navigate', handleNavigate);
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    async function detectBrowserAiStatus() {
+      try {
+        const { detectBrowserAi } = await import('./utils/browserAi.js');
+        const result = await detectBrowserAi();
+        if (!ignore) setBrowserAiStatus(result.status);
+      } catch {
+        if (!ignore) setBrowserAiStatus('no_api');
+      }
+    }
+    detectBrowserAiStatus();
+    return () => { ignore = true; };
   }, []);
 
   useEffect(() => {
@@ -644,7 +660,7 @@ function App() {
 
         <div className="canvas">
           {apiStatus === 'offline' && <SystemNotice status="offline" />}
-          {view === 'workspace' && <WorkspaceView activity={activity} apiStatus={apiStatus} isSubmitting={isSubmitting} materials={materials} query={query} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setQuery={setQuery} setView={go} submit={submit} onViewMaterialDetail={handleViewMaterialDetail} />}
+          {view === 'workspace' && <WorkspaceView activity={activity} apiStatus={apiStatus} isSubmitting={isSubmitting} materials={materials} query={query} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setQuery={setQuery} setView={go} submit={submit} onViewMaterialDetail={handleViewMaterialDetail} browserAiStatus={browserAiStatus} />}
           {view === 'detail' && (
             <DetailView
               apiStatus={apiStatus}
@@ -753,7 +769,7 @@ function App() {
               }}
             />
           )}
-          {view === 'settings' && <SettingsView initialSection={settingsSection} onSectionConsumed={() => setSettingsSection(null)} setView={go} />}
+          {view === 'settings' && <SettingsView initialSection={settingsSection} onSectionConsumed={() => setSettingsSection(null)} setView={go} browserAiStatus={browserAiStatus} />}
         </div>
       </section>
       {isCreateKbOpen && (

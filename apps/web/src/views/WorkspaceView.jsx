@@ -21,9 +21,11 @@ import { useTranslation } from 'react-i18next';
  * @param {(value: string) => void} props.setQuery - 设置输入值
  * @param {(view: string) => void} props.setView - 切换视图
  * @param {() => void} props.submit - 提交回调
+ * @param {(material: object) => void} props.onViewMaterialDetail - 查看材料详情回调
+ * @param {string} props.browserAiStatus - 浏览器内置 AI 模型状态
  * @returns {JSX.Element} 工作区视图
  */
-export default function WorkspaceView({ activity, apiStatus, isSubmitting, materials, query, selectedKnowledgeBaseId, setQuery, setView, submit }) {
+export default function WorkspaceView({ activity, apiStatus, isSubmitting, materials, query, selectedKnowledgeBaseId, setQuery, setView, submit, onViewMaterialDetail, browserAiStatus = 'checking' }) {
   const { t } = useTranslation();
   const hasContent = materials.length > 0;
   const offline = apiStatus !== 'online';
@@ -84,6 +86,7 @@ export default function WorkspaceView({ activity, apiStatus, isSubmitting, mater
                 materials={materials}
                 onViewAll={() => setView('library')}
                 onViewDetail={onViewMaterialDetail}
+                browserAiStatus={browserAiStatus}
               />
               <KnowledgeMapPanel selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={setView} />
             </>

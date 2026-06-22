@@ -1,10 +1,11 @@
 /**
  * 最近导入资料组件：展示最近导入的材料卡片。
+ * 支持浏览器内置 AI 模型生成摘要。
  * @module components/RecentImports
  */
 
 import { useState } from 'react';
-import { PlayCircle, Upload, X } from 'lucide-react';
+import { Loader2, PlayCircle, Sparkles, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import EmptyState from './EmptyState';
@@ -41,12 +42,17 @@ function isXiaohongshuVideoNote(item) {
  * @param {object} props - 组件属性
  * @param {Array<object>} props.materials - 最近导入资料列表
  * @param {() => void} props.onViewAll - 点击「查看全部」回调
+ * @param {(material: object) => void} [props.onViewDetail] - 点击卡片查看详情回调
+ * @param {string} [props.browserAiStatus] - 浏览器内置 AI 模型状态
  * @returns {JSX.Element} 最近导入面板
  */
-export default function RecentImports({ materials, onViewAll, onViewDetail }) {
+export default function RecentImports({ materials, onViewAll, onViewDetail, browserAiStatus = 'checking' }) {
   const { t } = useTranslation();
   const parseStatusLabel = useParseStatusLabel();
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [aiSummaries, setAiSummaries] = useState({});
+
+  const aiReady = browserAiStatus === 'ready';
 
   /**
    * 获取平台显示名称。
@@ -71,6 +77,28 @@ export default function RecentImports({ materials, onViewAll, onViewDetail }) {
       : cleaned;
   }
 
+  /**
+   * 触发浏览器 AI 生成摘要。
+   * 仅当浏览器 AI 可用且材料尚未生成过摘要时调用。
+   * @param {object} item - 材料对象
+   */
+  async function handleSummarize(item) {
+    if (!aiReady || !item?.id) return;
+    const existing = aiSummaries[item.id];
+    if (existing?.state === 'loading' || existing?.state === 'done') return;
+    setAiSummaries((prev) => ({ ...prev, [item.id]: { state: 'loading' } }));
+    try {
+      const { summarizeWithBrowserAi } = await import('../utils/browserAi.js');
+      const summary = await summarizeWithBrowserAi(item.summary || item.title || '');
+      setAiSummaries((prev) => ({ ...prev, [item.id]: { state: 'done', content: summary } }));
+    } catch (err) {
+      setAiSummaries((prev) => ({
+        ...prev,
+        [item.id]: { state: 'error', error: err?.message || t('recentImports.aiSummaryFailed') },
+      }));
+    }
+  }
+
   return (
     <article className="recent-panel">
       <div className="section-title">
@@ -86,6 +114,8 @@ export default function RecentImports({ materials, onViewAll, onViewDetail }) {
           const isVideo = isXiaohongshuVideoNote(item);
           const truncatedSummary = truncateSummary(item.summary);
           const hasMore = item.summary && item.summary.replace(/\s+/g, ' ').trim().length > SUMMARY_MAX_CHARS;
+          const aiState = aiSummaries[item.id];
+          const showAiButton = aiReady && item.summary;
           return (
             <article
               className={`material-card ${item.state}${onViewDetail ? ' is-clickable' : ''}`}
@@ -136,6 +166,38 @@ export default function RecentImports({ materials, onViewAll, onViewDetail }) {
                 >
                   {t('recentImports.readMore')}
                 </button>
+              )}
+              {showAiButton && (
+                <div className="material-ai-summary">
+                  {aiState?.state === 'done' ? (
+                    <div className="material-ai-summary-result">
+                      <div className="material-ai-summary-head">
+                        <Sparkles size={14} />
+                        <span>{t('recentImports.aiSummaryLabel')}</span>
+                      </div>
+                      <p>{aiState.content}</p>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="material-ai-summary-btn"
+                      disabled={aiState?.state === 'loading'}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSummarize(item);
+                      }}
+                    >
+                      {aiState?.state === 'loading' ? (
+                        <><Loader2 size={14} className="spin" /> {t('recentImports.aiSummaryLoading')}</>
+                      ) : (
+                        <><Sparkles size={14} /> {t('recentImports.aiSummaryAction')}</>
+                      )}
+                    </button>
+                  )}
+                  {aiState?.state === 'error' && (
+                    <p className="material-ai-summary-error">{aiState.error}</p>
+                  )}
+                </div>
               )}
               <div className="tag-row">{item.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
             </article>
