@@ -29,6 +29,7 @@ import {
   readWeReadBookMetaList,
   readWeReadSyncState,
   computeWeReadStats,
+  computeWeReadRecommendations,
   previewWeReadBook,
   loadFilter,
   recordExport,
@@ -880,6 +881,16 @@ export function buildApi() {
     } catch (error) {
       request.log.error({ error }, 'compute weread stats failed');
       return reply.code(500).send({ error: 'Failed to compute WeRead stats.' });
+    }
+  });
+
+  app.get<{ Querystring: { knowledgeBaseId?: string } }>('/api/weread/recommendations', async (request, reply) => {
+    try {
+      const kbId = typeof request.query.knowledgeBaseId === 'string' ? request.query.knowledgeBaseId : undefined;
+      return computeWeReadRecommendations(kbId);
+    } catch (error) {
+      request.log.error({ error }, 'compute weread recommendations failed');
+      return reply.code(500).send({ error: 'Failed to compute WeRead recommendations.' });
     }
   });
 

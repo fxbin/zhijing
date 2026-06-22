@@ -858,6 +858,113 @@ function WeReadPreviewDrawer({ book, mode, batchCount, onClose, onImport, t }) {
   );
 }
 
+/**
+ * 微信读书智能推荐面板
+ * 基于覆盖缺口、深度推荐、卡片关联三种策略展示推荐书籍
+ * @param {Object} props
+ * @param {string|null} props.knowledgeBaseId - 当前知识库 ID
+ * @param {Function} props.onImport - 导入回调
+ * @param {Function} props.t - i18n 翻译函数
+ */
+function WeReadRecommendPanel({ knowledgeBaseId, onImport, t }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    (async () => {
+      try {
+        const url = knowledgeBaseId
+          ? `/api/weread/recommendations?knowledgeBaseId=${encodeURIComponent(knowledgeBaseId)}`
+          : '/api/weread/recommendations';
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('recommendations');
+        const result = await res.json();
+        if (!alive) return;
+        setData(result);
+        setLoading(false);
+      } catch {
+        if (!alive) return;
+        setData(null);
+        setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [knowledgeBaseId]);
+
+  if (loading || !data || data.recommendations.length === 0) return null;
+
+  const reasonLabel = (reason) => {
+    if (reason === 'coverage_gap') return t('weread.recommendCoverageGap');
+    if (reason === 'depth') return t('weread.recommendDepth');
+    return t('weread.recommendCardLinked');
+  };
+
+  return (
+    <div className={`weread-recommend-band${collapsed ? ' is-collapsed' : ''}`}>
+      <div className="weread-recommend-head">
+        <h3>
+          <BookOpen size={16} />
+          {t('weread.recommendTitle')}
+        </h3>
+        <button type="button" className="weread-stats-toggle" onClick={() => setCollapsed((p) => !p)}>
+          {collapsed ? t('weread.statsExpand') : t('weread.statsCollapse')}
+        </button>
+      </div>
+      {!collapsed && (
+        <div className="weread-recommend-list">
+          {data.recommendations.map((rec) => {
+            const theme = CATEGORY_THEME_MAP[rec.theme] || CATEGORY_THEME_MAP.general;
+            return (
+              <div className="weread-recommend-item" key={rec.bookId}>
+                <div className="weread-recommend-cover">
+                  {rec.cover ? (
+                    <img src={rec.cover} alt="" loading="lazy" />
+                  ) : (
+                    <span className="weread-cover-placeholder"><BookOpen size={24} /></span>
+                  )}
+                </div>
+                <div className="weread-recommend-info">
+                  <strong title={rec.title}>{rec.title}</strong>
+                  {rec.author && <span className="weread-recommend-author">{rec.author}</span>}
+                  <span
+                    className="weread-recommend-reason-chip"
+                    style={{ background: theme.bg, color: theme.color }}
+                  >
+                    {reasonLabel(rec.reason)}
+                  </span>
+                  <p className="weread-recommend-reason-text">{rec.reasonText}</p>
+                </div>
+                <div className="weread-recommend-actions">
+                  <a
+                    className="weread-icon-btn"
+                    href={wereadWebBookUrl(rec.bookId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={t('weread.openInApp')}
+                    title={t('weread.openInApp')}
+                  >
+                    <ExternalLink size={15} />
+                  </a>
+                  <button
+                    type="button"
+                    className="weread-card-btn"
+                    onClick={() => onImport({ bookId: rec.bookId, title: rec.title, author: rec.author, cover: rec.cover })}
+                  >
+                    <BookOpen size={14} /> {t('weread.importNotes')}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseId, onOpenKnowledgeBase }) {
   const { t } = useTranslation();
 
@@ -1420,6 +1527,14 @@ export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseI
           collapsed={statsCollapsed}
           onToggleCollapse={handleToggleStatsCollapse}
           onKpiClick={handleKpiClick}
+          t={t}
+        />
+      )}
+
+      {configured && !error && (
+        <WeReadRecommendPanel
+          knowledgeBaseId={selectedKnowledgeBaseId}
+          onImport={(book) => handleImport(book)}
           t={t}
         />
       )}

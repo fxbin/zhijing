@@ -109,6 +109,28 @@ export type WeReadStatsResponse = {
   lastSyncError: string | null;
 };
 
+export type WeReadRecommendReason = 'coverage_gap' | 'depth' | 'card_linked';
+
+export type WeReadRecommendation = {
+  bookId: string;
+  title: string;
+  author: string;
+  cover: string | null;
+  category: string | null;
+  finishReading: number;
+  readUpdateTime: number | null;
+  bookmarkCount: number | null;
+  reason: WeReadRecommendReason;
+  reasonText: string;
+  theme: string;
+};
+
+export type WeReadRecommendResult = {
+  recommendations: WeReadRecommendation[];
+  total: number;
+  coverageGaps: { theme: string; kbCount: number; shelfCount: number }[];
+};
+
 export type WeReadPreviewNote = {
   type: 'bookmark' | 'review';
   noteId: string;

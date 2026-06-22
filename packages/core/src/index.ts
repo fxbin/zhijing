@@ -112,6 +112,8 @@ import {
   type WeReadRecentBook,
   type WeReadPreviewNote,
   type WeReadPreviewResult,
+  type WeReadRecommendation,
+  type WeReadRecommendResult,
 } from './weread.js';
 
 type PersistedModelProviderConfig = Partial<{
@@ -6360,6 +6362,8 @@ export type {
   WeReadRecentBook,
   WeReadPreviewNote,
   WeReadPreviewResult,
+  WeReadRecommendation,
+  WeReadRecommendResult,
 };
 
 /**
@@ -6589,6 +6593,165 @@ export function readWeReadSyncState(): WeReadSyncStateRow | null {
  */
 export function computeWeReadStats(): WeReadStatsResponse {
   return repository.computeWeReadStats();
+}
+
+const RECOMMEND_KEYWORD_MAP: { keys: string[]; theme: string }[] = [
+  { keys: ['经济', '理财', '投资', '商业', '创业', '管理', '金融'], theme: 'concept' },
+  { keys: ['计算机', '编程', '互联网', '科技', '自然科学', '工程', '医学', '数学'], theme: 'method' },
+  { keys: ['心理', '社科', '哲学', '教育', '社会', '政治', '法学', '宗教'], theme: 'fact' },
+  { keys: ['文学', '小说', '散文', '传记', '艺术', '历史', '诗歌', '漫画'], theme: 'question' },
+];
+
+const RECOMMEND_MAX_RESULTS = 10;
+const RECOMMEND_COVERAGE_WEIGHT = 3;
+const RECOMMEND_DEPTH_WEIGHT = 2;
+const RECOMMEND_CARD_LINKED_WEIGHT = 1;
+
+function resolveThemeByCategory(category: string | null): string {
+  if (!category) return 'general';
+  for (const rule of RECOMMEND_KEYWORD_MAP) {
+    if (rule.keys.some((k) => category.includes(k))) {
+      return rule.theme;
+    }
+  }
+  return 'general';
+}
+
+/**
+ * 计算微信读书书籍推荐列表。
+ * 基于三种策略：覆盖缺口（知识库缺少的主题）、深度推荐（同主题进阶）、卡片关联（已导入笔记的同主题书）。
+ * @param knowledgeBaseId - 当前知识库 ID，用于计算覆盖缺口
+ * @returns 推荐结果，包含推荐书籍列表和覆盖缺口分析
+ */
+export function computeWeReadRecommendations(knowledgeBaseId?: string): WeReadRecommendResult {
+  const books = repository.readWeReadBookMetaList().filter((b) => b.presentOnShelf === 1);
+  const unimportedBooks = books.filter((b) => !b.materialId);
+  const importedBooks = books.filter((b) => b.materialId);
+
+  let kbCards: { type: string }[] = [];
+  if (knowledgeBaseId) {
+    const detail = repository.findKnowledgeBase(knowledgeBaseId);
+    if (detail) {
+      kbCards = repository.listCards(knowledgeBaseId);
+    }
+  }
+
+  const kbThemeCount = new Map<string, number>();
+  for (const card of kbCards) {
+    const theme = card.type;
+    kbThemeCount.set(theme, (kbThemeCount.get(theme) ?? 0) + 1);
+  }
+
+  const shelfThemeCount = new Map<string, number>();
+  for (const book of books) {
+    const theme = resolveThemeByCategory(book.category);
+    shelfThemeCount.set(theme, (shelfThemeCount.get(theme) ?? 0) + 1);
+  }
+
+  const coverageGaps: { theme: string; kbCount: number; shelfCount: number }[] = [];
+  for (const [theme, shelfCount] of shelfThemeCount.entries()) {
+    const kbCount = kbThemeCount.get(theme) ?? 0;
+    if (kbCount < shelfCount) {
+      coverageGaps.push({ theme, kbCount, shelfCount });
+    }
+  }
+  coverageGaps.sort((a, b) => (b.shelfCount - b.kbCount) - (a.shelfCount - a.kbCount));
+
+  const recommendations: WeReadRecommendation[] = [];
+  const seenBookIds = new Set<string>();
+
+  for (const gap of coverageGaps.slice(0, 3)) {
+    const candidates = unimportedBooks
+      .filter((b) => resolveThemeByCategory(b.category) === gap.theme)
+      .sort((a, b) => (b.readUpdateTime ?? 0) - (a.readUpdateTime ?? 0))
+      .slice(0, 2);
+    for (const book of candidates) {
+      if (seenBookIds.has(book.bookId)) continue;
+      seenBookIds.add(book.bookId);
+      recommendations.push({
+        bookId: book.bookId,
+        title: book.title,
+        author: book.author,
+        cover: book.cover,
+        category: book.category,
+        finishReading: book.finishReading,
+        readUpdateTime: book.readUpdateTime,
+        bookmarkCount: book.bookmarkCount,
+        reason: 'coverage_gap',
+        reasonText: `知识库在${gap.theme}主题下有 ${gap.kbCount} 张卡片，书架有 ${gap.shelfCount} 本，建议补充`,
+        theme: gap.theme,
+      });
+    }
+  }
+
+  const importedThemes = new Set<string>();
+  for (const book of importedBooks) {
+    importedThemes.add(resolveThemeByCategory(book.category));
+  }
+  for (const theme of importedThemes) {
+    const candidates = unimportedBooks
+      .filter((b) => resolveThemeByCategory(b.category) === theme && b.finishReading === 0)
+      .sort((a, b) => (b.bookmarkCount ?? 0) - (a.bookmarkCount ?? 0))
+      .slice(0, 1);
+    for (const book of candidates) {
+      if (seenBookIds.has(book.bookId)) continue;
+      seenBookIds.add(book.bookId);
+      recommendations.push({
+        bookId: book.bookId,
+        title: book.title,
+        author: book.author,
+        cover: book.cover,
+        category: book.category,
+        finishReading: book.finishReading,
+        readUpdateTime: book.readUpdateTime,
+        bookmarkCount: book.bookmarkCount,
+        reason: 'depth',
+        reasonText: `你已导入同主题书籍笔记，推荐继续深入阅读`,
+        theme,
+      });
+    }
+  }
+
+  for (const book of importedBooks.slice(0, 3)) {
+    const theme = resolveThemeByCategory(book.category);
+    const candidates = unimportedBooks
+      .filter((b) => resolveThemeByCategory(b.category) === theme)
+      .sort((a, b) => (b.readUpdateTime ?? 0) - (a.readUpdateTime ?? 0))
+      .slice(0, 1);
+    for (const candidate of candidates) {
+      if (seenBookIds.has(candidate.bookId)) continue;
+      seenBookIds.add(candidate.bookId);
+      recommendations.push({
+        bookId: candidate.bookId,
+        title: candidate.title,
+        author: candidate.author,
+        cover: candidate.cover,
+        category: candidate.category,
+        finishReading: candidate.finishReading,
+        readUpdateTime: candidate.readUpdateTime,
+        bookmarkCount: candidate.bookmarkCount,
+        reason: 'card_linked',
+        reasonText: `与已导入的《${book.title}》同属${theme}主题，可补充知识体系`,
+        theme,
+      });
+    }
+  }
+
+  const sorted = recommendations.sort((a, b) => {
+    const weightA = a.reason === 'coverage_gap' ? RECOMMEND_COVERAGE_WEIGHT
+      : a.reason === 'depth' ? RECOMMEND_DEPTH_WEIGHT
+      : RECOMMEND_CARD_LINKED_WEIGHT;
+    const weightB = b.reason === 'coverage_gap' ? RECOMMEND_COVERAGE_WEIGHT
+      : b.reason === 'depth' ? RECOMMEND_DEPTH_WEIGHT
+      : RECOMMEND_CARD_LINKED_WEIGHT;
+    return weightB - weightA;
+  });
+
+  return {
+    recommendations: sorted.slice(0, RECOMMEND_MAX_RESULTS),
+    total: sorted.length,
+    coverageGaps,
+  };
 }
 
 /**
