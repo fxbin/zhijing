@@ -351,9 +351,6 @@ export default function DetailView({
             <p>{detail.summary}</p>
           </div>
           <div className="page-title-actions">
-            <button onClick={() => setView('chat')} type="button">{t('nav.chat')}</button>
-            <button onClick={() => setView('recall')} type="button">{t('nav.recall')}</button>
-            <button onClick={() => setView('export')} type="button">{t('nav.export')}</button>
             <button onClick={() => setView('workflow')} type="button">{t('detail.runKit')}</button>
           </div>
         </div>
