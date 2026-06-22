@@ -3,7 +3,7 @@
  * @module views/DetailView
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   BarChart3,
@@ -216,6 +216,7 @@ export default function DetailView({
   const [extracting, setExtracting] = useState(false);
   const [entityError, setEntityError] = useState('');
   const [highlightedCardId, setHighlightedCardId] = useState(null);
+  const highlightTimerRef = useRef(null);
 
   useEffect(() => {
     if (!selectedKnowledgeBaseId) return;
@@ -252,8 +253,8 @@ export default function DetailView({
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-    const timer = setTimeout(() => setHighlightedCardId(null), HIGHLIGHT_TIMEOUT_MS);
-    return () => clearTimeout(timer);
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightedCardId(null), HIGHLIGHT_TIMEOUT_MS);
   }, [cards]);
 
   /**
@@ -266,8 +267,8 @@ export default function DetailView({
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-    const timer = setTimeout(() => setHighlightedCardId(null), HIGHLIGHT_TIMEOUT_MS);
-    return () => clearTimeout(timer);
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightedCardId(null), HIGHLIGHT_TIMEOUT_MS);
   }
 
   /**
