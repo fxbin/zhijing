@@ -738,7 +738,16 @@ function App() {
             />
           )}
           {view === 'export' && <ExportView detail={knowledgeBaseDetail} setView={go} />}
-          {view === 'weread' && <WeReadView />}
+          {view === 'weread' && (
+            <WeReadView
+              knowledgeBases={knowledgeBases}
+              selectedKnowledgeBaseId={selectedKnowledgeBaseId}
+              onOpenKnowledgeBase={(id) => {
+                if (id && id !== selectedKnowledgeBaseId) setSelectedKnowledgeBaseId(id);
+                go('detail');
+              }}
+            />
+          )}
           {view === 'settings' && <SettingsView initialSection={settingsSection} onSectionConsumed={() => setSettingsSection(null)} setView={go} />}
         </div>
       </section>
