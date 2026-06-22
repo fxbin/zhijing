@@ -25,6 +25,11 @@ import {
   getWeReadSettings,
   getWeReadShelf,
   importWeReadBook,
+  syncWeReadShelf,
+  readWeReadBookMetaList,
+  readWeReadSyncState,
+  computeWeReadStats,
+  previewWeReadBook,
   loadFilter,
   recordExport,
   getKnowledgeBaseAnalytics,
@@ -844,6 +849,53 @@ export function buildApi() {
       }
       request.log.error({ error }, 'import weread book failed');
       return reply.code(500).send({ error: 'Failed to import WeRead book.' });
+    }
+  });
+
+  app.post<{ Body: { force?: boolean } }>('/api/weread/sync', async (request, reply) => {
+    try {
+      const force = request.body?.force === true;
+      return await syncWeReadShelf(force);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'sync weread shelf failed');
+      return reply.code(500).send({ error: 'Failed to sync WeRead shelf.' });
+    }
+  });
+
+  app.get('/api/weread/meta', async (request, reply) => {
+    try {
+      return { books: readWeReadBookMetaList(), syncState: readWeReadSyncState() };
+    } catch (error) {
+      request.log.error({ error }, 'read weread meta failed');
+      return reply.code(500).send({ error: 'Failed to read WeRead meta.' });
+    }
+  });
+
+  app.get('/api/weread/stats', async (request, reply) => {
+    try {
+      return computeWeReadStats();
+    } catch (error) {
+      request.log.error({ error }, 'compute weread stats failed');
+      return reply.code(500).send({ error: 'Failed to compute WeRead stats.' });
+    }
+  });
+
+  app.post<{ Body: { bookId?: string } }>('/api/weread/preview', async (request, reply) => {
+    const bookId = typeof request.body?.bookId === 'string' ? request.body.bookId.trim() : '';
+    if (!bookId) {
+      return reply.code(400).send({ error: 'bookId is required.' });
+    }
+    try {
+      return await previewWeReadBook(bookId);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'preview weread book failed');
+      return reply.code(500).send({ error: 'Failed to preview WeRead book.' });
     }
   });
 
