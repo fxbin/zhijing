@@ -22,6 +22,7 @@ import {
 const TAB_BOOKS = 'books';
 const TAB_ALBUMS = 'albums';
 const TAB_ARCHIVE = 'archive';
+const TAB_REVIEW = 'review';
 
 const SORT_RECENT = 'recent';
 const SORT_TITLE = 'title';
@@ -1078,6 +1079,12 @@ export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseI
     return arr;
   }, [filteredBooks, sort]);
 
+  const reviewBooks = useMemo(() => {
+    return books
+      .filter((b) => b.materialId)
+      .sort((a, b) => (b.readUpdateTime || 0) - (a.readUpdateTime || 0));
+  }, [books]);
+
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el) return;
@@ -1396,6 +1403,15 @@ export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseI
         >
           {t('weread.archive')} <span className="weread-tab-count">{configured === false ? '—' : archiveGroups.length}</span>
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === TAB_REVIEW}
+          className={activeTab === TAB_REVIEW ? 'is-active' : ''}
+          onClick={() => setActiveTab(TAB_REVIEW)}
+        >
+          {t('weread.review')} <span className="weread-tab-count">{configured === false ? '—' : reviewBooks.length}</span>
+        </button>
       </nav>
 
       {configured && !error && (
@@ -1654,6 +1670,25 @@ export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseI
                 );
               })}
             </div>
+          )
+        )}
+
+        {configured && !loading && !error && shelfBooks && activeTab === TAB_REVIEW && (
+          reviewBooks.length === 0 ? (
+            <div className="weread-empty">
+              <div className="weread-empty-icon"><BookmarkCheck size={40} /></div>
+              <strong>{t('weread.reviewEmpty')}</strong>
+              <p>{t('weread.reviewEmptyHint')}</p>
+            </div>
+          ) : (
+            <>
+              <div className="weread-result-count">
+                {t('weread.reviewCount', { count: reviewBooks.length })}
+              </div>
+              <div className={`weread-grid weread-grid--${view}`}>
+                {reviewBooks.map(renderBookCard)}
+              </div>
+            </>
           )
         )}
       </div>
