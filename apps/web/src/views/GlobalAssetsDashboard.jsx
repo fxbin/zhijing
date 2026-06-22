@@ -41,6 +41,7 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact })
   const [filterLoaded, setFilterLoaded] = useState(false);
   const [expandedMaterials, setExpandedMaterials] = useState(false);
   const [expandedCards, setExpandedCards] = useState(false);
+  const [expandedArtifacts, setExpandedArtifacts] = useState(false);
 
   useEffect(() => {
     if (filterLoaded) return;
@@ -84,14 +85,14 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact })
   }, [filterLoaded, filterCardType, filterClaimStatus, filterSort, filterKeyword]);
 
   const metrics = [
-    { id: 'knowledgeBases', label: t('assets.metric.knowledgeBases'), value: data.totals.knowledgeBases, body: t('assets.metric.knowledgeBasesBody') },
-    { id: 'materials', label: t('assets.metric.materials'), value: data.totals.materials, body: t('assets.metric.materialsBody') },
-    { id: 'cards', label: t('assets.metric.cards'), value: data.totals.cards, body: t('assets.metric.cardsBody') },
-    { id: 'artifacts', label: t('assets.metric.artifacts'), value: data.totals.artifacts, body: t('assets.metric.artifactsBody') },
-    { id: 'tasks', label: t('assets.metric.tasks'), value: data.totals.tasks, body: t('assets.metric.tasksBody') },
-    { id: 'sourcedCards', label: t('assets.metric.sourcedCards'), value: data.totals.sourcedCards, body: t('assets.metric.sourcedCardsBody') },
-    { id: 'needsReview', label: t('assets.metric.needsReview'), value: data.totals.reviewMaterials, body: t('assets.metric.needsReviewBody') },
-    { id: 'duplicateSignals', label: t('assets.metric.duplicateSignals'), value: data.totals.duplicateSignals, body: t('assets.metric.duplicateSignalsBody') },
+    { id: 'knowledgeBases', label: t('assets.metric.knowledgeBases'), value: data.totals.knowledgeBases, body: t('assets.metric.knowledgeBasesBody'), drillTarget: null },
+    { id: 'materials', label: t('assets.metric.materials'), value: data.totals.materials, body: t('assets.metric.materialsBody'), drillTarget: 'library' },
+    { id: 'cards', label: t('assets.metric.cards'), value: data.totals.cards, body: t('assets.metric.cardsBody'), drillTarget: 'detail' },
+    { id: 'artifacts', label: t('assets.metric.artifacts'), value: data.totals.artifacts, body: t('assets.metric.artifactsBody'), drillTarget: 'export' },
+    { id: 'tasks', label: t('assets.metric.tasks'), value: data.totals.tasks, body: t('assets.metric.tasksBody'), drillTarget: null },
+    { id: 'sourcedCards', label: t('assets.metric.sourcedCards'), value: data.totals.sourcedCards, body: t('assets.metric.sourcedCardsBody'), drillTarget: 'detail' },
+    { id: 'needsReview', label: t('assets.metric.needsReview'), value: data.totals.reviewMaterials, body: t('assets.metric.needsReviewBody'), drillTarget: 'library' },
+    { id: 'duplicateSignals', label: t('assets.metric.duplicateSignals'), value: data.totals.duplicateSignals, body: t('assets.metric.duplicateSignalsBody'), drillTarget: null },
   ];
 
   const CARD_TYPE_OPTIONS = ['all', 'concept', 'method', 'case', 'step', 'viewpoint', 'fact', 'question', 'general'];
@@ -124,7 +125,9 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact })
     ? filteredCards
     : filteredCards.slice(0, PREVIEW_LIMIT_CARDS);
 
-  const displayedArtifacts = data.allArtifacts.slice(0, PREVIEW_LIMIT_ARTIFACTS);
+  const displayedArtifacts = expandedArtifacts
+    ? data.allArtifacts
+    : data.allArtifacts.slice(0, PREVIEW_LIMIT_ARTIFACTS);
 
   async function resetFilter() {
     setFilterCardType('all');
@@ -151,13 +154,22 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact })
       <AdvancedOpsTabs active="assets" setView={setView} />
 
       <div className="advanced-metric-grid">
-        {metrics.map((metric) => (
-          <article className="advanced-metric-card" key={metric.id}>
-            <span>{metric.label}</span>
-            <strong>{metric.value}</strong>
-            <small>{metric.body}</small>
-          </article>
-        ))}
+        {metrics.map((metric) => {
+          const clickable = Boolean(metric.drillTarget);
+          const Tag = clickable ? 'button' : 'article';
+          return (
+            <Tag
+              className={`advanced-metric-card${clickable ? ' is-clickable' : ''}`}
+              key={metric.id}
+              type={clickable ? 'button' : undefined}
+              onClick={clickable ? () => setView(metric.drillTarget) : undefined}
+            >
+              <span>{metric.label}</span>
+              <strong>{metric.value}</strong>
+              <small>{metric.body}</small>
+            </Tag>
+          );
+        })}
       </div>
 
       <section className="assets-filter-bar">
@@ -288,9 +300,9 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact })
                 <button
                   type="button"
                   className="asset-show-all"
-                  onClick={() => setView('library')}
+                  onClick={() => setExpandedArtifacts((prev) => !prev)}
                 >
-                  {t('common.showAll')}
+                  {expandedArtifacts ? t('compare.collapse') : t('common.showAll')}
                 </button>
               )}
             </>

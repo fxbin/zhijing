@@ -6980,6 +6980,18 @@ button { cursor: pointer; }
   color: var(--muted);
 }
 
+.advanced-metric-card.is-clickable {
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.advanced-metric-card.is-clickable:hover {
+  border-color: var(--scholar-blue, #2C5F8D);
+  box-shadow: 0 4px 12px rgba(44, 95, 141, 0.12);
+  transform: translateY(-1px);
+}
+
 .advanced-panel-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

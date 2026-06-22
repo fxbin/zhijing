@@ -117,11 +117,11 @@ export function buildAdvancedOpsData({ knowledgeBases, materials, detail, tasks 
   const detailMaterials = detail.materials ?? [];
   const detailCards = detail.cards ?? [];
   const detailArtifacts = detail.artifacts ?? [];
-  const allMaterials = mergeById([...materials, ...detailMaterials]);
+  const allMaterials = detailMaterials;
   const allCards = detailCards;
   const allArtifacts = detailArtifacts;
-  const totalMaterials = knowledgeBases.reduce((sum, base) => sum + (base.sourceCount ?? 0), 0) || allMaterials.length;
-  const totalCards = knowledgeBases.reduce((sum, base) => sum + (base.cardCount ?? 0), 0) || allCards.length;
+  const totalMaterials = allMaterials.length;
+  const totalCards = allCards.length;
   const sourcedCards = allCards.filter((card) => card.claimStatus === 'sourced').length;
   const reviewMaterials = allMaterials.filter((item) => item.parseStatus === 'needs_review' || item.parseStatus === 'failed');
   const duplicateMaterials = duplicateGroups(allMaterials, (item) => item.sourceUrl || item.rawInput || item.title);
