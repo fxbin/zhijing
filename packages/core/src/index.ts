@@ -100,8 +100,17 @@ import {
   type WeReadBookmarkList,
   type WeReadReviewList,
   type WeReadShelf,
+  type WeReadShelfArchive,
   type WeReadShelfBook,
   type WeReadImportResult,
+  type WeReadBookMetaRow,
+  type WeReadSyncStateRow,
+  type WeReadStatsResponse,
+  type WeReadCategorySlice,
+  type WeReadYearTrend,
+  type WeReadRecentBook,
+  type WeReadPreviewNote,
+  type WeReadPreviewResult,
 } from './weread.js';
 
 type PersistedModelProviderConfig = Partial<{
@@ -211,6 +220,12 @@ type KnowledgeRepository = {
   readWeReadApiKey(): string | null;
   writeWeReadApiKey(apiKey: string): void;
   deleteWeReadApiKey(): void;
+  syncWeReadBookMeta(books: WeReadShelfBook[], archiveYearMap: Map<string, string>): void;
+  readWeReadBookMetaList(): WeReadBookMetaRow[];
+  readWeReadSyncState(): WeReadSyncStateRow | null;
+  writeWeReadSyncState(state: WeReadSyncStateRow): void;
+  updateWeReadBookMetaImport(bookId: string, materialId: string, bookmarkCount: number): void;
+  computeWeReadStats(): WeReadStatsResponse;
 };
 
 type GeneratedCard = {
@@ -565,6 +580,126 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
 
   deleteWeReadApiKey() {
     this.wereadApiKey = null;
+  }
+
+  private wereadBookMeta: WeReadBookMetaRow[] = [];
+  private wereadSyncState: WeReadSyncStateRow | null = null;
+
+  syncWeReadBookMeta(books: WeReadShelfBook[], archiveYearMap: Map<string, string>): void {
+    const nowIso = now();
+    const seenIds = new Set<string>();
+    for (const book of books) {
+      seenIds.add(book.bookId);
+      const existing = this.wereadBookMeta.find((row) => row.bookId === book.bookId);
+      if (existing) {
+        existing.title = book.title;
+        existing.author = book.author;
+        existing.cover = book.cover ?? null;
+        existing.category = book.category ?? null;
+        existing.finishReading = book.finishReading ?? 0;
+        existing.readUpdateTime = book.readUpdateTime ?? null;
+        existing.secret = book.secret ?? 0;
+        existing.archiveYear = archiveYearMap.get(book.bookId) ?? null;
+        existing.presentOnShelf = 1;
+        existing.lastSyncedAt = nowIso;
+      } else {
+        this.wereadBookMeta.push({
+          bookId: book.bookId,
+          title: book.title,
+          author: book.author,
+          cover: book.cover ?? null,
+          category: book.category ?? null,
+          finishReading: book.finishReading ?? 0,
+          readUpdateTime: book.readUpdateTime ?? null,
+          secret: book.secret ?? 0,
+          archiveYear: archiveYearMap.get(book.bookId) ?? null,
+          presentOnShelf: 1,
+          materialId: null,
+          bookmarkCount: null,
+          firstSeenAt: nowIso,
+          lastSyncedAt: nowIso,
+        });
+      }
+    }
+    for (const row of this.wereadBookMeta) {
+      if (!seenIds.has(row.bookId)) {
+        row.presentOnShelf = 0;
+      }
+    }
+  }
+
+  readWeReadBookMetaList(): WeReadBookMetaRow[] {
+    return this.wereadBookMeta.filter((row) => row.presentOnShelf === 1);
+  }
+
+  readWeReadSyncState(): WeReadSyncStateRow | null {
+    return this.wereadSyncState;
+  }
+
+  writeWeReadSyncState(state: WeReadSyncStateRow): void {
+    this.wereadSyncState = state;
+  }
+
+  updateWeReadBookMetaImport(bookId: string, materialId: string, bookmarkCount: number): void {
+    const row = this.wereadBookMeta.find((row) => row.bookId === bookId);
+    if (row) {
+      row.materialId = materialId;
+      row.bookmarkCount = bookmarkCount;
+    }
+  }
+
+  computeWeReadStats(): WeReadStatsResponse {
+    const rows = this.wereadBookMeta.filter((row) => row.presentOnShelf === 1);
+    const totalBooks = rows.length;
+    const finishedBooks = rows.filter((row) => row.finishReading === 1).length;
+    const importedToZhijing = rows.filter((row) => row.materialId !== null).length;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const activeLast7Days = rows.filter((row) => row.readUpdateTime && row.readUpdateTime >= nowSec - 7 * 86400).length;
+    const activeLast30Days = rows.filter((row) => row.readUpdateTime && row.readUpdateTime >= nowSec - 30 * 86400).length;
+
+    const categoryMap = new Map<string, number>();
+    for (const row of rows) {
+      const cat = row.category || '未分类';
+      categoryMap.set(cat, (categoryMap.get(cat) ?? 0) + 1);
+    }
+    const categoryDistribution: WeReadCategorySlice[] = Array.from(categoryMap.entries())
+      .map(([category, count]) => ({ category, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const yearMap = new Map<string, number>();
+    for (const row of rows) {
+      if (row.archiveYear) {
+        yearMap.set(row.archiveYear, (yearMap.get(row.archiveYear) ?? 0) + 1);
+      }
+    }
+    const archiveYearTrend: WeReadYearTrend[] = Array.from(yearMap.entries())
+      .map(([year, count]) => ({ year, count }))
+      .sort((a, b) => (a.year ?? '').localeCompare(b.year ?? ''));
+
+    const topBooks: WeReadRecentBook[] = rows
+      .filter((row) => row.readUpdateTime !== null)
+      .sort((a, b) => (b.readUpdateTime ?? 0) - (a.readUpdateTime ?? 0))
+      .slice(0, 5)
+      .map((row) => ({
+        bookId: row.bookId,
+        title: row.title,
+        author: row.author,
+        cover: row.cover,
+        readUpdateTime: row.readUpdateTime,
+        finishReading: row.finishReading === 1,
+      }));
+
+    return {
+      totalBooks,
+      finishedBooks,
+      inProgressBooks: totalBooks - finishedBooks,
+      importedToZhijing,
+      categoryDistribution,
+      archiveYearTrend,
+      recentReading: { activeLast7Days, activeLast30Days, topBooks },
+      lastSyncedAt: this.wereadSyncState?.lastFullSyncAt ?? null,
+      lastSyncError: this.wereadSyncState?.lastSyncError ?? null,
+    };
   }
 }
 
@@ -1450,6 +1585,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       CREATE INDEX IF NOT EXISTS idx_messages_knowledge_base_id ON messages(knowledge_base_id);
     `);
     this.ensureWeReadSettingsTable();
+    this.ensureWeReadBookMetaTable();
+    this.ensureWeReadSyncStateTable();
     this.ensureMaterialMediaColumn();
     this.ensureMaterialStatusTimelineColumn();
     this.ensureMaterialTranscriptColumns();
@@ -1662,6 +1799,194 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         updated_at TEXT NOT NULL
       );
     `);
+  }
+
+  private ensureWeReadBookMetaTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS weread_book_meta (
+        book_id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        author TEXT,
+        cover TEXT,
+        category TEXT,
+        finish_reading INTEGER NOT NULL DEFAULT 0,
+        read_update_time INTEGER,
+        secret INTEGER NOT NULL DEFAULT 0,
+        archive_year TEXT,
+        present_on_shelf INTEGER NOT NULL DEFAULT 1,
+        material_id TEXT REFERENCES materials(id) ON DELETE SET NULL,
+        bookmark_count INTEGER,
+        first_seen_at TEXT NOT NULL,
+        last_synced_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_weread_book_meta_finish ON weread_book_meta(finish_reading);
+      CREATE INDEX IF NOT EXISTS idx_weread_book_meta_archive_year ON weread_book_meta(archive_year);
+      CREATE INDEX IF NOT EXISTS idx_weread_book_meta_read_update_time ON weread_book_meta(read_update_time DESC);
+      CREATE INDEX IF NOT EXISTS idx_weread_book_meta_material_id ON weread_book_meta(material_id);
+    `);
+  }
+
+  private ensureWeReadSyncStateTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS weread_sync_state (
+        id TEXT PRIMARY KEY,
+        shelf_update_time INTEGER,
+        total_books INTEGER,
+        last_full_sync_at TEXT,
+        last_sync_error TEXT
+      );
+    `);
+  }
+
+  syncWeReadBookMeta(books: WeReadShelfBook[], archiveYearMap: Map<string, string>): void {
+    const nowIso = now();
+    const seenIds = new Set<string>();
+    const upsertStmt = this.db.prepare(`
+      INSERT INTO weread_book_meta (
+        book_id, title, author, cover, category,
+        finish_reading, read_update_time, secret, archive_year,
+        present_on_shelf, first_seen_at, last_synced_at
+      ) VALUES (
+        @bookId, @title, @author, @cover, @category,
+        @finishReading, @readUpdateTime, @secret, @archiveYear,
+        1, @nowIso, @nowIso
+      )
+      ON CONFLICT(book_id) DO UPDATE SET
+        title = @title,
+        author = @author,
+        cover = @cover,
+        category = @category,
+        finish_reading = @finishReading,
+        read_update_time = @readUpdateTime,
+        secret = @secret,
+        archive_year = @archiveYear,
+        present_on_shelf = 1,
+        last_synced_at = @nowIso
+    `);
+    for (const book of books) {
+      seenIds.add(book.bookId);
+      upsertStmt.run({
+        bookId: book.bookId,
+        title: book.title,
+        author: book.author,
+        cover: book.cover ?? null,
+        category: book.category ?? null,
+        finishReading: book.finishReading ?? 0,
+        readUpdateTime: book.readUpdateTime ?? null,
+        secret: book.secret ?? 0,
+        archiveYear: archiveYearMap.get(book.bookId) ?? null,
+        nowIso,
+      });
+    }
+    const seenJson = JSON.stringify(Array.from(seenIds));
+    this.db.prepare(`
+      UPDATE weread_book_meta SET present_on_shelf = 0
+      WHERE book_id NOT IN (SELECT value FROM json_each(?)) AND present_on_shelf = 1
+    `).run(seenJson);
+  }
+
+  readWeReadBookMetaList(): WeReadBookMetaRow[] {
+    return this.db.prepare(`
+      SELECT book_id AS bookId, title, author, cover, category,
+             finish_reading AS finishReading, read_update_time AS readUpdateTime,
+             secret, archive_year AS archiveYear, present_on_shelf AS presentOnShelf,
+             material_id AS materialId, bookmark_count AS bookmarkCount,
+             first_seen_at AS firstSeenAt, last_synced_at AS lastSyncedAt
+      FROM weread_book_meta WHERE present_on_shelf = 1
+      ORDER BY read_update_time DESC
+    `).all() as WeReadBookMetaRow[];
+  }
+
+  readWeReadSyncState(): WeReadSyncStateRow | null {
+    const row = this.db.prepare(`
+      SELECT shelf_update_time AS shelfUpdateTime, total_books AS totalBooks,
+             last_full_sync_at AS lastFullSyncAt, last_sync_error AS lastSyncError
+      FROM weread_sync_state WHERE id = 'default'
+    `).get() as WeReadSyncStateRow | undefined;
+    return row ?? null;
+  }
+
+  writeWeReadSyncState(state: WeReadSyncStateRow): void {
+    this.db.prepare(`
+      INSERT INTO weread_sync_state (id, shelf_update_time, total_books, last_full_sync_at, last_sync_error)
+      VALUES ('default', @shelfUpdateTime, @totalBooks, @lastFullSyncAt, @lastSyncError)
+      ON CONFLICT(id) DO UPDATE SET
+        shelf_update_time = @shelfUpdateTime,
+        total_books = @totalBooks,
+        last_full_sync_at = @lastFullSyncAt,
+        last_sync_error = @lastSyncError
+    `).run({
+      shelfUpdateTime: state.shelfUpdateTime,
+      totalBooks: state.totalBooks,
+      lastFullSyncAt: state.lastFullSyncAt,
+      lastSyncError: state.lastSyncError,
+    });
+  }
+
+  updateWeReadBookMetaImport(bookId: string, materialId: string, bookmarkCount: number): void {
+    this.db.prepare(`
+      UPDATE weread_book_meta SET material_id = ?, bookmark_count = ?
+      WHERE book_id = ?
+    `).run(materialId, bookmarkCount, bookId);
+  }
+
+  computeWeReadStats(): WeReadStatsResponse {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const sevenDaysAgo = nowSec - 7 * 86400;
+    const thirtyDaysAgo = nowSec - 30 * 86400;
+
+    const totals = this.db.prepare(`
+      SELECT
+        COUNT(*) AS totalBooks,
+        SUM(finish_reading = 1) AS finishedBooks,
+        SUM(material_id IS NOT NULL) AS importedToZhijing,
+        SUM(CASE WHEN read_update_time >= ? THEN 1 ELSE 0 END) AS activeLast7Days,
+        SUM(CASE WHEN read_update_time >= ? THEN 1 ELSE 0 END) AS activeLast30Days
+      FROM weread_book_meta WHERE present_on_shelf = 1
+    `).get(sevenDaysAgo, thirtyDaysAgo) as {
+      totalBooks: number;
+      finishedBooks: number;
+      importedToZhijing: number;
+      activeLast7Days: number;
+      activeLast30Days: number;
+    };
+
+    const categoryRows = this.db.prepare(`
+      SELECT COALESCE(NULLIF(category, ''), '未分类') AS category, COUNT(*) AS count
+      FROM weread_book_meta WHERE present_on_shelf = 1
+      GROUP BY 1 ORDER BY count DESC
+    `).all() as WeReadCategorySlice[];
+
+    const yearRows = this.db.prepare(`
+      SELECT archive_year AS year, COUNT(*) AS count
+      FROM weread_book_meta WHERE present_on_shelf = 1 AND archive_year IS NOT NULL
+      GROUP BY 1 ORDER BY year ASC
+    `).all() as WeReadYearTrend[];
+
+    const topBookRows = this.db.prepare(`
+      SELECT book_id AS bookId, title, author, cover,
+             read_update_time AS readUpdateTime, finish_reading AS finishReading
+      FROM weread_book_meta WHERE present_on_shelf = 1 AND read_update_time IS NOT NULL
+      ORDER BY read_update_time DESC LIMIT 5
+    `).all() as unknown as WeReadRecentBook[];
+
+    const syncState = this.readWeReadSyncState();
+
+    return {
+      totalBooks: totals.totalBooks,
+      finishedBooks: totals.finishedBooks,
+      inProgressBooks: totals.totalBooks - totals.finishedBooks,
+      importedToZhijing: totals.importedToZhijing,
+      categoryDistribution: categoryRows,
+      archiveYearTrend: yearRows,
+      recentReading: {
+        activeLast7Days: totals.activeLast7Days,
+        activeLast30Days: totals.activeLast30Days,
+        topBooks: topBookRows.map((row) => ({ ...row, finishReading: Boolean(row.finishReading) })),
+      },
+      lastSyncedAt: syncState?.lastFullSyncAt ?? null,
+      lastSyncError: syncState?.lastSyncError ?? null,
+    };
   }
 
   private ensureArtifactSubtypeColumn() {
@@ -6000,7 +6325,20 @@ export function getKnowledgeBasePath(id: string): KnowledgeBasePath | undefined 
 }
 
 export { WeReadError };
-export type { WeReadShelf, WeReadShelfBook, WeReadImportResult };
+export type {
+  WeReadShelf,
+  WeReadShelfArchive,
+  WeReadShelfBook,
+  WeReadImportResult,
+  WeReadBookMetaRow,
+  WeReadSyncStateRow,
+  WeReadStatsResponse,
+  WeReadCategorySlice,
+  WeReadYearTrend,
+  WeReadRecentBook,
+  WeReadPreviewNote,
+  WeReadPreviewResult,
+};
 
 /**
  * 获取微信读书配置状态。
@@ -6094,7 +6432,7 @@ export async function importWeReadBook(bookId: string, knowledgeBaseId?: string)
     knowledgeBaseId: base.id,
     type: 'text',
     rawInput: contentText,
-    sourceUrl: `weread://reading?bId=${bookId}`,
+    sourceUrl: `https://weread.qq.com/#bot/book/${bookId}`,
     platform: 'weread',
     title: `《${bookInfo.title}》阅读笔记`,
     contentText,
@@ -6122,10 +6460,175 @@ export async function importWeReadBook(bookId: string, knowledgeBaseId?: string)
   createArtifact(base, material, contentText, generated);
   touchKnowledgeBase(base.id);
 
+  const importedBookmarkCount = bookmarks.updated?.length ?? 0;
+  repository.updateWeReadBookMetaImport(bookId, material.id, importedBookmarkCount);
+
   return {
     materialId: material.id,
     title: material.title,
     contentText,
+    bookmarkCount: importedBookmarkCount,
+    reviewCount: reviews.reviews?.length ?? 0,
+  };
+}
+
+const WEREAD_SYNC_STALE_MS = 10 * 60 * 1000;
+
+/**
+ * 同步微信读书书架到本地缓存（SWR 模式）。
+ *
+ * @param force - true 时强制全量同步，忽略时间窗与 updateTime 短路
+ * @returns 同步结果摘要
+ * @throws {KnowledgeCoreError} 未配置 API Key 时抛出
+ */
+export async function syncWeReadShelf(force = false): Promise<{
+  synced: boolean;
+  totalBooks: number;
+  skipped: boolean;
+  error: string | null;
+}> {
+  const apiKey = repository.readWeReadApiKey();
+  if (!apiKey) {
+    throw new KnowledgeCoreError('未配置微信读书 API Key', 400);
+  }
+
+  const existingState = repository.readWeReadSyncState();
+  const nowMs = Date.now();
+
+  if (!force && existingState?.lastFullSyncAt) {
+    const lastSyncMs = new Date(existingState.lastFullSyncAt).getTime();
+    if (nowMs - lastSyncMs < WEREAD_SYNC_STALE_MS) {
+      return {
+        synced: false,
+        totalBooks: existingState.totalBooks,
+        skipped: true,
+        error: null,
+      };
+    }
+  }
+
+  const client = new WeReadClient(apiKey);
+
+  try {
+    const shelf = await client.getShelf();
+
+    const archiveYearMap = new Map<string, string>();
+    for (const archive of shelf.archive ?? []) {
+      for (const bookId of archive.bookIds ?? []) {
+        archiveYearMap.set(bookId, archive.name);
+      }
+    }
+
+    repository.syncWeReadBookMeta(shelf.books ?? [], archiveYearMap);
+
+    const totalBooks = shelf.books?.length ?? 0;
+    repository.writeWeReadSyncState({
+      shelfUpdateTime: shelf.updateTime ?? null,
+      totalBooks,
+      lastFullSyncAt: now(),
+      lastSyncError: null,
+    });
+
+    return { synced: true, totalBooks, skipped: false, error: null };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    repository.writeWeReadSyncState({
+      shelfUpdateTime: existingState?.shelfUpdateTime ?? null,
+      totalBooks: existingState?.totalBooks ?? 0,
+      lastFullSyncAt: existingState?.lastFullSyncAt ?? now(),
+      lastSyncError: errorMsg,
+    });
+    throw error;
+  }
+}
+
+/**
+ * 读取本地缓存的书架元数据列表（不触发远端同步）。
+ *
+ * @returns 本地缓存的书架书籍列表
+ */
+export function readWeReadBookMetaList(): WeReadBookMetaRow[] {
+  return repository.readWeReadBookMetaList();
+}
+
+/**
+ * 读取本地缓存的同步状态。
+ *
+ * @returns 同步状态，未同步过返回 null
+ */
+export function readWeReadSyncState(): WeReadSyncStateRow | null {
+  return repository.readWeReadSyncState();
+}
+
+/**
+ * 计算微信读书统计数据（基于本地缓存，不触发远端请求）。
+ *
+ * @returns 统计结果
+ */
+export function computeWeReadStats(): WeReadStatsResponse {
+  return repository.computeWeReadStats();
+}
+
+/**
+ * 预览单本书的笔记与划线（不导入）。
+ *
+ * @param bookId - 微信读书书籍 ID
+ * @returns 结构化笔记列表，供前端勾选
+ * @throws {KnowledgeCoreError} 未配置 API Key 时抛出
+ */
+export async function previewWeReadBook(bookId: string): Promise<WeReadPreviewResult> {
+  const apiKey = repository.readWeReadApiKey();
+  if (!apiKey) {
+    throw new KnowledgeCoreError('未配置微信读书 API Key', 400);
+  }
+
+  const client = new WeReadClient(apiKey);
+  const [bookInfo, bookmarks, reviews] = await Promise.all([
+    client.getBookInfo(bookId),
+    client.getBookmarkList(bookId),
+    client.getReviewList(bookId),
+  ]);
+
+  const chapterMap = new Map<number, string>();
+  for (const chapter of bookmarks.chapters ?? []) {
+    chapterMap.set(chapter.chapterUid, chapter.title);
+  }
+
+  const notes: WeReadPreviewNote[] = [];
+
+  for (const bookmark of bookmarks.updated ?? []) {
+    notes.push({
+      type: 'bookmark',
+      noteId: bookmark.bookmarkId,
+      chapterUid: bookmark.chapterUid,
+      chapterTitle: chapterMap.get(bookmark.chapterUid) ?? '未知章节',
+      content: bookmark.markText,
+      createTime: bookmark.createTime,
+      range: bookmark.range,
+    });
+  }
+
+  for (const review of reviews.reviews ?? []) {
+    notes.push({
+      type: 'review',
+      noteId: review.review.reviewId,
+      chapterUid: 0,
+      chapterTitle: review.review.chapterName ?? '我的想法',
+      content: review.review.content,
+      createTime: review.review.createTime,
+    });
+  }
+
+  notes.sort((a, b) => a.createTime - b.createTime);
+
+  return {
+    bookId,
+    title: bookInfo.title,
+    author: bookInfo.author,
+    cover: bookInfo.cover ?? null,
+    category: bookInfo.category ?? null,
+    chapters: bookmarks.chapters ?? [],
+    notes,
     bookmarkCount: bookmarks.updated?.length ?? 0,
     reviewCount: reviews.reviews?.length ?? 0,
   };

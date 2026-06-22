@@ -35,11 +35,94 @@ export type WeReadShelfAlbum = {
   };
 };
 
+export type WeReadShelfArchive = {
+  name: string;
+  bookIds: string[];
+  albumIds: string[];
+};
+
 export type WeReadShelf = {
   books: WeReadShelfBook[];
   albums: WeReadShelfAlbum[];
   mp?: unknown;
-  bookCount: number;
+  archive?: WeReadShelfArchive[];
+  bookCount?: number;
+  updateTime?: number;
+};
+
+export type WeReadBookMetaRow = {
+  bookId: string;
+  title: string;
+  author: string;
+  cover: string | null;
+  category: string | null;
+  finishReading: number;
+  readUpdateTime: number | null;
+  secret: number;
+  archiveYear: string | null;
+  presentOnShelf: number;
+  materialId: string | null;
+  bookmarkCount: number | null;
+  firstSeenAt: string;
+  lastSyncedAt: string;
+};
+
+export type WeReadSyncStateRow = {
+  shelfUpdateTime: number | null;
+  totalBooks: number;
+  lastFullSyncAt: string | null;
+  lastSyncError: string | null;
+};
+
+export type WeReadCategorySlice = { category: string; count: number };
+
+export type WeReadYearTrend = { year: string | null; count: number };
+
+export type WeReadRecentBook = {
+  bookId: string;
+  title: string;
+  author: string | null;
+  cover: string | null;
+  readUpdateTime: number | null;
+  finishReading: boolean;
+};
+
+export type WeReadStatsResponse = {
+  totalBooks: number;
+  finishedBooks: number;
+  inProgressBooks: number;
+  importedToZhijing: number;
+  categoryDistribution: WeReadCategorySlice[];
+  archiveYearTrend: WeReadYearTrend[];
+  recentReading: {
+    activeLast7Days: number;
+    activeLast30Days: number;
+    topBooks: WeReadRecentBook[];
+  };
+  lastSyncedAt: string | null;
+  lastSyncError: string | null;
+};
+
+export type WeReadPreviewNote = {
+  type: 'bookmark' | 'review';
+  noteId: string;
+  chapterUid: number;
+  chapterTitle: string;
+  content: string;
+  createTime: number;
+  range?: string;
+};
+
+export type WeReadPreviewResult = {
+  bookId: string;
+  title: string;
+  author: string;
+  cover: string | null;
+  category: string | null;
+  chapters: WeReadChapter[];
+  notes: WeReadPreviewNote[];
+  bookmarkCount: number;
+  reviewCount: number;
 };
 
 export type WeReadBookInfo = {
