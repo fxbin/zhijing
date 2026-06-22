@@ -1274,6 +1274,25 @@ button { cursor: pointer; }
   object-fit: cover;
 }
 
+.material-cover-thumb.is-video {
+  position: relative;
+}
+
+.material-video-badge {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(9, 20, 38, 0.32);
+  color: #fff;
+  pointer-events: none;
+}
+
+.material-video-badge svg {
+  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.5));
+}
+
 .image-lightbox {
   position: fixed;
   inset: 0;

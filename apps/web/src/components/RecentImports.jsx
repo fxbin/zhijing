@@ -4,12 +4,12 @@
  */
 
 import { useState } from 'react';
-import { Upload, X } from 'lucide-react';
+import { PlayCircle, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import EmptyState from './EmptyState';
 import { useParseStatusLabel } from '../utils/i18nLabels';
-import { materialMediaUrls, isImageUrl, proxyImageUrl } from '../utils/material';
+import { materialMediaUrls, isImageUrl, isVideoUrl, proxyImageUrl } from '../utils/material';
 
 /**
  * 判断材料是否为小红书且包含可展示的图片封面。
@@ -20,6 +20,18 @@ function resolveXiaohongshuCover(item) {
   if (item.platform !== 'xiaohongshu') return undefined;
   const urls = materialMediaUrls(item);
   return urls.find((url) => isImageUrl(url));
+}
+
+/**
+ * 判断小红书材料是否为视频笔记。
+ * 当 mediaUrls 中存在视频 URL 时认定为视频笔记。
+ * @param {object} item - 材料对象
+ * @returns {boolean} 是否为视频笔记
+ */
+function isXiaohongshuVideoNote(item) {
+  if (item.platform !== 'xiaohongshu') return false;
+  const urls = materialMediaUrls(item);
+  return urls.some((url) => isVideoUrl(url));
 }
 
 /**
@@ -56,6 +68,7 @@ export default function RecentImports({ materials, onViewAll }) {
           <EmptyState title={t('library.empty.title')} body={t('library.empty.body')} />
         ) : materials.map((item, index) => {
           const coverUrl = resolveXiaohongshuCover(item);
+          const isVideo = isXiaohongshuVideoNote(item);
           return (
             <article className={`material-card ${item.state}`} key={item.id ?? `recent-${index}`}>
               <div className="material-meta">
@@ -67,11 +80,16 @@ export default function RecentImports({ materials, onViewAll }) {
               {coverUrl && (
                 <button
                   aria-label={t('recentImports.viewCover')}
-                  className="material-cover-thumb"
+                  className={`material-cover-thumb${isVideo ? ' is-video' : ''}`}
                   onClick={() => setPreviewUrl(coverUrl)}
                   type="button"
                 >
                   <img alt={item.title} loading="lazy" src={proxyImageUrl(coverUrl)} />
+                  {isVideo && (
+                    <span className="material-video-badge" aria-hidden="true">
+                      <PlayCircle size={28} />
+                    </span>
+                  )}
                 </button>
               )}
               <p>{item.summary}</p>
