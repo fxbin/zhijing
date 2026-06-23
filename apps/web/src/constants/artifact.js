@@ -14,10 +14,50 @@ export const SUBTYPE_TO_VARIANT = {
 };
 
 export const CREATE_KB_KITS = [
-  { key: 'industry', title: '行业研究', hint: '追踪行业动态与竞争格局', icon: Network },
-  { key: 'content', title: '内容创作', hint: '系统化管理选题与素材', icon: FileText },
-  { key: 'reading', title: '读书笔记', hint: '结构化提取书中核心观点', icon: BookOpen },
+  {
+    key: 'industry',
+    title: '行业研究',
+    hint: '追踪行业动态与竞争格局',
+    icon: Network,
+    defaults: { audience: 'intermediate', depth: 'standard', scope: 'panorama' },
+  },
+  {
+    key: 'content',
+    title: '内容创作',
+    hint: '系统化管理选题与素材',
+    icon: FileText,
+    defaults: { audience: 'intermediate', depth: 'overview', scope: 'focused' },
+  },
+  {
+    key: 'reading',
+    title: '读书笔记',
+    hint: '结构化提取书中核心观点',
+    icon: BookOpen,
+    defaults: { audience: 'beginner', depth: 'standard', scope: 'focused' },
+  },
 ];
+
+export const KB_AUDIENCE_OPTIONS = [
+  { key: 'beginner' },
+  { key: 'intermediate' },
+  { key: 'expert' },
+];
+
+export const KB_DEPTH_OPTIONS = [
+  { key: 'overview' },
+  { key: 'standard' },
+  { key: 'deep' },
+];
+
+export const KB_SCOPE_OPTIONS = [
+  { key: 'focused' },
+  { key: 'panorama' },
+  { key: 'cross' },
+];
+
+export const DEFAULT_KB_AUDIENCE = 'intermediate';
+export const DEFAULT_KB_DEPTH = 'standard';
+export const DEFAULT_KB_SCOPE = 'panorama';
 
 export const kitCards = [
   { id: 'learning_research', title: '学习研究 Kit', body: '把一个知识库整理成主题研究摘要、核心概念表和待补资料清单。', status: 'Ready', icon: BookOpen },

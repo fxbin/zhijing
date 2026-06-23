@@ -11,6 +11,7 @@ import {
   createModelProviderProfile,
   deleteMaterial,
   deleteModelProviderProfile,
+  deleteKnowledgeBase,
   describeCloudBackupStatus,
   editArtifactSection,
   editCardContent,
@@ -69,13 +70,17 @@ import {
   testWeReadConnection,
   unarchiveCard,
   unarchiveMaterial,
+  updateKnowledgeBaseMeta,
   updateModelProviderProfile,
 } from '@zhijing/core';
 import type {
   AssignMaterialRequest,
   CompleteMaterialReviewRequest,
   CreateModelProviderProfileRequest,
+  IntakeAudience,
+  IntakeDepth,
   IntakeRequest,
+  IntakeScope,
   KnowledgeKitId,
   MaterialType,
   ParseStatus,
@@ -85,11 +90,20 @@ import type {
   TestModelProviderSettingsRequest,
   UpdateModelProviderProfileRequest,
 } from '@zhijing/shared';
+import {
+  INTAKE_AUDIENCE_VALUES,
+  INTAKE_DEPTH_VALUES,
+  INTAKE_SCOPE_VALUES,
+} from '@zhijing/shared';
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ];
+
+const INTAKE_AUDIENCE_SET = new Set<string>(INTAKE_AUDIENCE_VALUES);
+const INTAKE_DEPTH_SET = new Set<string>(INTAKE_DEPTH_VALUES);
+const INTAKE_SCOPE_SET = new Set<string>(INTAKE_SCOPE_VALUES);
 
 function resolveAllowedOrigins(): string[] {
   const raw = process.env.ZHIJING_ALLOWED_ORIGINS;
@@ -288,6 +302,42 @@ export function buildApi() {
     }
   });
 
+  app.put<{
+    Params: { id: string };
+    Body: { title?: string; summary?: string };
+  }>('/api/knowledge-bases/:id', async (request, reply) => {
+    const { title, summary } = request.body ?? {};
+    if (title !== undefined && !title.trim()) {
+      return reply.code(400).send({ error: '知识库标题不能为空。' });
+    }
+    try {
+      const base = updateKnowledgeBaseMeta(request.params.id, title, summary);
+      if (!base) {
+        return reply.code(404).send({ error: '知识库不存在。' });
+      }
+      return { knowledgeBase: base };
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'update knowledge base failed');
+      return reply.code(500).send({ error: 'Update knowledge base failed.' });
+    }
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/knowledge-bases/:id', async (request, reply) => {
+    try {
+      const ok = deleteKnowledgeBase(request.params.id);
+      if (!ok) {
+        return reply.code(404).send({ error: '知识库不存在。' });
+      }
+      return { ok: true };
+    } catch (error) {
+      request.log.error({ error }, 'delete knowledge base failed');
+      return reply.code(500).send({ error: 'Delete knowledge base failed.' });
+    }
+  });
+
   app.get<{
     Querystring: {
       q?: string;
@@ -304,9 +354,11 @@ export function buildApi() {
       status?: string;
       q?: string;
       limit?: string;
+      knowledgeBaseId?: string;
     };
   }>('/api/materials', async (request) => ({
     materials: listMaterials({
+      knowledgeBaseId: request.query.knowledgeBaseId || undefined,
       type: parseMaterialType(request.query.type),
       status: parseStatus(request.query.status),
       query: request.query.q,
@@ -791,10 +843,27 @@ export function buildApi() {
       return reply.code(400).send({ error: 'Input is required.' });
     }
 
+    const audience = request.body?.audience;
+    const depth = request.body?.depth;
+    const scope = request.body?.scope;
+
+    if (audience !== undefined && !INTAKE_AUDIENCE_SET.has(audience)) {
+      return reply.code(400).send({ error: 'audience 字段值非法。' });
+    }
+    if (depth !== undefined && !INTAKE_DEPTH_SET.has(depth)) {
+      return reply.code(400).send({ error: 'depth 字段值非法。' });
+    }
+    if (scope !== undefined && !INTAKE_SCOPE_SET.has(scope)) {
+      return reply.code(400).send({ error: 'scope 字段值非法。' });
+    }
+
     try {
       return await intakeKnowledge({
         input,
         knowledgeBaseId: request.body.knowledgeBaseId,
+        audience,
+        depth,
+        scope,
       });
     } catch (error) {
       request.log.error({ error }, 'intake failed');

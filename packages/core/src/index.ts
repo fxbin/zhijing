@@ -33,8 +33,11 @@ import {
   type SavedFilter,
   type SavedFilterScope,
   type CompleteMaterialReviewRequest,
+  type IntakeAudience,
+  type IntakeDepth,
   type IntakeRequest,
   type IntakeResult,
+  type IntakeScope,
   type KnowledgeBaseAnalytics,
   type KnowledgeBaseDetail,
   type KnowledgeBasePath,
@@ -169,6 +172,7 @@ type KnowledgeRepository = {
   updateKnowledgeBase(base: KnowledgeBaseSummary): void;
   listKnowledgeBases(): KnowledgeBaseSummary[];
   findKnowledgeBase(id: string): KnowledgeBaseSummary | undefined;
+  deleteKnowledgeBase(id: string): void;
   insertMaterial(material: MaterialRecord): void;
   updateMaterial(material: MaterialRecord): void;
   findMaterial(id: string): MaterialRecord | undefined;
@@ -302,6 +306,14 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
 
   findKnowledgeBase(id: string) {
     return this.state.knowledgeBases.find((item) => item.id === id);
+  }
+
+  deleteKnowledgeBase(id: string) {
+    this.state.knowledgeBases = this.state.knowledgeBases.filter((item) => item.id !== id);
+    this.state.materials = this.state.materials.filter((item) => item.knowledgeBaseId !== id);
+    this.state.cards = this.state.cards.filter((item) => item.knowledgeBaseId !== id);
+    this.state.artifacts = this.state.artifacts.filter((item) => item.knowledgeBaseId !== id);
+    this.state.entities = this.state.entities.filter((item) => item.knowledgeBaseId !== id);
   }
 
   insertMaterial(material: MaterialRecord) {
@@ -887,6 +899,10 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   findKnowledgeBase(id: string) {
     const row = this.db.prepare('SELECT * FROM knowledge_bases WHERE id = ?').get(id) as KnowledgeBaseRow | undefined;
     return row ? mapKnowledgeBase(row) : undefined;
+  }
+
+  deleteKnowledgeBase(id: string) {
+    this.db.prepare('DELETE FROM knowledge_bases WHERE id = ?').run(id);
   }
 
   insertMaterial(material: MaterialRecord) {
@@ -3174,6 +3190,10 @@ async function generateKnowledge(
   });
 }
 
+const DEFAULT_INTAKE_AUDIENCE: IntakeAudience = 'intermediate';
+const DEFAULT_INTAKE_DEPTH: IntakeDepth = 'standard';
+const DEFAULT_INTAKE_SCOPE: IntakeScope = 'panorama';
+
 export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeResult> {
   const value = request.input.trim();
   if (!value) {
@@ -3182,7 +3202,13 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
 
   const kind = classifyInput(value);
   const workflow = kind === 'question' ? 'answer_question' : kind === 'theme' ? 'create_knowledge_base' : 'ingest_material';
-  const task = createTask(workflow, { input: value, knowledgeBaseId: request.knowledgeBaseId });
+  const task = createTask(workflow, {
+    input: value,
+    knowledgeBaseId: request.knowledgeBaseId,
+    audience: request.audience,
+    depth: request.depth,
+    scope: request.scope,
+  });
 
   try {
     let base: KnowledgeBaseSummary | undefined;
@@ -3261,6 +3287,11 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
         materialId: material?.id,
         hasSourceMaterial: Boolean(material),
         parseStatus: material?.parseStatus,
+        ...(kind === 'theme' ? {
+          audience: request.audience ?? DEFAULT_INTAKE_AUDIENCE,
+          depth: request.depth ?? DEFAULT_INTAKE_DEPTH,
+          scope: request.scope ?? DEFAULT_INTAKE_SCOPE,
+        } : {}),
       },
     );
     const generated = generation.output;
@@ -5097,6 +5128,44 @@ export function resetTranscriptionCapabilityCache() {
 
 export function listKnowledgeBases() {
   return repository.listKnowledgeBases();
+}
+
+/**
+ * 更新知识库元信息（标题与摘要）。
+ * @param id - 知识库 ID
+ * @param title - 新标题（可选，为空则不更新）
+ * @param summary - 新摘要（可选，为空则不更新）
+ * @returns 更新后的知识库摘要，知识库不存在时返回 undefined
+ * @author fxbin
+ */
+export function updateKnowledgeBaseMeta(id: string, title?: string, summary?: string): KnowledgeBaseSummary | undefined {
+  const base = repository.findKnowledgeBase(id);
+  if (!base) return undefined;
+  const trimmedTitle = title?.trim();
+  if (trimmedTitle !== undefined && !trimmedTitle) {
+    throw new KnowledgeCoreError('知识库标题不能为空。', 400);
+  }
+  const next: KnowledgeBaseSummary = {
+    ...base,
+    title: trimmedTitle || base.title,
+    summary: summary !== undefined ? (summary.trim() || base.summary) : base.summary,
+    updatedAt: now(),
+  };
+  repository.updateKnowledgeBase(next);
+  return next;
+}
+
+/**
+ * 删除知识库，级联删除其下所有资料、卡片、产物等关联数据。
+ * @param id - 知识库 ID
+ * @returns true 表示删除成功，false 表示知识库不存在
+ * @author fxbin
+ */
+export function deleteKnowledgeBase(id: string): boolean {
+  const base = repository.findKnowledgeBase(id);
+  if (!base) return false;
+  repository.deleteKnowledgeBase(id);
+  return true;
 }
 
 type ListMaterialsOptions = {

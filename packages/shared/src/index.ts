@@ -23,9 +23,42 @@ export type ClaimStatus = 'ai_skeleton' | 'sourced' | 'user_confirmed' | 'unsupp
 
 export type KnowledgeKitId = 'learning_research' | 'content_creation' | 'product_research' | 'topic_decomposition';
 
+/**
+ * 创建知识库时的意图澄清字段：受众水平。
+ * - beginner 零基础，主动补前置知识与术语解释
+ * - intermediate 有基础，默认掌握领域常识
+ * - expert 专家级，跳过共识聚焦争议与前沿
+ * @author fxbin
+ */
+export const INTAKE_AUDIENCE_VALUES = ['beginner', 'intermediate', 'expert'] as const;
+export type IntakeAudience = typeof INTAKE_AUDIENCE_VALUES[number];
+
+/**
+ * 创建知识库时的意图澄清字段：内容深度。
+ * - overview 入门概览，5-8 张卡片
+ * - standard 系统掌握，12-20 张卡片
+ * - deep 深度研究，20-35 张卡片含推导与前沿
+ * @author fxbin
+ */
+export const INTAKE_DEPTH_VALUES = ['overview', 'standard', 'deep'] as const;
+export type IntakeDepth = typeof INTAKE_DEPTH_VALUES[number];
+
+/**
+ * 创建知识库时的意图澄清字段：范围边界。
+ * - focused 聚焦核心概念群
+ * - panorama 全景覆盖主要分支
+ * - cross 跨领域延伸，额外生成交叉应用卡
+ * @author fxbin
+ */
+export const INTAKE_SCOPE_VALUES = ['focused', 'panorama', 'cross'] as const;
+export type IntakeScope = typeof INTAKE_SCOPE_VALUES[number];
+
 export interface IntakeRequest {
   input: string;
   knowledgeBaseId?: string;
+  audience?: IntakeAudience;
+  depth?: IntakeDepth;
+  scope?: IntakeScope;
 }
 
 export interface ModelProviderModel {

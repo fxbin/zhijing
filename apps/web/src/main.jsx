@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './i18n';
 import {
+  AlertTriangle,
   Archive,
   Database,
   FolderOpen,
@@ -82,6 +83,8 @@ function App() {
   const [kitRunResult, setKitRunResult] = useState(null);
   const [isCreateKbOpen, setIsCreateKbOpen] = useState(false);
   const [createKbError, setCreateKbError] = useState(null);
+  const [editingKb, setEditingKb] = useState(null);
+  const [deletingKb, setDeletingKb] = useState(null);
   const [settingsSection, setSettingsSection] = useState(null);
   const [navOpen, setNavOpen] = useState(false);
   const [topSearchQuery, setTopSearchQuery] = useState('');
@@ -343,7 +346,37 @@ function App() {
     go('library');
   };
 
-  const submit = async (overrideValue) => {
+  async function handleSaveKnowledgeBase(id, title, summary) {
+    try {
+      const response = await fetch(`/api/knowledge-bases/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, summary }),
+      });
+      if (!response.ok) throw new Error('Update failed.');
+      const result = await response.json();
+      setKnowledgeBases((current) => current.map((base) => base.id === id ? result.knowledgeBase : base));
+      setEditingKb(null);
+    } catch (err) {
+      setEditingKb((current) => ({ ...current, error: err.message || t('knowledgeBase.edit') }));
+    }
+  }
+
+  async function handleDeleteKnowledgeBase(id) {
+    try {
+      const response = await fetch(`/api/knowledge-bases/${id}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Delete failed.');
+      setKnowledgeBases((current) => current.filter((base) => base.id !== id));
+      if (selectedKnowledgeBaseId === id) {
+        setSelectedKnowledgeBaseId(null);
+      }
+      setDeletingKb(null);
+    } catch (err) {
+      setDeletingKb((current) => ({ ...current, error: err.message || t('knowledgeBase.delete') }));
+    }
+  }
+
+  const submit = async (overrideValue, options) => {
     const value = (overrideValue ?? query).trim();
     if (!value || isSubmitting) return;
     setIsSubmitting(true);
@@ -353,7 +386,7 @@ function App() {
       const response = await fetch('/api/intake', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: value }),
+        body: JSON.stringify({ input: value, ...options }),
       });
 
       if (!response.ok) {
@@ -620,6 +653,8 @@ function App() {
             <KnowledgeBaseSwitcher
               knowledgeBases={knowledgeBases}
               onCreate={() => { setCreateKbError(null); setIsCreateKbOpen(true); }}
+              onDelete={(base) => setDeletingKb({ id: base.id, title: base.title })}
+              onEdit={(base) => setEditingKb({ id: base.id, title: base.title, summary: base.summary ?? '', error: null })}
               onSelect={(id) => {
                 setSelectedKnowledgeBaseId(id);
               }}
@@ -689,6 +724,7 @@ function App() {
               onNavigate={go}
               onParseMaterial={parseMaterial}
               parsingMaterialId={parsingMaterialId}
+              selectedKnowledgeBaseId={selectedKnowledgeBaseId}
             />
           )}
           {view === 'search' && (
@@ -776,10 +812,14 @@ function App() {
         <CreateKbModal
           error={createKbError}
           onClose={() => { setCreateKbError(null); setIsCreateKbOpen(false); }}
-          onSubmit={(theme) => {
+          onSubmit={(payload) => {
             setCreateKbError(null);
             setIsCreateKbOpen(false);
-            submit(theme);
+            submit(payload.theme, {
+              audience: payload.audience,
+              depth: payload.depth,
+              scope: payload.scope,
+            });
           }}
           onCreateEmpty={async (title, summary) => {
             try {
@@ -808,6 +848,74 @@ function App() {
             }
           }}
         />
+      )}
+
+      {editingKb && (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal-card">
+            <div className="modal-head">
+              <h3>{t('knowledgeBase.edit')}</h3>
+            </div>
+            <div className="modal-body">
+              <label className="modal-field">
+                <span>{t('knowledgeBase.editTitleLabel')}</span>
+                <input
+                  autoFocus
+                  type="text"
+                  value={editingKb.title}
+                  onChange={(event) => setEditingKb((current) => ({ ...current, title: event.target.value }))}
+                />
+              </label>
+              <label className="modal-field">
+                <span>{t('knowledgeBase.editSummaryLabel')}</span>
+                <textarea
+                  rows={3}
+                  value={editingKb.summary}
+                  onChange={(event) => setEditingKb((current) => ({ ...current, summary: event.target.value }))}
+                />
+              </label>
+              {editingKb.error && <p className="modal-error" role="alert">{editingKb.error}</p>}
+            </div>
+            <div className="modal-foot">
+              <button className="btn-ghost" type="button" onClick={() => setEditingKb(null)}>{t('common.cancel')}</button>
+              <button
+                className="btn-primary"
+                disabled={!editingKb.title.trim()}
+                type="button"
+                onClick={() => handleSaveKnowledgeBase(editingKb.id, editingKb.title, editingKb.summary)}
+              >
+                {t('knowledgeBase.editSave')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingKb && (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal-card">
+            <div className="modal-head">
+              <AlertTriangle size={24} />
+              <h3>{t('knowledgeBase.deleteConfirmTitle')}</h3>
+            </div>
+            <div className="modal-body">
+              <p>{t('knowledgeBase.deleteConfirmHint')}</p>
+              <p><strong>{deletingKb.title}</strong></p>
+              <p className="modal-error">{t('knowledgeBase.deleteConfirmBody')}</p>
+              {deletingKb.error && <p className="modal-error" role="alert">{deletingKb.error}</p>}
+            </div>
+            <div className="modal-foot">
+              <button className="btn-ghost" type="button" onClick={() => setDeletingKb(null)}>{t('common.cancel')}</button>
+              <button
+                className="btn-primary danger"
+                type="button"
+                onClick={() => handleDeleteKnowledgeBase(deletingKb.id)}
+              >
+                {t('common.confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );
