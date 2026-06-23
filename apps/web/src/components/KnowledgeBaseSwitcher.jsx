@@ -1,20 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronUp, Database, Plus } from 'lucide-react';
+import { ChevronDown, ChevronUp, Database, Pencil, Plus, Trash2 } from 'lucide-react';
 import { formatBaseMeta } from '../utils/knowledge';
 
 /**
  * 顶部知识库切换器。
  *
- * 显示当前选中的知识库，点击后展开下拉面板切换或新建知识库。
+ * 显示当前选中的知识库，点击后展开下拉面板切换、新建、编辑或删除知识库。
  *
  * @param {object} props
  * @param {Array<{id?: string, title: string}>} props.knowledgeBases - 知识库列表
  * @param {string|null} props.selectedKnowledgeBaseId - 当前选中的知识库 ID
  * @param {(id: string) => void} props.onSelect - 选择知识库时的回调
  * @param {() => void} props.onCreate - 点击新建知识库时的回调
+ * @param {(base: {id: string, title: string, summary: string}) => void} props.onEdit - 点击编辑知识库时的回调
+ * @param {(base: {id: string, title: string}) => void} props.onDelete - 点击删除知识库时的回调
+ * @author fxbin
  */
-export default function KnowledgeBaseSwitcher({ knowledgeBases, selectedKnowledgeBaseId, onSelect, onCreate }) {
+export default function KnowledgeBaseSwitcher({ knowledgeBases, selectedKnowledgeBaseId, onSelect, onCreate, onEdit, onDelete }) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const panelRef = useRef(null);
@@ -45,6 +48,18 @@ export default function KnowledgeBaseSwitcher({ knowledgeBases, selectedKnowledg
    */
   function selectBase(id) {
     onSelect(id);
+    setIsOpen(false);
+  }
+
+  /**
+   * 阻止事件冒泡，避免点击操作按钮时触发 selectBase。
+   * @param {React.MouseEvent} event
+   * @param {(base: {id: string, title: string, summary?: string}) => void} handler
+   * @param {{id: string, title: string, summary?: string}} base
+   */
+  function handleAction(event, handler, base) {
+    event.stopPropagation();
+    handler(base);
     setIsOpen(false);
   }
 
@@ -86,6 +101,26 @@ export default function KnowledgeBaseSwitcher({ knowledgeBases, selectedKnowledg
                   <strong>{base.title}</strong>
                   <small>{formatBaseMeta(base)}</small>
                 </div>
+                {base.id && (
+                  <div className="kb-switcher-actions">
+                    <button
+                      aria-label={t('knowledgeBase.edit')}
+                      className="kb-switcher-action"
+                      onClick={(event) => handleAction(event, onEdit, base)}
+                      type="button"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      aria-label={t('knowledgeBase.delete')}
+                      className="kb-switcher-action danger"
+                      onClick={(event) => handleAction(event, onDelete, base)}
+                      type="button"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )}
               </button>
             ))}
           </div>

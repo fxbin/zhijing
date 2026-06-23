@@ -57,7 +57,7 @@ const SEARCH_DEBOUNCE_MS = 300;
  * @returns {JSX.Element} 资料库视图
  * @author fxbin
  */
-export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMutation, onNavigate, onParseMaterial, parsingMaterialId }) {
+export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMutation, onNavigate, onParseMaterial, parsingMaterialId, selectedKnowledgeBaseId }) {
   const { t } = useTranslation();
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState('all');
@@ -91,6 +91,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
     setIsLoading(true);
     try {
       const params = new URLSearchParams({ limit: '180' });
+      if (selectedKnowledgeBaseId) params.set('knowledgeBaseId', selectedKnowledgeBaseId);
       if (searchValue.trim()) params.set('q', searchValue.trim());
       const response = await fetch(`/api/materials?${params.toString()}`);
       if (!response.ok) throw new Error('Material list unavailable.');
@@ -112,6 +113,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
         setIsLoading(true);
         try {
           const params = new URLSearchParams({ limit: '180' });
+          if (selectedKnowledgeBaseId) params.set('knowledgeBaseId', selectedKnowledgeBaseId);
           if (searchValue.trim()) params.set('q', searchValue.trim());
           const response = await fetch(`/api/materials?${params.toString()}`);
           if (!response.ok) throw new Error('Material list unavailable.');
@@ -135,7 +137,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [searchValue, t]);
+  }, [searchValue, selectedKnowledgeBaseId, t]);
 
   const filteredItems = items.filter((item) => {
     if (filter === 'all') return true;
