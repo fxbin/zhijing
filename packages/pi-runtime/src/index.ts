@@ -796,8 +796,22 @@ export function mockArtifactSubtypeOutput(subtype: ArtifactSubtype, prompt: stri
   return { summary, sections, openQuestions: ['该主题还有哪些值得展开的方向？'] };
 }
 
+const TITLE_PREFIX_PATTERN = /^(我想(?:了解|学习|知道|研究|搞懂|搞清楚|系统学习|知道下)|帮我(?:查|找|了解|整理|总结|看看)|请问|关于|怎么|如何|有没有人|推荐下)\s*(?:一下|关于)?\s*/;
+const TITLE_SUFFIX_PUNCT = /[?？!！。.…,，、\s]+$/;
+const TITLE_MAX_LENGTH = 32;
+
+/**
+ * 从原始文本中提取精炼标题（mock fallback 使用）。
+ * 优先取首行，去除常见口语前缀与尾部标点，最后截断到最大长度。
+ * @param input - 原始文本
+ * @returns 精炼后的标题
+ * @author fxbin
+ */
 function compactTitle(input: string) {
-  const cleaned = input.replace(/\s+/g, ' ').trim();
+  const firstLine = input.split('\n')[0] ?? input;
+  const noPrefix = firstLine.replace(TITLE_PREFIX_PATTERN, '');
+  const noSuffix = noPrefix.replace(TITLE_SUFFIX_PUNCT, '');
+  const cleaned = noSuffix.replace(/\s+/g, ' ').trim();
   if (!cleaned) return '未命名知识库';
-  return cleaned.length > 32 ? `${cleaned.slice(0, 32)}...` : cleaned;
+  return cleaned.length > TITLE_MAX_LENGTH ? `${cleaned.slice(0, TITLE_MAX_LENGTH)}...` : cleaned;
 }
