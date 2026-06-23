@@ -866,6 +866,9 @@ export function buildApi() {
         scope,
       });
     } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
       request.log.error({ error }, 'intake failed');
       return reply.code(500).send({ error: 'Intake failed.' });
     }

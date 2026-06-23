@@ -172,6 +172,7 @@ type KnowledgeRepository = {
   updateKnowledgeBase(base: KnowledgeBaseSummary): void;
   listKnowledgeBases(): KnowledgeBaseSummary[];
   findKnowledgeBase(id: string): KnowledgeBaseSummary | undefined;
+  findKnowledgeBaseByTitle(title: string): KnowledgeBaseSummary | undefined;
   deleteKnowledgeBase(id: string): void;
   insertMaterial(material: MaterialRecord): void;
   updateMaterial(material: MaterialRecord): void;
@@ -306,6 +307,10 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
 
   findKnowledgeBase(id: string) {
     return this.state.knowledgeBases.find((item) => item.id === id);
+  }
+
+  findKnowledgeBaseByTitle(title: string) {
+    return this.state.knowledgeBases.find((item) => item.title === title);
   }
 
   deleteKnowledgeBase(id: string) {
@@ -898,6 +903,11 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
   findKnowledgeBase(id: string) {
     const row = this.db.prepare('SELECT * FROM knowledge_bases WHERE id = ?').get(id) as KnowledgeBaseRow | undefined;
+    return row ? mapKnowledgeBase(row) : undefined;
+  }
+
+  findKnowledgeBaseByTitle(title: string) {
+    const row = this.db.prepare('SELECT * FROM knowledge_bases WHERE title = ? LIMIT 1').get(title) as KnowledgeBaseRow | undefined;
     return row ? mapKnowledgeBase(row) : undefined;
   }
 
@@ -1634,6 +1644,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureModelProviderProfilesTable();
     this.ensureKnowledgeBaseNodePositionsTable();
     this.ensureArchivedColumns();
+    this.ensureKnowledgeBaseTitleUnique();
   }
 
   private ensureMaterialMediaColumn() {
@@ -1819,6 +1830,28 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       this.db.exec('ALTER TABLE cards ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;');
     }
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_cards_archived ON cards(archived, knowledge_base_id);');
+  }
+
+  /**
+   * 为 knowledge_bases.title 建立唯一索引（兜底防重名）。
+   * 迁移前先检测重名：无重名则建索引升级为双重保护；有重名则跳过并告警，退化为应用层检查，不阻断启动。
+   * @author fxbin
+   */
+  private ensureKnowledgeBaseTitleUnique() {
+    const duplicates = this.db.prepare(
+      'SELECT title, COUNT(*) AS cnt FROM knowledge_bases GROUP BY title HAVING cnt > 1'
+    ).all() as Array<{ title: string; cnt: number }>;
+
+    if (duplicates.length > 0) {
+      console.warn(
+        `[migrate] 检测到 ${duplicates.length} 个重名知识库标题，跳过 UNIQUE 索引创建。请手动清理后重启以启用唯一约束。`
+      );
+      return;
+    }
+
+    this.db.exec(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_bases_title ON knowledge_bases(title)'
+    );
   }
 
   /**
@@ -2930,10 +2963,49 @@ function id(prefix: string) {
   return `${prefix}_${randomUUID().slice(0, 8)}`;
 }
 
+const TITLE_PREFIX_PATTERN = /^(我想(?:了解|学习|知道|研究|搞懂|搞清楚|系统学习|知道下)|帮我(?:查|找|了解|整理|总结|看看)|请问|关于|怎么|如何|有没有人|推荐下)\s*(?:一下|关于)?\s*/;
+const TITLE_SUFFIX_PUNCT = /[?？!！。.…,，、\s]+$/;
+const TITLE_MAX_LENGTH = 32;
+
+/**
+ * 从原始文本中提取精炼标题。
+ * 优先取首行，去除常见口语前缀与尾部标点，最后截断到最大长度。
+ * AI 可用时由 LLM 返回生成标题，此函数仅作截断保护与 mock fallback。
+ * @param input - 原始文本
+ * @returns 精炼后的标题
+ * @author fxbin
+ */
 function compactTitle(input: string) {
-  const cleaned = input.replace(/\s+/g, ' ').trim();
+  const firstLine = input.split('\n')[0] ?? input;
+  const noPrefix = firstLine.replace(TITLE_PREFIX_PATTERN, '');
+  const noSuffix = noPrefix.replace(TITLE_SUFFIX_PUNCT, '');
+  const cleaned = noSuffix.replace(/\s+/g, ' ').trim();
   if (!cleaned) return '未命名知识库';
-  return cleaned.length > 32 ? `${cleaned.slice(0, 32)}...` : cleaned;
+  return cleaned.length > TITLE_MAX_LENGTH ? `${cleaned.slice(0, TITLE_MAX_LENGTH)}...` : cleaned;
+}
+
+const TITLE_DUPLICATE_SUFFIX_START = 2;
+const TITLE_DUPLICATE_SUFFIX_MAX = 99;
+
+/**
+ * 为 AI 生成等非用户显式命名场景生成不冲突的标题。
+ * 若原标题未被占用则直接返回；否则追加 (2)、(3)... 直到找到可用标题。
+ * @param rawTitle - 原始标题（未经 compactTitle 处理）
+ * @returns 不与现有知识库冲突的标题
+ * @author fxbin
+ */
+function ensureUniqueTitle(rawTitle: string): string {
+  const compacted = compactTitle(rawTitle);
+  if (!repository.findKnowledgeBaseByTitle(compacted)) {
+    return compacted;
+  }
+  for (let suffix = TITLE_DUPLICATE_SUFFIX_START; suffix <= TITLE_DUPLICATE_SUFFIX_MAX; suffix += 1) {
+    const candidate = `${compacted} (${suffix})`;
+    if (!repository.findKnowledgeBaseByTitle(candidate)) {
+      return candidate;
+    }
+  }
+  return `${compacted} (${Date.now()})`;
 }
 
 function titleFromLink(input: string) {
@@ -3010,8 +3082,12 @@ export function createEmptyKnowledgeBase(title: string, summary?: string): Knowl
   if (!trimmedTitle) {
     throw new KnowledgeCoreError('知识库标题不能为空。', 400);
   }
-  const finalSummary = (summary?.trim()) || `围绕「${trimmedTitle}」的知识库，等待导入资料。`;
-  return createKnowledgeBase(compactTitle(trimmedTitle), finalSummary);
+  const finalTitle = compactTitle(trimmedTitle);
+  if (repository.findKnowledgeBaseByTitle(finalTitle)) {
+    throw new KnowledgeCoreError(`标题「${finalTitle}」已存在。`, 409);
+  }
+  const finalSummary = (summary?.trim()) || `围绕「${finalTitle}」的知识库，等待导入资料。`;
+  return createKnowledgeBase(finalTitle, finalSummary);
 }
 
 function createMaterial(base: KnowledgeBaseSummary, request: IntakeRequest, type: MaterialRecord['type']) {
@@ -3297,7 +3373,7 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
     const generated = generation.output;
 
     const knowledgeBase = base ?? createKnowledgeBase(
-      compactTitle(generated.title ?? value),
+      ensureUniqueTitle(generated.title ?? value),
       generated.summary ?? `围绕「${compactTitle(value)}」生成的知识库骨架。`,
     );
 
@@ -3693,7 +3769,7 @@ function resolveMaterialAssignmentTarget(input: AssignMaterialRequest, material:
 
   const title = normalizeSecret(input.newKnowledgeBaseTitle);
   if (title) {
-    return createKnowledgeBase(compactTitle(title), `由资料「${material.title}」新建的知识库。`);
+    return createKnowledgeBase(ensureUniqueTitle(title), `由资料「${material.title}」新建的知识库。`);
   }
 
   throw new KnowledgeCoreError('Target knowledge base or new title is required.', 400);
@@ -5145,9 +5221,16 @@ export function updateKnowledgeBaseMeta(id: string, title?: string, summary?: st
   if (trimmedTitle !== undefined && !trimmedTitle) {
     throw new KnowledgeCoreError('知识库标题不能为空。', 400);
   }
+  const nextTitle = trimmedTitle ? compactTitle(trimmedTitle) : base.title;
+  if (nextTitle !== base.title) {
+    const existing = repository.findKnowledgeBaseByTitle(nextTitle);
+    if (existing && existing.id !== id) {
+      throw new KnowledgeCoreError(`标题「${nextTitle}」已被其他知识库占用。`, 409);
+    }
+  }
   const next: KnowledgeBaseSummary = {
     ...base,
-    title: trimmedTitle || base.title,
+    title: nextTitle,
     summary: summary !== undefined ? (summary.trim() || base.summary) : base.summary,
     updatedAt: now(),
   };
