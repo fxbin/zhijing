@@ -567,7 +567,8 @@ export interface KnowledgeMapEdge {
   id: string;
   sourceId: string;
   targetId: string;
-  relation: 'contains' | 'source' | 'supports';
+  relation: 'contains' | 'source' | 'supports' | 'contradicts' | 'related_to';
+  custom?: boolean;
 }
 
 export interface KnowledgeMapResult {
@@ -580,6 +581,8 @@ export interface KnowledgeMapResult {
     materials: number;
     cards: number;
     sourcedCards: number;
+    skeletonCards: number;
+    tensionEdges: number;
   };
 }
 
@@ -829,6 +832,29 @@ export interface KnowledgeMapNodePosition {
 
 export interface SaveKnowledgeMapNodePositionsRequest {
   positions: KnowledgeMapNodePosition[];
+}
+
+/**
+ * 自定义地图边（用户手动添加的关系）。
+ * @author fxbin
+ */
+export interface KnowledgeMapCustomEdge {
+  id: string;
+  knowledgeBaseId: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  relation: 'supports' | 'contradicts' | 'related_to';
+  createdAt: string;
+}
+
+/**
+ * 添加自定义地图边请求。
+ * @author fxbin
+ */
+export interface AddMapEdgeRequest {
+  sourceNodeId: string;
+  targetNodeId: string;
+  relation: 'supports' | 'contradicts' | 'related_to';
 }
 
 export function classifyInput(input: string): IntakeKind {

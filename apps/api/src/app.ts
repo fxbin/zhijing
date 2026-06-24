@@ -43,6 +43,8 @@ import {
   getKnowledgeMap,
   getKnowledgeBaseNodePositions,
   saveKnowledgeBaseNodePositions,
+  addMapEdge,
+  removeMapEdge,
   getTask,
   initializeArtifactSections,
   intakeKnowledge,
@@ -82,6 +84,7 @@ import {
   updateModelProviderProfile,
 } from '@zhijing/core';
 import type {
+  AddMapEdgeRequest,
   AssignMaterialRequest,
   CompleteMaterialReviewRequest,
   CreateModelProviderProfileRequest,
@@ -792,6 +795,36 @@ export function buildApi() {
       }
       request.log.error({ error }, 'save knowledge base node positions failed');
       return reply.code(500).send({ error: 'Save node positions failed.' });
+    }
+  });
+
+  app.post<{ Params: { id: string }; Body: AddMapEdgeRequest }>('/api/knowledge-bases/:id/map/edges', async (request, reply) => {
+    try {
+      const edge = addMapEdge(request.params.id, {
+        sourceNodeId: typeof request.body?.sourceNodeId === 'string' ? request.body.sourceNodeId : '',
+        targetNodeId: typeof request.body?.targetNodeId === 'string' ? request.body.targetNodeId : '',
+        relation: typeof request.body?.relation === 'string' ? (request.body.relation as AddMapEdgeRequest['relation']) : 'related_to',
+      });
+      return reply.code(201).send(edge);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'add map edge failed');
+      return reply.code(500).send({ error: 'Add map edge failed.' });
+    }
+  });
+
+  app.delete<{ Params: { id: string; edgeId: string } }>('/api/knowledge-bases/:id/map/edges/:edgeId', async (request, reply) => {
+    try {
+      removeMapEdge(request.params.id, request.params.edgeId);
+      return reply.code(204).send();
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'remove map edge failed');
+      return reply.code(500).send({ error: 'Remove map edge failed.' });
     }
   });
 

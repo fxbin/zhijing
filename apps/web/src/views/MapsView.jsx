@@ -15,6 +15,8 @@ import {
   mapKindLabel,
   describeNodeStatus,
   describeNodeMetadata,
+  describeEdgeClass,
+  getClaimStatusLegend,
 } from '../utils/map';
 
 /**
@@ -248,6 +250,75 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
   }, [pendingSave, nodePositions, selectedKnowledgeBaseId]);
 
   /**
+   * 重新加载地图数据（添加/删除边后调用）。
+   */
+  async function reloadMap() {
+    if (!selectedKnowledgeBaseId) return;
+    try {
+      const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/map`);
+      if (!response.ok) return;
+      const result = await response.json();
+      setMap(result);
+      setNodePositions(
+        (result.nodePositions ?? []).reduce((acc, position) => {
+          acc[position.nodeId] = { x: position.x, y: position.y };
+          return acc;
+        }, {}),
+      );
+    } catch {
+      // 静默忽略重载失败
+    }
+  }
+
+  /**
+   * 保存自定义关系到后端。
+   */
+  async function saveCustomRelation() {
+    if (!selectedKnowledgeBaseId || !relationEditor?.targetId || !selectedNode) return;
+    try {
+      const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/map/edges`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceNodeId: selectedNode.id,
+          targetNodeId: relationEditor.targetId,
+          relation: relationEditor.relation,
+        }),
+      });
+      if (!response.ok) {
+        setStatus(t('maps.status.saveFailed'));
+        return;
+      }
+      setStatus(t('maps.status.relationAdded'));
+      setRelationEditor(null);
+      await reloadMap();
+    } catch {
+      setStatus(t('maps.status.saveFailed'));
+    }
+  }
+
+  /**
+   * 删除自定义边。
+   * @param {string} edgeId - 边 ID
+   */
+  async function deleteCustomEdge(edgeId) {
+    if (!selectedKnowledgeBaseId) return;
+    try {
+      const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/map/edges/${edgeId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        setStatus(t('maps.status.saveFailed'));
+        return;
+      }
+      setStatus(t('maps.status.relationRemoved'));
+      await reloadMap();
+    } catch {
+      setStatus(t('maps.status.saveFailed'));
+    }
+  }
+
+  /**
    * 搜索词变化时，若当前选中节点不在匹配结果中，自动选中第一个匹配节点。
    */
   useEffect(() => {
@@ -319,6 +390,12 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
                     <span>{nodes.length} {t('maps.nodes')}</span>
                     <span>{edges.length} {t('maps.edges')}</span>
                     <span>{map.stats?.sourcedCards ?? 0} {t('maps.sourced')}</span>
+                    {map.stats?.skeletonCards > 0 && (
+                      <span className="map-stat-skeleton">{map.stats.skeletonCards} {t('maps.skeleton')}</span>
+                    )}
+                    {map.stats?.tensionEdges > 0 && (
+                      <span className="map-stat-tension">{map.stats.tensionEdges} {t('maps.tension')}</span>
+                    )}
                   </div>
                 </div>
 
@@ -339,9 +416,10 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
                         const target = layoutNodes.find((node) => node.id === edge.targetId);
                         if (!source || !target) return null;
                         const isActive = selectedNode && (edge.sourceId === selectedNode.id || edge.targetId === selectedNode.id);
+                        const edgeClass = describeEdgeClass(edge.relation, edge.custom);
                         return (
                           <line
-                            className={isActive ? 'map-edge active' : 'map-edge'}
+                            className={`${edgeClass}${isActive ? ' active' : ''}`}
                             key={edge.id}
                             x1={source.x}
                             y1={source.y}
@@ -363,6 +441,7 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
                             role="button"
                             tabIndex={0}
                             transform={`translate(${node.x}, ${node.y})`}
+                            data-status={node.status}
                             onKeyDown={(event) => {
                               if (event.key === 'Enter' || event.key === ' ') setSelectedNodeId(node.id);
                             }}
@@ -395,6 +474,17 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
                       <small>{option.count}</small>
                     </button>
                   ))}
+                </div>
+                <div className="map-claim-legend" aria-label={t('maps.claimLegend')}>
+                  <span className="map-claim-legend-title">{t('maps.claimStatus')}</span>
+                  <div className="map-claim-legend-items">
+                    {getClaimStatusLegend().map((item) => (
+                      <span className={`map-claim-chip ${item.tone}`} key={item.key}>
+                        <i className="map-claim-dot" />
+                        {item.label}
+                      </span>
+                    ))}
+                  </div>
                 </div>
                 <div className="map-floating-controls" aria-label={t('maps.zoomControls')}>
                   <button aria-label={t('common.zoomIn')} onClick={() => setZoom((value) => Math.min(value + 0.12, 1.36))} type="button">+</button>
@@ -462,7 +552,7 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
                       const isOutgoing = edge.sourceId === selectedNode.id;
                       return (
                         <article
-                          className="relation-item"
+                          className={`relation-item${edge.custom ? ' custom' : ''}`}
                           key={edge.id}
                           onClick={() => other && setSelectedNodeId(other.id)}
                           role="button"
@@ -474,6 +564,19 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
                           <span>{relationTypeLabelMap[edge.relation] ?? edge.relation}</span>
                           <strong>{other?.label ?? edge.targetId}</strong>
                           <p>{isOutgoing ? t('maps.outgoingRelation') : t('maps.incomingRelation')}</p>
+                          {edge.custom && (
+                            <button
+                              className="relation-delete-btn"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                deleteCustomEdge(edge.id);
+                              }}
+                              type="button"
+                              aria-label={t('common.delete')}
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
                         </article>
                       );
                     })}
@@ -519,12 +622,7 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
                       <button
                         type="button"
                         disabled={!relationEditor.targetId}
-                        onClick={() => {
-                          const targetNode = nodes.find((n) => n.id === relationEditor.targetId);
-                          const relationLabel = relationTypeLabelMap[relationEditor.relation] ?? relationEditor.relation;
-                          setStatus(t('maps.status.relationDraft', { source: selectedNode.label, relation: relationLabel, target: targetNode?.label ?? '' }));
-                          setRelationEditor(null);
-                        }}
+                        onClick={saveCustomRelation}
                       >
                         {t('common.save')}
                       </button>

@@ -40,7 +40,15 @@ const NODE_STATUS_META = {
   parsing: { tone: 'pending', label: '解析中' },
   failed: { tone: 'negative', label: '失败' },
   error: { tone: 'negative', label: '异常' },
+  ai_skeleton: { tone: 'skeleton', label: 'AI 骨架' },
+  sourced: { tone: 'sourced', label: '已溯源' },
+  user_confirmed: { tone: 'confirmed', label: '已确认' },
+  unsupported: { tone: 'negative', label: '无支撑' },
+  grounded: { tone: 'positive', label: '已落地' },
+  organizing: { tone: 'pending', label: '建构中' },
 };
+
+const CLAIM_STATUS_ORDER = ['ai_skeleton', 'organizing', 'sourced', 'user_confirmed', 'grounded', 'unsupported'];
 
 /**
  * 判断节点是否匹配过滤器和搜索关键词。
@@ -160,6 +168,29 @@ export function mapKindLabel(kind) {
  */
 export function describeNodeStatus(status) {
   return NODE_STATUS_META[status] ?? { tone: 'neutral', label: status ?? '未知' };
+}
+
+/**
+ * 返回边的样式类名，用于在 SVG 中区分不同关系类型。
+ * @param {string} relation - 边的关系类型
+ * @param {boolean} isCustom - 是否为用户自定义边
+ * @returns {string} CSS 类名
+ */
+export function describeEdgeClass(relation, isCustom) {
+  if (relation === 'contradicts') return 'map-edge contradicts';
+  if (relation === 'related_to') return 'map-edge related-to';
+  if (isCustom) return 'map-edge custom';
+  return 'map-edge';
+}
+
+/**
+ * 返回 claim status 的图例列表，用于地图画布上展示认知状态分布。
+ * @returns {Array<{key: string; label: string; tone: string}>} 图例项数组
+ */
+export function getClaimStatusLegend() {
+  return CLAIM_STATUS_ORDER
+    .filter((key) => NODE_STATUS_META[key])
+    .map((key) => ({ key, label: NODE_STATUS_META[key].label, tone: NODE_STATUS_META[key].tone }));
 }
 
 /**

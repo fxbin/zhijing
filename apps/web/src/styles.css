@@ -5672,6 +5672,122 @@ button { cursor: pointer; }
   opacity: 0.92;
 }
 
+.map-edge.contradicts {
+  stroke: #d4584a;
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  opacity: 0.78;
+}
+
+.map-edge.contradicts.active {
+  stroke: #b03828;
+  stroke-width: 2.8;
+  opacity: 1;
+}
+
+.map-edge.related-to {
+  stroke: #8b6fb0;
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+  opacity: 0.6;
+}
+
+.map-edge.custom {
+  stroke: #6b8e7f;
+  stroke-width: 1.8;
+  opacity: 0.72;
+}
+
+.map-stat-skeleton {
+  color: #e8a54a;
+  font-weight: 600;
+}
+
+.map-stat-tension {
+  color: #d4584a;
+  font-weight: 600;
+}
+
+.map-claim-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.map-claim-legend-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.map-claim-legend-items {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.map-claim-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.map-claim-chip .map-claim-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.map-claim-chip.skeleton .map-claim-dot { background: #e8a54a; }
+.map-claim-chip.sourced .map-claim-dot { background: #6b8e7f; }
+.map-claim-chip.confirmed .map-claim-dot { background: #2c5f8d; }
+.map-claim-chip.positive .map-claim-dot { background: #6b8e7f; }
+.map-claim-chip.pending .map-claim-dot { background: #e8a54a; }
+.map-claim-chip.negative .map-claim-dot { background: #d4584a; }
+.map-claim-chip.neutral .map-claim-dot { background: #999; }
+
+.map-svg-node.card[data-status="ai_skeleton"] circle { fill: #e8a54a; }
+.map-svg-node.card[data-status="sourced"] circle { fill: #6b8e7f; }
+.map-svg-node.card[data-status="user_confirmed"] circle { fill: #2c5f8d; }
+.map-svg-node.card[data-status="unsupported"] circle { fill: #d4584a; }
+
+.relation-item.custom {
+  border-left: 3px solid #6b8e7f;
+}
+
+.relation-delete-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: #d4584a;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.relation-delete-btn:hover {
+  opacity: 1;
+  background: rgba(212, 88, 74, 0.1);
+}
+
 .map-svg-node {
   cursor: pointer;
   outline: 0;
@@ -6008,6 +6124,7 @@ button { cursor: pointer; }
 
 .relation-item {
   cursor: pointer;
+  position: relative;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
 }
 

@@ -52,6 +52,8 @@ import {
   type KnowledgeBasePath,
   type KnowledgeMapResult,
   type KnowledgeMapNodePosition,
+  type KnowledgeMapCustomEdge,
+  type AddMapEdgeRequest,
   type PathStep,
   type SaveKnowledgeMapNodePositionsRequest,
   type KnowledgeBaseSummary,
@@ -184,6 +186,22 @@ const ATTENTION_TARGET_TYPE_CARD = 'card';
 const ATTENTION_TARGET_TYPE_LAYOUT = 'layout';
 const ATTENTION_TARGET_TYPE_QUESTION = 'question';
 
+/**
+ * 地图自定义边相关常量（P12-2）。
+ * @author fxbin
+ */
+const MAP_EDGE_ID_PREFIX = 'edge';
+const MAP_EDGE_TABLE_NAME = 'map_custom_edges';
+const MAP_EDGE_RELATION_SUPPORTS = 'supports';
+const MAP_EDGE_RELATION_CONTRADICTS = 'contradicts';
+const MAP_EDGE_RELATION_RELATED_TO = 'related_to';
+const MAP_EDGE_ALLOWED_RELATIONS: ReadonlySet<string> = new Set([
+  MAP_EDGE_RELATION_SUPPORTS,
+  MAP_EDGE_RELATION_CONTRADICTS,
+  MAP_EDGE_RELATION_RELATED_TO,
+]);
+const MAP_TENSION_EDGE_LIMIT = 20;
+
 const RECALL_TOOL_DIRECT_FETCH = 'direct_fetch';
 const RECALL_TOOL_SHALLOW = 'shallow_recall';
 const RECALL_TOOL_DEEP = 'deep_recall';
@@ -299,6 +317,7 @@ type StoreState = {
   modelProviderConfig?: PersistedModelProviderConfig;
   modelProviderProfiles: ModelProviderProfileRecord[];
   nodePositions: Record<string, Array<{ nodeId: string; x: number; y: number }>>;
+  mapCustomEdges: KnowledgeMapCustomEdge[];
   attentionSignals: AttentionSignal[];
   agentActionLogs: AgentActionLog[];
 };
@@ -322,6 +341,9 @@ type KnowledgeRepository = {
   listArchivedMaterials(knowledgeBaseId?: string): MaterialRecord[];
   getNodePositions(knowledgeBaseId: string): Array<{ nodeId: string; x: number; y: number }>;
   saveNodePositions(knowledgeBaseId: string, positions: Array<{ nodeId: string; x: number; y: number }>): void;
+  listMapCustomEdges(knowledgeBaseId: string): KnowledgeMapCustomEdge[];
+  insertMapCustomEdge(edge: KnowledgeMapCustomEdge): void;
+  deleteMapCustomEdge(knowledgeBaseId: string, edgeId: string): void;
   insertCards(cards: KnowledgeCard[]): void;
   updateCard(card: KnowledgeCard): void;
   listCards(knowledgeBaseId?: string): KnowledgeCard[];
@@ -435,6 +457,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     conflictAudit: [],
     modelProviderProfiles: [],
     nodePositions: {},
+    mapCustomEdges: [],
     attentionSignals: [],
     agentActionLogs: [],
   };
@@ -532,6 +555,20 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
 
   saveNodePositions(knowledgeBaseId: string, positions: Array<{ nodeId: string; x: number; y: number }>) {
     this.state.nodePositions[knowledgeBaseId] = positions;
+  }
+
+  listMapCustomEdges(knowledgeBaseId: string) {
+    return this.state.mapCustomEdges.filter((edge) => edge.knowledgeBaseId === knowledgeBaseId);
+  }
+
+  insertMapCustomEdge(edge: KnowledgeMapCustomEdge) {
+    this.state.mapCustomEdges.unshift(edge);
+  }
+
+  deleteMapCustomEdge(knowledgeBaseId: string, edgeId: string) {
+    this.state.mapCustomEdges = this.state.mapCustomEdges.filter(
+      (edge) => !(edge.id === edgeId && edge.knowledgeBaseId === knowledgeBaseId),
+    );
   }
 
   insertCards(cards: KnowledgeCard[]) {
@@ -1373,6 +1410,45 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       this.db.exec('ROLLBACK');
       throw error;
     }
+  }
+
+  /**
+   * 确保 map_custom_edges 表存在（P12-2）。
+   */
+  private ensureMapCustomEdgeTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS ${MAP_EDGE_TABLE_NAME} (
+        id TEXT PRIMARY KEY,
+        knowledge_base_id TEXT NOT NULL,
+        source_node_id TEXT NOT NULL,
+        target_node_id TEXT NOT NULL,
+        relation TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_map_custom_edges_kb ON ${MAP_EDGE_TABLE_NAME}(knowledge_base_id);
+    `);
+  }
+
+  listMapCustomEdges(knowledgeBaseId: string) {
+    this.ensureMapCustomEdgeTable();
+    const rows = this.db
+      .prepare(`SELECT id, knowledge_base_id, source_node_id, target_node_id, relation, created_at FROM ${MAP_EDGE_TABLE_NAME} WHERE knowledge_base_id = ? ORDER BY created_at DESC`)
+      .all(knowledgeBaseId) as Array<MapCustomEdgeRow>;
+    return rows.map(mapMapCustomEdge);
+  }
+
+  insertMapCustomEdge(edge: KnowledgeMapCustomEdge) {
+    this.ensureMapCustomEdgeTable();
+    this.db.prepare(`
+      INSERT INTO ${MAP_EDGE_TABLE_NAME} (id, knowledge_base_id, source_node_id, target_node_id, relation, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(edge.id, edge.knowledgeBaseId, edge.sourceNodeId, edge.targetNodeId, edge.relation, edge.createdAt);
+  }
+
+  deleteMapCustomEdge(knowledgeBaseId: string, edgeId: string) {
+    this.ensureMapCustomEdgeTable();
+    this.db.prepare(`DELETE FROM ${MAP_EDGE_TABLE_NAME} WHERE id = ? AND knowledge_base_id = ?`)
+      .run(edgeId, knowledgeBaseId);
   }
 
   insertCards(cards: KnowledgeCard[]) {
@@ -3124,6 +3200,32 @@ function mapAgentActionLog(row: AgentActionLogRow): AgentActionLog {
     durationMs: row.duration_ms,
     success: row.success === AGENT_ACTION_SUCCESS_TRUE,
     error: row.error ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+type MapCustomEdgeRow = {
+  id: string;
+  knowledge_base_id: string;
+  source_node_id: string;
+  target_node_id: string;
+  relation: string;
+  created_at: string;
+};
+
+/**
+ * 将 map_custom_edges 表行映射为 KnowledgeMapCustomEdge 对象。
+ * @param row - 数据库行
+ * @returns 自定义地图边对象
+ * @author fxbin
+ */
+function mapMapCustomEdge(row: MapCustomEdgeRow): KnowledgeMapCustomEdge {
+  return {
+    id: row.id,
+    knowledgeBaseId: row.knowledge_base_id,
+    sourceNodeId: row.source_node_id,
+    targetNodeId: row.target_node_id,
+    relation: row.relation as 'supports' | 'contradicts' | 'related_to',
     createdAt: row.created_at,
   };
 }
@@ -6955,7 +7057,12 @@ export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {
       mediaCount: material.mediaUrls?.length ?? 0,
     },
   }));
-  const cardNodes = cards.slice(0, 28).map((card) => ({
+  const sortedCards = [...cards].sort((a, b) => {
+    const rankA = a.claimStatus === 'sourced' ? 0 : a.claimStatus === 'user_confirmed' ? 1 : 2;
+    const rankB = b.claimStatus === 'sourced' ? 0 : b.claimStatus === 'user_confirmed' ? 1 : 2;
+    return rankA - rankB;
+  });
+  const cardNodes = sortedCards.slice(0, 28).map((card) => ({
     id: `card:${card.id}`,
     kind: 'card' as const,
     label: card.title,
@@ -6983,7 +7090,8 @@ export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {
   ];
 
   const visibleMaterialIds = new Set(materialNodes.map((node) => node.id.replace('material:', '')));
-  const edges = [
+  const visibleCardIds = new Set(cardNodes.map((node) => node.id.replace('card:', '')));
+  const structuralEdges = [
     ...materialNodes.map((node) => ({
       id: `edge:${base.id}:${node.id}`,
       sourceId: `knowledge_base:${base.id}`,
@@ -7004,6 +7112,16 @@ export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {
     }),
   ];
 
+  const tensionEdges = buildTensionEdges(id, visibleCardIds);
+  const customEdges = repository.listMapCustomEdges(id).map((edge) => ({
+    id: edge.id,
+    sourceId: edge.sourceNodeId,
+    targetId: edge.targetNodeId,
+    relation: edge.relation,
+    custom: true,
+  }));
+  const edges = [...structuralEdges, ...tensionEdges, ...customEdges];
+
   return {
     knowledgeBaseId: id,
     generatedAt: now(),
@@ -7014,8 +7132,55 @@ export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {
       materials: materials.length,
       cards: cards.length,
       sourcedCards: cards.filter((card) => card.claimStatus === 'sourced').length,
+      skeletonCards: cards.filter((card) => card.claimStatus === 'ai_skeleton').length,
+      tensionEdges: tensionEdges.length,
     },
   };
+}
+
+/**
+ * 构建知识库的张力边（P12-1）。
+ *
+ * 扫描同一知识库中标题包含对立关键词的卡片对，
+ * 生成 contradicts 类型的边，帮助用户在地图上直观发现认知冲突。
+ *
+ * @author fxbin
+ * @param knowledgeBaseId - 知识库 ID
+ * @param visibleCardIds - 当前地图上可见的卡片 ID 集合
+ * @returns 张力边数组
+ */
+function buildTensionEdges(
+  knowledgeBaseId: string,
+  visibleCardIds: Set<string>,
+): Array<{ id: string; sourceId: string; targetId: string; relation: 'contradicts'; custom?: boolean }> {
+  const cards = repository.listCards(knowledgeBaseId);
+  const tensionGroups: Array<{ sideA: KnowledgeCard[]; sideB: KnowledgeCard[] }> = [];
+  for (const [keywordA, keywordB] of TENSION_KEYWORD_PAIRS) {
+    const sideA = cards.filter((card) => card.title.includes(keywordA));
+    const sideB = cards.filter((card) => card.title.includes(keywordB));
+    if (sideA.length === 0 || sideB.length === 0) continue;
+    tensionGroups.push({ sideA, sideB });
+  }
+  const edges: Array<{ id: string; sourceId: string; targetId: string; relation: 'contradicts'; custom?: boolean }> = [];
+  const seen = new Set<string>();
+  for (const group of tensionGroups) {
+    for (const cardA of group.sideA) {
+      if (!visibleCardIds.has(cardA.id)) continue;
+      for (const cardB of group.sideB) {
+        if (!visibleCardIds.has(cardB.id)) continue;
+        const key = [cardA.id, cardB.id].sort().join('::');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        edges.push({
+          id: `tension:${cardA.id}:${cardB.id}`,
+          sourceId: `card:${cardA.id}`,
+          targetId: `card:${cardB.id}`,
+          relation: 'contradicts',
+        });
+      }
+    }
+  }
+  return edges.slice(0, MAP_TENSION_EDGE_LIMIT);
 }
 
 /**
@@ -7062,6 +7227,54 @@ export function saveKnowledgeBaseNodePositions(
     createdAt: now(),
   });
   return positions;
+}
+
+/**
+ * 添加自定义地图边（P12-2）。
+ *
+ * 用户在地图上手动添加的语义关系边（supports/contradicts/related_to），
+ * 持久化到 map_custom_edges 表，在 getKnowledgeMap 时合并返回。
+ *
+ * @author fxbin
+ * @param knowledgeBaseId - 知识库 ID
+ * @param request - 添加边请求
+ * @returns 创建的自定义边对象
+ */
+export function addMapEdge(knowledgeBaseId: string, request: AddMapEdgeRequest): KnowledgeMapCustomEdge {
+  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  if (!base) throw new KnowledgeCoreError('Knowledge base not found.', 404);
+  if (!request.sourceNodeId || !request.targetNodeId) {
+    throw new KnowledgeCoreError('边的源节点和目标节点不能为空。', 400);
+  }
+  if (request.sourceNodeId === request.targetNodeId) {
+    throw new KnowledgeCoreError('边的源节点和目标节点不能相同。', 400);
+  }
+  if (!MAP_EDGE_ALLOWED_RELATIONS.has(request.relation)) {
+    throw new KnowledgeCoreError('不支持的关系类型。', 400);
+  }
+  const edge: KnowledgeMapCustomEdge = {
+    id: id(MAP_EDGE_ID_PREFIX),
+    knowledgeBaseId,
+    sourceNodeId: request.sourceNodeId,
+    targetNodeId: request.targetNodeId,
+    relation: request.relation,
+    createdAt: now(),
+  };
+  repository.insertMapCustomEdge(edge);
+  return edge;
+}
+
+/**
+ * 删除自定义地图边（P12-2）。
+ *
+ * @author fxbin
+ * @param knowledgeBaseId - 知识库 ID
+ * @param edgeId - 边 ID
+ */
+export function removeMapEdge(knowledgeBaseId: string, edgeId: string): void {
+  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  if (!base) throw new KnowledgeCoreError('Knowledge base not found.', 404);
+  repository.deleteMapCustomEdge(knowledgeBaseId, edgeId);
 }
 
 /**
