@@ -87,7 +87,7 @@ export function splitMediaUrls(value) {
  * @returns {boolean} 是否为视频 URL
  */
 export function isVideoUrl(url) {
-  return /sns-video|\.mp4|\.mov|\.webm|\.m4v|videocdn/i.test(url);
+  return /sns-video|\.mp4|\.mov|\.webm|\.m4v|videocdn|douyinvod/i.test(url);
 }
 
 /**

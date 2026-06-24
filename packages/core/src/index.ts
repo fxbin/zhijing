@@ -4226,7 +4226,7 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
     }
 
     if (kind === 'link' && base && material) {
-      if (material.platform === 'xiaohongshu') {
+      if (material.platform === 'xiaohongshu' || material.platform === 'douyin') {
         try {
           const parseResult = await requestMaterialParsing(material.id);
           finishTask(task, {
@@ -4244,7 +4244,7 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
             cards: parseResult.cards ?? [],
             task: parseResult.task ?? task,
             artifact: parseResult.artifact,
-            message: parseResult.message ?? '小红书链接已自动解析。',
+            message: parseResult.message ?? '链接已自动解析。',
           };
         } catch {
           finishTask(task, {
@@ -4993,7 +4993,9 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
     recordParseAttempt(material);
     const parsed = material.platform === 'xiaohongshu'
       ? await parseXiaohongshuMaterial(material)
-      : await parseOrdinaryWebMaterial(material);
+      : material.platform === 'douyin'
+        ? await parseDouyinMaterial(material)
+        : await parseOrdinaryWebMaterial(material);
     rememberParserCache(material, parsed);
     return applyParsedMaterialResult(material, task, parsed, retry);
   } catch (error) {
@@ -5265,7 +5267,7 @@ export function recordMaterialParsingFailure(
 }
 
 function canParseWithServerParser(material: MaterialRecord) {
-  return material.platform === 'xiaohongshu' || material.platform === 'web' || material.platform === undefined;
+  return material.platform === 'xiaohongshu' || material.platform === 'douyin' || material.platform === 'web' || material.platform === undefined;
 }
 
 async function parseOrdinaryWebMaterial(material: MaterialRecord): Promise<ParsedMaterialContent> {
@@ -5316,6 +5318,111 @@ async function parseOrdinaryWebMaterial(material: MaterialRecord): Promise<Parse
   } finally {
     clearTimeout(timer);
   }
+}
+
+const DOUYIN_SCRIPT_PATH = join(process.cwd(), 'scripts', 'douyin_extract.py');
+const DOUYIN_EXTRACT_TIMEOUT_MS = 90_000;
+const DOUYIN_EXTRACT_MAX_BUFFER = 2 * 1024 * 1024;
+const DOUYIN_VIDEO_CDN_INDICATOR = 'douyinvod';
+const DOUYIN_REFERER = 'https://www.douyin.com/';
+
+/**
+ * 抖音提取脚本返回的 JSON 结构
+ * @author fxbin
+ */
+interface DouyinExtractResult {
+  play_addr?: string;
+  cover?: string;
+  dynamic_cover?: string;
+  origin_cover?: string;
+  desc?: string;
+  aweme_id?: string;
+  nickname?: string;
+  author_id?: string;
+  digg_count?: number;
+  comment_count?: number;
+  share_count?: number;
+  duration?: number;
+  page_url?: string;
+  error?: string;
+}
+
+/**
+ * 从用户输入文本中提取第一个抖音链接
+ * @param input - 用户原始输入（分享文本）
+ * @returns 抖音链接或 undefined
+ * @author fxbin
+ */
+function extractFirstDouyinUrl(input: string | undefined): string | undefined {
+  if (!input) return undefined;
+  const urls = extractUrls(input).filter((url) => /douyin\.com|iesdouyin\.com/i.test(url));
+  return urls[0];
+}
+
+/**
+ * 解析抖音短视频资料：调用外部 Python 脚本（Playwright）拦截抖音 API，
+ * 提取视频地址、封面、作者、描述等元数据。
+ *
+ * 外部脚本路径：scripts/douyin_extract.py
+ * 依赖：Python3 + Playwright（需安装浏览器）
+ * 代理：通过 DOUYIN_PROXY / HTTP_PROXY 环境变量配置
+ *
+ * @param material - 抖音资料记录
+ * @returns 解析后的内容（标题、正文、媒体 URL 列表）
+ * @author fxbin
+ */
+async function parseDouyinMaterial(material: MaterialRecord): Promise<ParsedMaterialContent> {
+  const inputUrl = extractFirstDouyinUrl(material.rawInput) ?? material.sourceUrl;
+  if (!inputUrl) {
+    throw new KnowledgeCoreError('Douyin source URL is required for parsing.', 400);
+  }
+
+  let stdout: string;
+  try {
+    const result = await execFileAsync('python3', [DOUYIN_SCRIPT_PATH, inputUrl], {
+      timeout: DOUYIN_EXTRACT_TIMEOUT_MS,
+      maxBuffer: DOUYIN_EXTRACT_MAX_BUFFER,
+      env: { ...process.env },
+    });
+    stdout = result.stdout;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`抖音提取脚本执行失败：${message}。请确认已安装 Python3 和 Playwright（pip install playwright && playwright install chromium）。`);
+  }
+
+  let data: DouyinExtractResult;
+  try {
+    data = JSON.parse(stdout) as DouyinExtractResult;
+  } catch {
+    throw new Error('抖音提取脚本返回了无效的 JSON。');
+  }
+
+  if (data.error) {
+    throw new Error(`抖音提取失败：${data.error}`);
+  }
+
+  if (!data.play_addr) {
+    throw new Error('抖音 API 响应中未找到视频地址。');
+  }
+
+  const mediaUrls = [data.play_addr];
+  if (data.cover) mediaUrls.push(data.cover);
+
+  const textParts = [
+    data.desc,
+    data.nickname ? `作者：${data.nickname}` : '',
+    data.digg_count ? `点赞：${data.digg_count}` : '',
+    data.comment_count ? `评论：${data.comment_count}` : '',
+    data.share_count ? `分享：${data.share_count}` : '',
+    data.duration ? `时长：${Math.round(data.duration / 1000)}秒` : '',
+    data.page_url ? `来源链接：${data.page_url}` : '',
+  ].filter(Boolean);
+
+  return {
+    title: compactTitle(data.desc ?? '抖音视频'),
+    text: cleanText(textParts.join('\n\n')).slice(0, 18_000),
+    mediaUrls,
+  };
 }
 
 async function parseXiaohongshuMaterial(material: MaterialRecord): Promise<ParsedMaterialContent> {
@@ -6074,19 +6181,25 @@ export async function transcribeMaterialVideo(material: MaterialRecord): Promise
   const outputDir = join(os.tmpdir(), `zhijing-${workId}-whisper`);
 
   try {
-    await execFileAsync('ffmpeg', [
-      '-y',
-      '-i',
-      videoUrl,
+    const ffmpegArgs: string[] = ['-y'];
+    const ffmpegEnv = { ...process.env };
+    if (videoUrl.includes(DOUYIN_VIDEO_CDN_INDICATOR)) {
+      ffmpegArgs.push('-headers', `Referer: ${DOUYIN_REFERER}\r\n`);
+      const proxy = process.env.DOUYIN_PROXY ?? process.env.HTTP_PROXY ?? process.env.HTTPS_PROXY;
+      if (proxy) {
+        ffmpegEnv.http_proxy = proxy;
+        ffmpegEnv.https_proxy = proxy;
+      }
+    }
+    ffmpegArgs.push(
+      '-i', videoUrl,
       '-vn',
-      '-acodec',
-      'pcm_s16le',
-      '-ar',
-      AUDIO_SAMPLE_RATE,
-      '-ac',
-      MONO_CHANNELS,
+      '-acodec', 'pcm_s16le',
+      '-ar', AUDIO_SAMPLE_RATE,
+      '-ac', MONO_CHANNELS,
       audioPath,
-    ]);
+    );
+    await execFileAsync('ffmpeg', ffmpegArgs, { env: ffmpegEnv });
 
     await execFileAsync(whisperCommand, [
       audioPath,

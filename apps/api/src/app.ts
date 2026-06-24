@@ -272,9 +272,10 @@ export function buildApi() {
       return reply.code(400).send({ error: 'Invalid image URL.' });
     }
     try {
+      const isDouyinImage = imageUrl.includes('douyinpic.com') || imageUrl.includes('byteimg.com');
       const response = await fetch(imageUrl, {
         headers: {
-          Referer: '',
+          Referer: isDouyinImage ? 'https://www.douyin.com/' : '',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         },
       });

@@ -15,24 +15,24 @@ import { materialMediaUrls, isImageUrl, isVideoUrl, proxyImageUrl } from '../uti
 const SUMMARY_MAX_CHARS = 300;
 
 /**
- * 判断材料是否为小红书且包含可展示的图片封面。
+ * 从材料的 mediaUrls 中解析封面图片 URL。
+ * 适用于小红书、抖音等包含图片媒体的平台。
  * @param {object} item - 材料对象
  * @returns {string|undefined} 封面图片 URL，无封面时返回 undefined
  */
-function resolveXiaohongshuCover(item) {
-  if (item.platform !== 'xiaohongshu') return undefined;
+function resolveMaterialCover(item) {
   const urls = materialMediaUrls(item);
   return urls.find((url) => isImageUrl(url));
 }
 
 /**
- * 判断小红书材料是否为视频笔记。
+ * 判断材料是否为视频笔记。
  * 当 mediaUrls 中存在视频 URL 时认定为视频笔记。
+ * 适用于小红书、抖音等包含视频媒体的平台。
  * @param {object} item - 材料对象
  * @returns {boolean} 是否为视频笔记
  */
-function isXiaohongshuVideoNote(item) {
-  if (item.platform !== 'xiaohongshu') return false;
+function isMaterialVideoNote(item) {
   const urls = materialMediaUrls(item);
   return urls.some((url) => isVideoUrl(url));
 }
@@ -110,8 +110,8 @@ export default function RecentImports({ materials, onViewAll, onViewDetail, brow
         {materials.length === 0 ? (
           <EmptyState title={t('library.empty.title')} body={t('library.empty.body')} />
         ) : materials.map((item, index) => {
-          const coverUrl = resolveXiaohongshuCover(item);
-          const isVideo = isXiaohongshuVideoNote(item);
+          const coverUrl = resolveMaterialCover(item);
+          const isVideo = isMaterialVideoNote(item);
           const truncatedSummary = truncateSummary(item.summary);
           const hasMore = item.summary && item.summary.replace(/\s+/g, ' ').trim().length > SUMMARY_MAX_CHARS;
           const aiState = aiSummaries[item.id];
