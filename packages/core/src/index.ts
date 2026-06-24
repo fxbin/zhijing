@@ -6,6 +6,8 @@ import {
   type AttentionSignalStrength,
   type AttentionSignalTargetType,
   type AttentionSignalType,
+  type InterestTopic,
+  type UserInterestProfile,
   type AssignMaterialRequest,
   type ArtifactRecord,
   type ArtifactRevision,
@@ -7668,6 +7670,84 @@ export function testHypothesis(knowledgeBaseId: string, hypothesis: string): Hyp
  */
 export function listAttentionSignals(knowledgeBaseId?: string, limit?: number): AttentionSignal[] {
   return repository.listAttentionSignals(knowledgeBaseId, limit);
+}
+
+const INTEREST_WINDOW_DAYS = 7;
+const INTEREST_TOP_TOPICS_LIMIT = 20;
+const INTEREST_SIGNAL_WEIGHTS: Record<AttentionSignalType, number> = {
+  question_card_created: 3,
+  ask_question: 2,
+  manual_layout: 1,
+  card_opened: 0.5,
+};
+
+/**
+ * 计算用户兴趣画像，基于近期认知行为构建滚动兴趣向量。
+ * 收集最近 windowDays 内的卡片创建、材料导入、提问、回忆评分等信号，
+ * 对文本内容分词并加权统计，输出按权重排序的兴趣主题列表。
+ * @param windowDays - 滚动窗口天数，默认 7 天
+ * @returns 用户兴趣画像
+ * @author fxbin
+ */
+export function computeUserInterestProfile(windowDays: number = INTEREST_WINDOW_DAYS): UserInterestProfile {
+  const cutoffMs = Date.now() - windowDays * 24 * 60 * 60 * 1000;
+  const cutoffIso = new Date(cutoffMs).toISOString();
+  const topicWeights = new Map<string, { weight: number; sourceCount: number }>();
+
+  const addTopic = (text: string | undefined, weight: number) => {
+    if (!text) return;
+    const tokens = tokenizeForTfidf(text);
+    for (const token of tokens) {
+      if (isChineseStopWord(token)) continue;
+      const current = topicWeights.get(token) ?? { weight: 0, sourceCount: 0 };
+      current.weight += weight;
+      current.sourceCount += 1;
+      topicWeights.set(token, current);
+    }
+  };
+
+  for (const card of repository.listCards()) {
+    if (card.createdAt >= cutoffIso) {
+      addTopic(card.title, 1.5);
+      addTopic(card.body, 0.5);
+    }
+  }
+
+  for (const material of repository.listMaterials()) {
+    if (material.createdAt >= cutoffIso) {
+      addTopic(material.title, 1.0);
+    }
+  }
+
+  const recentSignals = repository.listAttentionSignals(undefined, 500);
+  let signalCount = 0;
+  for (const signal of recentSignals) {
+    if (signal.createdAt < cutoffIso) continue;
+    signalCount += 1;
+    const weight = INTEREST_SIGNAL_WEIGHTS[signal.signalType] ?? 1;
+    const contextText = typeof signal.contextData?.question === 'string'
+      ? signal.contextData.question
+      : typeof signal.contextData?.title === 'string'
+        ? signal.contextData.title
+        : undefined;
+    addTopic(contextText, weight);
+  }
+
+  const topics: InterestTopic[] = [...topicWeights.entries()]
+    .map(([term, data]) => ({
+      term,
+      weight: Math.round(data.weight * 100) / 100,
+      sourceCount: data.sourceCount,
+    }))
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, INTEREST_TOP_TOPICS_LIMIT);
+
+  return {
+    windowDays,
+    topics,
+    totalSignals: signalCount,
+    generatedAt: new Date().toISOString(),
+  };
 }
 
 /**

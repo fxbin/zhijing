@@ -989,6 +989,28 @@ export interface AttentionSignal {
 }
 
 /**
+ * 兴趣主题项，表示用户近期关注的一个主题词及其权重。
+ * @author fxbin
+ */
+export interface InterestTopic {
+  term: string;
+  weight: number;
+  sourceCount: number;
+}
+
+/**
+ * 用户兴趣画像，基于近期认知行为（卡片创建、提问、回忆评分等）
+ * 构建的滚动兴趣向量，用于主动推荐与盲区检测。
+ * @author fxbin
+ */
+export interface UserInterestProfile {
+  windowDays: number;
+  topics: InterestTopic[];
+  totalSignals: number;
+  generatedAt: string;
+}
+
+/**
  * 回忆工具名称，标识 Recall Agent 使用的四种检索策略。
  * - direct_fetch 精确命中，零成本内存匹配
  * - shallow_recall 浅层回忆，基于 FTS5 + BM25 排序

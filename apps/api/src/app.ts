@@ -61,6 +61,7 @@ import {
   listModelProviderProfiles,
   listCardRevisions,
   listAttentionSignals,
+  computeUserInterestProfile,
   listAgentActionLogs,
   listInspectTables,
   inspectQuery,
@@ -516,6 +517,11 @@ export function buildApi() {
     query: request.query.q,
     limit: parseLimit(request.query.limit),
   }));
+
+  app.get<{ Querystring: { days?: string } }>('/api/interest-profile', async (request) => {
+    const days = Math.max(1, Math.min(Number(request.query.days) || 7, 90));
+    return computeUserInterestProfile(days);
+  });
 
   app.get<{
     Querystring: {
