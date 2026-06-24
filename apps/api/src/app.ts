@@ -70,6 +70,7 @@ import {
   recordCannotAnswerFeedback,
   computeRecallDecay,
   applyRecallDecay,
+  generateAgentProposals,
   listAgentActionLogs,
   listInspectTables,
   inspectQuery,
@@ -571,6 +572,8 @@ export function buildApi() {
   app.get('/api/recall-decay', async () => computeRecallDecay());
 
   app.post('/api/recall-decay/apply', async () => applyRecallDecay());
+
+  app.get('/api/agent-proposals', async () => generateAgentProposals());
 
   app.get<{
     Querystring: {

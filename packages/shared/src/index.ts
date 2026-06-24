@@ -1161,6 +1161,38 @@ export interface RecallDecayApplyResult {
 }
 
 /**
+ * Agent 主动提议类型，标识提议的来源场景。
+ * - blind_spot 盲区补充建议（高兴趣低覆盖的主题）
+ * - repeated_thinking 重复思考提醒（相似问题反复提问）
+ * - recall_review 遗忘复习建议（recall 分数低的卡片）
+ * - topic_explore 主题探索建议（高兴趣主题的延伸探索）
+ * @author fxbin
+ */
+export type AgentProposalType = 'blind_spot' | 'repeated_thinking' | 'recall_review' | 'topic_explore';
+
+/**
+ * Agent 主动提议条目，向用户建议下一步认知行动。
+ * 守提议权不写入权：Agent 只提议，不直接执行任何写入操作。
+ * @author fxbin
+ */
+export interface AgentProposal {
+  type: AgentProposalType;
+  title: string;
+  description: string;
+  actionLabel: string;
+  metadata: Record<string, unknown>;
+}
+
+/**
+ * Agent 主动提议报告，汇总各类提议供前端展示。
+ * @author fxbin
+ */
+export interface AgentProposalReport {
+  proposals: AgentProposal[];
+  generatedAt: string;
+}
+
+/**
  * 回忆工具名称，标识 Recall Agent 使用的四种检索策略。
  * - direct_fetch 精确命中，零成本内存匹配
  * - shallow_recall 浅层回忆，基于 FTS5 + BM25 排序

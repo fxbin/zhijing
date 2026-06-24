@@ -20,6 +20,8 @@ import {
   type RecallDecayReport,
   type RecallDecayItem,
   type RecallDecayApplyResult,
+  type AgentProposal,
+  type AgentProposalReport,
   type AssignMaterialRequest,
   type ArtifactRecord,
   type ArtifactRevision,
@@ -8171,6 +8173,68 @@ export function applyRecallDecay(): RecallDecayApplyResult {
     archivedCount: archivedCardIds.length,
     skippedCount,
     archivedCardIds,
+  };
+}
+
+const PROPOSAL_MAX_PER_TYPE = 3;
+const PROPOSAL_RECALL_REVIEW_THRESHOLD = 0.2;
+
+/**
+ * 生成 Agent 主动提议，基于盲区、重复思考、遗忘衰减、兴趣主题四个维度。
+ * 守提议权不写入权：本函数只生成提议数据，不执行任何写入操作。
+ * @returns Agent 主动提议报告
+ * @author fxbin
+ */
+export function generateAgentProposals(): AgentProposalReport {
+  const proposals: AgentProposal[] = [];
+
+  const coverage = computeTopicCoverage();
+  for (const topic of coverage.topics.filter((item) => item.isBlindSpot).slice(0, PROPOSAL_MAX_PER_TYPE)) {
+    proposals.push({
+      type: 'blind_spot',
+      title: `盲区补充：${topic.term}`,
+      description: `你对「${topic.term}」关注度高（权重 ${topic.interestWeight}），但知识库中覆盖不足（仅 ${topic.totalCards} 张卡片、${topic.totalMaterials} 条资料）。建议补充相关资料。`,
+      actionLabel: '补充资料',
+      metadata: { term: topic.term, interestWeight: topic.interestWeight, coverageScore: topic.coverageScore },
+    });
+  }
+
+  const repeatedThinking = detectRepeatedThinking();
+  for (const group of repeatedThinking.groups.slice(0, PROPOSAL_MAX_PER_TYPE)) {
+    proposals.push({
+      type: 'repeated_thinking',
+      title: '重复思考提醒',
+      description: `你已 ${group.repeatCount} 次提出相似问题：「${group.representativeQuestion}」。考虑换个角度或深化已有回答？`,
+      actionLabel: '查看历史回答',
+      metadata: { repeatCount: group.repeatCount, similarityScore: group.similarityScore },
+    });
+  }
+
+  const recallDecay = computeRecallDecay();
+  for (const item of recallDecay.items.filter((entry) => entry.recallScore < PROPOSAL_RECALL_REVIEW_THRESHOLD).slice(0, PROPOSAL_MAX_PER_TYPE)) {
+    proposals.push({
+      type: 'recall_review',
+      title: `复习建议：${item.cardTitle}`,
+      description: `这张卡片已 ${item.daysSinceLastAccess} 天未访问，recall 分数仅 ${item.recallScore}。建议复习以防遗忘。`,
+      actionLabel: '复习卡片',
+      metadata: { cardId: item.cardId, recallScore: item.recallScore, daysSinceLastAccess: item.daysSinceLastAccess },
+    });
+  }
+
+  const profile = computeUserInterestProfile(INTEREST_WINDOW_DAYS);
+  for (const topic of profile.topics.slice(0, PROPOSAL_MAX_PER_TYPE)) {
+    proposals.push({
+      type: 'topic_explore',
+      title: `主题探索：${topic.term}`,
+      description: `「${topic.term}」是你近期高关注主题（权重 ${topic.weight}，来源 ${topic.sourceCount}）。考虑深入探索或建立专题知识库？`,
+      actionLabel: '探索主题',
+      metadata: { term: topic.term, weight: topic.weight, sourceCount: topic.sourceCount },
+    });
+  }
+
+  return {
+    proposals,
+    generatedAt: new Date().toISOString(),
   };
 }
 
