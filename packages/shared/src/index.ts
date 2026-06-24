@@ -199,7 +199,7 @@ export type ArchiveStatus = 'active' | 'archived';
 
 export interface MaterialRecord {
   id: string;
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   type: MaterialType;
   rawInput: string;
   sourceUrl?: string;
@@ -230,7 +230,7 @@ export type RecallGrade = 'again' | 'hard' | 'good' | 'easy';
 
 export interface KnowledgeCard {
   id: string;
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   materialId?: string;
   type: CardType;
   title: string;
@@ -258,7 +258,7 @@ export interface CardRevision {
 
 export interface ChatMessage {
   id: string;
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   question: string;
   answer: string;
   cardIds: string[];
@@ -309,7 +309,7 @@ export type ArtifactSubtype =
 
 export interface ArtifactRecord {
   id: string;
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   artifactType: 'summary' | 'research_report' | 'cards' | 'kit_report';
   subtype: ArtifactSubtype;
   title: string;
@@ -360,7 +360,7 @@ export type ExportScope = 'all' | 'materials' | 'cards';
 
 export interface ExportRecord {
   id: string;
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   format: ExportFormat;
   scope: ExportScope;
   includeArtifacts: boolean;
@@ -394,7 +394,7 @@ export type EntityType = 'person' | 'organization' | 'concept' | 'tool' | 'place
 
 export interface Entity {
   id: string;
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   name: string;
   type: EntityType;
   description: string;
@@ -415,7 +415,7 @@ export type ConflictResolutionAction = 'merge' | 'delete';
 
 export interface ConflictGroupItem {
   id: string;
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   title: string;
   meta: string;
 }
@@ -433,7 +433,7 @@ export interface ConflictAuditEntry {
   action: ConflictResolutionAction;
   keepId: string;
   dropIds: string[];
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   note: string;
   createdAt: string;
 }
@@ -531,7 +531,7 @@ export interface KnowledgeBaseDetail extends KnowledgeBaseSummary {
  */
 export interface ArchiveItemResult {
   id: string;
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   kind: 'material' | 'card';
   archived: boolean;
 }
@@ -864,7 +864,7 @@ export interface SaveKnowledgeMapNodePositionsRequest {
  */
 export interface KnowledgeMapCustomEdge {
   id: string;
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   sourceNodeId: string;
   targetNodeId: string;
   relation: 'supports' | 'contradicts' | 'related_to';
@@ -1003,7 +1003,7 @@ export type AttentionSignalTargetType = 'card' | 'material' | 'layout' | 'questi
  */
 export interface AttentionSignal {
   id: string;
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   signalType: AttentionSignalType;
   signalStrength: AttentionSignalStrength;
   targetType: AttentionSignalTargetType;
@@ -1133,7 +1133,7 @@ export interface RepeatedThinkingReport {
  */
 export interface ReadingSessionRequest {
   cardId: string;
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   durationMs: number;
 }
 
@@ -1142,7 +1142,7 @@ export interface ReadingSessionRequest {
  * @author fxbin
  */
 export interface CannotAnswerFeedbackRequest {
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   question: string;
 }
 
@@ -1153,7 +1153,7 @@ export interface CannotAnswerFeedbackRequest {
 export interface RecallDecayItem {
   cardId: string;
   cardTitle: string;
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   knowledgeBaseTitle: string;
   lastAccessedAt: string;
   daysSinceLastAccess: number;
@@ -1234,7 +1234,7 @@ export type RecallToolName = 'direct_fetch' | 'shallow_recall' | 'deep_recall' |
 export interface RecallResultItem {
   kind: 'card' | 'material';
   id: string;
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   title: string;
   preview: string;
   relevanceScore: number;

@@ -191,6 +191,19 @@ type ModelProviderProfileRecord = {
 const DEFAULT_PROFILE_NAME = '默认配置';
 const MODEL_PROVIDER_PROFILE_ID_PREFIX = 'mpp';
 const LEGACY_MODEL_PROVIDER_SETTINGS_ID = 'default';
+
+/**
+ * 默认工作区常量。
+ *
+ * 单池存储迁移的核心兜底机制：当卡片/资料/产物未指定归属知识库时，
+ * 自动归入默认工作区。这样既实现了"无库卡片可存在"的单池存储体验，
+ * 又规避了 SQLite NOT NULL 约束的 schema 重建风险。
+ *
+ * @author fxbin
+ */
+const DEFAULT_KB_ID = 'default';
+const DEFAULT_KB_TITLE = '全局工作区';
+const DEFAULT_KB_SUMMARY = '未指定工作区的卡片、资料与产物自动归入此处，可在全局视图中统一管理。';
 const CONTEXT_RETRIEVAL_LIMIT = 8;
 const FTS_TOKENIZER = 'unicode61';
 const MEMORY_SEARCH_TITLE_WEIGHT = 3;
@@ -1336,7 +1349,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       material.id,
-      material.knowledgeBaseId,
+      resolveKnowledgeBaseId(material.knowledgeBaseId),
       material.type,
       material.rawInput,
       material.sourceUrl ?? null,
@@ -1361,7 +1374,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       SET knowledge_base_id = ?, type = ?, raw_input = ?, source_url = ?, platform = ?, title = ?, content_text = ?, media_urls_json = ?, parse_status = ?, parse_error = ?, transcript = ?, transcript_status = ?, transcript_error = ?, created_at = ?, archived = ?
       WHERE id = ?
     `).run(
-      material.knowledgeBaseId,
+      resolveKnowledgeBaseId(material.knowledgeBaseId),
       material.type,
       material.rawInput,
       material.sourceUrl ?? null,
@@ -1495,7 +1508,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.db.prepare(`
       INSERT INTO ${MAP_EDGE_TABLE_NAME} (id, knowledge_base_id, source_node_id, target_node_id, relation, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(edge.id, edge.knowledgeBaseId, edge.sourceNodeId, edge.targetNodeId, edge.relation, edge.createdAt);
+    `).run(edge.id, resolveKnowledgeBaseId(edge.knowledgeBaseId), edge.sourceNodeId, edge.targetNodeId, edge.relation, edge.createdAt);
   }
 
   deleteMapCustomEdge(knowledgeBaseId: string, edgeId: string) {
@@ -1513,7 +1526,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.db.exec('BEGIN');
     try {
       for (const card of cards) {
-        insert.run(card.id, card.knowledgeBaseId, card.materialId ?? null, card.type, card.title, card.body, card.claimStatus, serializeCardRecall(card.recall), card.createdAt, card.updatedAt, card.archived ? 1 : 0);
+        insert.run(card.id, resolveKnowledgeBaseId(card.knowledgeBaseId), card.materialId ?? null, card.type, card.title, card.body, card.claimStatus, serializeCardRecall(card.recall), card.createdAt, card.updatedAt, card.archived ? 1 : 0);
         this.upsertCardFts(card);
       }
       this.db.exec('COMMIT');
@@ -1529,7 +1542,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       SET knowledge_base_id = ?, material_id = ?, type = ?, title = ?, body = ?, claim_status = ?, recall_json = ?, created_at = ?, updated_at = ?, archived = ?
       WHERE id = ?
     `).run(
-      card.knowledgeBaseId,
+      resolveKnowledgeBaseId(card.knowledgeBaseId),
       card.materialId ?? null,
       card.type,
       card.title,
@@ -1598,7 +1611,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       record.id,
-      record.knowledgeBaseId,
+      resolveKnowledgeBaseId(record.knowledgeBaseId),
       record.format,
       record.scope,
       record.includeArtifacts ? 1 : 0,
@@ -1662,7 +1675,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         updated_at = excluded.updated_at
     `).run({
       id: record.id,
-      knowledge_base_id: record.knowledgeBaseId,
+      knowledge_base_id: resolveKnowledgeBaseId(record.knowledgeBaseId),
       name: record.name,
       type: record.type,
       description: record.description,
@@ -1703,7 +1716,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       VALUES (?, ?, ?, ?)
     `).run(
       material.id,
-      material.knowledgeBaseId,
+      resolveKnowledgeBaseId(material.knowledgeBaseId),
       material.title,
       material.contentText ?? material.rawInput,
     );
@@ -1722,7 +1735,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       VALUES (?, ?, ?, ?)
     `).run(
       card.id,
-      card.knowledgeBaseId,
+      resolveKnowledgeBaseId(card.knowledgeBaseId),
       card.title,
       card.body,
     );
@@ -1810,7 +1823,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       action: entry.action,
       keep_id: entry.keepId,
       drop_ids_json: JSON.stringify(entry.dropIds),
-      knowledge_base_id: entry.knowledgeBaseId,
+      knowledge_base_id: resolveKnowledgeBaseId(entry.knowledgeBaseId),
       note: entry.note,
       created_at: entry.createdAt,
     });
@@ -1856,7 +1869,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       artifact.id,
-      artifact.knowledgeBaseId,
+      resolveKnowledgeBaseId(artifact.knowledgeBaseId),
       artifact.artifactType,
       artifact.subtype,
       artifact.title,
@@ -1873,7 +1886,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       SET knowledge_base_id = ?, artifact_type = ?, subtype = ?, title = ?, body = ?, source_material_ids_json = ?, sections_json = ?, created_at = ?
       WHERE id = ?
     `).run(
-      artifact.knowledgeBaseId,
+      resolveKnowledgeBaseId(artifact.knowledgeBaseId),
       artifact.artifactType,
       artifact.subtype,
       artifact.title,
@@ -1928,7 +1941,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       message.id,
-      message.knowledgeBaseId,
+      resolveKnowledgeBaseId(message.knowledgeBaseId),
       message.question,
       message.answer,
       JSON.stringify(message.cardIds),
@@ -2095,7 +2108,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       signal.id,
-      signal.knowledgeBaseId,
+      resolveKnowledgeBaseId(signal.knowledgeBaseId),
       signal.signalType,
       signal.signalStrength,
       signal.targetType,
@@ -4051,6 +4064,48 @@ function upsertDefaultKnowledgeBase(input: string) {
 }
 
 /**
+ * 确保默认工作区存在。
+ *
+ * 单池存储迁移的兜底入口：当系统首次启动或默认工作区被删除后，
+ * 自动重建 id=default 的全局工作区，用于承接未指定归属的卡片/资料/产物。
+ *
+ * @returns 默认工作区摘要
+ * @author fxbin
+ */
+export function ensureDefaultWorkspace(): KnowledgeBaseSummary {
+  const existing = repository.findKnowledgeBase(DEFAULT_KB_ID);
+  if (existing) return existing;
+  const timestamp = now();
+  const base: KnowledgeBaseSummary = {
+    id: DEFAULT_KB_ID,
+    title: DEFAULT_KB_TITLE,
+    summary: DEFAULT_KB_SUMMARY,
+    stage: 'ai_skeleton',
+    sourceCount: 0,
+    cardCount: 0,
+    sourcedRatio: 0,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  repository.insertKnowledgeBase(base);
+  return base;
+}
+
+/**
+ * 解析知识库 ID，未指定时返回默认工作区 ID。
+ *
+ * 单池存储迁移的核心兜底函数：所有落库点在写入 knowledgeBaseId 前，
+ * 应通过此函数解析，确保 SQLite NOT NULL 约束不被违反。
+ *
+ * @param knowledgeBaseId - 可选的知识库 ID
+ * @returns 解析后的知识库 ID（永不为空）
+ * @author fxbin
+ */
+export function resolveKnowledgeBaseId(knowledgeBaseId?: string): string {
+  return knowledgeBaseId && knowledgeBaseId.trim() ? knowledgeBaseId.trim() : DEFAULT_KB_ID;
+}
+
+/**
  * 显式创建空知识库，不触发 LLM 生成。
  * 用户可通过模态输入标题和可选摘要，后续再导入资料或运行 Kit。
  */
@@ -4517,7 +4572,7 @@ export function acceptProposedCards(messageId: string, selectedIndices?: number[
     throw new KnowledgeCoreError('No proposed cards to accept.', 400);
   }
 
-  const base = repository.findKnowledgeBase(message.knowledgeBaseId);
+  const base = repository.findKnowledgeBase(resolveKnowledgeBaseId(message.knowledgeBaseId));
   if (!base) {
     throw new KnowledgeCoreError('Knowledge base not found.', 404);
   }
@@ -4653,7 +4708,7 @@ export function assignMaterialToKnowledgeBase(
   input: AssignMaterialRequest,
 ): MaterialAssignmentResult {
   const material = requireMaterial(materialId);
-  const previousKnowledgeBaseId = material.knowledgeBaseId;
+  const previousKnowledgeBaseId = resolveKnowledgeBaseId(material.knowledgeBaseId);
   const targetBase = resolveMaterialAssignmentTarget(input, material);
 
   material.knowledgeBaseId = targetBase.id;
@@ -4686,7 +4741,7 @@ export function suggestMaterialAssignments(materialId: string): MaterialAssignme
     .filter((suggestion) => suggestion.score > 0)
     .sort((left, right) => right.score - left.score)
     .slice(0, 4);
-  const currentBase = repository.findKnowledgeBase(material.knowledgeBaseId);
+  const currentBase = repository.findKnowledgeBase(resolveKnowledgeBaseId(material.knowledgeBaseId));
   const currentSuggestion: MaterialAssignmentSuggestion[] = currentBase && !scored.some((item) => item.knowledgeBaseId === currentBase.id)
     ? [{
         knowledgeBaseId: currentBase.id,
@@ -4765,7 +4820,7 @@ export async function completeMaterialReview(
   input: CompleteMaterialReviewRequest,
 ): Promise<MaterialReviewResult> {
   const material = requireMaterial(materialId);
-  const knowledgeBase = repository.findKnowledgeBase(material.knowledgeBaseId);
+  const knowledgeBase = repository.findKnowledgeBase(resolveKnowledgeBaseId(material.knowledgeBaseId));
   if (!knowledgeBase) {
     throw new KnowledgeCoreError('Knowledge base not found.', 404);
   }
@@ -4796,7 +4851,7 @@ export async function completeMaterialReview(
   if (!markIngested) {
     return {
       material,
-      knowledgeBase: repository.findKnowledgeBase(material.knowledgeBaseId) ?? knowledgeBase,
+      knowledgeBase: repository.findKnowledgeBase(resolveKnowledgeBaseId(material.knowledgeBaseId)) ?? knowledgeBase,
       message: '资料补充已保存，仍保留为待复核状态。',
     };
   }
@@ -4819,7 +4874,7 @@ export async function completeMaterialReview(
       mediaUrls: material.mediaUrls,
       mediaCount: material.mediaUrls.length,
     });
-    const base = repository.findKnowledgeBase(material.knowledgeBaseId) ?? knowledgeBase;
+    const base = repository.findKnowledgeBase(resolveKnowledgeBaseId(material.knowledgeBaseId)) ?? knowledgeBase;
     const cards = createCards(base, material, contentForGeneration, generation.output.cards);
     const artifact = createArtifact(base, material, contentForGeneration, generation.output);
     const reconciledBase = reconcileKnowledgeBaseStats(base.id) ?? base;
@@ -4888,8 +4943,9 @@ function moveMaterialAssets(materialId: string, previousKnowledgeBaseId: string,
   }
 }
 
-function reconcileKnowledgeBaseStats(knowledgeBaseId: string) {
-  const base = repository.findKnowledgeBase(knowledgeBaseId);
+function reconcileKnowledgeBaseStats(knowledgeBaseId?: string) {
+  const resolved = resolveKnowledgeBaseId(knowledgeBaseId);
+  const base = repository.findKnowledgeBase(resolved);
   if (!base) return undefined;
   const materials = repository.listMaterials(base.id);
   const cards = repository.listCards(base.id);
@@ -4912,7 +4968,7 @@ export function deleteMaterial(materialId: string): { materialId: string; knowle
   if (!material) {
     throw new KnowledgeCoreError('Material not found.', 404);
   }
-  const knowledgeBaseId = material.knowledgeBaseId;
+  const knowledgeBaseId = resolveKnowledgeBaseId(material.knowledgeBaseId);
   for (const artifact of repository.listArtifacts()) {
     if (!artifact.sourceMaterialIds.includes(materialId)) continue;
     artifact.sourceMaterialIds = artifact.sourceMaterialIds.filter((id) => id !== materialId);
@@ -5175,7 +5231,7 @@ async function applyParsedMaterialResult(
     scheduleMaterialTranscription(material);
   }
 
-  const base = repository.findKnowledgeBase(material.knowledgeBaseId);
+  const base = repository.findKnowledgeBase(resolveKnowledgeBaseId(material.knowledgeBaseId));
   if (!base) {
     throw new KnowledgeCoreError('Knowledge base not found.', 404);
   }
@@ -6182,8 +6238,9 @@ function cleanParseError(errorMessage: string) {
   return (trimmed || 'Material parsing failed.').slice(0, 500);
 }
 
-function touchKnowledgeBase(knowledgeBaseId: string) {
-  const base = repository.findKnowledgeBase(knowledgeBaseId);
+function touchKnowledgeBase(knowledgeBaseId?: string) {
+  const resolved = resolveKnowledgeBaseId(knowledgeBaseId);
+  const base = repository.findKnowledgeBase(resolved);
   if (!base) return;
   base.updatedAt = now();
   repository.updateKnowledgeBase(base);
@@ -7263,9 +7320,10 @@ function detectSemanticTensionGroups(): ConflictGroup[] {
   const cards = repository.listCards();
   const byKnowledgeBase = new Map<string, KnowledgeCard[]>();
   for (const card of cards) {
-    const bucket = byKnowledgeBase.get(card.knowledgeBaseId) ?? [];
+    const kbId = resolveKnowledgeBaseId(card.knowledgeBaseId);
+    const bucket = byKnowledgeBase.get(kbId) ?? [];
     bucket.push(card);
-    byKnowledgeBase.set(card.knowledgeBaseId, bucket);
+    byKnowledgeBase.set(kbId, bucket);
   }
 
   const groups: ConflictGroup[] = [];
@@ -7345,7 +7403,7 @@ function resolveCardConflict(keepId: string, dropIds: string[]): string {
     }
     repository.deleteCard(dropId);
   }
-  return keepCard.knowledgeBaseId;
+  return resolveKnowledgeBaseId(keepCard.knowledgeBaseId);
 }
 
 function resolveMaterialConflict(keepId: string, dropIds: string[]): string {
@@ -7366,7 +7424,7 @@ function resolveMaterialConflict(keepId: string, dropIds: string[]): string {
   for (const dropId of dropIds) {
     deleteMaterial(dropId);
   }
-  return keepMaterial.knowledgeBaseId;
+  return resolveKnowledgeBaseId(keepMaterial.knowledgeBaseId);
 }
 
 /**
@@ -7991,7 +8049,7 @@ export function generateDailyDigest(): DailyDigest {
         type: 'card',
         title: card.title,
         knowledgeBaseId: card.knowledgeBaseId,
-        knowledgeBaseTitle: knowledgeBaseMap.get(card.knowledgeBaseId),
+        knowledgeBaseTitle: knowledgeBaseMap.get(resolveKnowledgeBaseId(card.knowledgeBaseId)),
         createdAt: card.createdAt,
       });
     }
@@ -8029,7 +8087,7 @@ export function generateDailyDigest(): DailyDigest {
       type: 'signal',
       title: String(contextText).slice(0, 60),
       knowledgeBaseId: signal.knowledgeBaseId,
-      knowledgeBaseTitle: knowledgeBaseMap.get(signal.knowledgeBaseId),
+      knowledgeBaseTitle: knowledgeBaseMap.get(resolveKnowledgeBaseId(signal.knowledgeBaseId)),
       createdAt: signal.createdAt,
     });
     if (newSignals.length >= DIGEST_MAX_ITEMS_PER_TYPE) break;
@@ -8323,7 +8381,7 @@ export function computeRecallDecay(): RecallDecayReport {
       cardId: card.id,
       cardTitle: card.title,
       knowledgeBaseId: card.knowledgeBaseId,
-      knowledgeBaseTitle: baseMap.get(card.knowledgeBaseId) ?? '',
+      knowledgeBaseTitle: baseMap.get(resolveKnowledgeBaseId(card.knowledgeBaseId)) ?? '',
       lastAccessedAt,
       daysSinceLastAccess: Math.round(daysSinceLastAccess * 10) / 10,
       recallScore: Math.round(recallScore * 1000) / 1000,
@@ -8765,11 +8823,12 @@ export function getGlobalInsights(): GlobalInsights {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 8)
     .map((card) => {
-      const base = bases.find((b) => b.id === card.knowledgeBaseId);
+      const kbId = resolveKnowledgeBaseId(card.knowledgeBaseId);
+      const base = bases.find((b) => b.id === kbId);
       return {
         id: card.id,
-        knowledgeBaseId: card.knowledgeBaseId,
-        knowledgeBaseTitle: base?.title ?? card.knowledgeBaseId,
+        knowledgeBaseId: kbId,
+        knowledgeBaseTitle: base?.title ?? kbId,
         title: card.title,
         type: card.type,
         claimStatus: card.claimStatus,

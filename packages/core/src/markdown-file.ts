@@ -50,7 +50,7 @@ export interface CardFrontmatter {
   id: string;
   type: string;
   claimStatus: string;
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   materialId?: string;
   recall?: {
     ease?: number;
@@ -76,7 +76,7 @@ export interface CardFrontmatter {
 export interface MaterialFrontmatter {
   id: string;
   type: string;
-  knowledgeBaseId: string;
+  knowledgeBaseId?: string;
   sourceUrl?: string;
   platform?: string;
   parseStatus: string;
