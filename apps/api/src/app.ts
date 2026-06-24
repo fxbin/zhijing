@@ -65,6 +65,7 @@ import {
   computeUserInterestProfile,
   generateDailyDigest,
   computeTopicCoverage,
+  detectRepeatedThinking,
   listAgentActionLogs,
   listInspectTables,
   inspectQuery,
@@ -537,6 +538,8 @@ export function buildApi() {
   });
 
   app.get('/api/topic-coverage', async () => computeTopicCoverage());
+
+  app.get('/api/repeated-thinking', async () => detectRepeatedThinking());
 
   app.get<{
     Querystring: {

@@ -13,6 +13,8 @@ import {
   type TopicCoverageHeatmap,
   type TopicCoverageItem,
   type TopicCoverageCell,
+  type RepeatedThinkingReport,
+  type RepeatedQuestionGroup,
   type AssignMaterialRequest,
   type ArtifactRecord,
   type ArtifactRevision,
@@ -7905,6 +7907,120 @@ export function computeTopicCoverage(): TopicCoverageHeatmap {
   return {
     topics,
     blindSpotCount,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+const REPEATED_THINKING_SIMILARITY_THRESHOLD = 0.4;
+const REPEATED_THINKING_MIN_GROUP_SIZE = 2;
+const REPEATED_THINKING_MAX_GROUPS = 10;
+const REPEATED_THINKING_QUESTION_SIGNAL_TYPE = 'ask_question';
+
+/**
+ * 检测重复思考模式，识别用户是否在重复思考相似问题。
+ * 基于 ask_question 注意力信号，使用 Jaccard 相似度对问题分词进行两两比较，
+ * 将相似度超过阈值的问题合并为同一组，提示用户避免认知原地打转。
+ * @returns 重复思考模式检测报告
+ * @author fxbin
+ */
+export function detectRepeatedThinking(): RepeatedThinkingReport {
+  const signals = repository.listAttentionSignals(undefined, 500);
+  const questions = signals
+    .filter((signal) => signal.signalType === REPEATED_THINKING_QUESTION_SIGNAL_TYPE)
+    .map((signal) => ({
+      id: signal.id,
+      question: typeof signal.contextData?.question === 'string'
+        ? signal.contextData.question
+        : '',
+      createdAt: signal.createdAt,
+      knowledgeBaseId: signal.knowledgeBaseId,
+    }))
+    .filter((item) => item.question.length > 0);
+
+  if (questions.length < REPEATED_THINKING_MIN_GROUP_SIZE) {
+    return {
+      groups: [],
+      totalRepeatedQuestions: 0,
+      hasRepetitivePattern: false,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  const tokenSets = questions.map((item) => new Set(tokenizeForTfidf(item.question)));
+
+  const parent = questions.map((_, index) => index);
+  const findRoot = (x: number): number => {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]];
+      x = parent[x];
+    }
+    return x;
+  };
+  const union = (a: number, b: number) => {
+    const rootA = findRoot(a);
+    const rootB = findRoot(b);
+    if (rootA !== rootB) {
+      parent[rootB] = rootA;
+    }
+  };
+
+  const jaccardSimilarity = (setA: Set<string>, setB: Set<string>): number => {
+    if (setA.size === 0 || setB.size === 0) return 0;
+    let intersection = 0;
+    for (const token of setA) {
+      if (setB.has(token)) intersection += 1;
+    }
+    return intersection / (setA.size + setB.size - intersection);
+  };
+
+  for (let i = 0; i < questions.length; i++) {
+    for (let j = i + 1; j < questions.length; j++) {
+      const similarity = jaccardSimilarity(tokenSets[i], tokenSets[j]);
+      if (similarity >= REPEATED_THINKING_SIMILARITY_THRESHOLD) {
+        union(i, j);
+      }
+    }
+  }
+
+  const groupMap = new Map<number, number[]>();
+  for (let i = 0; i < questions.length; i++) {
+    const root = findRoot(i);
+    const group = groupMap.get(root) ?? [];
+    group.push(i);
+    groupMap.set(root, group);
+  }
+
+  const groups: RepeatedQuestionGroup[] = [];
+  for (const indices of groupMap.values()) {
+    if (indices.length < REPEATED_THINKING_MIN_GROUP_SIZE) continue;
+    const groupQuestions = indices.map((index) => questions[index]);
+    const sortedByTime = [...groupQuestions].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const tokenSetsInGroup = indices.map((index) => tokenSets[index]);
+    let maxSimilarity = 0;
+    for (let i = 0; i < tokenSetsInGroup.length; i++) {
+      for (let j = i + 1; j < tokenSetsInGroup.length; j++) {
+        const sim = jaccardSimilarity(tokenSetsInGroup[i], tokenSetsInGroup[j]);
+        if (sim > maxSimilarity) maxSimilarity = sim;
+      }
+    }
+    groups.push({
+      representativeQuestion: sortedByTime[sortedByTime.length - 1].question,
+      questions: groupQuestions,
+      similarityScore: Math.round(maxSimilarity * 100) / 100,
+      firstAskedAt: sortedByTime[0].createdAt,
+      lastAskedAt: sortedByTime[sortedByTime.length - 1].createdAt,
+      repeatCount: groupQuestions.length,
+    });
+  }
+
+  groups.sort((a, b) => b.repeatCount - a.repeatCount || b.similarityScore - a.similarityScore);
+  const topGroups = groups.slice(0, REPEATED_THINKING_MAX_GROUPS);
+  const totalRepeatedQuestions = topGroups.reduce((sum, group) => sum + group.repeatCount, 0);
+
+  return {
+    groups: topGroups,
+    totalRepeatedQuestions,
+    hasRepetitivePattern: topGroups.length > 0,
     generatedAt: new Date().toISOString(),
   };
 }

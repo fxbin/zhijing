@@ -1074,6 +1074,35 @@ export interface TopicCoverageHeatmap {
 }
 
 /**
+ * 重复思考问题组，表示一组语义相似的用户提问。
+ * @author fxbin
+ */
+export interface RepeatedQuestionGroup {
+  representativeQuestion: string;
+  questions: Array<{
+    id: string;
+    question: string;
+    createdAt: string;
+    knowledgeBaseId?: string;
+  }>;
+  similarityScore: number;
+  firstAskedAt: string;
+  lastAskedAt: string;
+  repeatCount: number;
+}
+
+/**
+ * 重复思考模式检测报告，识别用户是否在重复思考相似问题。
+ * @author fxbin
+ */
+export interface RepeatedThinkingReport {
+  groups: RepeatedQuestionGroup[];
+  totalRepeatedQuestions: number;
+  hasRepetitivePattern: boolean;
+  generatedAt: string;
+}
+
+/**
  * 回忆工具名称，标识 Recall Agent 使用的四种检索策略。
  * - direct_fetch 精确命中，零成本内存匹配
  * - shallow_recall 浅层回忆，基于 FTS5 + BM25 排序
