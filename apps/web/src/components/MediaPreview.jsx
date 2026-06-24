@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { Image as ImageIcon, Play, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { isImageUrl, isVideoUrl, proxyImageUrl } from '../utils/material';
+import { isImageUrl, isVideoUrl, proxyImageUrl, proxyVideoUrl } from '../utils/material';
 
 /**
  * 媒体预览组件，展示图片缩略图、视频播放器或媒体链接。
@@ -83,7 +83,7 @@ export default function MediaPreview({ urls, compact = false }) {
             >
               {type === 'video' && (
                 <>
-                  <video src={url} preload="metadata" title={`${title} ${index + 1}`} />
+                  <video src={proxyVideoUrl(url)} preload="metadata" title={`${title} ${index + 1}`} />
                   <span className="media-preview-play">
                     <Play size={20} fill="currentColor" />
                   </span>
@@ -124,7 +124,7 @@ export default function MediaPreview({ urls, compact = false }) {
             <X size={22} />
           </button>
           {previewType === 'video' ? (
-            <video controls src={previewUrl} autoPlay />
+            <video controls src={proxyVideoUrl(previewUrl)} autoPlay />
           ) : (
             <img alt={t('media.mediaPreview')} src={proxyImageUrl(previewUrl)} />
           )}

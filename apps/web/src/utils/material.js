@@ -70,6 +70,18 @@ export function proxyImageUrl(url) {
 }
 
 /**
+ * 将外部视频 URL 转换为本地代理 URL，解决跨域与 Referer 校验问题。
+ * 抖音 CDN（douyinvod）需要正确 Referer 才能访问，浏览器直接请求会 403。
+ * @param {string} url - 原始视频 URL
+ * @returns {string} 代理后的视频 URL
+ */
+export function proxyVideoUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  if (url.startsWith('/api/proxy-video')) return url;
+  return `/api/proxy-video?url=${encodeURIComponent(url)}`;
+}
+
+/**
  * 将空格分隔的字符串拆分为合法 URL 数组。
  * @param {string} value - 包含 URL 的字符串
  * @returns {string[]} 合法 URL 数组

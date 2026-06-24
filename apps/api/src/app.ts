@@ -294,6 +294,52 @@ export function buildApi() {
     }
   });
 
+  app.get<{ Querystring: { url?: string } }>('/api/proxy-video', async (request, reply) => {
+    const videoUrl = request.query.url;
+    if (!videoUrl || !/^https?:\/\//i.test(videoUrl)) {
+      return reply.code(400).send({ error: 'Invalid video URL.' });
+    }
+    try {
+      const isDouyinVideo = videoUrl.includes('douyinvod') || videoUrl.includes('bytecdn');
+      const headers: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      };
+      if (isDouyinVideo) {
+        headers['Referer'] = 'https://www.douyin.com/';
+      }
+      const range = request.headers.range;
+      if (range) {
+        headers['Range'] = range;
+      }
+      const response = await fetch(videoUrl, { headers });
+      if (!response.ok && response.status !== 206) {
+        return reply.code(response.status).send({ error: 'Video fetch failed.' });
+      }
+      const contentType = response.headers.get('content-type') ?? 'video/mp4';
+      const arrayBuffer = await response.arrayBuffer();
+      const replyHeaders: Record<string, string> = {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=3600',
+        'Accept-Ranges': 'bytes',
+      };
+      const contentRange = response.headers.get('content-range');
+      if (contentRange) {
+        replyHeaders['Content-Range'] = contentRange;
+      }
+      const contentLength = response.headers.get('content-length');
+      if (contentLength) {
+        replyHeaders['Content-Length'] = contentLength;
+      }
+      return reply
+        .code(response.status === 206 ? 206 : 200)
+        .headers(replyHeaders)
+        .send(Buffer.from(arrayBuffer));
+    } catch (error) {
+      request.log.error({ error, videoUrl }, 'proxy video failed');
+      return reply.code(502).send({ error: 'Video proxy failed.' });
+    }
+  });
+
   app.get('/api/settings/model-provider', async () => getModelProviderSettings());
 
   app.put<{ Body: Partial<SaveModelProviderSettingsRequest> }>('/api/settings/model-provider', async (request, reply) => {
