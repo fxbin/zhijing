@@ -115,10 +115,11 @@ import { DuckDBConnection } from '@duckdb/node-api';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { readFile, unlink } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import {
   buildWeReadMaterialMarkdown,
@@ -5320,7 +5321,8 @@ async function parseOrdinaryWebMaterial(material: MaterialRecord): Promise<Parse
   }
 }
 
-const DOUYIN_SCRIPT_PATH = join(process.cwd(), 'scripts', 'douyin_extract.py');
+const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const DOUYIN_SCRIPT_PATH = join(PROJECT_ROOT, 'scripts', 'douyin_extract.py');
 const DOUYIN_EXTRACT_TIMEOUT_MS = 90_000;
 const DOUYIN_EXTRACT_MAX_BUFFER = 2 * 1024 * 1024;
 const DOUYIN_VIDEO_CDN_INDICATOR = 'douyinvod';
