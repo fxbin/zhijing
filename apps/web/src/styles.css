@@ -2067,6 +2067,110 @@ button { cursor: pointer; }
   overflow-wrap: anywhere;
 }
 
+.related-suggestions-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface-subtle, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 12px;
+  min-width: 0;
+}
+
+.related-suggestions-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary, #475569);
+}
+
+.related-suggestions-loading {
+  font-size: 13px;
+  color: var(--text-muted, #94a3b8);
+  padding: 8px 0;
+}
+
+.related-suggestion-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 10px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  transition: border-color 0.15s ease;
+}
+
+.related-suggestion-item:hover {
+  border-color: var(--scholar-blue, #2C5F8D);
+}
+
+.related-suggestion-content {
+  display: grid;
+  gap: 4px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.related-suggestion-content:focus-visible {
+  outline: 2px solid var(--scholar-blue, #2C5F8D);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.related-suggestion-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #1e293b);
+  overflow-wrap: anywhere;
+}
+
+.related-suggestion-meta {
+  font-size: 11px;
+  color: var(--text-muted, #94a3b8);
+}
+
+.related-suggestion-reason {
+  font-size: 11px;
+  color: var(--text-secondary, #475569);
+}
+
+.related-suggestion-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.related-action-dismiss,
+.related-action-reject {
+  font-size: 11px;
+  padding: 4px 8px;
+  border: 1px solid var(--border, #e2e8f0);
+  background: var(--surface, #ffffff);
+  color: var(--text-secondary, #475569);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+}
+
+.related-action-dismiss:hover {
+  background: var(--surface-subtle, #f1f5f9);
+  color: var(--text-primary, #1e293b);
+}
+
+.related-action-reject:hover {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
 .feed {
   display: grid;
   gap: 20px;

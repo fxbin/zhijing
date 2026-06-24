@@ -2,6 +2,10 @@ import {
   type AgentTask,
   type ArchiveItemResult,
   type ArchivedItemsResult,
+  type AttentionSignal,
+  type AttentionSignalStrength,
+  type AttentionSignalTargetType,
+  type AttentionSignalType,
   type AssignMaterialRequest,
   type ArtifactRecord,
   type ArtifactRevision,
@@ -25,7 +29,12 @@ import {
   type ExportRecord,
   type ExportScope,
   type GlobalInsights,
+  type ConstructionProgress,
+  type ConstructionStage,
   type RecallGrade,
+  type RecallResult,
+  type RecallResultItem,
+  type RecallToolName,
   classifyInput,
   type Entity,
   type EntityType,
@@ -66,6 +75,15 @@ import {
   type ModelProviderProfile,
   type ParseStatus,
   type SaveModelProviderSettingsRequest,
+  type SocraticQuestion,
+  type SocraticQuestioningResult,
+  type SocraticQuestionType,
+  type SocraticTrigger,
+  type RelatedSuggestion,
+  type RelatedSuggestionsResult,
+  type AgentAction,
+  type AgentActionLog,
+  type AgentActionLogResult,
   type TaskStatus,
   type TestModelProviderSettingsRequest,
   detectPlatform,
@@ -81,6 +99,7 @@ import {
   getPiEnvApiKey,
   isKnownPiProvider,
   questionAnswerSchema,
+  socraticQuestioningSchema,
   structuredSchemas,
   type KnownProvider,
   type PiRuntime,
@@ -148,6 +167,121 @@ type ModelProviderProfileRecord = {
 const DEFAULT_PROFILE_NAME = '默认配置';
 const MODEL_PROVIDER_PROFILE_ID_PREFIX = 'mpp';
 const LEGACY_MODEL_PROVIDER_SETTINGS_ID = 'default';
+const CONTEXT_RETRIEVAL_LIMIT = 8;
+const FTS_TOKENIZER = 'unicode61';
+const MEMORY_SEARCH_TITLE_WEIGHT = 3;
+const MEMORY_SEARCH_BODY_WEIGHT = 1;
+const ATTENTION_SIGNAL_STRONG = 'strong';
+const ATTENTION_SIGNAL_MEDIUM = 'medium';
+const ATTENTION_SIGNAL_WEAK = 'weak';
+const ATTENTION_SIGNAL_QUESTION_CARD = 'question_card_created';
+const ATTENTION_SIGNAL_MANUAL_LAYOUT = 'manual_layout';
+const ATTENTION_SIGNAL_ASK_QUESTION = 'ask_question';
+const ATTENTION_SIGNAL_CARD_OPENED = 'card_opened';
+const ATTENTION_LOG_LIMIT = 100;
+const ATTENTION_CONTEXT_QUESTION_MAX_LENGTH = 200;
+const ATTENTION_TARGET_TYPE_CARD = 'card';
+const ATTENTION_TARGET_TYPE_LAYOUT = 'layout';
+const ATTENTION_TARGET_TYPE_QUESTION = 'question';
+
+const RECALL_TOOL_DIRECT_FETCH = 'direct_fetch';
+const RECALL_TOOL_SHALLOW = 'shallow_recall';
+const RECALL_TOOL_DEEP = 'deep_recall';
+const RECALL_TOOL_TOPIC_EXPLORATION = 'topic_exploration';
+const RECALL_DEFAULT_LIMIT = 8;
+const RECALL_PREVIEW_MAX_LENGTH = 200;
+const RECALL_RELEVANCE_THRESHOLD = 0.1;
+const RECALL_DIRECT_FETCH_EXACT_SCORE = 1.0;
+const RECALL_DIRECT_FETCH_CONTAIN_SCORE = 0.8;
+const RECALL_TOPIC_DIRECT_NEIGHBOR_SCORE = 0.9;
+const RECALL_TOPIC_SECOND_NEIGHBOR_SCORE = 0.6;
+const RECALL_DEEP_EXPANSION_PROMPT_PREFIX = '请为以下查询生成最多 5 个语义相关的扩展词或同义词，用逗号分隔，不要解释：\n查询：';
+const RECALL_DEEP_EXPANSION_PROMPT_SUFFIX = '\n扩展词：';
+const RECALL_DEEP_EXPANSION_MAX_TERMS = 5;
+const KNOWLEDGE_MAP_CARD_NODE_PREFIX = 'card:';
+const RECALL_RELEVANCE_ROUND_FACTOR = 10000;
+
+const CONSTRUCTION_SEEDLING_THRESHOLD = 0.6;
+const CONSTRUCTION_GROWING_THRESHOLD = 0.3;
+const CONSTRUCTION_RATIO_BASE = 0;
+const CONSTRUCTION_STAGE_SEEDLING = 'seedling';
+const CONSTRUCTION_STAGE_GROWING = 'growing';
+const CONSTRUCTION_STAGE_MATURE = 'mature';
+const CONSTRUCTION_ACTION_SEEDLING = '知识库仍以 AI 骨架为主，建议优先确认或修改骨架卡';
+const CONSTRUCTION_ACTION_GROWING = '知识库建构中，继续确认骨架卡以提升知识质量';
+const CONSTRUCTION_ACTION_MATURE = '知识库建构接近完成，可以开始溯源和检验';
+
+const TENSION_KEYWORD_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ['支持', '反对'],
+  ['优点', '缺点'],
+  ['利', '弊'],
+  ['正面', '反面'],
+  ['肯定', '否定'],
+  ['赞成', '反对'],
+];
+const TENSION_KEY_PREFIX = 'tension:';
+const TENSION_KEY_SEPARATOR = '-vs-:';
+const TENSION_TITLE_TEMPLATE = '"{a}" vs "{b}" 张力';
+const TENSION_META_TEMPLATE = '{status} · 类型 {type}';
+
+/**
+ * 苏格拉底追问相关常量（P11-2）。
+ *
+ * 铁律：Agent 只生成提问，不生成答案。
+ * prompt 模板中明确指示"只提问，不提供答案"，
+ * 避免替代用户建构认知。
+ *
+ * @author fxbin
+ */
+const SOCRATIC_TRIGGER_SKELETON = 'skeleton_card';
+const SOCRATIC_TRIGGER_TENSION = 'semantic_tension';
+const SOCRATIC_TRIGGER_MANUAL = 'manual';
+const SOCRATIC_QUESTION_MIN_COUNT = 3;
+const SOCRATIC_QUESTION_MAX_COUNT = 5;
+const SOCRATIC_CARD_DIGEST_LIMIT = 20;
+const SOCRATIC_PROMPT_HEADER = '你是知径的苏格拉底追问 Agent。你的职责是生成提问，引导用户自己思考，绝不提供答案。';
+const SOCRATIC_PROMPT_RULES = [
+  '铁律：只生成提问，不生成任何答案、解释或提示。',
+  '每个问题必须属于以下五种类型之一：definition_clarity（定义澄清）、evidence_probe（证据追问）、counterexample_challenge（反例挑战）、boundary_probe（边界追问）、connection_probe（关联追问）。',
+  '问题应当开放、具体、可回答，避免是非题。',
+  'rationale 字段是系统内部使用的提问理由，不应展示给用户作为答案提示。',
+  '生成 3-5 个问题，覆盖不同追问维度。',
+].join('\n');
+const SOCRATIC_PROMPT_SKELETON_TEMPLATE = '当前知识库「{title}」存在骨架卡（AI 生成未确认）。请基于以下卡片信息生成苏格拉底追问，引导用户澄清概念边界、补充证据或思考反例。';
+const SOCRATIC_PROMPT_TENSION_TEMPLATE = '当前知识库「{title}」检测到语义张力：关键词「{a}」与「{b}」存在对立。请生成苏格拉底追问，引导用户思考这一对立。';
+const SOCRATIC_PROMPT_MANUAL_TEMPLATE = '用户主动请求对知识库「{title}」进行苏格拉底追问。请基于知识库核心卡片生成追问，引导用户深化认知建构。';
+const SOCRATIC_ATTENTION_SIGNAL_TYPE = 'ask_question';
+const SOCRATIC_ATTENTION_SIGNAL_STRENGTH = 'strong';
+const SOCRATIC_ATTENTION_TARGET_TYPE = 'question';
+
+/**
+ * "可能相关"建议相关常量（P10-4）。
+ *
+ * 基于 Recall Agent 检索结果生成建议，展示在侧边栏。
+ * 用户可忽略或否决，仅影响前端展示，不持久化。
+ *
+ * @author fxbin
+ */
+const RELATED_SUGGESTION_LIMIT = 5;
+const RELATED_SUGGESTION_MIN_SCORE = 0.1;
+const RELATED_SUGGESTION_REASON_TOPIC = '基于知识地图邻居检索';
+const RELATED_SUGGESTION_REASON_SHALLOW = '基于关键词匹配检索';
+const RELATED_SUGGESTION_REASON_DIRECT = '基于标题精确匹配';
+
+/**
+ * Agent 行为日志相关常量（P10-5）。
+ *
+ * 记录每次 Agent 调用的输入/输出/耗时/结果，供可审计性使用。
+ * datasette inspect 能力通过 SQL 导出端点实现，无需引入 datasette 依赖。
+ *
+ * @author fxbin
+ */
+const AGENT_ACTION_LOG_DEFAULT_LIMIT = 50;
+const AGENT_ACTION_LOG_MAX_LIMIT = 200;
+const AGENT_ACTION_LOG_TABLE_NAME = 'agent_action_log';
+const AGENT_ACTION_LOG_ID_PREFIX = 'alog';
+const AGENT_ACTION_SUCCESS_TRUE = 1;
+const AGENT_ACTION_SUCCESS_FALSE = 0;
 
 type StoreState = {
   knowledgeBases: KnowledgeBaseSummary[];
@@ -165,6 +299,8 @@ type StoreState = {
   modelProviderConfig?: PersistedModelProviderConfig;
   modelProviderProfiles: ModelProviderProfileRecord[];
   nodePositions: Record<string, Array<{ nodeId: string; x: number; y: number }>>;
+  attentionSignals: AttentionSignal[];
+  agentActionLogs: AgentActionLog[];
 };
 
 type KnowledgeRepository = {
@@ -178,6 +314,7 @@ type KnowledgeRepository = {
   updateMaterial(material: MaterialRecord): void;
   findMaterial(id: string): MaterialRecord | undefined;
   listMaterials(knowledgeBaseId?: string, limit?: number): MaterialRecord[];
+  searchMaterialsByRelevance(knowledgeBaseId: string, query: string, limit: number): MaterialRecord[];
   findCard(id: string): KnowledgeCard | undefined;
   deleteMaterial(id: string): void;
   archiveMaterial(id: string): void;
@@ -188,6 +325,7 @@ type KnowledgeRepository = {
   insertCards(cards: KnowledgeCard[]): void;
   updateCard(card: KnowledgeCard): void;
   listCards(knowledgeBaseId?: string): KnowledgeCard[];
+  searchCardsByRelevance(knowledgeBaseId: string, query: string, limit: number): KnowledgeCard[];
   archiveCard(id: string): void;
   unarchiveCard(id: string): void;
   listArchivedCards(knowledgeBaseId?: string): KnowledgeCard[];
@@ -234,6 +372,15 @@ type KnowledgeRepository = {
   writeWeReadSyncState(state: WeReadSyncStateRow): void;
   updateWeReadBookMetaImport(bookId: string, materialId: string, bookmarkCount: number): void;
   computeWeReadStats(): WeReadStatsResponse;
+  insertAttentionSignal(signal: AttentionSignal): void;
+  listAttentionSignals(knowledgeBaseId?: string, limit?: number): AttentionSignal[];
+  markAttentionConsumed(signalId: string): void;
+  deleteAttentionSignals(knowledgeBaseId: string): void;
+  insertAgentActionLog(log: AgentActionLog): void;
+  listAgentActionLogs(options?: { knowledgeBaseId?: string; action?: string; limit?: number }): AgentActionLog[];
+  countAgentActionLogs(options?: { knowledgeBaseId?: string; action?: string }): number;
+  executeInspectQuery(sql: string, limit?: number): Array<Record<string, unknown>>;
+  listInspectTables(): Array<{ name: string; sql: string }>;
 };
 
 type GeneratedCard = {
@@ -288,6 +435,8 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     conflictAudit: [],
     modelProviderProfiles: [],
     nodePositions: {},
+    attentionSignals: [],
+    agentActionLogs: [],
   };
 
   private wereadApiKey: string | null = null;
@@ -319,6 +468,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     this.state.cards = this.state.cards.filter((item) => item.knowledgeBaseId !== id);
     this.state.artifacts = this.state.artifacts.filter((item) => item.knowledgeBaseId !== id);
     this.state.entities = this.state.entities.filter((item) => item.knowledgeBaseId !== id);
+    this.state.attentionSignals = this.state.attentionSignals.filter((item) => item.knowledgeBaseId !== id);
   }
 
   insertMaterial(material: MaterialRecord) {
@@ -486,6 +636,51 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
   deleteCard(id: string) {
     this.state.cards = this.state.cards.filter((card) => card.id !== id);
     this.state.cardRevisions = this.state.cardRevisions.filter((revision) => revision.cardId !== id);
+  }
+
+  /**
+   * 基于关键词包含匹配与简易评分，检索与查询文本最相关的卡片（内存实现）。
+   * 标题匹配权重高于正文匹配，按评分降序排序，限制返回数量。
+   * 若查询字符串无有效搜索词，返回按更新时间排序的前 limit 条。
+   * @author fxbin
+   * @param {string} knowledgeBaseId - 知识库ID
+   * @param {string} query - 查询文本
+   * @param {number} limit - 最大返回数量
+   * @returns {KnowledgeCard[]} 按相关性排序的卡片数组
+   */
+  searchCardsByRelevance(knowledgeBaseId: string, query: string, limit: number): KnowledgeCard[] {
+    const cards = this.listCards(knowledgeBaseId);
+    const terms = extractSearchTerms(query);
+    if (terms.length === 0) return cards.slice(0, limit);
+    const scored = cards
+      .map((card) => ({ card, score: scoreTextRelevance(card.title, card.body, terms) }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+    return scored.slice(0, limit).map((item) => item.card);
+  }
+
+  /**
+   * 基于关键词包含匹配与简易评分，检索与查询文本最相关的资料（内存实现）。
+   * 标题匹配权重高于正文匹配，按评分降序排序，限制返回数量。
+   * 若查询字符串无有效搜索词，返回按创建时间排序的前 limit 条。
+   * @author fxbin
+   * @param {string} knowledgeBaseId - 知识库ID
+   * @param {string} query - 查询文本
+   * @param {number} limit - 最大返回数量
+   * @returns {MaterialRecord[]} 按相关性排序的资料数组
+   */
+  searchMaterialsByRelevance(knowledgeBaseId: string, query: string, limit: number): MaterialRecord[] {
+    const materials = this.listMaterials(knowledgeBaseId);
+    const terms = extractSearchTerms(query);
+    if (terms.length === 0) return materials.slice(0, limit);
+    const scored = materials
+      .map((material) => ({
+        material,
+        score: scoreTextRelevance(material.title, material.contentText ?? material.rawInput, terms),
+      }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+    return scored.slice(0, limit).map((item) => item.material);
   }
 
   insertConflictAudit(entry: ConflictAuditEntry) {
@@ -736,6 +931,116 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
       lastSyncError: this.wereadSyncState?.lastSyncError ?? null,
     };
   }
+
+  /**
+   * 插入一条注意力信号记录（内存实现）。
+   * @param signal - 注意力信号对象
+   * @author fxbin
+   */
+  insertAttentionSignal(signal: AttentionSignal): void {
+    this.state.attentionSignals.unshift(signal);
+  }
+
+  /**
+   * 查询注意力信号列表，按创建时间降序排序（内存实现）。
+   * @param knowledgeBaseId - 可选，知识库 ID 过滤
+   * @param limit - 可选，最大返回数量，默认 ATTENTION_LOG_LIMIT
+   * @returns 注意力信号数组
+   * @author fxbin
+   */
+  listAttentionSignals(knowledgeBaseId?: string, limit?: number): AttentionSignal[] {
+    const signals = knowledgeBaseId
+      ? this.state.attentionSignals.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
+      : this.state.attentionSignals;
+    const sorted = [...signals].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    const maxRows = typeof limit === 'number' ? limit : ATTENTION_LOG_LIMIT;
+    return sorted.slice(0, maxRows);
+  }
+
+  /**
+   * 标记注意力信号为已消费（内存实现）。
+   * @param signalId - 信号 ID
+   * @author fxbin
+   */
+  markAttentionConsumed(signalId: string): void {
+    const signal = this.state.attentionSignals.find((item) => item.id === signalId);
+    if (signal) signal.consumed = true;
+  }
+
+  /**
+   * 删除指定知识库的所有注意力信号（内存实现）。
+   * @param knowledgeBaseId - 知识库 ID
+   * @author fxbin
+   */
+  deleteAttentionSignals(knowledgeBaseId: string): void {
+    this.state.attentionSignals = this.state.attentionSignals.filter(
+      (item) => item.knowledgeBaseId !== knowledgeBaseId,
+    );
+  }
+
+  /**
+   * 插入 Agent 行为日志（内存实现）。
+   * @param log - 行为日志记录
+   * @author fxbin
+   */
+  insertAgentActionLog(log: AgentActionLog): void {
+    this.state.agentActionLogs.unshift(log);
+  }
+
+  /**
+   * 查询 Agent 行为日志（内存实现）。
+   * @param options - 查询选项
+   * @author fxbin
+   */
+  listAgentActionLogs(options?: { knowledgeBaseId?: string; action?: string; limit?: number }): AgentActionLog[] {
+    let logs = this.state.agentActionLogs;
+    if (options?.knowledgeBaseId) {
+      logs = logs.filter((log) => log.knowledgeBaseId === options.knowledgeBaseId);
+    }
+    if (options?.action) {
+      logs = logs.filter((log) => log.action === options.action);
+    }
+    const limit = options?.limit ?? AGENT_ACTION_LOG_DEFAULT_LIMIT;
+    return logs.slice(0, limit);
+  }
+
+  /**
+   * 统计 Agent 行为日志数量（内存实现）。
+   * @param options - 查询选项
+   * @author fxbin
+   */
+  countAgentActionLogs(options?: { knowledgeBaseId?: string; action?: string }): number {
+    return this.listAgentActionLogs({ ...options, limit: AGENT_ACTION_LOG_MAX_LIMIT }).length;
+  }
+
+  /**
+   * 执行 inspect SQL 查询（内存实现，仅支持简单过滤）。
+   * @param sql - SQL 语句（内存实现仅做简单解析）
+   * @param limit - 最大返回行数
+   * @author fxbin
+   */
+  executeInspectQuery(sql: string, limit?: number): Array<Record<string, unknown>> {
+    const maxRows = limit ?? AGENT_ACTION_LOG_DEFAULT_LIMIT;
+    const lowerSql = sql.toLowerCase();
+    if (lowerSql.includes(AGENT_ACTION_LOG_TABLE_NAME)) {
+      return this.state.agentActionLogs.slice(0, maxRows).map((log) => log as unknown as Record<string, unknown>);
+    }
+    if (lowerSql.includes('attention_log')) {
+      return this.state.attentionSignals.slice(0, maxRows).map((signal) => signal as unknown as Record<string, unknown>);
+    }
+    return [];
+  }
+
+  /**
+   * 列出 inspect 可用的表（内存实现，返回虚拟表列表）。
+   * @author fxbin
+   */
+  listInspectTables(): Array<{ name: string; sql: string }> {
+    return [
+      { name: AGENT_ACTION_LOG_TABLE_NAME, sql: 'CREATE TABLE agent_action_log (id, action, knowledge_base_id, input_json, output_json, duration_ms, success, error, created_at)' },
+      { name: 'attention_log', sql: 'CREATE TABLE attention_log (id, knowledge_base_id, signal_type, signal_strength, target_type, target_id, context_data_json, consumed, created_at)' },
+    ];
+  }
 }
 
 type KnowledgeBaseRow = {
@@ -911,8 +1216,27 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     return row ? mapKnowledgeBase(row) : undefined;
   }
 
+  /**
+   * 删除知识库及其关联数据。
+   *
+   * 先清理 FTS5 虚拟表中的孤立索引行（FTS5 不支持外键级联），
+   * 再删除主表记录，依赖 ON DELETE CASCADE 级联清理 materials/cards。
+   *
+   * @param id - 知识库 ID
+   * @author fxbin
+   */
   deleteKnowledgeBase(id: string) {
-    this.db.prepare('DELETE FROM knowledge_bases WHERE id = ?').run(id);
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare('DELETE FROM cards_fts WHERE knowledge_base_id = ?').run(id);
+      this.db.prepare('DELETE FROM materials_fts WHERE knowledge_base_id = ?').run(id);
+      this.db.prepare('DELETE FROM attention_log WHERE knowledge_base_id = ?').run(id);
+      this.db.prepare('DELETE FROM knowledge_bases WHERE id = ?').run(id);
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   insertMaterial(material: MaterialRecord) {
@@ -938,6 +1262,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       material.createdAt,
       material.archived ? 1 : 0,
     );
+    this.upsertMaterialFts(material);
   }
 
   updateMaterial(material: MaterialRecord) {
@@ -963,6 +1288,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       material.archived ? 1 : 0,
       material.id,
     );
+    this.upsertMaterialFts(material);
   }
 
   findMaterial(id: string) {
@@ -1002,6 +1328,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     try {
       this.db.prepare('UPDATE cards SET material_id = NULL WHERE material_id = ?').run(id);
       this.db.prepare('DELETE FROM materials WHERE id = ?').run(id);
+      this.deleteMaterialFts(id);
       this.db.exec('COMMIT');
     } catch (error) {
       this.db.exec('ROLLBACK');
@@ -1058,6 +1385,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     try {
       for (const card of cards) {
         insert.run(card.id, card.knowledgeBaseId, card.materialId ?? null, card.type, card.title, card.body, card.claimStatus, serializeCardRecall(card.recall), card.createdAt, card.updatedAt, card.archived ? 1 : 0);
+        this.upsertCardFts(card);
       }
       this.db.exec('COMMIT');
     } catch (error) {
@@ -1084,6 +1412,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       card.archived ? 1 : 0,
       card.id,
     );
+    this.upsertCardFts(card);
   }
 
   listCards(knowledgeBaseId?: string) {
@@ -1229,6 +1558,117 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
   deleteCard(id: string) {
     this.db.prepare('DELETE FROM cards WHERE id = ?').run(id);
+    this.deleteCardFts(id);
+  }
+
+  /**
+   * 同步写入或更新 materials_fts 全文索引。
+   * 先删除旧索引行再插入新行，保证标题与正文内容与主表一致。
+   * @author fxbin
+   * @param {MaterialRecord} material - 资料记录
+   */
+  private upsertMaterialFts(material: MaterialRecord) {
+    this.db.prepare('DELETE FROM materials_fts WHERE material_id = ?').run(material.id);
+    this.db.prepare(`
+      INSERT INTO materials_fts (material_id, knowledge_base_id, title, content_text)
+      VALUES (?, ?, ?, ?)
+    `).run(
+      material.id,
+      material.knowledgeBaseId,
+      material.title,
+      material.contentText ?? material.rawInput,
+    );
+  }
+
+  /**
+   * 同步写入或更新 cards_fts 全文索引。
+   * 先删除旧索引行再插入新行，保证标题与正文内容与主表一致。
+   * @author fxbin
+   * @param {KnowledgeCard} card - 卡片记录
+   */
+  private upsertCardFts(card: KnowledgeCard) {
+    this.db.prepare('DELETE FROM cards_fts WHERE card_id = ?').run(card.id);
+    this.db.prepare(`
+      INSERT INTO cards_fts (card_id, knowledge_base_id, title, body)
+      VALUES (?, ?, ?, ?)
+    `).run(
+      card.id,
+      card.knowledgeBaseId,
+      card.title,
+      card.body,
+    );
+  }
+
+  /**
+   * 从 materials_fts 全文索引中删除指定资料。
+   * @author fxbin
+   * @param {string} id - 资料ID
+   */
+  private deleteMaterialFts(id: string) {
+    this.db.prepare('DELETE FROM materials_fts WHERE material_id = ?').run(id);
+  }
+
+  /**
+   * 从 cards_fts 全文索引中删除指定卡片。
+   * @author fxbin
+   * @param {string} id - 卡片ID
+   */
+  private deleteCardFts(id: string) {
+    this.db.prepare('DELETE FROM cards_fts WHERE card_id = ?').run(id);
+  }
+
+  /**
+   * 基于 FTS5 全文检索与 BM25 相关性排序，检索与查询文本最相关的卡片。
+   * 仅返回未归档的卡片，按相关性从高到低排序，限制返回数量。
+   * 若查询字符串清理后为空或检索失败，返回空数组。
+   * @author fxbin
+   * @param {string} knowledgeBaseId - 知识库ID
+   * @param {string} query - 查询文本
+   * @param {number} limit - 最大返回数量
+   * @returns {KnowledgeCard[]} 按相关性排序的卡片数组
+   */
+  searchCardsByRelevance(knowledgeBaseId: string, query: string, limit: number): KnowledgeCard[] {
+    const sanitized = sanitizeFtsQuery(query);
+    if (!sanitized) return [];
+    try {
+      const rows = this.db.prepare(`
+        SELECT c.* FROM cards c
+        JOIN cards_fts ON c.id = cards_fts.card_id
+        WHERE cards_fts.knowledge_base_id = ? AND cards_fts MATCH ? AND c.archived = 0
+        ORDER BY bm25(cards_fts)
+        LIMIT ?
+      `).all(knowledgeBaseId, sanitized, limit) as CardRow[];
+      return rows.map(mapCard);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * 基于 FTS5 全文检索与 BM25 相关性排序，检索与查询文本最相关的资料。
+   * 仅返回未归档的资料，按相关性从高到低排序，限制返回数量。
+   * 若查询字符串清理后为空或检索失败，返回空数组。
+   * @author fxbin
+   * @param {string} knowledgeBaseId - 知识库ID
+   * @param {string} query - 查询文本
+   * @param {number} limit - 最大返回数量
+   * @returns {MaterialRecord[]} 按相关性排序的资料数组
+   */
+  searchMaterialsByRelevance(knowledgeBaseId: string, query: string, limit: number): MaterialRecord[] {
+    const sanitized = sanitizeFtsQuery(query);
+    if (!sanitized) return [];
+    try {
+      const rows = this.db.prepare(`
+        SELECT m.* FROM materials m
+        JOIN materials_fts ON m.id = materials_fts.material_id
+        WHERE materials_fts.knowledge_base_id = ? AND materials_fts MATCH ? AND m.archived = 0
+        ORDER BY bm25(materials_fts)
+        LIMIT ?
+      `).all(knowledgeBaseId, sanitized, limit) as MaterialRow[];
+      return rows.map(mapMaterial);
+    } catch {
+      return [];
+    }
   }
 
   insertConflictAudit(entry: ConflictAuditEntry) {
@@ -1502,6 +1942,62 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.db.prepare('DELETE FROM weread_settings WHERE id = ?').run('default');
   }
 
+  /**
+   * 插入一条注意力信号记录，供 Recall Agent 检索用户认知建构活动。
+   * @param signal - 注意力信号对象
+   * @author fxbin
+   */
+  insertAttentionSignal(signal: AttentionSignal): void {
+    this.db.prepare(`
+      INSERT INTO attention_log (
+        id, knowledge_base_id, signal_type, signal_strength, target_type, target_id, context_data_json, consumed, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      signal.id,
+      signal.knowledgeBaseId,
+      signal.signalType,
+      signal.signalStrength,
+      signal.targetType,
+      signal.targetId,
+      JSON.stringify(signal.contextData),
+      signal.consumed ? 1 : 0,
+      signal.createdAt,
+    );
+  }
+
+  /**
+   * 查询注意力信号列表，按创建时间降序排序。
+   * @param knowledgeBaseId - 可选，知识库 ID 过滤；未指定时返回全库信号
+   * @param limit - 可选，最大返回数量，默认 ATTENTION_LOG_LIMIT
+   * @returns 注意力信号数组
+   * @author fxbin
+   */
+  listAttentionSignals(knowledgeBaseId?: string, limit?: number): AttentionSignal[] {
+    const maxRows = typeof limit === 'number' ? limit : ATTENTION_LOG_LIMIT;
+    const rows = knowledgeBaseId
+      ? this.db.prepare('SELECT * FROM attention_log WHERE knowledge_base_id = ? ORDER BY created_at DESC LIMIT ?').all(knowledgeBaseId, maxRows) as AttentionLogRow[]
+      : this.db.prepare('SELECT * FROM attention_log ORDER BY created_at DESC LIMIT ?').all(maxRows) as AttentionLogRow[];
+    return rows.map(mapAttentionSignal);
+  }
+
+  /**
+   * 标记注意力信号为已消费，避免 Recall Agent 重复检索。
+   * @param signalId - 信号 ID
+   * @author fxbin
+   */
+  markAttentionConsumed(signalId: string): void {
+    this.db.prepare('UPDATE attention_log SET consumed = 1 WHERE id = ?').run(signalId);
+  }
+
+  /**
+   * 删除指定知识库的所有注意力信号。
+   * @param knowledgeBaseId - 知识库 ID
+   * @author fxbin
+   */
+  deleteAttentionSignals(knowledgeBaseId: string): void {
+    this.db.prepare('DELETE FROM attention_log WHERE knowledge_base_id = ?').run(knowledgeBaseId);
+  }
+
   private migrate() {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS knowledge_bases (
@@ -1645,6 +2141,34 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureKnowledgeBaseNodePositionsTable();
     this.ensureArchivedColumns();
     this.ensureKnowledgeBaseTitleUnique();
+    this.ensureFtsTables();
+    this.ensureAttentionLogTable();
+  }
+
+  /**
+   * 创建 FTS5 全文检索虚拟表，用于 cards 与 materials 的相关性排序检索。
+   * 虚拟表为派生索引，可随时重建；card_id/material_id/knowledge_base_id 标记为 UNINDEXED（只存储不索引）。
+   * 使用 IF NOT EXISTS 保证幂等，兼容新旧数据库。
+   * @author fxbin
+   */
+  private ensureFtsTables() {
+    this.db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS cards_fts USING fts5(
+        card_id UNINDEXED,
+        knowledge_base_id UNINDEXED,
+        title,
+        body,
+        tokenize = '${FTS_TOKENIZER}'
+      );
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS materials_fts USING fts5(
+        material_id UNINDEXED,
+        knowledge_base_id UNINDEXED,
+        title,
+        content_text,
+        tokenize = '${FTS_TOKENIZER}'
+      );
+    `);
   }
 
   private ensureMaterialMediaColumn() {
@@ -2083,6 +2607,157 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       this.db.exec('ALTER TABLE cards ADD COLUMN recall_json TEXT;');
     }
   }
+
+  /**
+   * 创建 attention_log 表及索引，记录用户注意力信号。
+   * 使用 IF NOT EXISTS 保证幂等，兼容新旧数据库。
+   * @author fxbin
+   */
+  private ensureAttentionLogTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS attention_log (
+        id TEXT PRIMARY KEY,
+        knowledge_base_id TEXT NOT NULL,
+        signal_type TEXT NOT NULL,
+        signal_strength TEXT NOT NULL,
+        target_type TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        context_data_json TEXT NOT NULL DEFAULT '{}',
+        consumed INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_attention_log_kb ON attention_log(knowledge_base_id);
+      CREATE INDEX IF NOT EXISTS idx_attention_log_created ON attention_log(created_at DESC);
+    `);
+  }
+
+  /**
+   * 创建 agent_action_log 表及索引，记录 Agent 行为日志（P10-5）。
+   * 使用 IF NOT EXISTS 保证幂等，兼容新旧数据库。
+   * @author fxbin
+   */
+  private ensureAgentActionLogTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS agent_action_log (
+        id TEXT PRIMARY KEY,
+        action TEXT NOT NULL,
+        knowledge_base_id TEXT,
+        input_json TEXT NOT NULL,
+        output_json TEXT,
+        duration_ms INTEGER NOT NULL,
+        success INTEGER NOT NULL,
+        error TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_agent_action_log_kb ON agent_action_log(knowledge_base_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_action_log_action ON agent_action_log(action);
+      CREATE INDEX IF NOT EXISTS idx_agent_action_log_created ON agent_action_log(created_at DESC);
+    `);
+  }
+
+  /**
+   * 插入 Agent 行为日志（SQLite 实现）。
+   * @param log - 行为日志记录
+   * @author fxbin
+   */
+  insertAgentActionLog(log: AgentActionLog): void {
+    this.ensureAgentActionLogTable();
+    this.db.prepare(`
+      INSERT INTO agent_action_log (
+        id, action, knowledge_base_id, input_json, output_json, duration_ms, success, error, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      log.id,
+      log.action,
+      log.knowledgeBaseId ?? null,
+      JSON.stringify(log.input),
+      log.output ? JSON.stringify(log.output) : null,
+      log.durationMs,
+      log.success ? AGENT_ACTION_SUCCESS_TRUE : AGENT_ACTION_SUCCESS_FALSE,
+      log.error ?? null,
+      log.createdAt,
+    );
+  }
+
+  /**
+   * 查询 Agent 行为日志（SQLite 实现）。
+   * @param options - 查询选项
+   * @author fxbin
+   */
+  listAgentActionLogs(options?: { knowledgeBaseId?: string; action?: string; limit?: number }): AgentActionLog[] {
+    this.ensureAgentActionLogTable();
+    const limit = Math.min(options?.limit ?? AGENT_ACTION_LOG_DEFAULT_LIMIT, AGENT_ACTION_LOG_MAX_LIMIT);
+    const conditions: string[] = [];
+    const params: Array<string | number> = [];
+    if (options?.knowledgeBaseId) {
+      conditions.push('knowledge_base_id = ?');
+      params.push(options.knowledgeBaseId);
+    }
+    if (options?.action) {
+      conditions.push('action = ?');
+      params.push(options.action);
+    }
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const rows = this.db.prepare(
+      `SELECT * FROM agent_action_log ${whereClause} ORDER BY created_at DESC LIMIT ?`,
+    ).all(...params, limit) as AgentActionLogRow[];
+    return rows.map(mapAgentActionLog);
+  }
+
+  /**
+   * 统计 Agent 行为日志数量（SQLite 实现）。
+   * @param options - 查询选项
+   * @author fxbin
+   */
+  countAgentActionLogs(options?: { knowledgeBaseId?: string; action?: string }): number {
+    this.ensureAgentActionLogTable();
+    const conditions: string[] = [];
+    const params: Array<string | number> = [];
+    if (options?.knowledgeBaseId) {
+      conditions.push('knowledge_base_id = ?');
+      params.push(options.knowledgeBaseId);
+    }
+    if (options?.action) {
+      conditions.push('action = ?');
+      params.push(options.action);
+    }
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const row = this.db.prepare(
+      `SELECT COUNT(*) as count FROM agent_action_log ${whereClause}`,
+    ).get(...params) as { count: number };
+    return row.count;
+  }
+
+  /**
+   * 执行 inspect SQL 查询（SQLite 实现，只读）。
+   *
+   * 安全限制：仅允许 SELECT 语句，禁止任何写操作。
+   * 结果行数受 limit 参数限制，默认 50 行。
+   *
+   * @param sql - SQL 语句（必须是 SELECT）
+   * @param limit - 最大返回行数
+   * @author fxbin
+   */
+  executeInspectQuery(sql: string, limit?: number): Array<Record<string, unknown>> {
+    const trimmedSql = sql.trim();
+    if (!trimmedSql.toLowerCase().startsWith('select')) {
+      throw new KnowledgeCoreError('inspect 仅支持 SELECT 语句。', 400);
+    }
+    const maxRows = Math.min(limit ?? AGENT_ACTION_LOG_DEFAULT_LIMIT, AGENT_ACTION_LOG_MAX_LIMIT);
+    const stmt = this.db.prepare(`${trimmedSql} LIMIT ${maxRows}`);
+    return stmt.all() as Array<Record<string, unknown>>;
+  }
+
+  /**
+   * 列出 inspect 可用的表（SQLite 实现）。
+   * @author fxbin
+   */
+  listInspectTables(): Array<{ name: string; sql: string }> {
+    const rows = this.db.prepare(
+      "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    ).all() as Array<{ name: string; sql: string }>;
+    return rows;
+  }
 }
 
 function mapKnowledgeBase(row: KnowledgeBaseRow): KnowledgeBaseSummary {
@@ -2221,6 +2896,62 @@ function mapCardRevision(row: CardRevisionRow): CardRevision {
   };
 }
 
+const FTS_SPECIAL_CHARS_PATTERN = /["*:(\-+)^]/g;
+const FTS_WHITESPACE_PATTERN = /\s+/g;
+const CJK_CHARACTER_PATTERN = /[\u4e00-\u9fff]/;
+
+/**
+ * 清理 FTS5 查询字符串，去除 FTS5 查询语法中的特殊字符，避免语法错误。
+ * 仅保留可被分词器处理的普通文本，清理后用于 MATCH 查询。
+ * @author fxbin
+ * @param {string} query - 原始查询字符串
+ * @returns {string} 清理后的查询字符串，可能为空字符串
+ */
+function sanitizeFtsQuery(query: string): string {
+  return query
+    .replace(FTS_SPECIAL_CHARS_PATTERN, ' ')
+    .replace(FTS_WHITESPACE_PATTERN, ' ')
+    .trim();
+}
+
+/**
+ * 从查询字符串中提取搜索词，用于内存实现的关键词匹配。
+ * 先按空格分词；若结果为单个包含 CJK 字符的词，则按字符分割以模拟 FTS5 unicode61 对中文的分词行为。
+ * @author fxbin
+ * @param {string} query - 原始查询字符串
+ * @returns {string[]} 去重后的搜索词数组
+ */
+function extractSearchTerms(query: string): string[] {
+  const words = query
+    .replace(FTS_SPECIAL_CHARS_PATTERN, ' ')
+    .split(/\s+/)
+    .filter((term) => term.length > 0);
+  if (words.length === 0) return [];
+  if (words.length === 1 && CJK_CHARACTER_PATTERN.test(words[0])) {
+    const chars = words[0].split('').filter((char) => CJK_CHARACTER_PATTERN.test(char));
+    return Array.from(new Set(chars));
+  }
+  return Array.from(new Set(words));
+}
+
+/**
+ * 计算文本与搜索词的相关性评分，用于内存实现的关键词匹配。
+ * 标题匹配权重高于正文匹配，返回所有匹配词的加权总分。
+ * @author fxbin
+ * @param {string} title - 标题文本
+ * @param {string} body - 正文文本
+ * @param {string[]} terms - 搜索词数组
+ * @returns {number} 相关性评分，0 表示无匹配
+ */
+function scoreTextRelevance(title: string, body: string, terms: string[]): number {
+  let score = 0;
+  for (const term of terms) {
+    if (title.includes(term)) score += MEMORY_SEARCH_TITLE_WEIGHT;
+    if (body.includes(term)) score += MEMORY_SEARCH_BODY_WEIGHT;
+  }
+  return score;
+}
+
 const REVISION_FIELDS: CardRevisionField[] = ['title', 'body', 'type', 'claimStatus'];
 
 function parseRevisionFields(json: string): CardRevisionField[] {
@@ -2329,6 +3060,70 @@ function mapConflictAudit(row: ConflictAuditRow): ConflictAuditEntry {
     dropIds: JSON.parse(row.drop_ids_json) as string[],
     knowledgeBaseId: row.knowledge_base_id,
     note: row.note,
+    createdAt: row.created_at,
+  };
+}
+
+type AttentionLogRow = {
+  id: string;
+  knowledge_base_id: string;
+  signal_type: AttentionSignalType;
+  signal_strength: AttentionSignalStrength;
+  target_type: AttentionSignalTargetType;
+  target_id: string;
+  context_data_json: string;
+  consumed: number;
+  created_at: string;
+};
+
+/**
+ * 将 attention_log 表行映射为 AttentionSignal 对象。
+ * @param row - 数据库行
+ * @returns 注意力信号对象
+ * @author fxbin
+ */
+function mapAttentionSignal(row: AttentionLogRow): AttentionSignal {
+  return {
+    id: row.id,
+    knowledgeBaseId: row.knowledge_base_id,
+    signalType: row.signal_type,
+    signalStrength: row.signal_strength,
+    targetType: row.target_type,
+    targetId: row.target_id,
+    contextData: JSON.parse(row.context_data_json) as Record<string, unknown>,
+    consumed: row.consumed === 1,
+    createdAt: row.created_at,
+  };
+}
+
+type AgentActionLogRow = {
+  id: string;
+  action: string;
+  knowledge_base_id: string | null;
+  input_json: string;
+  output_json: string | null;
+  duration_ms: number;
+  success: number;
+  error: string | null;
+  created_at: string;
+};
+
+/**
+ * 将 agent_action_log 表行映射为 AgentActionLog 对象。
+ * @param row - 数据库行
+ * @returns Agent 行为日志对象
+ * @author fxbin
+ */
+function mapAgentActionLog(row: AgentActionLogRow): AgentActionLog {
+  return {
+    id: row.id,
+    action: row.action as AgentAction,
+    knowledgeBaseId: row.knowledge_base_id ?? undefined,
+    input: JSON.parse(row.input_json) as Record<string, unknown>,
+    output: row.output_json ? JSON.parse(row.output_json) as Record<string, unknown> : undefined,
+    durationMs: row.duration_ms,
+    success: row.success === AGENT_ACTION_SUCCESS_TRUE,
+    error: row.error ?? undefined,
     createdAt: row.created_at,
   };
 }
@@ -3165,6 +3960,21 @@ function createCards(
   base.sourcedRatio = base.cardCount > 0 ? sourcedCount / base.cardCount : 0;
   base.updatedAt = timestamp;
   repository.insertCards(cards);
+  for (const card of cards) {
+    if (card.type === 'question') {
+      repository.insertAttentionSignal({
+        id: id('attn'),
+        knowledgeBaseId: base.id,
+        signalType: ATTENTION_SIGNAL_QUESTION_CARD,
+        signalStrength: ATTENTION_SIGNAL_STRONG,
+        targetType: ATTENTION_TARGET_TYPE_CARD,
+        targetId: card.id,
+        contextData: { question: seed.substring(0, ATTENTION_CONTEXT_QUESTION_MAX_LENGTH) },
+        consumed: false,
+        createdAt: timestamp,
+      });
+    }
+  }
   repository.updateKnowledgeBase(base);
   return cards;
 }
@@ -3432,7 +4242,18 @@ export async function answerKnowledgeBaseQuestion(knowledgeBaseId: string, quest
 
   try {
     const material = createMaterial(base, { input: value, knowledgeBaseId }, 'question');
-    const generationContext = buildQuestionContext(base.id, material.id);
+    repository.insertAttentionSignal({
+      id: id('attn'),
+      knowledgeBaseId: base.id,
+      signalType: ATTENTION_SIGNAL_ASK_QUESTION,
+      signalStrength: ATTENTION_SIGNAL_MEDIUM,
+      targetType: ATTENTION_TARGET_TYPE_QUESTION,
+      targetId: material.id,
+      contextData: { question: value.substring(0, ATTENTION_CONTEXT_QUESTION_MAX_LENGTH) },
+      consumed: false,
+      createdAt: now(),
+    });
+    const generationContext = buildQuestionContext(base.id, material.id, value);
     const generation = await generateKnowledge('question_answer', value, {
       kind: 'question',
       knowledgeBaseId: base.id,
@@ -3870,10 +4691,9 @@ function buildKitContext(knowledgeBaseId: string) {
   return { materials, cards, artifacts };
 }
 
-function buildQuestionContext(knowledgeBaseId: string, questionMaterialId: string) {
-  const materials = repository.listMaterials(knowledgeBaseId)
+function buildQuestionContext(knowledgeBaseId: string, questionMaterialId: string, question: string) {
+  const materials = repository.searchMaterialsByRelevance(knowledgeBaseId, question, CONTEXT_RETRIEVAL_LIMIT)
     .filter((material) => material.id !== questionMaterialId)
-    .slice(0, 8)
     .map((material) => ({
       id: material.id,
       type: material.type,
@@ -3884,8 +4704,7 @@ function buildQuestionContext(knowledgeBaseId: string, questionMaterialId: strin
       mediaUrls: material.mediaUrls ?? [],
       contentPreview: compactPreview(material.contentText ?? material.rawInput),
     }));
-  const cards = repository.listCards(knowledgeBaseId)
-    .slice(0, 8)
+  const cards = repository.searchCardsByRelevance(knowledgeBaseId, question, CONTEXT_RETRIEVAL_LIMIT)
     .map((card) => ({
       id: card.id,
       type: card.type,
@@ -5802,6 +6621,9 @@ export function listConflictGroups(kind?: ConflictKind): ConflictGroup[] {
   if (!kind || kind === 'duplicate_material') {
     groups.push(...detectMaterialConflictGroups());
   }
+  if (!kind || kind === 'semantic_tension') {
+    groups.push(...detectSemanticTensionGroups());
+  }
   return groups;
 }
 
@@ -5863,6 +6685,60 @@ function detectMaterialConflictGroups(): ConflictGroup[] {
 
 function normalizeConflictKey(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * 检测语义张力分组（P11-3）。
+ *
+ * 扫描同一知识库中的卡片，检测标题中包含对立关键词的卡片对，
+ * 如"支持 X"与"反对 X"、"优点"与"缺点"等，形成张力分组。
+ *
+ * 张力分组帮助用户发现知识库中的认知冲突，引导主动对质与纠错。
+ *
+ * @author fxbin
+ * @returns {ConflictGroup[]} 语义张力分组数组
+ */
+function detectSemanticTensionGroups(): ConflictGroup[] {
+  const cards = repository.listCards();
+  const byKnowledgeBase = new Map<string, KnowledgeCard[]>();
+  for (const card of cards) {
+    const bucket = byKnowledgeBase.get(card.knowledgeBaseId) ?? [];
+    bucket.push(card);
+    byKnowledgeBase.set(card.knowledgeBaseId, bucket);
+  }
+
+  const groups: ConflictGroup[] = [];
+  for (const [knowledgeBaseId, kbCards] of byKnowledgeBase) {
+    for (const [keywordA, keywordB] of TENSION_KEYWORD_PAIRS) {
+      const sideA = kbCards.filter((card) => card.title.includes(keywordA));
+      const sideB = kbCards.filter((card) => card.title.includes(keywordB));
+      if (sideA.length === 0 || sideB.length === 0) {
+        continue;
+      }
+
+      const items = [...sideA, ...sideB]
+        .slice(0, CONFLICT_GROUP_ITEM_LIMIT)
+        .map((card) => ({
+          id: card.id,
+          knowledgeBaseId: card.knowledgeBaseId,
+          title: card.title,
+          meta: TENSION_META_TEMPLATE
+            .replace('{status}', card.claimStatus === 'sourced' ? '已溯源' : card.claimStatus === 'ai_skeleton' ? '骨架' : '已确认')
+            .replace('{type}', card.type),
+        }));
+
+      const key = `${TENSION_KEY_PREFIX}${keywordA}${TENSION_KEY_SEPARATOR}${keywordB}:${knowledgeBaseId}`;
+      const title = TENSION_TITLE_TEMPLATE.replace('{a}', keywordA).replace('{b}', keywordB);
+
+      groups.push({
+        kind: 'semantic_tension',
+        key,
+        title,
+        items,
+      });
+    }
+  }
+  return groups;
 }
 
 /**
@@ -6155,15 +7031,15 @@ export function getKnowledgeBaseNodePositions(id: string): KnowledgeMapNodePosit
 
 /**
  * 保存知识库的节点拖拽位置。
- * @param {string} id - 知识库 ID
+ * @param {string} knowledgeBaseId - 知识库 ID
  * @param {SaveKnowledgeMapNodePositionsRequest} request - 保存请求
  * @returns {KnowledgeMapNodePosition[]} 保存后的节点位置数组
  */
 export function saveKnowledgeBaseNodePositions(
-  id: string,
+  knowledgeBaseId: string,
   request: SaveKnowledgeMapNodePositionsRequest,
 ): KnowledgeMapNodePosition[] {
-  const base = repository.findKnowledgeBase(id);
+  const base = repository.findKnowledgeBase(knowledgeBaseId);
   if (!base) throw new KnowledgeCoreError('Knowledge base not found.', 404);
   const positions = (request.positions ?? []).filter(
     (position): position is KnowledgeMapNodePosition =>
@@ -6173,8 +7049,118 @@ export function saveKnowledgeBaseNodePositions(
       && Number.isFinite(position.x)
       && Number.isFinite(position.y),
   );
-  repository.saveNodePositions(id, positions);
+  repository.saveNodePositions(knowledgeBaseId, positions);
+  repository.insertAttentionSignal({
+    id: id('attn'),
+    knowledgeBaseId: knowledgeBaseId,
+    signalType: ATTENTION_SIGNAL_MANUAL_LAYOUT,
+    signalStrength: ATTENTION_SIGNAL_MEDIUM,
+    targetType: ATTENTION_TARGET_TYPE_LAYOUT,
+    targetId: knowledgeBaseId,
+    contextData: { nodeCount: positions.length },
+    consumed: false,
+    createdAt: now(),
+  });
   return positions;
+}
+
+/**
+ * 查询注意力信号列表，供 Recall Agent 检索用户认知建构活动。
+ * @param knowledgeBaseId - 可选，知识库 ID 过滤；未指定时返回全库信号
+ * @param limit - 可选，最大返回数量
+ * @returns 注意力信号数组
+ * @author fxbin
+ */
+export function listAttentionSignals(knowledgeBaseId?: string, limit?: number): AttentionSignal[] {
+  return repository.listAttentionSignals(knowledgeBaseId, limit);
+}
+
+/**
+ * 记录 Agent 行为日志（P10-5）。
+ *
+ * 包装 Agent 调用，自动测量耗时并记录输入/输出/错误。
+ * 供可审计性使用，每次 Agent 行为都留 log。
+ *
+ * @author fxbin
+ * @param {AgentAction} action - 行为类型
+ * @param {object} options - 选项
+ * @param {string} [options.knowledgeBaseId] - 知识库 ID
+ * @param {Record<string, unknown>} [options.input] - 输入参数
+ * @param {Record<string, unknown>} [options.output] - 输出结果
+ * @param {string} [options.error] - 错误信息
+ * @param {number} [options.durationMs] - 耗时（毫秒）
+ * @returns {AgentActionLog} 行为日志记录
+ */
+export function logAgentAction(
+  action: AgentAction,
+  options: {
+    knowledgeBaseId?: string;
+    input?: Record<string, unknown>;
+    output?: Record<string, unknown>;
+    error?: string;
+    durationMs?: number;
+  },
+): AgentActionLog {
+  const log: AgentActionLog = {
+    id: id(AGENT_ACTION_LOG_ID_PREFIX),
+    action,
+    knowledgeBaseId: options.knowledgeBaseId,
+    input: options.input ?? {},
+    output: options.output,
+    durationMs: options.durationMs ?? 0,
+    success: !options.error,
+    error: options.error,
+    createdAt: now(),
+  };
+  repository.insertAgentActionLog(log);
+  return log;
+}
+
+/**
+ * 查询 Agent 行为日志（P10-5）。
+ *
+ * @author fxbin
+ * @param {object} options - 查询选项
+ * @param {string} [options.knowledgeBaseId] - 知识库 ID 过滤
+ * @param {string} [options.action] - 行为类型过滤
+ * @param {number} [options.limit] - 最大返回数量
+ * @returns {AgentActionLogResult} 日志查询结果
+ */
+export function listAgentActionLogs(options?: {
+  knowledgeBaseId?: string;
+  action?: string;
+  limit?: number;
+}): AgentActionLogResult {
+  const logs = repository.listAgentActionLogs(options);
+  const total = repository.countAgentActionLogs(options);
+  return { logs, total };
+}
+
+/**
+ * 执行 inspect SQL 查询（P10-5）。
+ *
+ * datasette inspect 能力的轻量实现：仅支持 SELECT 语句，
+ * 结果行数受 limit 参数限制。
+ *
+ * 安全限制：仅允许 SELECT，禁止任何写操作。
+ *
+ * @author fxbin
+ * @param {string} sql - SQL 语句（必须是 SELECT）
+ * @param {number} [limit] - 最大返回行数
+ * @returns {Array<Record<string, unknown>>} 查询结果
+ */
+export function inspectQuery(sql: string, limit?: number): Array<Record<string, unknown>> {
+  return repository.executeInspectQuery(sql, limit);
+}
+
+/**
+ * 列出 inspect 可用的表（P10-5）。
+ *
+ * @author fxbin
+ * @returns {Array<{name: string; sql: string}>} 表列表
+ */
+export function listInspectTables(): Array<{ name: string; sql: string }> {
+  return repository.listInspectTables();
 }
 
 export function getTask(id: string) {
@@ -6453,6 +7439,342 @@ export function getGlobalInsights(): GlobalInsights {
       edgeCount,
       knowledgeBaseCount: bases.length,
     },
+  };
+}
+
+/**
+ * 计算知识库的建构进度报告（P11-1）。
+ *
+ * 量化用户认知劳动量，基于骨架卡（ai_skeleton）占比划分建构阶段：
+ *  - seedling 幼苗期：骨架卡占比 > 60%，知识库仍以 AI 生成为主
+ *  - growing 成长期：骨架卡占比 30%-60%，用户正在主动建构
+ *  - mature 成熟期：骨架卡占比 < 30%，建构接近完成
+ *
+ * 每个阶段附带建议动作，引导用户从 AI 骨架转向自主建构。
+ * 若知识库不存在或无卡片，返回 undefined。
+ *
+ * @author fxbin
+ * @param {string} knowledgeBaseId - 知识库 ID
+ * @returns {ConstructionProgress | undefined} 建构进度报告
+ */
+export function getConstructionProgress(knowledgeBaseId: string): ConstructionProgress | undefined {
+  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  if (!base) return undefined;
+
+  const cards = repository.listCards(knowledgeBaseId);
+  const totalCards = cards.length;
+  if (totalCards === 0) return undefined;
+
+  const skeletonCards = cards.filter((card) => card.claimStatus === 'ai_skeleton').length;
+  const confirmedCards = cards.filter((card) => card.claimStatus === 'user_confirmed').length;
+  const sourcedCards = cards.filter((card) => card.claimStatus === 'sourced').length;
+  const unsupportedCards = cards.filter((card) => card.claimStatus === 'unsupported').length;
+
+  const skeletonRatio = skeletonCards / totalCards;
+  const confirmedRatio = confirmedCards / totalCards;
+  const sourcedRatio = sourcedCards / totalCards;
+
+  let constructionStage: ConstructionStage;
+  let suggestedAction: string;
+
+  if (skeletonRatio > CONSTRUCTION_SEEDLING_THRESHOLD) {
+    constructionStage = CONSTRUCTION_STAGE_SEEDLING as ConstructionStage;
+    suggestedAction = CONSTRUCTION_ACTION_SEEDLING;
+  } else if (skeletonRatio > CONSTRUCTION_GROWING_THRESHOLD) {
+    constructionStage = CONSTRUCTION_STAGE_GROWING as ConstructionStage;
+    suggestedAction = CONSTRUCTION_ACTION_GROWING;
+  } else {
+    constructionStage = CONSTRUCTION_STAGE_MATURE as ConstructionStage;
+    suggestedAction = CONSTRUCTION_ACTION_MATURE;
+  }
+
+  return {
+    knowledgeBaseId,
+    totalCards,
+    skeletonCards,
+    confirmedCards,
+    sourcedCards,
+    unsupportedCards,
+    skeletonRatio,
+    confirmedRatio,
+    sourcedRatio,
+    constructionStage,
+    suggestedAction,
+  };
+}
+
+/**
+ * 获取知识库中所有骨架卡（claimStatus === 'ai_skeleton'）列表。
+ *
+ * 用于"骨架卡强制建构流程"（P11-1）前端展示"待建构"列表。
+ *
+ * @author fxbin
+ * @param {string} knowledgeBaseId - 知识库 ID
+ * @returns {KnowledgeCard[]} 骨架卡数组
+ */
+export function listSkeletonCards(knowledgeBaseId: string): KnowledgeCard[] {
+  return repository
+    .listCards(knowledgeBaseId)
+    .filter((card) => card.claimStatus === 'ai_skeleton');
+}
+
+/**
+ * 生成苏格拉底追问（P11-2）。
+ *
+ * 核心铁律：Agent 只生成提问，不生成答案。
+ * 镜子不保姆：反映用户当前认知状态，不替代用户建构。
+ *
+ * 触发场景：
+ *  - skeleton_card 骨架卡待建构时，引导用户澄清概念边界
+ *  - semantic_tension 语义张力检测到认知冲突时，引导用户思考对立
+ *  - manual 用户主动请求追问时，基于知识库核心卡片生成
+ *
+ * 实现要点：
+ *  - prompt 中明确指示"只提问，不提供答案"
+ *  - schema 中只有 questions 字段，无 answer 字段
+ *  - 记录 attention_signal 供 Recall Agent 检索
+ *  - 问题数量限制在 3-5 个，覆盖不同追问维度
+ *
+ * @author fxbin
+ * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {object} options - 可选参数
+ * @param {string} options.cardId - 目标卡片 ID（skeleton_card 触发时使用）
+ * @param {string} options.tensionKey - 张力组 key（semantic_tension 触发时使用）
+ * @param {SocraticTrigger} options.trigger - 触发来源，默认 manual
+ * @returns {Promise<SocraticQuestioningResult>} 苏格拉底追问结果
+ */
+export async function generateSocraticQuestions(
+  knowledgeBaseId: string,
+  options?: { cardId?: string; tensionKey?: string; trigger?: SocraticTrigger },
+): Promise<SocraticQuestioningResult> {
+  const startTime = Date.now();
+  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  if (!base) {
+    throw new KnowledgeCoreError(`Knowledge base ${knowledgeBaseId} not found.`, 404);
+  }
+
+  const trigger = options?.trigger ?? SOCRATIC_TRIGGER_MANUAL as SocraticTrigger;
+  const cardId = options?.cardId;
+  const tensionKey = options?.tensionKey;
+
+  const cards = repository.listCards(knowledgeBaseId);
+  if (cards.length === 0) {
+    throw new KnowledgeCoreError('知识库没有卡片，无法生成苏格拉底追问。', 400);
+  }
+
+  const prompt = buildSocraticPrompt(base.title, cards, trigger, cardId, tensionKey);
+  const runtime = createMockPiRuntime();
+  const result = await runtime.completeStructured<{ questions: SocraticQuestion[] }>({
+    task: 'socratic_questioning',
+    prompt,
+    schema: socraticQuestioningSchema as TSchema,
+  });
+
+  const questions = (result.output.questions ?? []).slice(0, SOCRATIC_QUESTION_MAX_COUNT);
+  if (questions.length < SOCRATIC_QUESTION_MIN_COUNT) {
+    throw new KnowledgeCoreError('苏格拉底追问生成失败：问题数量不足。', 500);
+  }
+
+  const generatedAt = now();
+  const questioningResult: SocraticQuestioningResult = {
+    knowledgeBaseId,
+    questions,
+    triggerContext: {
+      trigger,
+      cardId,
+      tensionKey,
+    },
+    generatedAt,
+  };
+
+  repository.insertAttentionSignal({
+    id: id('att'),
+    knowledgeBaseId,
+    signalType: SOCRATIC_ATTENTION_SIGNAL_TYPE as AttentionSignalType,
+    signalStrength: SOCRATIC_ATTENTION_SIGNAL_STRENGTH as AttentionSignalStrength,
+    targetType: SOCRATIC_ATTENTION_TARGET_TYPE as AttentionSignalTargetType,
+    targetId: knowledgeBaseId,
+    contextData: {
+      trigger,
+      cardId,
+      tensionKey,
+      questionCount: questions.length,
+      questionTypes: questions.map((q) => q.type),
+    },
+    consumed: false,
+    createdAt: generatedAt,
+  });
+
+  logAgentAction('socratic_questioning', {
+    knowledgeBaseId,
+    input: { trigger, cardId, tensionKey },
+    output: { questionCount: questions.length, questionTypes: questions.map((q) => q.type) },
+    durationMs: Date.now() - startTime,
+  });
+
+  return questioningResult;
+}
+
+/**
+ * 构建苏格拉底追问 prompt。
+ *
+ * 根据触发来源选择不同的 prompt 模板，并注入卡片摘要作为上下文。
+ * prompt 中明确指示"只提问，不提供答案"，遵循不代写铁律。
+ *
+ * @author fxbin
+ * @param {string} kbTitle - 知识库标题
+ * @param {KnowledgeCard[]} cards - 知识库卡片
+ * @param {SocraticTrigger} trigger - 触发来源
+ * @param {string} [cardId] - 目标卡片 ID
+ * @param {string} [tensionKey] - 张力组 key
+ * @returns {string} 完整 prompt
+ */
+function buildSocraticPrompt(
+  kbTitle: string,
+  cards: KnowledgeCard[],
+  trigger: SocraticTrigger,
+  cardId?: string,
+  tensionKey?: string,
+): string {
+  let triggerSection: string;
+  if (trigger === SOCRATIC_TRIGGER_SKELETON) {
+    const targetCard = cardId ? cards.find((c) => c.id === cardId) : undefined;
+    const targetCards = targetCard ? [targetCard] : cards.filter((c) => c.claimStatus === 'ai_skeleton');
+    const digest = targetCards.slice(0, SOCRATIC_CARD_DIGEST_LIMIT).map((c) => `- ${c.title}：${c.body.slice(0, 80)}`).join('\n');
+    triggerSection = SOCRATIC_PROMPT_SKELETON_TEMPLATE.replace('{title}', kbTitle) + `\n\n骨架卡摘要：\n${digest || '（暂无骨架卡）'}`;
+  } else if (trigger === SOCRATIC_TRIGGER_TENSION) {
+    const tensionPair = parseTensionKey(tensionKey);
+    const pairText = tensionPair ? `「${tensionPair[0]}」与「${tensionPair[1]}」` : '未知张力对';
+    triggerSection = SOCRATIC_PROMPT_TENSION_TEMPLATE.replace('{title}', kbTitle).replace('{a}', tensionPair ? tensionPair[0] : '').replace('{b}', tensionPair ? tensionPair[1] : '') + `\n\n张力关键词：${pairText}`;
+  } else {
+    const digest = cards.slice(0, SOCRATIC_CARD_DIGEST_LIMIT).map((c) => `- ${c.title}：${c.body.slice(0, 80)}`).join('\n');
+    triggerSection = SOCRATIC_PROMPT_MANUAL_TEMPLATE.replace('{title}', kbTitle) + `\n\n核心卡片摘要：\n${digest}`;
+  }
+
+  return [
+    SOCRATIC_PROMPT_HEADER,
+    SOCRATIC_PROMPT_RULES,
+    '',
+    triggerSection,
+  ].join('\n');
+}
+
+/**
+ * 解析张力组 key，提取对立关键词对。
+ *
+ * 张力 key 格式：tension:{keywordA}-vs-:{keywordB}:{knowledgeBaseId}
+ *
+ * @author fxbin
+ * @param {string} [tensionKey] - 张力组 key
+ * @returns {[string, string] | undefined} 关键词对，解析失败返回 undefined
+ */
+function parseTensionKey(tensionKey?: string): [string, string] | undefined {
+  if (!tensionKey) return undefined;
+  if (!tensionKey.startsWith(TENSION_KEY_PREFIX)) return undefined;
+  const withoutPrefix = tensionKey.slice(TENSION_KEY_PREFIX.length);
+  const parts = withoutPrefix.split(TENSION_KEY_SEPARATOR);
+  if (parts.length < 2) return undefined;
+  const keywordA = parts[0];
+  const rest = parts.slice(1).join(TENSION_KEY_SEPARATOR);
+  const lastColonIndex = rest.lastIndexOf(':');
+  if (lastColonIndex === -1) return undefined;
+  const keywordB = rest.slice(0, lastColonIndex);
+  return [keywordA, keywordB];
+}
+
+/**
+ * 生成"可能相关"建议（P10-4）。
+ *
+ * 基于 Recall Agent 检索结果，为用户推荐可能相关的卡片。
+ * 建议展示在侧边栏，用户可忽略或否决，仅影响前端展示，不持久化。
+ *
+ * 检索策略：
+ *  - 若提供 currentCardId，使用 recallTopicExploration 检索知识地图邻居
+ *  - 同时使用 recallShallow 基于当前卡片标题进行关键词检索
+ *  - 合并去重，按 relevanceScore 降序排序
+ *  - 返回前 5 个建议
+ *
+ * 设计原则：
+ *  - 镜子不保姆：只提供检索建议，不替代用户决策
+ *  - 提议权不写入权：建议不自动修改任何数据
+ *
+ * @author fxbin
+ * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {string} [currentCardId] - 当前查看的卡片 ID，用作检索种子
+ * @returns {RelatedSuggestionsResult} 建议结果
+ */
+export function generateRelatedSuggestions(
+  knowledgeBaseId: string,
+  currentCardId?: string,
+): RelatedSuggestionsResult {
+  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  if (!base) {
+    throw new KnowledgeCoreError(`Knowledge base ${knowledgeBaseId} not found.`, 404);
+  }
+
+  const suggestions: RelatedSuggestion[] = [];
+  const seenCardIds = new Set<string>();
+
+  if (currentCardId) {
+    const seedCard = repository.findCard(currentCardId);
+    if (seedCard && seedCard.knowledgeBaseId === knowledgeBaseId) {
+      const topicResult = recallTopicExploration(knowledgeBaseId, currentCardId, RELATED_SUGGESTION_LIMIT);
+      for (const item of topicResult.items) {
+        if (item.kind !== 'card') continue;
+        if (item.id === currentCardId) continue;
+        if (seenCardIds.has(item.id)) continue;
+        if (item.relevanceScore < RELATED_SUGGESTION_MIN_SCORE) continue;
+        seenCardIds.add(item.id);
+        suggestions.push({
+          cardId: item.id,
+          title: item.title,
+          relevanceScore: item.relevanceScore,
+          recalledBy: item.recalledBy,
+          reason: RELATED_SUGGESTION_REASON_TOPIC,
+        });
+      }
+
+      const shallowResult = recallShallow(knowledgeBaseId, seedCard.title, RELATED_SUGGESTION_LIMIT);
+      for (const item of shallowResult.items) {
+        if (item.kind !== 'card') continue;
+        if (item.id === currentCardId) continue;
+        if (seenCardIds.has(item.id)) continue;
+        if (item.relevanceScore < RELATED_SUGGESTION_MIN_SCORE) continue;
+        seenCardIds.add(item.id);
+        suggestions.push({
+          cardId: item.id,
+          title: item.title,
+          relevanceScore: item.relevanceScore,
+          recalledBy: item.recalledBy,
+          reason: RELATED_SUGGESTION_REASON_SHALLOW,
+        });
+      }
+    }
+  } else {
+    const directResult = recallDirectFetch(knowledgeBaseId, base.title, RELATED_SUGGESTION_LIMIT);
+    for (const item of directResult.items) {
+      if (item.kind !== 'card') continue;
+      if (seenCardIds.has(item.id)) continue;
+      if (item.relevanceScore < RELATED_SUGGESTION_MIN_SCORE) continue;
+      seenCardIds.add(item.id);
+      suggestions.push({
+        cardId: item.id,
+        title: item.title,
+        relevanceScore: item.relevanceScore,
+        recalledBy: item.recalledBy,
+        reason: RELATED_SUGGESTION_REASON_DIRECT,
+      });
+    }
+  }
+
+  suggestions.sort((a, b) => b.relevanceScore - a.relevanceScore);
+  const limited = suggestions.slice(0, RELATED_SUGGESTION_LIMIT);
+
+  return {
+    knowledgeBaseId,
+    currentCardId,
+    suggestions: limited,
+    generatedAt: now(),
   };
 }
 
@@ -7008,3 +8330,362 @@ function rows(reader: { getRowObjectsJson(): Record<string, unknown>[] }) {
 function singleRow(reader: { getRowObjectsJson(): Record<string, unknown>[] }) {
   return rows(reader)[0] ?? {};
 }
+
+/**
+ * 截断文本作为回忆结果的预览，超长部分以省略号收尾。
+ * 与 compactPreview 不同，本函数服务于 Recall 工具链，使用独立的预览长度上限。
+ * @author fxbin
+ * @param {string} input - 原始文本
+ * @returns {string} 清理并截断后的预览文本
+ */
+function recallPreview(input: string): string {
+  const cleaned = input.replace(/\s+/g, ' ').trim();
+  return cleaned.length > RECALL_PREVIEW_MAX_LENGTH
+    ? `${cleaned.slice(0, RECALL_PREVIEW_MAX_LENGTH)}...`
+    : cleaned;
+}
+
+/**
+ * 将相关性分数四舍五入到 4 位小数，避免浮点精度噪声。
+ * @author fxbin
+ * @param {number} score - 原始分数
+ * @returns {number} 规整后的分数
+ */
+function roundRelevance(score: number): number {
+  return Math.round(score * RECALL_RELEVANCE_ROUND_FACTOR) / RECALL_RELEVANCE_ROUND_FACTOR;
+}
+
+/**
+ * 计算 direct_fetch 工具下标题与查询的精确匹配分数。
+ * - 标题与查询完全相等记为精确命中
+ * - 标题包含查询或查询包含标题记为包含命中
+ * - 其余记为不命中返回 0
+ * @author fxbin
+ * @param {string} title - 卡片或资料标题
+ * @param {string} query - 已 trim 的查询串
+ * @returns {number} 相关性分数，未命中返回 0
+ */
+function scoreDirectFetch(title: string, query: string): number {
+  const normalizedTitle = title.trim();
+  if (!normalizedTitle) return 0;
+  if (normalizedTitle === query) return RECALL_DIRECT_FETCH_EXACT_SCORE;
+  if (normalizedTitle.includes(query) || query.includes(normalizedTitle)) {
+    return RECALL_DIRECT_FETCH_CONTAIN_SCORE;
+  }
+  return 0;
+}
+
+/**
+ * 调用 pi-runtime 生成查询的语义扩展词，并将扩展词与原查询拼接为增强查询串。
+ * 当 pi-runtime 不可用、调用异常或无法解析出有效扩展词时返回空串，由调用方降级。
+ * @author fxbin
+ * @param {PiRuntime} piRuntime - 结构化输出运行时
+ * @param {string} query - 原始查询串
+ * @returns {Promise<string>} 拼接后的增强查询串，降级时返回空串
+ */
+async function expandQueryWithRuntime(piRuntime: PiRuntime, query: string): Promise<string> {
+  try {
+    const prompt = RECALL_DEEP_EXPANSION_PROMPT_PREFIX + query + RECALL_DEEP_EXPANSION_PROMPT_SUFFIX;
+    let rawText = '';
+    for await (const chunk of piRuntime.streamText({ prompt })) {
+      rawText += chunk.text;
+    }
+    const terms = rawText
+      .split(/[,\s，、；;]+/)
+      .map((term) => term.trim())
+      .filter((term) => term.length > 0 && term.length <= RECALL_PREVIEW_MAX_LENGTH && term !== query);
+    const unique = [...new Set(terms)].slice(0, RECALL_DEEP_EXPANSION_MAX_TERMS);
+    if (unique.length === 0) return '';
+    return [query, ...unique].join(' ');
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 将一个 RecallResult 的 tool 与所有 items 的 recalledBy 重写为目标工具名。
+ * 用于 deep_recall 降级复用 shallow_recall 结果时，保证审计标识一致。
+ * @author fxbin
+ * @param {RecallResult} result - 原始检索结果
+ * @param {RecallToolName} tool - 目标工具名
+ * @returns {RecallResult} 重标后的检索结果
+ */
+function relabelRecallResult(result: RecallResult, tool: RecallToolName): RecallResult {
+  return {
+    ...result,
+    tool,
+    items: result.items.map((item) => ({ ...item, recalledBy: tool })),
+  };
+}
+
+/**
+ * 精确命中回忆工具：遍历知识库内卡片与资料，按标题精确或包含匹配检索。
+ * 纯内存操作，零 LLM 成本，适用于查询词与已有标题高度重合的场景。
+ * @author fxbin
+ * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {string} query - 查询串
+ * @param {number} [limit] - 返回上限，默认 RECALL_DEFAULT_LIMIT
+ * @returns {RecallResult} 检索结果，recalledBy 为 direct_fetch
+ */
+export function recallDirectFetch(knowledgeBaseId: string, query: string, limit?: number): RecallResult {
+  const trimmedQuery = query.trim();
+  const maxItems = limit ?? RECALL_DEFAULT_LIMIT;
+  const items: RecallResultItem[] = [];
+  if (!trimmedQuery) {
+    return { items, tool: RECALL_TOOL_DIRECT_FETCH, query: trimmedQuery, totalFound: 0 };
+  }
+  for (const card of repository.listCards(knowledgeBaseId)) {
+    if (items.length >= maxItems) break;
+    const score = scoreDirectFetch(card.title, trimmedQuery);
+    if (score <= 0) continue;
+    items.push({
+      kind: 'card',
+      id: card.id,
+      knowledgeBaseId: card.knowledgeBaseId,
+      title: card.title,
+      preview: recallPreview(card.body),
+      relevanceScore: score,
+      recalledBy: RECALL_TOOL_DIRECT_FETCH,
+    });
+  }
+  for (const material of repository.listMaterials(knowledgeBaseId)) {
+    if (items.length >= maxItems) break;
+    const score = scoreDirectFetch(material.title, trimmedQuery);
+    if (score <= 0) continue;
+    items.push({
+      kind: 'material',
+      id: material.id,
+      knowledgeBaseId: material.knowledgeBaseId,
+      title: material.title,
+      preview: recallPreview(material.contentText ?? material.rawInput),
+      relevanceScore: score,
+      recalledBy: RECALL_TOOL_DIRECT_FETCH,
+    });
+  }
+  return { items, tool: RECALL_TOOL_DIRECT_FETCH, query: trimmedQuery, totalFound: items.length };
+}
+
+/**
+ * 浅层回忆工具：复用 searchCardsByRelevance / searchMaterialsByRelevance 进行检索，
+ * 并基于内部文本相关性打分归一化为 0-1 区间的 relevanceScore。
+ * 零 LLM 成本，查询为空时返回空结果。
+ * @author fxbin
+ * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {string} query - 查询串
+ * @param {number} [limit] - 返回上限，默认 RECALL_DEFAULT_LIMIT
+ * @returns {RecallResult} 检索结果，recalledBy 为 shallow_recall
+ */
+export function recallShallow(knowledgeBaseId: string, query: string, limit?: number): RecallResult {
+  const trimmedQuery = query.trim();
+  const maxItems = limit ?? RECALL_DEFAULT_LIMIT;
+  if (!trimmedQuery) {
+    return { items: [], tool: RECALL_TOOL_SHALLOW, query: trimmedQuery, totalFound: 0 };
+  }
+  const terms = extractSearchTerms(trimmedQuery);
+  const cards = repository.searchCardsByRelevance(knowledgeBaseId, trimmedQuery, maxItems);
+  const materials = repository.searchMaterialsByRelevance(knowledgeBaseId, trimmedQuery, maxItems);
+  const cardScored = cards.map((card) => ({
+    card,
+    score: scoreTextRelevance(card.title, card.body, terms),
+  }));
+  const materialScored = materials.map((material) => ({
+    material,
+    score: scoreTextRelevance(material.title, material.contentText ?? material.rawInput, terms),
+  }));
+  const maxScore = Math.max(
+    ...cardScored.map((entry) => entry.score),
+    ...materialScored.map((entry) => entry.score),
+    0,
+  );
+  const items: RecallResultItem[] = [];
+  for (const { card, score } of cardScored) {
+    if (items.length >= maxItems) break;
+    const relevance = maxScore > 0 ? score / maxScore : 0;
+    if (relevance < RECALL_RELEVANCE_THRESHOLD) continue;
+    items.push({
+      kind: 'card',
+      id: card.id,
+      knowledgeBaseId: card.knowledgeBaseId,
+      title: card.title,
+      preview: recallPreview(card.body),
+      relevanceScore: roundRelevance(relevance),
+      recalledBy: RECALL_TOOL_SHALLOW,
+    });
+  }
+  for (const { material, score } of materialScored) {
+    if (items.length >= maxItems) break;
+    const relevance = maxScore > 0 ? score / maxScore : 0;
+    if (relevance < RECALL_RELEVANCE_THRESHOLD) continue;
+    items.push({
+      kind: 'material',
+      id: material.id,
+      knowledgeBaseId: material.knowledgeBaseId,
+      title: material.title,
+      preview: recallPreview(material.contentText ?? material.rawInput),
+      relevanceScore: roundRelevance(relevance),
+      recalledBy: RECALL_TOOL_SHALLOW,
+    });
+  }
+  const totalFound = cardScored.filter((entry) => entry.score > 0).length
+    + materialScored.filter((entry) => entry.score > 0).length;
+  return { items, tool: RECALL_TOOL_SHALLOW, query: trimmedQuery, totalFound };
+}
+
+/**
+ * 深层回忆工具：借助 pi-runtime 生成查询的语义扩展词，再用扩展后的查询执行浅层回忆。
+ * 当 piRuntime 未提供、调用异常或无法解析出有效扩展词时，降级为浅层回忆。
+ * 注意本函数为 async，调用方需 await。
+ * @author fxbin
+ * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {string} query - 查询串
+ * @param {number} [limit] - 返回上限，默认 RECALL_DEFAULT_LIMIT
+ * @param {PiRuntime} [piRuntime] - 结构化输出运行时，可选
+ * @returns {Promise<RecallResult>} 检索结果，recalledBy 为 deep_recall
+ */
+export async function recallDeep(
+  knowledgeBaseId: string,
+  query: string,
+  limit?: number,
+  piRuntime?: PiRuntime,
+): Promise<RecallResult> {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) {
+    return { items: [], tool: RECALL_TOOL_DEEP, query: trimmedQuery, totalFound: 0 };
+  }
+  if (!piRuntime) {
+    const shallow = recallShallow(knowledgeBaseId, trimmedQuery, limit);
+    return relabelRecallResult(shallow, RECALL_TOOL_DEEP);
+  }
+  const expandedQuery = await expandQueryWithRuntime(piRuntime, trimmedQuery);
+  if (!expandedQuery) {
+    const shallow = recallShallow(knowledgeBaseId, trimmedQuery, limit);
+    return relabelRecallResult(shallow, RECALL_TOOL_DEEP);
+  }
+  const shallow = recallShallow(knowledgeBaseId, expandedQuery, limit);
+  return relabelRecallResult(shallow, RECALL_TOOL_DEEP);
+}
+
+/**
+ * 主题探索回忆工具：以种子卡片为起点，遍历知识地图邻居节点检索相关卡片。
+ * 直接邻居 relevanceScore 为 0.9，二度邻居为 0.6；仅返回 card 类型节点。
+ * 适用于用户已聚焦某张卡片、需要扩展其关联上下文的场景。
+ * @author fxbin
+ * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {string} seedCardId - 种子卡片 ID
+ * @param {number} [limit] - 返回上限，默认 RECALL_DEFAULT_LIMIT
+ * @returns {RecallResult} 检索结果，recalledBy 为 topic_exploration
+ */
+export function recallTopicExploration(knowledgeBaseId: string, seedCardId: string, limit?: number): RecallResult {
+  const maxItems = limit ?? RECALL_DEFAULT_LIMIT;
+  const map = getKnowledgeMap(knowledgeBaseId);
+  if (!map) {
+    return { items: [], tool: RECALL_TOOL_TOPIC_EXPLORATION, query: seedCardId, totalFound: 0 };
+  }
+  const seedNodeId = KNOWLEDGE_MAP_CARD_NODE_PREFIX + seedCardId;
+  const seedExists = map.nodes.some((node) => node.id === seedNodeId);
+  if (!seedExists) {
+    return { items: [], tool: RECALL_TOOL_TOPIC_EXPLORATION, query: seedCardId, totalFound: 0 };
+  }
+  const directNeighborIds = new Set<string>();
+  for (const edge of map.edges) {
+    if (edge.sourceId === seedNodeId) directNeighborIds.add(edge.targetId);
+    if (edge.targetId === seedNodeId) directNeighborIds.add(edge.sourceId);
+  }
+  directNeighborIds.delete(seedNodeId);
+  const secondNeighborIds = new Set<string>();
+  for (const neighborId of directNeighborIds) {
+    for (const edge of map.edges) {
+      const otherId = edge.sourceId === neighborId
+        ? edge.targetId
+        : edge.targetId === neighborId
+          ? edge.sourceId
+          : null;
+      if (otherId && otherId !== seedNodeId && !directNeighborIds.has(otherId)) {
+        secondNeighborIds.add(otherId);
+      }
+    }
+  }
+  const items: RecallResultItem[] = [];
+  const collectCardNeighbor = (nodeId: string, score: number) => {
+    if (items.length >= maxItems) return;
+    if (!nodeId.startsWith(KNOWLEDGE_MAP_CARD_NODE_PREFIX)) return;
+    const cardId = nodeId.slice(KNOWLEDGE_MAP_CARD_NODE_PREFIX.length);
+    const card = repository.findCard(cardId);
+    if (!card) return;
+    items.push({
+      kind: 'card',
+      id: card.id,
+      knowledgeBaseId: card.knowledgeBaseId,
+      title: card.title,
+      preview: recallPreview(card.body),
+      relevanceScore: score,
+      recalledBy: RECALL_TOOL_TOPIC_EXPLORATION,
+    });
+  };
+  for (const neighborId of directNeighborIds) {
+    collectCardNeighbor(neighborId, RECALL_TOPIC_DIRECT_NEIGHBOR_SCORE);
+  }
+  for (const neighborId of secondNeighborIds) {
+    collectCardNeighbor(neighborId, RECALL_TOPIC_SECOND_NEIGHBOR_SCORE);
+  }
+  return { items, tool: RECALL_TOOL_TOPIC_EXPLORATION, query: seedCardId, totalFound: items.length };
+}
+
+/**
+ * 统一回忆入口：并行调用四个回忆工具，合并去重后返回每个工具的 RecallResult。
+ * 跨工具去重策略：同一 id 仅保留 relevanceScore 最高的条目，且只出现在对应工具结果中。
+ * 每个 RecallResult 内部 items 按 relevanceScore 降序排序，便于审计追踪各工具贡献。
+ * @author fxbin
+ * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {string} query - 查询串
+ * @param {{ seedCardId?: string; piRuntime?: PiRuntime; limit?: number }} [options] - 可选参数
+ * @returns {Promise<RecallResult[]>} 各工具的检索结果数组
+ */
+export async function recall(
+  knowledgeBaseId: string,
+  query: string,
+  options?: { seedCardId?: string; piRuntime?: PiRuntime; limit?: number },
+): Promise<RecallResult[]> {
+  const limit = options?.limit ?? RECALL_DEFAULT_LIMIT;
+  const [direct, shallow, deep, topic] = await Promise.all([
+    Promise.resolve(recallDirectFetch(knowledgeBaseId, query, limit)),
+    Promise.resolve(recallShallow(knowledgeBaseId, query, limit)),
+    recallDeep(knowledgeBaseId, query, limit, options?.piRuntime),
+    options?.seedCardId
+      ? Promise.resolve(recallTopicExploration(knowledgeBaseId, options.seedCardId, limit))
+      : Promise.resolve(null),
+  ]);
+  const rawResults: RecallResult[] = [direct, shallow, deep];
+  if (topic) rawResults.push(topic);
+  const allItems = rawResults.flatMap((result) => result.items);
+  const bestById = new Map<string, RecallResultItem>();
+  for (const item of allItems) {
+    const key = `${item.kind}:${item.id}`;
+    const existing = bestById.get(key);
+    if (!existing || item.relevanceScore > existing.relevanceScore) {
+      bestById.set(key, item);
+    }
+  }
+  return rawResults.map((result) => ({
+    ...result,
+    items: result.items
+      .filter((item) => bestById.get(`${item.kind}:${item.id}`) === item)
+      .sort((left, right) => right.relevanceScore - left.relevanceScore),
+  }));
+}
+
+export {
+  MarkdownFileAdapter,
+  type CardFrontmatter,
+  type MaterialFrontmatter,
+  type KnowledgeBaseFrontmatter,
+} from './markdown-file.js';
+
+export {
+  FileSyncAdapter,
+  type FileSyncRepository,
+  type ExportRepository,
+  type ScannedKnowledgeBase,
+  type ScanVaultResult,
+  type ExportVaultResult,
+} from './file-sync-adapter.js';

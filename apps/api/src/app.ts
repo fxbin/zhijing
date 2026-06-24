@@ -17,9 +17,13 @@ import {
   editCardContent,
   extractEntities,
   generateCrossKbSynthesis,
+  generateSocraticQuestions,
+  generateRelatedSuggestions,
   getDashboard,
   getTranscriptionCapabilityReport,
   getGlobalInsights,
+  getConstructionProgress,
+  listSkeletonCards,
   getKnowledgeBasePath,
   getModelProviderSettings,
   getModelProviderSettingsV2,
@@ -53,6 +57,10 @@ import {
   listMessages,
   listModelProviderProfiles,
   listCardRevisions,
+  listAttentionSignals,
+  listAgentActionLogs,
+  listInspectTables,
+  inspectQuery,
   activateModelProviderProfile,
   recordCardReview,
   listKnowledgeBases,
@@ -87,6 +95,7 @@ import type {
   RunKnowledgeKitRequest,
   SaveKnowledgeMapNodePositionsRequest,
   SaveModelProviderSettingsRequest,
+  SocraticTrigger,
   TestModelProviderSettingsRequest,
   UpdateModelProviderProfileRequest,
 } from '@zhijing/shared';
@@ -104,6 +113,9 @@ const DEFAULT_ALLOWED_ORIGINS = [
 const INTAKE_AUDIENCE_SET = new Set<string>(INTAKE_AUDIENCE_VALUES);
 const INTAKE_DEPTH_SET = new Set<string>(INTAKE_DEPTH_VALUES);
 const INTAKE_SCOPE_SET = new Set<string>(INTAKE_SCOPE_VALUES);
+
+const SOCRATIC_TRIGGER_VALUES: readonly SocraticTrigger[] = ['skeleton_card', 'semantic_tension', 'manual'];
+const SOCRATIC_TRIGGER_SET = new Set<string>(SOCRATIC_TRIGGER_VALUES);
 
 function resolveAllowedOrigins(): string[] {
   const raw = process.env.ZHIJING_ALLOWED_ORIGINS;
@@ -143,6 +155,111 @@ export function buildApi() {
   });
 
   app.get('/api/insights', async () => getGlobalInsights());
+
+  app.get<{ Params: { knowledgeBaseId: string } }>(
+    '/api/knowledge-bases/:knowledgeBaseId/construction-progress',
+    async (request, reply) => {
+      const progress = getConstructionProgress(request.params.knowledgeBaseId);
+      if (!progress) {
+        return reply.code(404).send({ error: 'Knowledge base not found or has no cards.' });
+      }
+      return progress;
+    },
+  );
+
+  app.get<{ Params: { knowledgeBaseId: string } }>(
+    '/api/knowledge-bases/:knowledgeBaseId/skeleton-cards',
+    async (request) => listSkeletonCards(request.params.knowledgeBaseId),
+  );
+
+  app.post<{
+    Params: { knowledgeBaseId: string };
+    Body: { cardId?: string; tensionKey?: string; trigger?: string };
+  }>('/api/knowledge-bases/:knowledgeBaseId/socratic-questions', async (request, reply) => {
+    const triggerRaw = typeof request.body?.trigger === 'string' ? request.body.trigger.trim() : '';
+    const trigger: SocraticTrigger | undefined = triggerRaw
+      ? (SOCRATIC_TRIGGER_SET.has(triggerRaw) ? (triggerRaw as SocraticTrigger) : undefined)
+      : undefined;
+    if (triggerRaw && !trigger) {
+      return reply.code(400).send({ error: 'trigger 必须是 skeleton_card、semantic_tension 或 manual 之一。' });
+    }
+    try {
+      const result = await generateSocraticQuestions(request.params.knowledgeBaseId, {
+        cardId: typeof request.body?.cardId === 'string' ? request.body.cardId.trim() : undefined,
+        tensionKey: typeof request.body?.tensionKey === 'string' ? request.body.tensionKey.trim() : undefined,
+        trigger,
+      });
+      return result;
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'generate socratic questions failed');
+      return reply.code(500).send({ error: 'Generate socratic questions failed.' });
+    }
+  });
+
+  app.get<{ Params: { knowledgeBaseId: string }; Querystring: { currentCardId?: string } }>(
+    '/api/knowledge-bases/:knowledgeBaseId/related-suggestions',
+    async (request, reply) => {
+      try {
+        const currentCardId = typeof request.query.currentCardId === 'string' && request.query.currentCardId.trim()
+          ? request.query.currentCardId.trim()
+          : undefined;
+        return generateRelatedSuggestions(request.params.knowledgeBaseId, currentCardId);
+      } catch (error) {
+        if (error instanceof KnowledgeCoreError) {
+          return reply.code(error.statusCode).send({ error: error.message });
+        }
+        request.log.error({ error }, 'generate related suggestions failed');
+        return reply.code(500).send({ error: 'Generate related suggestions failed.' });
+      }
+    },
+  );
+
+  app.get<{ Params: { knowledgeBaseId: string }; Querystring: { limit?: string } }>(
+    '/api/knowledge-bases/:knowledgeBaseId/attention-signals',
+    async (request) => {
+      const limitRaw = typeof request.query.limit === 'string' ? request.query.limit.trim() : '';
+      const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
+      return { signals: listAttentionSignals(request.params.knowledgeBaseId, limit) };
+    },
+  );
+
+  app.get<{ Querystring: { knowledgeBaseId?: string; action?: string; limit?: string } }>(
+    '/api/agent-action-logs',
+    async (request) => {
+      const knowledgeBaseId = typeof request.query.knowledgeBaseId === 'string' && request.query.knowledgeBaseId.trim()
+        ? request.query.knowledgeBaseId.trim()
+        : undefined;
+      const action = typeof request.query.action === 'string' && request.query.action.trim()
+        ? request.query.action.trim()
+        : undefined;
+      const limitRaw = typeof request.query.limit === 'string' ? request.query.limit.trim() : '';
+      const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
+      return listAgentActionLogs({ knowledgeBaseId, action, limit });
+    },
+  );
+
+  app.get('/api/inspect/tables', async () => ({ tables: listInspectTables() }));
+
+  app.post<{ Body: { sql?: string; limit?: number } }>('/api/inspect/query', async (request, reply) => {
+    const sql = typeof request.body?.sql === 'string' ? request.body.sql.trim() : '';
+    if (!sql) {
+      return reply.code(400).send({ error: 'sql 为必填。' });
+    }
+    const limit = typeof request.body?.limit === 'number' ? request.body.limit : undefined;
+    try {
+      const rows = inspectQuery(sql, limit);
+      return { rows, count: rows.length };
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'inspect query failed');
+      return reply.code(500).send({ error: 'Inspect query failed.' });
+    }
+  });
 
   app.get<{ Querystring: { url?: string } }>('/api/proxy-image', async (request, reply) => {
     const imageUrl = request.query.url;

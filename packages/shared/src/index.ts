@@ -387,7 +387,7 @@ export interface ExtractedEntitySeed {
   description: string;
 }
 
-export type ConflictKind = 'duplicate_card' | 'duplicate_material';
+export type ConflictKind = 'duplicate_card' | 'duplicate_material' | 'semantic_tension';
 
 export type ConflictResolutionAction = 'merge' | 'delete';
 
@@ -618,6 +618,190 @@ export interface GlobalInsights {
   };
 }
 
+/**
+ * 知识库建构阶段。
+ *
+ * 基于骨架卡（ai_skeleton）占比划分：
+ *  - seedling 幼苗期：骨架卡占比 > 60%，知识库仍以 AI 生成为主
+ *  - growing 成长期：骨架卡占比 30%-60%，用户正在主动建构
+ *  - mature 成熟期：骨架卡占比 < 30%，建构接近完成
+ *
+ * @author fxbin
+ */
+export type ConstructionStage = 'seedling' | 'growing' | 'mature';
+
+/**
+ * 知识库建构进度报告。
+ *
+ * 用于"骨架卡强制建构流程"（P11-1），量化用户认知劳动量，
+ * 引导用户从 AI 骨架转向自主建构。
+ *
+ * @author fxbin
+ */
+export interface ConstructionProgress {
+  knowledgeBaseId: string;
+  totalCards: number;
+  skeletonCards: number;
+  confirmedCards: number;
+  sourcedCards: number;
+  unsupportedCards: number;
+  skeletonRatio: number;
+  confirmedRatio: number;
+  sourcedRatio: number;
+  constructionStage: ConstructionStage;
+  suggestedAction: string;
+}
+
+/**
+ * 苏格拉底追问类型，标识 Agent 生成的问题所属的认知追问维度。
+ *
+ * 设计原则（P11-2 铁律）：
+ *  - Agent 只生成提问，不生成答案
+ *  - 提问引导用户自己思考，不代写认知
+ *  - 镜子不保姆：反映用户当前认知状态，不替代用户建构
+ *
+ * 五种追问维度：
+ *  - definition_clarity 定义澄清：追问概念边界与定义
+ *  - evidence_probe 证据追问：追问支撑论断的证据来源
+ *  - counterexample_challenge 反例挑战：追问是否存在反例
+ *  - boundary_probe 边界追问：追问适用范围与失效条件
+ *  - connection_probe 关联追问：追问与其他概念的关系
+ *
+ * @author fxbin
+ */
+export type SocraticQuestionType =
+  | 'definition_clarity'
+  | 'evidence_probe'
+  | 'counterexample_challenge'
+  | 'boundary_probe'
+  | 'connection_probe';
+
+/**
+ * 苏格拉底追问触发来源，标识问题生成的上下文。
+ *  - skeleton_card 骨架卡待建构时触发
+ *  - semantic_tension 语义张力检测到认知冲突时触发
+ *  - manual 用户主动请求追问
+ * @author fxbin
+ */
+export type SocraticTrigger = 'skeleton_card' | 'semantic_tension' | 'manual';
+
+/**
+ * 单条苏格拉底追问。
+ *
+ * 注意：rationale 字段是系统内部使用的提问理由（供可审计性），
+ * 不应展示给用户作为"答案提示"。question 字段才是展示给用户的问题。
+ *
+ * @author fxbin
+ */
+export interface SocraticQuestion {
+  question: string;
+  type: SocraticQuestionType;
+  rationale: string;
+  targetCardId?: string;
+}
+
+/**
+ * 苏格拉底追问结果。
+ *
+ * @author fxbin
+ */
+export interface SocraticQuestioningResult {
+  knowledgeBaseId: string;
+  questions: SocraticQuestion[];
+  triggerContext: {
+    trigger: SocraticTrigger;
+    cardId?: string;
+    tensionKey?: string;
+  };
+  generatedAt: string;
+}
+
+/**
+ * "可能相关"建议项（P10-4）。
+ *
+ * 基于 Recall Agent 检索结果生成，展示在侧边栏供用户参考。
+ * 用户可忽略（dismiss）或否决（reject），这两种操作仅影响前端展示，不持久化。
+ *
+ * 设计原则：
+ *  - 镜子不保姆：只提供检索建议，不替代用户决策
+ *  - 提议权不写入权：建议不自动修改任何数据
+ *
+ * @author fxbin
+ */
+export interface RelatedSuggestion {
+  cardId: string;
+  title: string;
+  relevanceScore: number;
+  recalledBy: string;
+  reason: string;
+}
+
+/**
+ * "可能相关"建议结果（P10-4）。
+ *
+ * @author fxbin
+ */
+export interface RelatedSuggestionsResult {
+  knowledgeBaseId: string;
+  currentCardId?: string;
+  suggestions: RelatedSuggestion[];
+  generatedAt: string;
+}
+
+/**
+ * Agent 行为类型（P10-5）。
+ *
+ * 标识 Agent 执行的具体行为类别，用于行为日志审计。
+ *  - socratic_questioning 苏格拉底追问
+ *  - related_suggestions 可能相关建议
+ *  - cross_kb_synthesis 跨库综合
+ *  - entity_extraction 实体提取
+ *  - knowledge_intake 知识摄入
+ *  - material_parse 资料解析
+ *  - card_edit 卡片编辑
+ *  - conflict_resolve 冲突解决
+ * @author fxbin
+ */
+export type AgentAction =
+  | 'socratic_questioning'
+  | 'related_suggestions'
+  | 'cross_kb_synthesis'
+  | 'entity_extraction'
+  | 'knowledge_intake'
+  | 'material_parse'
+  | 'card_edit'
+  | 'conflict_resolve';
+
+/**
+ * Agent 行为日志记录（P10-5）。
+ *
+ * 记录每次 Agent 调用的输入、输出、耗时与结果，
+ * 供可审计性使用（datasette inspect 能力通过 SQL 导出端点实现）。
+ *
+ * @author fxbin
+ */
+export interface AgentActionLog {
+  id: string;
+  action: AgentAction;
+  knowledgeBaseId?: string;
+  input: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  durationMs: number;
+  success: boolean;
+  error?: string;
+  createdAt: string;
+}
+
+/**
+ * Agent 行为日志查询结果（P10-5）。
+ *
+ * @author fxbin
+ */
+export interface AgentActionLogResult {
+  logs: AgentActionLog[];
+  total: number;
+}
+
 export interface PathStep {
   id: string;
   order: number;
@@ -661,4 +845,87 @@ export function detectPlatform(input: string): string | undefined {
   if (value.includes('douyin.com') || value.includes('iesdouyin.com')) return 'douyin';
   if (/https?:\/\//i.test(value)) return 'web';
   return undefined;
+}
+
+/**
+ * 注意力信号类型，标识用户在知识库中产生的不同认知行为。
+ * - question_card_created 创建问题型卡片（强信号）
+ * - manual_layout 手动调整知识地图节点布局（中信号）
+ * - ask_question 向知识库提问（中信号）
+ * - card_opened 打开卡片查看（弱信号，前端埋点）
+ * @author fxbin
+ */
+export type AttentionSignalType = 'question_card_created' | 'manual_layout' | 'ask_question' | 'card_opened';
+
+/**
+ * 注意力信号强度，用于 Recall Agent 检索时加权排序。
+ * - strong 高价值认知行为（如主动创建问题卡片）
+ * - medium 中等价值认知行为（如提问、手动布局）
+ * - weak 低价值行为（如浏览卡片）
+ * @author fxbin
+ */
+export type AttentionSignalStrength = 'strong' | 'medium' | 'weak';
+
+/**
+ * 注意力信号的目标类型，标识信号关联的实体类别。
+ * - card 知识卡片
+ * - material 资料
+ * - layout 知识地图布局
+ * - question 提问
+ * @author fxbin
+ */
+export type AttentionSignalTargetType = 'card' | 'material' | 'layout' | 'question';
+
+/**
+ * 注意力信号记录，供 Recall Agent 检索用户认知建构活动。
+ * 存储无关设计：通过 KnowledgeRepository 接口抽象，兼容 SQLite 与未来文件化存储。
+ * @author fxbin
+ */
+export interface AttentionSignal {
+  id: string;
+  knowledgeBaseId: string;
+  signalType: AttentionSignalType;
+  signalStrength: AttentionSignalStrength;
+  targetType: AttentionSignalTargetType;
+  targetId: string;
+  contextData: Record<string, unknown>;
+  consumed: boolean;
+  createdAt: string;
+}
+
+/**
+ * 回忆工具名称，标识 Recall Agent 使用的四种检索策略。
+ * - direct_fetch 精确命中，零成本内存匹配
+ * - shallow_recall 浅层回忆，基于 FTS5 + BM25 排序
+ * - deep_recall 深层回忆，借助 LLM 语义扩展后检索
+ * - topic_exploration 主题探索，基于知识地图邻居遍历
+ * @author fxbin
+ */
+export type RecallToolName = 'direct_fetch' | 'shallow_recall' | 'deep_recall' | 'topic_exploration';
+
+/**
+ * 单条回忆结果项，描述被检索到的卡片或资料及其相关性分数。
+ * recalledBy 字段用于审计追踪，标识由哪个工具检索到本条目。
+ * @author fxbin
+ */
+export interface RecallResultItem {
+  kind: 'card' | 'material';
+  id: string;
+  knowledgeBaseId: string;
+  title: string;
+  preview: string;
+  relevanceScore: number;
+  recalledBy: RecallToolName;
+}
+
+/**
+ * 单个回忆工具的检索结果集合，包含结果列表与查询元信息。
+ * totalFound 为该工具命中的原始条目数（去重前），items 为最终返回项。
+ * @author fxbin
+ */
+export interface RecallResult {
+  items: RecallResultItem[];
+  tool: RecallToolName;
+  query: string;
+  totalFound: number;
 }

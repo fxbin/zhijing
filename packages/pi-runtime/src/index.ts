@@ -84,12 +84,36 @@ export const entityExtractionSchema = Type.Object({
   })),
 });
 
+/**
+ * 苏格拉底追问 schema（P11-2）。
+ *
+ * 铁律：只包含 questions 字段，绝不包含 answer 字段。
+ * Agent 只生成提问，不生成答案，避免替代用户建构认知。
+ *
+ * @author fxbin
+ */
+export const socraticQuestioningSchema = Type.Object({
+  questions: Type.Array(Type.Object({
+    question: Type.String(),
+    type: Type.Union([
+      Type.Literal('definition_clarity'),
+      Type.Literal('evidence_probe'),
+      Type.Literal('counterexample_challenge'),
+      Type.Literal('boundary_probe'),
+      Type.Literal('connection_probe'),
+    ]),
+    rationale: Type.String(),
+    targetCardId: Type.Optional(Type.String()),
+  })),
+});
+
 export const structuredSchemas = {
   knowledge_base_skeleton: topicSkeletonSchema,
   material_summary: materialSummarySchema,
   knowledge_cards: knowledgeCardsSchema,
   question_answer: questionAnswerSchema,
   entity_extraction: entityExtractionSchema,
+  socratic_questioning: socraticQuestioningSchema,
 } as const;
 
 const artifactSectionSchema = Type.Object({
@@ -133,7 +157,7 @@ export type ArtifactSubtype = keyof typeof artifactSubtypeSchemas;
 const ARTIFACT_SUBTYPE_LIST = Object.keys(artifactSubtypeSchemas) as ArtifactSubtype[];
 
 export interface StructuredGenerationRequest<TSchemaInput = unknown> {
-  task: 'knowledge_base_skeleton' | 'material_summary' | 'knowledge_cards' | 'question_answer' | 'entity_extraction';
+  task: 'knowledge_base_skeleton' | 'material_summary' | 'knowledge_cards' | 'question_answer' | 'entity_extraction' | 'socratic_questioning';
   prompt: string;
   schema?: TSchemaInput;
   context?: Record<string, unknown>;
@@ -495,7 +519,51 @@ export function validateStructuredOutput(task: StructuredGenerationTask, output:
     return;
   }
 
+  if (task === 'socratic_questioning') {
+    validateSocraticQuestions(value.questions, `${task}.questions`);
+    return;
+  }
+
   validateCards(value.cards, `${task}.cards`);
+}
+
+/**
+ * 苏格拉底追问问题类型白名单。
+ */
+const ALLOWED_SOCRATIC_TYPES = new Set([
+  'definition_clarity',
+  'evidence_probe',
+  'counterexample_challenge',
+  'boundary_probe',
+  'connection_probe',
+]);
+
+/**
+ * 校验苏格拉底追问问题数组。
+ *
+ * 铁律：只校验 question/type/rationale 字段，绝不接受 answer 字段。
+ * 若问题数组为空或字段不合规，抛出 StructuredOutputValidationError。
+ *
+ * @author fxbin
+ */
+function validateSocraticQuestions(value: unknown, path: string): void {
+  if (!Array.isArray(value)) {
+    throw new StructuredOutputValidationError(`${path} must be an array of questions.`);
+  }
+  if (value.length === 0) {
+    throw new StructuredOutputValidationError(`${path} must contain at least one question.`);
+  }
+  value.forEach((item, index) => {
+    const question = requirePlainObject(item, `${path}[${index}]`);
+    requireNonEmptyString(question.question, `${path}[${index}].question`);
+    requireNonEmptyString(question.rationale, `${path}[${index}].rationale`);
+    if (typeof question.type !== 'string' || !ALLOWED_SOCRATIC_TYPES.has(question.type)) {
+      throw new StructuredOutputValidationError(`${path}[${index}].type must be one of the supported socratic question types.`);
+    }
+    if (question.targetCardId !== undefined && typeof question.targetCardId !== 'string') {
+      throw new StructuredOutputValidationError(`${path}[${index}].targetCardId must be a string when present.`);
+    }
+  });
 }
 
 const allowedEntityTypes = new Set(['person', 'organization', 'concept', 'tool', 'place', 'event', 'other']);
@@ -735,6 +803,28 @@ function mockOutputFor(request: StructuredGenerationRequest) {
       entities: [
         { name: `${title} 核心概念`, type: 'concept', description: '从当前知识库卡片中提取的核心概念占位，配置 Pi provider 后会替换为真实实体。' },
         { name: '相关工具', type: 'tool', description: '与该主题相关的工具或平台占位。' },
+      ],
+    };
+  }
+
+  if (request.task === 'socratic_questioning') {
+    return {
+      questions: [
+        {
+          question: `「${title}」这个概念的核心边界是什么？哪些情况不属于它的范畴？`,
+          type: 'definition_clarity',
+          rationale: '骨架卡缺乏明确定义，需要用户澄清概念边界',
+        },
+        {
+          question: `支撑「${title}」这一论断的证据来源是什么？是否可验证？`,
+          type: 'evidence_probe',
+          rationale: '骨架卡未标注证据来源，需要用户补充可验证依据',
+        },
+        {
+          question: `是否存在与「${title}」相反的案例或反例？这些反例如何解释？`,
+          type: 'counterexample_challenge',
+          rationale: '引导用户思考反例，避免确认偏误',
+        },
       ],
     };
   }

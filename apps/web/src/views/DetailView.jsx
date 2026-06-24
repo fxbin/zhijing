@@ -27,6 +27,7 @@ import { extractConceptTags, groupCardsByType } from '../utils/knowledge';
 import { useCardTypeLabel, useClaimStatusLabel, useIntakeKindLabel, useParseStatusLabel } from '../utils/i18nLabels';
 import EmptyState from '../components/EmptyState';
 import MediaPreview from '../components/MediaPreview';
+import RelatedSuggestionsPanel from '../components/RelatedSuggestionsPanel';
 import SourceCitation from '../components/SourceCitation';
 import TaskStatus from '../components/TaskStatus';
 import AIChatShell from '../components/AIChatShell';
@@ -447,6 +448,11 @@ export default function DetailView({
               </div>
             ))}
           </aside>
+          <RelatedSuggestionsPanel
+            knowledgeBaseId={selectedKnowledgeBaseId}
+            currentCardId={highlightedCardId}
+            onCardClick={handleRoadmapNodeClick}
+          />
           <section className="entity-panel">
             <div className="panel-title">
               <Users size={20} />
