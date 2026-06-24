@@ -64,6 +64,7 @@ import {
   listAttentionSignals,
   computeUserInterestProfile,
   generateDailyDigest,
+  computeTopicCoverage,
   listAgentActionLogs,
   listInspectTables,
   inspectQuery,
@@ -534,6 +535,8 @@ export function buildApi() {
     }
     return generateDailyDigest();
   });
+
+  app.get('/api/topic-coverage', async () => computeTopicCoverage());
 
   app.get<{
     Querystring: {

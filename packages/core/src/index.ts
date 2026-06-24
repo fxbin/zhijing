@@ -10,6 +10,9 @@ import {
   type UserInterestProfile,
   type DailyDigest,
   type DailyDigestItem,
+  type TopicCoverageHeatmap,
+  type TopicCoverageItem,
+  type TopicCoverageCell,
   type AssignMaterialRequest,
   type ArtifactRecord,
   type ArtifactRevision,
@@ -7835,6 +7838,73 @@ export function generateDailyDigest(): DailyDigest {
     newSignals,
     topInterestTopics,
     totalNewItems: newCards.length + newMaterials.length + newSignals.length,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+const COVERAGE_BLIND_SPOT_INTEREST_THRESHOLD = 2;
+const COVERAGE_BLIND_SPOT_COVERAGE_THRESHOLD = 2;
+const COVERAGE_CARD_WEIGHT = 2;
+const COVERAGE_MATERIAL_WEIGHT = 1;
+const COVERAGE_MAX_TOPICS = 15;
+
+/**
+ * 计算主题覆盖热力图，可视化用户兴趣主题在知识库中的覆盖情况并识别盲区。
+ * 盲区定义：用户高兴趣（interestWeight >= 2）但低覆盖（coverageScore < 2）的主题。
+ * @returns 主题覆盖热力图
+ * @author fxbin
+ */
+export function computeTopicCoverage(): TopicCoverageHeatmap {
+  const profile = computeUserInterestProfile(INTEREST_WINDOW_DAYS);
+  const bases = repository.listKnowledgeBases();
+  const allCards = repository.listCards();
+  const allMaterials = repository.listMaterials();
+
+  const topics: TopicCoverageItem[] = profile.topics
+    .slice(0, COVERAGE_MAX_TOPICS)
+    .map((topic) => {
+      const termLower = topic.term.toLowerCase();
+      let totalCards = 0;
+      let totalMaterials = 0;
+      const cells: TopicCoverageCell[] = bases.map((base) => {
+        const cardCount = allCards.filter(
+          (card) => card.knowledgeBaseId === base.id
+            && (card.title.toLowerCase().includes(termLower)
+              || card.body.toLowerCase().includes(termLower)),
+        ).length;
+        const materialCount = allMaterials.filter(
+          (material) => material.knowledgeBaseId === base.id
+            && (material.title.toLowerCase().includes(termLower)
+              || (material.contentText ?? material.rawInput ?? '').toLowerCase().includes(termLower)),
+        ).length;
+        totalCards += cardCount;
+        totalMaterials += materialCount;
+        return {
+          knowledgeBaseId: base.id,
+          knowledgeBaseTitle: base.title,
+          cardCount,
+          materialCount,
+        };
+      });
+      const coverageScore = totalCards * COVERAGE_CARD_WEIGHT + totalMaterials * COVERAGE_MATERIAL_WEIGHT;
+      const isBlindSpot = topic.weight >= COVERAGE_BLIND_SPOT_INTEREST_THRESHOLD
+        && coverageScore < COVERAGE_BLIND_SPOT_COVERAGE_THRESHOLD;
+      return {
+        term: topic.term,
+        interestWeight: topic.weight,
+        totalCards,
+        totalMaterials,
+        coverageScore,
+        isBlindSpot,
+        cells,
+      };
+    });
+
+  const blindSpotCount = topics.filter((item) => item.isBlindSpot).length;
+
+  return {
+    topics,
+    blindSpotCount,
     generatedAt: new Date().toISOString(),
   };
 }

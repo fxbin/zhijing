@@ -1039,6 +1039,41 @@ export interface DailyDigest {
 }
 
 /**
+ * 主题覆盖热力图单元格，表示某个主题在某个知识库中的覆盖情况。
+ * @author fxbin
+ */
+export interface TopicCoverageCell {
+  knowledgeBaseId: string;
+  knowledgeBaseTitle: string;
+  cardCount: number;
+  materialCount: number;
+}
+
+/**
+ * 主题覆盖热力图条目，表示一个兴趣主题的覆盖情况及盲区标记。
+ * @author fxbin
+ */
+export interface TopicCoverageItem {
+  term: string;
+  interestWeight: number;
+  totalCards: number;
+  totalMaterials: number;
+  coverageScore: number;
+  isBlindSpot: boolean;
+  cells: TopicCoverageCell[];
+}
+
+/**
+ * 主题覆盖热力图，可视化用户兴趣主题在知识库中的覆盖情况，识别盲区。
+ * @author fxbin
+ */
+export interface TopicCoverageHeatmap {
+  topics: TopicCoverageItem[];
+  blindSpotCount: number;
+  generatedAt: string;
+}
+
+/**
  * 回忆工具名称，标识 Recall Agent 使用的四种检索策略。
  * - direct_fetch 精确命中，零成本内存匹配
  * - shallow_recall 浅层回忆，基于 FTS5 + BM25 排序
