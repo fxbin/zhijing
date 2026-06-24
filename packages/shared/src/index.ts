@@ -1123,6 +1123,44 @@ export interface CannotAnswerFeedbackRequest {
 }
 
 /**
+ * 遗忘衰减条目，表示一张卡片的 recall 分数及归档建议。
+ * @author fxbin
+ */
+export interface RecallDecayItem {
+  cardId: string;
+  cardTitle: string;
+  knowledgeBaseId: string;
+  knowledgeBaseTitle: string;
+  lastAccessedAt: string;
+  daysSinceLastAccess: number;
+  recallScore: number;
+  shouldArchive: boolean;
+}
+
+/**
+ * 遗忘衰减报告，汇总所有未归档卡片的 recall 分数并标记归档候选。
+ * @author fxbin
+ */
+export interface RecallDecayReport {
+  items: RecallDecayItem[];
+  totalCards: number;
+  archiveCandidateCount: number;
+  halfLifeDays: number;
+  threshold: number;
+  generatedAt: string;
+}
+
+/**
+ * 遗忘衰减应用结果，记录归档执行的卡片列表与数量。
+ * @author fxbin
+ */
+export interface RecallDecayApplyResult {
+  archivedCount: number;
+  skippedCount: number;
+  archivedCardIds: string[];
+}
+
+/**
  * 回忆工具名称，标识 Recall Agent 使用的四种检索策略。
  * - direct_fetch 精确命中，零成本内存匹配
  * - shallow_recall 浅层回忆，基于 FTS5 + BM25 排序

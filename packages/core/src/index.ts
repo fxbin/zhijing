@@ -17,6 +17,9 @@ import {
   type RepeatedQuestionGroup,
   type ReadingSessionRequest,
   type CannotAnswerFeedbackRequest,
+  type RecallDecayReport,
+  type RecallDecayItem,
+  type RecallDecayApplyResult,
   type AssignMaterialRequest,
   type ArtifactRecord,
   type ArtifactRevision,
@@ -8084,6 +8087,91 @@ export function recordCannotAnswerFeedback(request: CannotAnswerFeedbackRequest)
     createdAt: timestamp,
   });
   return { recorded: true };
+}
+
+const RECALL_DECAY_HALF_LIFE_DAYS = 7;
+const RECALL_DECAY_THRESHOLD = 0.1;
+const RECALL_DECAY_MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * 计算遗忘衰减报告，基于艾宾浩斯遗忘曲线为每张未归档卡片计算 recall 分数。
+ * recall = exp(-daysSinceLastAccess / halfLife)，低于阈值的卡片标记为归档候选。
+ * @returns 遗忘衰减报告
+ * @author fxbin
+ */
+export function computeRecallDecay(): RecallDecayReport {
+  const cards = repository.listCards();
+  const bases = repository.listKnowledgeBases();
+  const baseMap = new Map(bases.map((base) => [base.id, base.title]));
+  const signals = repository.listAttentionSignals(undefined, 1000);
+
+  const lastAccessByCard = new Map<string, string>();
+  for (const signal of signals) {
+    if (signal.signalType !== ATTENTION_SIGNAL_CARD_OPENED) continue;
+    const cardId = signal.targetId;
+    const current = lastAccessByCard.get(cardId);
+    if (!current || signal.createdAt > current) {
+      lastAccessByCard.set(cardId, signal.createdAt);
+    }
+  }
+
+  const nowMs = Date.now();
+  const items: RecallDecayItem[] = cards.map((card) => {
+    const lastAccessedAt = lastAccessByCard.get(card.id) ?? card.createdAt;
+    const lastAccessMs = new Date(lastAccessedAt).getTime();
+    const daysSinceLastAccess = Math.max(0, (nowMs - lastAccessMs) / RECALL_DECAY_MS_PER_DAY);
+    const recallScore = Math.exp(-daysSinceLastAccess / RECALL_DECAY_HALF_LIFE_DAYS);
+    return {
+      cardId: card.id,
+      cardTitle: card.title,
+      knowledgeBaseId: card.knowledgeBaseId,
+      knowledgeBaseTitle: baseMap.get(card.knowledgeBaseId) ?? '',
+      lastAccessedAt,
+      daysSinceLastAccess: Math.round(daysSinceLastAccess * 10) / 10,
+      recallScore: Math.round(recallScore * 1000) / 1000,
+      shouldArchive: recallScore < RECALL_DECAY_THRESHOLD,
+    };
+  });
+
+  items.sort((a, b) => a.recallScore - b.recallScore);
+  const archiveCandidateCount = items.filter((item) => item.shouldArchive).length;
+
+  return {
+    items,
+    totalCards: items.length,
+    archiveCandidateCount,
+    halfLifeDays: RECALL_DECAY_HALF_LIFE_DAYS,
+    threshold: RECALL_DECAY_THRESHOLD,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * 应用遗忘衰减，对 recall 分数低于阈值的卡片执行归档。
+ * @returns 归档执行结果
+ * @author fxbin
+ */
+export function applyRecallDecay(): RecallDecayApplyResult {
+  const report = computeRecallDecay();
+  const archivedCardIds: string[] = [];
+  let skippedCount = 0;
+  for (const item of report.items) {
+    if (!item.shouldArchive) {
+      skippedCount += 1;
+      continue;
+    }
+    try {
+      archiveCard(item.cardId);
+      archivedCardIds.push(item.cardId);
+    } catch {
+      skippedCount += 1;
+    }
+  }
+  return {
+    archivedCount: archivedCardIds.length,
+    skippedCount,
+    archivedCardIds,
+  };
 }
 
 /**

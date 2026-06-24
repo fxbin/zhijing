@@ -68,6 +68,8 @@ import {
   detectRepeatedThinking,
   recordReadingSession,
   recordCannotAnswerFeedback,
+  computeRecallDecay,
+  applyRecallDecay,
   listAgentActionLogs,
   listInspectTables,
   inspectQuery,
@@ -565,6 +567,10 @@ export function buildApi() {
     }
     return recordCannotAnswerFeedback({ knowledgeBaseId, question });
   });
+
+  app.get('/api/recall-decay', async () => computeRecallDecay());
+
+  app.post('/api/recall-decay/apply', async () => applyRecallDecay());
 
   app.get<{
     Querystring: {
