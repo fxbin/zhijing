@@ -26,6 +26,7 @@ import { formatPercent } from '../utils/format';
 import { extractConceptTags, groupCardsByType } from '../utils/knowledge';
 import { useCardTypeLabel, useClaimStatusLabel, useIntakeKindLabel, useParseStatusLabel } from '../utils/i18nLabels';
 import EmptyState from '../components/EmptyState';
+import EvidenceToolsPanel from '../components/EvidenceToolsPanel';
 import MediaPreview from '../components/MediaPreview';
 import RelatedSuggestionsPanel from '../components/RelatedSuggestionsPanel';
 import SourceCitation from '../components/SourceCitation';
@@ -426,6 +427,9 @@ export default function DetailView({
               <small>{t('detail.sourcedCount', { sourced: cards.filter((card) => card.claimStatus === 'sourced').length, total: cards.length })}</small>
             </div>
           </section>
+        )}
+        {selectedKnowledgeBaseId && cards.length > 0 && (
+          <EvidenceToolsPanel knowledgeBaseId={selectedKnowledgeBaseId} />
         )}
         <div className="detail-layout">
           <aside className="roadmap">

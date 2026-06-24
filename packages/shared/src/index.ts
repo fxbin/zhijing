@@ -857,6 +857,75 @@ export interface AddMapEdgeRequest {
   relation: 'supports' | 'contradicts' | 'related_to';
 }
 
+/**
+ * 证据审计报告（P13-1）。
+ *
+ * 扫描知识库中所有卡片的溯源状态，分类统计并识别覆盖缺口。
+ * 帮助用户发现哪些认知仍停留在 AI 骨架阶段，需要补充证据。
+ *
+ * @author fxbin
+ */
+export interface EvidenceAuditReport {
+  knowledgeBaseId: string;
+  generatedAt: string;
+  totals: {
+    cards: number;
+    sourced: number;
+    userConfirmed: number;
+    skeleton: number;
+    unsupported: number;
+  };
+  sourcedRatio: number;
+  gaps: EvidenceGap[];
+}
+
+/**
+ * 证据覆盖缺口（P13-1）。
+ *
+ * 按卡片类型分组，识别该类型下骨架卡占比过高的区域。
+ *
+ * @author fxbin
+ */
+export interface EvidenceGap {
+  cardType: string;
+  total: number;
+  skeleton: number;
+  skeletonRatio: number;
+  sampleCardIds: string[];
+}
+
+/**
+ * 假设检验结果（P13-2）。
+ *
+ * 用户提交一个假设，系统在知识库中搜索支持与反对的证据，
+ * 返回判定和引用卡片。遵循"镜子不保姆"铁律——只呈现证据，不替代用户判断。
+ *
+ * @author fxbin
+ */
+export interface HypothesisTestResult {
+  knowledgeBaseId: string;
+  hypothesis: string;
+  generatedAt: string;
+  verdict: 'supported' | 'contradicted' | 'mixed' | 'insufficient';
+  supportingCards: HypothesisEvidence[];
+  contradictingCards: HypothesisEvidence[];
+  neutralCards: HypothesisEvidence[];
+  summary: string;
+}
+
+/**
+ * 假设检验证据项（P13-2）。
+ *
+ * @author fxbin
+ */
+export interface HypothesisEvidence {
+  cardId: string;
+  title: string;
+  preview: string;
+  claimStatus: ClaimStatus;
+  relevanceScore: number;
+}
+
 export function classifyInput(input: string): IntakeKind {
   const value = input.trim();
   if (/https?:\/\//i.test(value)) return 'link';

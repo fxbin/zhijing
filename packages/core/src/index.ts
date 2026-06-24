@@ -86,6 +86,10 @@ import {
   type AgentAction,
   type AgentActionLog,
   type AgentActionLogResult,
+  type EvidenceAuditReport,
+  type EvidenceGap,
+  type HypothesisTestResult,
+  type HypothesisEvidence,
   type TaskStatus,
   type TestModelProviderSettingsRequest,
   detectPlatform,
@@ -201,6 +205,21 @@ const MAP_EDGE_ALLOWED_RELATIONS: ReadonlySet<string> = new Set([
   MAP_EDGE_RELATION_RELATED_TO,
 ]);
 const MAP_TENSION_EDGE_LIMIT = 20;
+
+/**
+ * 证据审计与假设检验相关常量（P13）。
+ * @author fxbin
+ */
+const EVIDENCE_GAP_SAMPLE_LIMIT = 5;
+const EVIDENCE_GAP_SKELETON_RATIO_THRESHOLD = 0.5;
+const HYPOTHESIS_SEARCH_LIMIT = 12;
+const HYPOTHESIS_PREVIEW_MAX_LENGTH = 200;
+const HYPOTHESIS_VERDICT_SUPPORTED = 'supported';
+const HYPOTHESIS_VERDICT_CONTRADICTED = 'contradicted';
+const HYPOTHESIS_VERDICT_MIXED = 'mixed';
+const HYPOTHESIS_VERDICT_INSUFFICIENT = 'insufficient';
+const HYPOTHESIS_SUPPORT_KEYWORDS = ['支持', '优点', '利', '正面', '肯定', '赞成', '证明', '确认', '成立'];
+const HYPOTHESIS_CONTRADICT_KEYWORDS = ['反对', '缺点', '弊', '反面', '否定', '不成立', '错误', '反驳', '质疑'];
 
 const RECALL_TOOL_DIRECT_FETCH = 'direct_fetch';
 const RECALL_TOOL_SHALLOW = 'shallow_recall';
@@ -4836,9 +4855,11 @@ function buildQuestionCitations(context: ReturnType<typeof buildQuestionContext>
   return [...materialCitations, ...cardCitations];
 }
 
-function compactPreview(input: string) {
+const PREVIEW_DEFAULT_MAX_LENGTH = 160;
+
+function compactPreview(input: string, maxLength: number = PREVIEW_DEFAULT_MAX_LENGTH) {
   const cleaned = input.replace(/\s+/g, ' ').trim();
-  return cleaned.length > 160 ? `${cleaned.slice(0, 160)}...` : cleaned;
+  return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength)}...` : cleaned;
 }
 
 export async function requestMaterialParsing(materialId: string): Promise<MaterialParseQueueResult> {
@@ -7275,6 +7296,142 @@ export function removeMapEdge(knowledgeBaseId: string, edgeId: string): void {
   const base = repository.findKnowledgeBase(knowledgeBaseId);
   if (!base) throw new KnowledgeCoreError('Knowledge base not found.', 404);
   repository.deleteMapCustomEdge(knowledgeBaseId, edgeId);
+}
+
+/**
+ * 生成证据审计报告（P13-1）。
+ *
+ * 扫描知识库中所有卡片的溯源状态，按 claimStatus 分类统计，
+ * 并按卡片类型分组识别骨架卡占比过高的覆盖缺口。
+ *
+ * 遵循"镜子不保姆"铁律——只呈现事实，不替代用户判断。
+ *
+ * @author fxbin
+ * @param knowledgeBaseId - 知识库 ID
+ * @returns 证据审计报告
+ */
+export function generateEvidenceAudit(knowledgeBaseId: string): EvidenceAuditReport {
+  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  if (!base) throw new KnowledgeCoreError('Knowledge base not found.', 404);
+
+  const cards = repository.listCards(knowledgeBaseId);
+  const totals = {
+    cards: cards.length,
+    sourced: cards.filter((card) => card.claimStatus === 'sourced').length,
+    userConfirmed: cards.filter((card) => card.claimStatus === 'user_confirmed').length,
+    skeleton: cards.filter((card) => card.claimStatus === 'ai_skeleton').length,
+    unsupported: cards.filter((card) => card.claimStatus === 'unsupported').length,
+  };
+  const sourcedRatio = cards.length > 0 ? totals.sourced / cards.length : 0;
+
+  const byType = new Map<string, KnowledgeCard[]>();
+  for (const card of cards) {
+    const bucket = byType.get(card.type) ?? [];
+    bucket.push(card);
+    byType.set(card.type, bucket);
+  }
+  const gaps: EvidenceGap[] = [];
+  for (const [cardType, typeCards] of byType) {
+    const skeletonCount = typeCards.filter((card) => card.claimStatus === 'ai_skeleton').length;
+    const skeletonRatio = typeCards.length > 0 ? skeletonCount / typeCards.length : 0;
+    if (skeletonRatio >= EVIDENCE_GAP_SKELETON_RATIO_THRESHOLD) {
+      gaps.push({
+        cardType,
+        total: typeCards.length,
+        skeleton: skeletonCount,
+        skeletonRatio,
+        sampleCardIds: typeCards
+          .filter((card) => card.claimStatus === 'ai_skeleton')
+          .slice(0, EVIDENCE_GAP_SAMPLE_LIMIT)
+          .map((card) => card.id),
+      });
+    }
+  }
+  gaps.sort((a, b) => b.skeletonRatio - a.skeletonRatio);
+
+  return {
+    knowledgeBaseId,
+    generatedAt: now(),
+    totals,
+    sourcedRatio,
+    gaps,
+  };
+}
+
+/**
+ * 假设检验（P13-2）。
+ *
+ * 用户提交一个假设，系统在知识库中搜索相关卡片，
+ * 根据卡片标题/正文中的支持/反对关键词分类证据，
+ * 返回判定和引用卡片列表。
+ *
+ * 遵循"镜子不保姆"铁律——只呈现证据，不替代用户判断。
+ * verdict 是基于证据数量的统计判定，不是真理裁决。
+ *
+ * @author fxbin
+ * @param knowledgeBaseId - 知识库 ID
+ * @param hypothesis - 用户假设文本
+ * @returns 假设检验结果
+ */
+export function testHypothesis(knowledgeBaseId: string, hypothesis: string): HypothesisTestResult {
+  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  if (!base) throw new KnowledgeCoreError('Knowledge base not found.', 404);
+  const trimmed = hypothesis.trim();
+  if (!trimmed) {
+    throw new KnowledgeCoreError('假设不能为空。', 400);
+  }
+
+  const cards = repository.searchCardsByRelevance(knowledgeBaseId, trimmed, HYPOTHESIS_SEARCH_LIMIT);
+  const supportingCards: HypothesisEvidence[] = [];
+  const contradictingCards: HypothesisEvidence[] = [];
+  const neutralCards: HypothesisEvidence[] = [];
+
+  for (const card of cards) {
+    const evidence: HypothesisEvidence = {
+      cardId: card.id,
+      title: card.title,
+      preview: compactPreview(card.body, HYPOTHESIS_PREVIEW_MAX_LENGTH),
+      claimStatus: card.claimStatus,
+      relevanceScore: 0,
+    };
+    const text = `${card.title} ${card.body}`;
+    const hasSupport = HYPOTHESIS_SUPPORT_KEYWORDS.some((keyword) => text.includes(keyword));
+    const hasContradict = HYPOTHESIS_CONTRADICT_KEYWORDS.some((keyword) => text.includes(keyword));
+    if (hasSupport && !hasContradict) {
+      supportingCards.push(evidence);
+    } else if (hasContradict && !hasSupport) {
+      contradictingCards.push(evidence);
+    } else {
+      neutralCards.push(evidence);
+    }
+  }
+
+  let verdict: HypothesisTestResult['verdict'];
+  let summary: string;
+  if (supportingCards.length === 0 && contradictingCards.length === 0) {
+    verdict = HYPOTHESIS_VERDICT_INSUFFICIENT;
+    summary = `知识库中未找到与假设「${trimmed}」直接相关的支持或反对证据。`;
+  } else if (contradictingCards.length === 0) {
+    verdict = HYPOTHESIS_VERDICT_SUPPORTED;
+    summary = `找到 ${supportingCards.length} 条支持证据，未发现反对证据。`;
+  } else if (supportingCards.length === 0) {
+    verdict = HYPOTHESIS_VERDICT_CONTRADICTED;
+    summary = `找到 ${contradictingCards.length} 条反对证据，未发现支持证据。`;
+  } else {
+    verdict = HYPOTHESIS_VERDICT_MIXED;
+    summary = `找到 ${supportingCards.length} 条支持证据和 ${contradictingCards.length} 条反对证据，证据存在分歧。`;
+  }
+
+  return {
+    knowledgeBaseId,
+    hypothesis: trimmed,
+    generatedAt: now(),
+    verdict,
+    supportingCards,
+    contradictingCards,
+    neutralCards,
+    summary,
+  };
 }
 
 /**

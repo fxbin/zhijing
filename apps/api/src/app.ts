@@ -17,6 +17,7 @@ import {
   editCardContent,
   extractEntities,
   generateCrossKbSynthesis,
+  generateEvidenceAudit,
   generateSocraticQuestions,
   generateRelatedSuggestions,
   getDashboard,
@@ -76,6 +77,7 @@ import {
   saveWeReadSettings,
   searchKnowledgeAssets,
   suggestMaterialAssignments,
+  testHypothesis,
   testModelProviderSettings,
   testWeReadConnection,
   unarchiveCard,
@@ -825,6 +827,34 @@ export function buildApi() {
       }
       request.log.error({ error }, 'remove map edge failed');
       return reply.code(500).send({ error: 'Remove map edge failed.' });
+    }
+  });
+
+  app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/evidence-audit', async (request, reply) => {
+    try {
+      return generateEvidenceAudit(request.params.id);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'generate evidence audit failed');
+      return reply.code(500).send({ error: 'Generate evidence audit failed.' });
+    }
+  });
+
+  app.post<{ Params: { id: string }; Body: { hypothesis?: string } }>('/api/knowledge-bases/:id/hypothesis-test', async (request, reply) => {
+    const hypothesis = typeof request.body?.hypothesis === 'string' ? request.body.hypothesis.trim() : '';
+    if (!hypothesis) {
+      return reply.code(400).send({ error: 'Hypothesis is required.' });
+    }
+    try {
+      return testHypothesis(request.params.id, hypothesis);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'test hypothesis failed');
+      return reply.code(500).send({ error: 'Test hypothesis failed.' });
     }
   });
 
