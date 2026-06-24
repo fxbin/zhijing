@@ -6,6 +6,7 @@ import {
   Archive,
   Database,
   FolderOpen,
+  Globe,
   Layers,
   Lightbulb,
   Map,
@@ -37,6 +38,7 @@ import WorkspaceView from './views/WorkspaceView';
 import DetailView from './views/DetailView';
 import LibraryView from './views/LibraryView';
 import SearchView from './views/SearchView';
+import GlobalView from './views/GlobalView';
 import KitView from './views/KitView';
 import WorkflowView from './views/WorkflowView';
 import ArtifactView from './views/ArtifactView';
@@ -584,6 +586,7 @@ function App() {
   };
 
   const navItems = [
+    { key: 'global', label: t('nav.global'), icon: Globe, group: 'core' },
     { key: 'detail', label: t('nav.knowledgeBase'), icon: Database, group: 'core' },
     { key: 'library', label: t('nav.library'), icon: FolderOpen, group: 'core' },
     { key: 'search', label: t('nav.search'), icon: Search, group: 'core' },
@@ -699,6 +702,7 @@ function App() {
         <div className="canvas">
           {apiStatus === 'offline' && <SystemNotice status="offline" />}
           {view === 'workspace' && <WorkspaceView activity={activity} apiStatus={apiStatus} isSubmitting={isSubmitting} materials={materials} query={query} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setQuery={setQuery} setView={go} submit={submit} onViewMaterialDetail={handleViewMaterialDetail} browserAiStatus={browserAiStatus} />}
+          {view === 'global' && <GlobalView setView={go} />}
           {view === 'detail' && (
             <DetailView
               apiStatus={apiStatus}

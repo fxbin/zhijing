@@ -79,6 +79,9 @@ import {
   recordCardReview,
   listKnowledgeBases,
   listMaterials,
+  listAllCards,
+  listAllMaterials,
+  listAllArtifacts,
   recordMaterialParsingFailure,
   requestMaterialParsing,
   resolveConflictGroup,
@@ -117,6 +120,8 @@ import type {
   CannotAnswerFeedbackRequest,
   AcceptProposedCardsRequest,
   UpdateModelProviderProfileRequest,
+  KnowledgeCard,
+  MaterialRecord,
 } from '@zhijing/shared';
 import {
   INTAKE_AUDIENCE_VALUES,
@@ -576,6 +581,40 @@ export function buildApi() {
   app.post('/api/recall-decay/apply', async () => applyRecallDecay());
 
   app.get('/api/agent-proposals', async () => generateAgentProposals());
+
+  app.get<{
+    Querystring: { type?: string; claimStatus?: string; query?: string; limit?: string };
+  }>('/api/cards', async (request) => {
+    const { type, claimStatus, query, limit } = request.query;
+    return listAllCards({
+      type: type as KnowledgeCard['type'] | undefined,
+      claimStatus: claimStatus as KnowledgeCard['claimStatus'] | undefined,
+      query: query ?? undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  });
+
+  app.get<{
+    Querystring: { type?: string; status?: string; query?: string; limit?: string };
+  }>('/api/materials', async (request) => {
+    const { type, status, query, limit } = request.query;
+    return listAllMaterials({
+      type: type as MaterialRecord['type'] | undefined,
+      status: status as MaterialRecord['parseStatus'] | undefined,
+      query: query ?? undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  });
+
+  app.get<{
+    Querystring: { query?: string; limit?: string };
+  }>('/api/artifacts', async (request) => {
+    const { query, limit } = request.query;
+    return listAllArtifacts({
+      query: query ?? undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  });
 
   app.post<{ Params: { id: string }; Body: AcceptProposedCardsRequest }>(
     '/api/messages/:id/accept-cards',

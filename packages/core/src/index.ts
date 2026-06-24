@@ -6639,6 +6639,70 @@ export function listMaterials(options: ListMaterialsOptions = {}) {
   return typeof options.limit === 'number' ? filtered.slice(0, options.limit) : filtered;
 }
 
+/**
+ * 全局卡片查询：不限定知识库，返回全库卡片。
+ * 支持按类型、溯源状态、关键词筛选，用于全局视图。
+ * @param options 筛选条件
+ * @returns 卡片列表
+ * @author fxbin
+ */
+export function listAllCards(options: {
+  type?: KnowledgeCard['type'];
+  claimStatus?: KnowledgeCard['claimStatus'];
+  query?: string;
+  limit?: number;
+} = {}) {
+  const query = options.query?.trim().toLowerCase();
+  const cards = repository.listCards(undefined);
+  const filtered = cards.filter((card) => {
+    if (options.type && card.type !== options.type) return false;
+    if (options.claimStatus && card.claimStatus !== options.claimStatus) return false;
+    if (!query) return true;
+    const searchable = [card.title, card.body].filter(Boolean).join(' ').toLowerCase();
+    return searchable.includes(query);
+  });
+  return typeof options.limit === 'number' ? filtered.slice(0, options.limit) : filtered;
+}
+
+/**
+ * 全局资料查询：不限定知识库，返回全库资料。
+ * @param options 筛选条件
+ * @returns 资料列表
+ * @author fxbin
+ */
+export function listAllMaterials(options: {
+  type?: MaterialRecord['type'];
+  status?: MaterialRecord['parseStatus'];
+  query?: string;
+  limit?: number;
+} = {}) {
+  return listMaterials({
+    type: options.type,
+    status: options.status,
+    query: options.query,
+    limit: options.limit,
+  });
+}
+
+/**
+ * 全局产物查询：不限定知识库，返回全库产物。
+ * @param options 筛选条件
+ * @returns 产物列表
+ * @author fxbin
+ */
+export function listAllArtifacts(options: {
+  query?: string;
+  limit?: number;
+} = {}) {
+  const query = options.query?.trim().toLowerCase();
+  const artifacts = repository.listArtifacts(undefined, options.limit);
+  if (!query) return artifacts;
+  return artifacts.filter((artifact) => {
+    const searchable = [artifact.title, artifact.body].filter(Boolean).join(' ').toLowerCase();
+    return searchable.includes(query);
+  });
+}
+
 export function searchKnowledgeAssets(input: { query?: string; limit?: number } = {}) {
   const query = input.query?.trim();
   if (!query) {
