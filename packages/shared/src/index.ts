@@ -948,9 +948,10 @@ export function detectPlatform(input: string): string | undefined {
  * - manual_layout 手动调整知识地图节点布局（中信号）
  * - ask_question 向知识库提问（中信号）
  * - card_opened 打开卡片查看（弱信号，前端埋点）
+ * - cannot_answer 用户反馈"答不上来"（中信号，标识知识盲区）
  * @author fxbin
  */
-export type AttentionSignalType = 'question_card_created' | 'manual_layout' | 'ask_question' | 'card_opened';
+export type AttentionSignalType = 'question_card_created' | 'manual_layout' | 'ask_question' | 'card_opened' | 'cannot_answer';
 
 /**
  * 注意力信号强度，用于 Recall Agent 检索时加权排序。
@@ -1110,6 +1111,15 @@ export interface ReadingSessionRequest {
   cardId: string;
   knowledgeBaseId: string;
   durationMs: number;
+}
+
+/**
+ * "答不上来"反馈请求，由前端在用户点击反馈按钮时上报。
+ * @author fxbin
+ */
+export interface CannotAnswerFeedbackRequest {
+  knowledgeBaseId: string;
+  question: string;
 }
 
 /**

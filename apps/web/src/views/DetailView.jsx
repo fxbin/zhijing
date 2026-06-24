@@ -226,6 +226,7 @@ export default function DetailView({
   const [entityError, setEntityError] = useState('');
   const [highlightedCardId, setHighlightedCardId] = useState(null);
   const highlightTimerRef = useRef(null);
+  const [cannotAnswerFeedbackSent, setCannotAnswerFeedbackSent] = useState(false);
 
   useEffect(() => {
     if (!selectedKnowledgeBaseId) return;
@@ -234,6 +235,10 @@ export default function DetailView({
       void flushReadingSession();
     };
   }, [selectedKnowledgeBaseId]);
+
+  useEffect(() => {
+    setCannotAnswerFeedbackSent(false);
+  }, [assistantAnswer?.question]);
 
   useEffect(() => {
     if (!selectedKnowledgeBaseId) return;
@@ -738,6 +743,28 @@ export default function DetailView({
                   <button className="assistant-link-button" onClick={() => onOpenArtifact(assistantAnswer.artifact)} type="button">
                     {t('detail.openArtifact')}
                     <SquareArrowOutUpRight size={15} />
+                  </button>
+                )}
+                {cannotAnswerFeedbackSent ? (
+                  <span className="cannot-answer-sent">{t('detail.cannotAnswered')}</span>
+                ) : (
+                  <button
+                    className="assistant-link-button cannot-answer-btn"
+                    onClick={() => {
+                      fetch('/api/cannot-answer-feedback', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          knowledgeBaseId: selectedKnowledgeBaseId,
+                          question: assistantAnswer.question ?? assistantQuestion,
+                        }),
+                      })
+                        .then(() => setCannotAnswerFeedbackSent(true))
+                        .catch(() => {});
+                    }}
+                    type="button"
+                  >
+                    {t('detail.cannotAnswer')}
                   </button>
                 )}
               </div>

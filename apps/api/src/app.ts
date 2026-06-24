@@ -67,6 +67,7 @@ import {
   computeTopicCoverage,
   detectRepeatedThinking,
   recordReadingSession,
+  recordCannotAnswerFeedback,
   listAgentActionLogs,
   listInspectTables,
   inspectQuery,
@@ -109,6 +110,7 @@ import type {
   SocraticTrigger,
   TestModelProviderSettingsRequest,
   ReadingSessionRequest,
+  CannotAnswerFeedbackRequest,
   UpdateModelProviderProfileRequest,
 } from '@zhijing/shared';
 import {
@@ -552,6 +554,16 @@ export function buildApi() {
       return reply.code(400).send({ error: 'cardId 和 knowledgeBaseId 为必填。' });
     }
     return recordReadingSession({ cardId, knowledgeBaseId, durationMs });
+  });
+
+  app.post<{ Body: Partial<CannotAnswerFeedbackRequest> }>('/api/cannot-answer-feedback', async (request, reply) => {
+    const body = request.body ?? {};
+    const knowledgeBaseId = typeof body.knowledgeBaseId === 'string' ? body.knowledgeBaseId.trim() : '';
+    const question = typeof body.question === 'string' ? body.question.trim() : '';
+    if (!knowledgeBaseId || !question) {
+      return reply.code(400).send({ error: 'knowledgeBaseId 和 question 为必填。' });
+    }
+    return recordCannotAnswerFeedback({ knowledgeBaseId, question });
   });
 
   app.get<{

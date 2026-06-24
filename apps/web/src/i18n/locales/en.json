@@ -298,6 +298,8 @@
   "detail.noMaterialsHint": "Saved links will appear here as traceable sources.",
   "detail.noSource": "No source",
   "detail.now": "now",
+  "detail.cannotAnswer": "Can't Answer",
+  "detail.cannotAnswered": "Feedback Sent",
   "detail.openArtifact": "Open Artifact",
   "detail.openArtifactNewWindow": "Open artifact in new window",
   "detail.parseButton": "Parse",

@@ -16,6 +16,7 @@ import {
   type RepeatedThinkingReport,
   type RepeatedQuestionGroup,
   type ReadingSessionRequest,
+  type CannotAnswerFeedbackRequest,
   type AssignMaterialRequest,
   type ArtifactRecord,
   type ArtifactRevision,
@@ -195,6 +196,7 @@ const ATTENTION_SIGNAL_QUESTION_CARD = 'question_card_created';
 const ATTENTION_SIGNAL_MANUAL_LAYOUT = 'manual_layout';
 const ATTENTION_SIGNAL_ASK_QUESTION = 'ask_question';
 const ATTENTION_SIGNAL_CARD_OPENED = 'card_opened';
+const ATTENTION_SIGNAL_CANNOT_ANSWER = 'cannot_answer';
 const ATTENTION_LOG_LIMIT = 100;
 const ATTENTION_CONTEXT_QUESTION_MAX_LENGTH = 200;
 const ATTENTION_TARGET_TYPE_CARD = 'card';
@@ -7685,6 +7687,7 @@ const INTEREST_TOP_TOPICS_LIMIT = 20;
 const INTEREST_SIGNAL_WEIGHTS: Record<AttentionSignalType, number> = {
   question_card_created: 3,
   ask_question: 2,
+  cannot_answer: 2,
   manual_layout: 1,
   card_opened: 0.5,
 };
@@ -8051,6 +8054,32 @@ export function recordReadingSession(request: ReadingSessionRequest): { recorded
     targetType: ATTENTION_TARGET_TYPE_CARD,
     targetId: request.cardId,
     contextData: { durationMs: Math.round(request.durationMs) },
+    consumed: false,
+    createdAt: timestamp,
+  });
+  return { recorded: true };
+}
+
+/**
+ * 记录"答不上来"反馈，将用户对 AI 回答的不满意作为 cannot_answer 注意力信号持久化。
+ * 用于识别知识盲区，驱动后续知识补充。
+ * @param request - 反馈请求（knowledgeBaseId、question）
+ * @returns 记录结果
+ * @author fxbin
+ */
+export function recordCannotAnswerFeedback(request: CannotAnswerFeedbackRequest): { recorded: boolean } {
+  if (!request.knowledgeBaseId || !request.question?.trim()) {
+    return { recorded: false };
+  }
+  const timestamp = now();
+  repository.insertAttentionSignal({
+    id: id('attn'),
+    knowledgeBaseId: request.knowledgeBaseId,
+    signalType: ATTENTION_SIGNAL_CANNOT_ANSWER,
+    signalStrength: ATTENTION_SIGNAL_MEDIUM,
+    targetType: ATTENTION_TARGET_TYPE_QUESTION,
+    targetId: request.knowledgeBaseId,
+    contextData: { question: request.question.trim().slice(0, ATTENTION_CONTEXT_QUESTION_MAX_LENGTH) },
     consumed: false,
     createdAt: timestamp,
   });

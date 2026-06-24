@@ -310,6 +310,8 @@
   "detail.noMaterialsHint": "保存链接后，来源会作为可追溯依据显示在这里。",
   "detail.noSource": "未指定来源",
   "detail.now": "刚刚",
+  "detail.cannotAnswer": "答不上来",
+  "detail.cannotAnswered": "已反馈",
   "detail.openArtifact": "打开产物",
   "detail.openArtifactNewWindow": "在新窗口打开产物",
   "detail.parseButton": "解析",
