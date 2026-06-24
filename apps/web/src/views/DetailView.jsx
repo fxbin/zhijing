@@ -34,6 +34,7 @@ import TaskStatus from '../components/TaskStatus';
 import AIChatShell from '../components/AIChatShell';
 import { useChatLayout } from '../hooks/useChatLayout';
 import { PATH_CARD_ID_STORAGE_KEY } from '../constants/options';
+import { startReadingSession, flushReadingSession } from '../utils/readingTracker';
 
 const BYTES_PER_GB = 1024 * 1024 * 1024;
 
@@ -225,6 +226,14 @@ export default function DetailView({
   const [entityError, setEntityError] = useState('');
   const [highlightedCardId, setHighlightedCardId] = useState(null);
   const highlightTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (!selectedKnowledgeBaseId) return;
+    startReadingSession(selectedKnowledgeBaseId);
+    return () => {
+      void flushReadingSession();
+    };
+  }, [selectedKnowledgeBaseId]);
 
   useEffect(() => {
     if (!selectedKnowledgeBaseId) return;

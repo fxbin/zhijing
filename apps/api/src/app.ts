@@ -66,6 +66,7 @@ import {
   generateDailyDigest,
   computeTopicCoverage,
   detectRepeatedThinking,
+  recordReadingSession,
   listAgentActionLogs,
   listInspectTables,
   inspectQuery,
@@ -107,6 +108,7 @@ import type {
   SaveModelProviderSettingsRequest,
   SocraticTrigger,
   TestModelProviderSettingsRequest,
+  ReadingSessionRequest,
   UpdateModelProviderProfileRequest,
 } from '@zhijing/shared';
 import {
@@ -540,6 +542,17 @@ export function buildApi() {
   app.get('/api/topic-coverage', async () => computeTopicCoverage());
 
   app.get('/api/repeated-thinking', async () => detectRepeatedThinking());
+
+  app.post<{ Body: Partial<ReadingSessionRequest> }>('/api/reading-sessions', async (request, reply) => {
+    const body = request.body ?? {};
+    const cardId = typeof body.cardId === 'string' ? body.cardId.trim() : '';
+    const knowledgeBaseId = typeof body.knowledgeBaseId === 'string' ? body.knowledgeBaseId.trim() : '';
+    const durationMs = typeof body.durationMs === 'number' ? body.durationMs : 0;
+    if (!cardId || !knowledgeBaseId) {
+      return reply.code(400).send({ error: 'cardId 和 knowledgeBaseId 为必填。' });
+    }
+    return recordReadingSession({ cardId, knowledgeBaseId, durationMs });
+  });
 
   app.get<{
     Querystring: {

@@ -1103,6 +1103,16 @@ export interface RepeatedThinkingReport {
 }
 
 /**
+ * 阅读行为记录请求，由前端在卡片关闭时上报停留时长。
+ * @author fxbin
+ */
+export interface ReadingSessionRequest {
+  cardId: string;
+  knowledgeBaseId: string;
+  durationMs: number;
+}
+
+/**
  * 回忆工具名称，标识 Recall Agent 使用的四种检索策略。
  * - direct_fetch 精确命中，零成本内存匹配
  * - shallow_recall 浅层回忆，基于 FTS5 + BM25 排序

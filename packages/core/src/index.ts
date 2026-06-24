@@ -15,6 +15,7 @@ import {
   type TopicCoverageCell,
   type RepeatedThinkingReport,
   type RepeatedQuestionGroup,
+  type ReadingSessionRequest,
   type AssignMaterialRequest,
   type ArtifactRecord,
   type ArtifactRevision,
@@ -8023,6 +8024,37 @@ export function detectRepeatedThinking(): RepeatedThinkingReport {
     hasRepetitivePattern: topGroups.length > 0,
     generatedAt: new Date().toISOString(),
   };
+}
+
+const READING_SESSION_MIN_DURATION_MS = 1000;
+
+/**
+ * 记录卡片阅读行为，将停留时长作为 card_opened 注意力信号持久化。
+ * 供用户兴趣画像与遗忘机制使用。
+ * @param request - 阅读行为记录请求（cardId、knowledgeBaseId、durationMs）
+ * @returns 记录结果
+ * @author fxbin
+ */
+export function recordReadingSession(request: ReadingSessionRequest): { recorded: boolean } {
+  if (!request.cardId || !request.knowledgeBaseId) {
+    return { recorded: false };
+  }
+  if (typeof request.durationMs !== 'number' || request.durationMs < READING_SESSION_MIN_DURATION_MS) {
+    return { recorded: false };
+  }
+  const timestamp = now();
+  repository.insertAttentionSignal({
+    id: id('attn'),
+    knowledgeBaseId: request.knowledgeBaseId,
+    signalType: ATTENTION_SIGNAL_CARD_OPENED,
+    signalStrength: ATTENTION_SIGNAL_WEAK,
+    targetType: ATTENTION_TARGET_TYPE_CARD,
+    targetId: request.cardId,
+    contextData: { durationMs: Math.round(request.durationMs) },
+    consumed: false,
+    createdAt: timestamp,
+  });
+  return { recorded: true };
 }
 
 /**
