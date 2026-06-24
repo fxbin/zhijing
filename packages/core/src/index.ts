@@ -6361,6 +6361,112 @@ const semanticSearchLexicon = [
   },
 ];
 
+const CHINESE_STOP_WORDS = new Set([
+  '的', '了', '是', '在', '有', '和', '就', '不', '人', '都', '一', '上',
+  '也', '很', '到', '说', '要', '去', '你', '会', '着', '看', '好', '自己',
+  '这', '那', '它', '他', '她', '我', '们', '个', '什么', '怎么', '为什么',
+  '可以', '应该', '需要', '这个', '那个', '哪些', '一些', '非常', '比较',
+  '关于', '对于', '由于', '至于', '于是', '虽然', '但是', '因为', '所以',
+  '如果', '尽管', '即使', '除非', '一旦', '之前', '之后', '上次', '下次',
+  '最近', '以前', '以后', '现在', '当时', '可能', '或者', '还是', '已经',
+  '正在', '将要', '马上', '立刻', '突然', '一直', '总是', '从不', '经常',
+  '偶尔', '有时', '常常', '往往', '通常', '一般', '特别', '尤其', '其中',
+  '另外', '此外', '除了', '包括', '包含', '属于', '作为', '为了', '通过',
+  '根据', '按照', '沿着', '顺着', '随着', '跟着', '接着', '继续', '一个',
+]);
+
+const TFIDF_TITLE_WEIGHT = 4;
+const TFIDF_BODY_WEIGHT = 1;
+
+function isChineseStopWord(term: string): boolean {
+  return CHINESE_STOP_WORDS.has(term);
+}
+
+function tokenizeForTfidf(text: string): string[] {
+  const normalized = text.toLowerCase();
+  const tokens: string[] = [];
+  const englishWords = normalized.match(/[a-z]{2,}/g) ?? [];
+  tokens.push(...englishWords);
+  const cjkChars = normalized.match(/[\u4e00-\u9fff]/g) ?? [];
+  for (let i = 0; i < cjkChars.length - 1; i++) {
+    tokens.push(cjkChars[i] + cjkChars[i + 1]);
+  }
+  for (const char of cjkChars) {
+    if (!isChineseStopWord(char)) {
+      tokens.push(char);
+    }
+  }
+  return tokens;
+}
+
+function buildIdfMap(): Map<string, number> {
+  const documentFrequencies = new Map<string, number>();
+  let documentCount = 0;
+  const collectTokens = (text: string | undefined) => {
+    if (!text) return;
+    const tokens = new Set(tokenizeForTfidf(text));
+    for (const token of tokens) {
+      documentFrequencies.set(token, (documentFrequencies.get(token) ?? 0) + 1);
+    }
+    documentCount += 1;
+  };
+  for (const base of repository.listKnowledgeBases()) {
+    collectTokens(base.title);
+    collectTokens(base.summary);
+  }
+  for (const material of repository.listMaterials()) {
+    collectTokens(material.title);
+    collectTokens(material.contentText ?? material.rawInput);
+  }
+  for (const card of repository.listCards()) {
+    collectTokens(card.title);
+    collectTokens(card.body);
+  }
+  for (const artifact of repository.listArtifacts()) {
+    collectTokens(artifact.title);
+    collectTokens(artifact.body);
+  }
+  const idfMap = new Map<string, number>();
+  const safeDocumentCount = Math.max(documentCount, 1);
+  for (const [token, df] of documentFrequencies) {
+    idfMap.set(token, Math.log((safeDocumentCount + 1) / (df + 1)) + 1);
+  }
+  return idfMap;
+}
+
+function scoreWithTfidf(
+  terms: SearchTerm[],
+  title: string | undefined,
+  idfMap: Map<string, number>,
+  ...fields: Array<string | undefined>
+): SearchScore {
+  const titleText = title?.toLowerCase() ?? '';
+  const bodyText = fields.filter(Boolean).join(' ').toLowerCase();
+  const matchedTerms: string[] = [];
+  let semantic = false;
+  let score = 0;
+  for (const term of terms) {
+    const idf = idfMap.get(term.value) ?? 1;
+    const titleMatches = titleText.split(term.value).length - 1;
+    if (titleMatches > 0) {
+      matchedTerms.push(term.value);
+      semantic ||= term.semantic;
+      score += TFIDF_TITLE_WEIGHT * term.weight * idf * Math.min(titleMatches, 3);
+    }
+    const bodyMatches = bodyText.split(term.value).length - 1;
+    if (bodyMatches > 0) {
+      matchedTerms.push(term.value);
+      semantic ||= term.semantic;
+      score += TFIDF_BODY_WEIGHT * term.weight * idf * Math.min(bodyMatches, 5);
+    }
+  }
+  return {
+    score,
+    matchedTerms: [...new Set(matchedTerms)].slice(0, 4),
+    semantic,
+  };
+}
+
 export function listMaterials(options: ListMaterialsOptions = {}) {
   const query = options.query?.trim().toLowerCase();
   const materials = repository.listMaterials(options.knowledgeBaseId);
@@ -6396,10 +6502,11 @@ export function searchKnowledgeAssets(input: { query?: string; limit?: number } 
 
   const limit = Math.max(1, Math.min(input.limit ?? 60, 120));
   const terms = buildSearchTerms(query);
+  const idfMap = buildIdfMap();
   const results: KnowledgeSearchResult[] = [];
 
   for (const base of repository.listKnowledgeBases()) {
-    const match = scoreSearchText(terms, base.title, base.summary);
+    const match = scoreWithTfidf(terms, base.title, idfMap, base.summary);
     addSearchResult(results, {
       id: base.id,
       kind: 'knowledge_base',
@@ -6416,9 +6523,10 @@ export function searchKnowledgeAssets(input: { query?: string; limit?: number } 
   }
 
   for (const material of repository.listMaterials()) {
-    const match = scoreSearchText(
+    const match = scoreWithTfidf(
       terms,
       material.title,
+      idfMap,
       material.rawInput,
       material.contentText,
       ...(material.mediaUrls ?? []),
@@ -6443,7 +6551,7 @@ export function searchKnowledgeAssets(input: { query?: string; limit?: number } 
   }
 
   for (const card of repository.listCards()) {
-    const match = scoreSearchText(terms, card.title, card.body, card.type, card.claimStatus);
+    const match = scoreWithTfidf(terms, card.title, idfMap, card.body, card.type, card.claimStatus);
     addSearchResult(results, {
       id: card.id,
       kind: 'card',
@@ -6459,7 +6567,7 @@ export function searchKnowledgeAssets(input: { query?: string; limit?: number } 
   }
 
   for (const artifact of repository.listArtifacts()) {
-    const match = scoreSearchText(terms, artifact.title, artifact.body, artifact.artifactType);
+    const match = scoreWithTfidf(terms, artifact.title, idfMap, artifact.body, artifact.artifactType);
     addSearchResult(results, {
       id: artifact.id,
       kind: 'artifact',
@@ -6499,7 +6607,9 @@ function buildSearchTerms(query: string) {
   const normalized = query.toLowerCase();
   const terms = new Map<string, SearchTerm>();
   for (const term of normalized.split(/\s+/).filter(Boolean)) {
-    addSearchTerm(terms, term, 1, false);
+    if (!isChineseStopWord(term)) {
+      addSearchTerm(terms, term, 1, false);
+    }
   }
   for (const entry of semanticSearchLexicon) {
     if (!entry.triggers.some((trigger) => normalized.includes(trigger))) continue;
