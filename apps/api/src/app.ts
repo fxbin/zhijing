@@ -71,6 +71,7 @@ import {
   computeRecallDecay,
   applyRecallDecay,
   generateAgentProposals,
+  acceptProposedCards,
   listAgentActionLogs,
   listInspectTables,
   inspectQuery,
@@ -114,6 +115,7 @@ import type {
   TestModelProviderSettingsRequest,
   ReadingSessionRequest,
   CannotAnswerFeedbackRequest,
+  AcceptProposedCardsRequest,
   UpdateModelProviderProfileRequest,
 } from '@zhijing/shared';
 import {
@@ -574,6 +576,24 @@ export function buildApi() {
   app.post('/api/recall-decay/apply', async () => applyRecallDecay());
 
   app.get('/api/agent-proposals', async () => generateAgentProposals());
+
+  app.post<{ Params: { id: string }; Body: AcceptProposedCardsRequest }>(
+    '/api/messages/:id/accept-cards',
+    async (request, reply) => {
+      const messageId = request.params.id;
+      const selectedIndices = request.body?.selectedIndices;
+      try {
+        const result = acceptProposedCards(messageId, selectedIndices);
+        return result;
+      } catch (error) {
+        if (error instanceof KnowledgeCoreError) {
+          return reply.code(error.statusCode).send({ error: error.message });
+        }
+        request.log.error({ error, messageId }, 'accept proposed cards failed');
+        return reply.code(500).send({ error: 'Accept proposed cards failed.' });
+      }
+    },
+  );
 
   app.get<{
     Querystring: {

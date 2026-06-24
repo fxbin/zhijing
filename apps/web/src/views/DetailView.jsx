@@ -145,6 +145,7 @@ function MaterialTranscriptPanel({ material }) {
  * @param {Array} props.messages - 历史消息列表
  * @param {() => void} props.onAsk - 提问回调
  * @param {(artifact: object, meta?: object) => void} props.onOpenArtifact - 打开产物回调
+ * @param {(newCards: object[], updatedMessage: object) => void} props.onCardsAccepted - 提议卡片采纳成功回调
  * @param {(materialId: string) => void} props.onParseMaterial - 解析资料回调
  * @param {string} props.parsingMaterialId - 正在解析的资料 ID
  * @param {string} props.selectedKnowledgeBaseId - 当前选中知识库 ID
@@ -162,6 +163,7 @@ export default function DetailView({
   latestTask,
   messages,
   onAsk,
+  onCardsAccepted,
   onOpenArtifact,
   onParseMaterial,
   parsingMaterialId,
@@ -227,6 +229,8 @@ export default function DetailView({
   const [highlightedCardId, setHighlightedCardId] = useState(null);
   const highlightTimerRef = useRef(null);
   const [cannotAnswerFeedbackSent, setCannotAnswerFeedbackSent] = useState(false);
+  const [proposedCardSelections, setProposedCardSelections] = useState(new Set());
+  const [acceptingCards, setAcceptingCards] = useState(false);
 
   useEffect(() => {
     if (!selectedKnowledgeBaseId) return;
@@ -239,6 +243,11 @@ export default function DetailView({
   useEffect(() => {
     setCannotAnswerFeedbackSent(false);
   }, [assistantAnswer?.question]);
+
+  useEffect(() => {
+    const proposedCards = assistantAnswer?.proposedCards ?? [];
+    setProposedCardSelections(new Set(proposedCards.map((_, index) => index)));
+  }, [assistantAnswer?.proposedCards]);
 
   useEffect(() => {
     if (!selectedKnowledgeBaseId) return;
@@ -304,6 +313,52 @@ export default function DetailView({
       else next.add(type);
       return next;
     });
+  }
+
+  /**
+   * 切换单张提议卡片的选中状态。
+   * @param {number} index - 提议卡片索引
+   */
+  function toggleProposedCard(index) {
+    setProposedCardSelections((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }
+
+  /**
+   * 采纳选中的提议卡片，调用后端 API 正式落库。
+   */
+  async function acceptProposedCards() {
+    const messageId = assistantAnswer?.messageId;
+    if (!messageId || acceptingCards) return;
+    const selectedIndices = Array.from(proposedCardSelections).sort((a, b) => a - b);
+    if (selectedIndices.length === 0) return;
+    setAcceptingCards(true);
+    try {
+      const response = await fetch(`/api/messages/${messageId}/accept-cards`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selectedIndices }),
+      });
+      if (!response.ok) return;
+      const result = await response.json();
+      if (onCardsAccepted) onCardsAccepted(result.cards ?? [], result.message);
+    } catch {
+      // 静默失败
+    } finally {
+      setAcceptingCards(false);
+    }
+  }
+
+  /**
+   * 忽略全部提议卡片，清除本地选中状态。
+   */
+  function dismissProposedCards() {
+    setProposedCardSelections(new Set());
+    if (onCardsAccepted) onCardsAccepted([], { id: assistantAnswer?.messageId });
   }
 
   /**
@@ -727,6 +782,48 @@ export default function DetailView({
                         <strong>{card.title}</strong>
                       </article>
                     ))}
+                  </div>
+                )}
+                {assistantAnswer?.proposedCards?.length > 0 && (
+                  <div className="proposed-cards-panel">
+                    <div className="proposed-cards-head">
+                      <strong>{t('detail.proposedCardsTitle')}</strong>
+                      <span className="proposed-cards-hint">{t('detail.proposedCardsHint')}</span>
+                    </div>
+                    <div className="proposed-cards-list">
+                      {assistantAnswer.proposedCards.map((card, index) => (
+                        <label key={index} className={`proposed-card-item ${proposedCardSelections.has(index) ? 'selected' : ''}`}>
+                          <input
+                            type="checkbox"
+                            checked={proposedCardSelections.has(index)}
+                            onChange={() => toggleProposedCard(index)}
+                          />
+                          <span className="card-type-badge">{cardTypeLabel(card.type)}</span>
+                          <div className="proposed-card-body">
+                            <strong>{card.title}</strong>
+                            <p>{card.body}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="proposed-cards-actions">
+                      <button
+                        type="button"
+                        className="proposed-cards-accept"
+                        disabled={acceptingCards || proposedCardSelections.size === 0}
+                        onClick={() => void acceptProposedCards()}
+                      >
+                        {acceptingCards ? t('detail.proposedCardsAccepting') : t('detail.proposedCardsAccept')}
+                      </button>
+                      <button
+                        type="button"
+                        className="proposed-cards-dismiss"
+                        disabled={acceptingCards}
+                        onClick={dismissProposedCards}
+                      >
+                        {t('detail.proposedCardsDismiss')}
+                      </button>
+                    </div>
                   </div>
                 )}
                 {assistantAnswer.citations && (

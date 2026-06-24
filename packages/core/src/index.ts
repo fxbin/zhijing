@@ -22,6 +22,7 @@ import {
   type RecallDecayApplyResult,
   type AgentProposal,
   type AgentProposalReport,
+  type ProposedCard,
   type AssignMaterialRequest,
   type ArtifactRecord,
   type ArtifactRevision,
@@ -414,6 +415,8 @@ type KnowledgeRepository = {
   findArtifact(artifactId: string): ArtifactRecord | undefined;
   insertMessage(message: ChatMessage): void;
   listMessages(knowledgeBaseId: string, limit?: number): ChatMessage[];
+  findMessage(messageId: string): ChatMessage | undefined;
+  updateMessageAcceptedCards(messageId: string, cardIds: string[]): void;
   readModelProviderConfig(): PersistedModelProviderConfig | undefined;
   writeModelProviderConfig(config: PersistedModelProviderConfig): void;
   listModelProviderProfiles(): ModelProviderProfileRecord[];
@@ -824,6 +827,18 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     return typeof limit === 'number' ? messages.slice(-limit) : messages;
   }
 
+  findMessage(messageId: string) {
+    return this.state.messages.find((item) => item.id === messageId);
+  }
+
+  updateMessageAcceptedCards(messageId: string, cardIds: string[]) {
+    const message = this.state.messages.find((item) => item.id === messageId);
+    if (message) {
+      message.cardIds = cardIds;
+      message.proposedCards = undefined;
+    }
+  }
+
   readModelProviderConfig() {
     return this.state.modelProviderConfig;
   }
@@ -1218,6 +1233,7 @@ type MessageRow = {
   artifact_id: string | null;
   material_id: string | null;
   created_at: string;
+  proposed_cards_json: string | null;
 };
 
 type ModelProviderSettingsRow = {
@@ -1908,8 +1924,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   insertMessage(message: ChatMessage) {
     this.db.prepare(`
       INSERT INTO messages (
-        id, knowledge_base_id, question, answer, card_ids_json, artifact_id, material_id, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        id, knowledge_base_id, question, answer, card_ids_json, artifact_id, material_id, created_at, proposed_cards_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       message.id,
       message.knowledgeBaseId,
@@ -1919,6 +1935,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       message.artifactId ?? null,
       message.materialId ?? null,
       message.createdAt,
+      message.proposedCards ? JSON.stringify(message.proposedCards) : null,
     );
   }
 
@@ -1927,6 +1944,17 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       ? this.db.prepare('SELECT * FROM (SELECT * FROM messages WHERE knowledge_base_id = ? ORDER BY created_at DESC LIMIT ?) ORDER BY created_at ASC').all(knowledgeBaseId, limit)
       : this.db.prepare('SELECT * FROM messages WHERE knowledge_base_id = ? ORDER BY created_at ASC').all(knowledgeBaseId);
     return (rows as MessageRow[]).map(mapMessage);
+  }
+
+  findMessage(messageId: string) {
+    const row = this.db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId) as MessageRow | undefined;
+    return row ? mapMessage(row) : undefined;
+  }
+
+  updateMessageAcceptedCards(messageId: string, cardIds: string[]) {
+    this.db.prepare(`
+      UPDATE messages SET card_ids_json = ?, proposed_cards_json = NULL WHERE id = ?
+    `).run(JSON.stringify(cardIds), messageId);
   }
 
   readModelProviderConfig() {
@@ -2256,6 +2284,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureKnowledgeBaseTitleUnique();
     this.ensureFtsTables();
     this.ensureAttentionLogTable();
+    this.ensureMessagesProposedCardsColumn();
   }
 
   /**
@@ -2742,6 +2771,18 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       CREATE INDEX IF NOT EXISTS idx_attention_log_kb ON attention_log(knowledge_base_id);
       CREATE INDEX IF NOT EXISTS idx_attention_log_created ON attention_log(created_at DESC);
     `);
+  }
+
+  /**
+   * 为 messages 表追加 proposed_cards_json 列，存储对话生成的卡片提议。
+   * 兼容旧库：已存在列时跳过 ALTER。
+   * @author fxbin
+   */
+  private ensureMessagesProposedCardsColumn() {
+    const columns = this.db.prepare('PRAGMA table_info(messages)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'proposed_cards_json')) {
+      this.db.exec('ALTER TABLE messages ADD COLUMN proposed_cards_json TEXT;');
+    }
   }
 
   /**
@@ -3391,6 +3432,7 @@ function mapArtifactRevision(row: ArtifactRevisionRow): ArtifactRevision {
 }
 
 function mapMessage(row: MessageRow): ChatMessage {
+  const proposedCardsJson = row.proposed_cards_json ?? undefined;
   return {
     id: row.id,
     knowledgeBaseId: row.knowledge_base_id,
@@ -3400,6 +3442,7 @@ function mapMessage(row: MessageRow): ChatMessage {
     artifactId: row.artifact_id ?? undefined,
     materialId: row.material_id ?? undefined,
     createdAt: row.created_at,
+    proposedCards: proposedCardsJson ? (JSON.parse(proposedCardsJson) as ProposedCard[]) : undefined,
   };
 }
 
@@ -4403,14 +4446,20 @@ export async function answerKnowledgeBaseQuestion(knowledgeBaseId: string, quest
     });
     const generated = generation.output;
     const citations = buildQuestionCitations(generationContext);
-    const cards = createCards(base, material, value, generated.cards);
     const artifact = createArtifact(base, material, value, generated);
+    const proposedCards: ProposedCard[] = normalizeGeneratedCards(generated.cards).map((card) => ({
+      type: normalizeCardType(card.type),
+      title: compactTitle(card.title ?? `${compactTitle(value)} 的知识卡片`),
+      body: card.body?.trim() || '这张知识卡片还需要补充内容。',
+    }));
+    const messageId = id('msg');
 
     finishTask(task, {
       kind: 'question',
       knowledgeBaseId: base.id,
       materialId: material.id,
-      cardIds: cards.map((card) => card.id),
+      cardIds: [],
+      proposedCardCount: proposedCards.length,
       artifactId: artifact.id,
       generationProvider: generation.provider,
       generationModel: generation.model,
@@ -4421,30 +4470,113 @@ export async function answerKnowledgeBaseQuestion(knowledgeBaseId: string, quest
     });
 
     repository.insertMessage({
-      id: id('msg'),
+      id: messageId,
       knowledgeBaseId: base.id,
       question: value,
       answer: generated.summary ?? artifact.body,
-      cardIds: cards.map((card) => card.id),
+      cardIds: [],
       artifactId: artifact.id,
       materialId: material.id,
       createdAt: now(),
+      proposedCards: proposedCards.length > 0 ? proposedCards : undefined,
     });
 
     return {
       kind: 'question',
       knowledgeBase: base,
       material,
-      cards,
+      cards: [],
       task,
       artifact,
       citations,
       message: '问题已基于当前知识库生成回答线索。',
+      proposedCards: proposedCards.length > 0 ? proposedCards : undefined,
+      messageId,
     };
   } catch (error) {
     failTask(task, error);
     throw error;
   }
+}
+
+/**
+ * 采纳对话生成的提议卡片，将其正式落库为 KnowledgeCard。
+ * 支持逐张选择：selectedIndices 指定要采纳的提议索引，省略则采纳全部。
+ * 守提议权不写入权：本函数由用户主动触发，非 Agent 自动写入。
+ * @param messageId 对话消息 ID
+ * @param selectedIndices 选中的提议索引列表，省略则采纳全部
+ * @returns 已落库的卡片列表与更新后的消息
+ * @author fxbin
+ */
+export function acceptProposedCards(messageId: string, selectedIndices?: number[]): { cards: KnowledgeCard[]; message: ChatMessage } {
+  const message = repository.findMessage(messageId);
+  if (!message) {
+    throw new KnowledgeCoreError('Message not found.', 404);
+  }
+  if (!message.proposedCards || message.proposedCards.length === 0) {
+    throw new KnowledgeCoreError('No proposed cards to accept.', 400);
+  }
+
+  const base = repository.findKnowledgeBase(message.knowledgeBaseId);
+  if (!base) {
+    throw new KnowledgeCoreError('Knowledge base not found.', 404);
+  }
+
+  const material = message.materialId ? repository.findMaterial(message.materialId) : undefined;
+
+  const indices = Array.isArray(selectedIndices) && selectedIndices.length > 0
+    ? selectedIndices.filter((index) => index >= 0 && index < message.proposedCards!.length)
+    : message.proposedCards!.map((_, index) => index);
+
+  if (indices.length === 0) {
+    throw new KnowledgeCoreError('No valid cards selected.', 400);
+  }
+
+  const selectedProposals = indices.map((index) => message.proposedCards![index]);
+  const timestamp = now();
+  const cards: KnowledgeCard[] = selectedProposals.map((card) => ({
+    id: id('card'),
+    knowledgeBaseId: base.id,
+    materialId: material?.id,
+    type: normalizeCardType(card.type),
+    title: compactTitle(card.title),
+    body: card.body.trim() || '这张知识卡片还需要补充内容。',
+    claimStatus: 'ai_skeleton',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }));
+
+  base.cardCount += cards.length;
+  const existingCards = repository.listCards(base.id);
+  const sourcedCount = [...existingCards, ...cards].filter((card) => card.claimStatus === 'sourced').length;
+  base.sourcedRatio = base.cardCount > 0 ? sourcedCount / base.cardCount : 0;
+  base.updatedAt = timestamp;
+  repository.insertCards(cards);
+  for (const card of cards) {
+    if (card.type === 'question') {
+      repository.insertAttentionSignal({
+        id: id('attn'),
+        knowledgeBaseId: base.id,
+        signalType: ATTENTION_SIGNAL_QUESTION_CARD,
+        signalStrength: ATTENTION_SIGNAL_STRONG,
+        targetType: ATTENTION_TARGET_TYPE_CARD,
+        targetId: card.id,
+        contextData: { question: message.question.substring(0, ATTENTION_CONTEXT_QUESTION_MAX_LENGTH) },
+        consumed: false,
+        createdAt: timestamp,
+      });
+    }
+  }
+  repository.updateKnowledgeBase(base);
+
+  const updatedCardIds = [...message.cardIds, ...cards.map((card) => card.id)];
+  repository.updateMessageAcceptedCards(message.id, updatedCardIds);
+
+  const updatedMessage = repository.findMessage(messageId);
+  if (!updatedMessage) {
+    throw new KnowledgeCoreError('Message update failed.', 500);
+  }
+  return { cards, message: updatedMessage };
 }
 
 export async function runKnowledgeKit(

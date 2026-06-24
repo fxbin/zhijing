@@ -460,6 +460,8 @@ function App() {
         question: value,
         message: result.message,
         cards: result.cards ?? [],
+        proposedCards: result.proposedCards ?? [],
+        messageId: result.messageId,
         artifact: result.artifact,
         citations: result.citations ?? [],
         task: result.task,
@@ -468,13 +470,14 @@ function App() {
         setKnowledgeBaseMessages((current) => [
           ...current,
           {
-            id: `msg_${Date.now()}`,
+            id: result.messageId ?? `msg_${Date.now()}`,
             knowledgeBaseId: selectedKnowledgeBaseId,
             question: value,
             answer: result.artifact?.body ?? result.message,
             cardIds: (result.cards ?? []).map((card) => card.id),
             artifactId: result.artifact?.id,
             createdAt: new Date().toISOString(),
+            proposedCards: result.proposedCards,
           },
         ]);
       }
@@ -707,6 +710,14 @@ function App() {
               latestTask={latestTask}
               messages={knowledgeBaseMessages}
               onAsk={askKnowledgeBase}
+              onCardsAccepted={(newCards, updatedMessage) => {
+                setKnowledgeBaseDetail((current) => ({
+                  ...current,
+                  cards: [...newCards, ...(current.cards ?? []).filter((card) => !newCards.some((item) => item.id === card.id))],
+                }));
+                setKnowledgeBaseMessages((current) => current.map((message) => message.id === updatedMessage.id ? updatedMessage : message));
+                setAssistantAnswer((current) => current ? { ...current, proposedCards: [], cards: [...(current.cards ?? []), ...newCards] } : current);
+              }}
               onOpenArtifact={openArtifact}
               onParseMaterial={parseMaterial}
               parsingMaterialId={parsingMaterialId}

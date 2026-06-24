@@ -265,6 +265,28 @@ export interface ChatMessage {
   artifactId?: string;
   materialId?: string;
   createdAt: string;
+  proposedCards?: ProposedCard[];
+}
+
+/**
+ * 对话生成的卡片提议，尚未落库为 KnowledgeCard。
+ * 用户在前端确认采纳后，才会通过 acceptProposedCards 正式写入 cards 表。
+ * 守提议权不写入权：对话只产生提议，不直接生成卡片。
+ * @author fxbin
+ */
+export interface ProposedCard {
+  type: CardType;
+  title: string;
+  body: string;
+}
+
+/**
+ * 采纳提议卡片请求，支持逐张选择。
+ * selectedIndices 为空或省略时采纳全部提议。
+ * @author fxbin
+ */
+export interface AcceptProposedCardsRequest {
+  selectedIndices?: number[];
 }
 
 export interface AgentTask {
@@ -441,6 +463,8 @@ export interface IntakeResult {
   artifact?: ArtifactRecord;
   citations?: KnowledgeCitation[];
   message: string;
+  proposedCards?: ProposedCard[];
+  messageId?: string;
 }
 
 export interface MaterialParseQueueResult {

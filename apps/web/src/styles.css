@@ -3831,6 +3831,110 @@ button { cursor: pointer; }
   line-height: 1.35;
 }
 
+.proposed-cards-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px dashed var(--scholar-blue, #2C5F8D);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--scholar-blue, #2C5F8D) 4%, transparent);
+}
+
+.proposed-cards-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.proposed-cards-head strong {
+  color: var(--primary);
+  font-size: 13px;
+}
+
+.proposed-cards-hint {
+  color: var(--text-muted, #888);
+  font-size: 11px;
+}
+
+.proposed-cards-list {
+  display: grid;
+  gap: 8px;
+}
+
+.proposed-card-item {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: start;
+  gap: 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.proposed-card-item.selected {
+  border-color: var(--scholar-blue, #2C5F8D);
+}
+
+.proposed-card-item input[type="checkbox"] {
+  margin-top: 3px;
+  accent-color: var(--scholar-blue, #2C5F8D);
+}
+
+.proposed-card-body strong {
+  display: block;
+  color: var(--primary);
+  font-size: 13px;
+  line-height: 1.35;
+  margin-bottom: 4px;
+}
+
+.proposed-card-body p {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.proposed-cards-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.proposed-cards-accept {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: var(--scholar-blue, #2C5F8D);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.proposed-cards-accept:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.proposed-cards-dismiss {
+  padding: 6px 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted, #888);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.proposed-cards-dismiss:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .citation-list {
   display: grid;
   gap: 8px;
