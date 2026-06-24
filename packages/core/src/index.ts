@@ -8,6 +8,8 @@ import {
   type AttentionSignalType,
   type InterestTopic,
   type UserInterestProfile,
+  type DailyDigest,
+  type DailyDigestItem,
   type AssignMaterialRequest,
   type ArtifactRecord,
   type ArtifactRevision,
@@ -7746,6 +7748,93 @@ export function computeUserInterestProfile(windowDays: number = INTEREST_WINDOW_
     windowDays,
     topics,
     totalSignals: signalCount,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+const DIGEST_WINDOW_HOURS = 24;
+const DIGEST_TOP_INTEREST_LIMIT = 8;
+const DIGEST_MAX_ITEMS_PER_TYPE = 30;
+
+/**
+ * 生成每日关注摘要，汇总过去 24 小时内的新增卡片、材料、注意力信号及兴趣主题。
+ * 由后台调度器每日调用，也可通过 API 实时触发。
+ * @returns 每日关注摘要
+ * @author fxbin
+ */
+export function generateDailyDigest(): DailyDigest {
+  const nowMs = Date.now();
+  const cutoffMs = nowMs - DIGEST_WINDOW_HOURS * 60 * 60 * 1000;
+  const cutoffIso = new Date(cutoffMs).toISOString();
+  const today = new Date(nowMs).toISOString().slice(0, 10);
+
+  const knowledgeBaseMap = new Map<string, string>();
+  for (const base of repository.listKnowledgeBases()) {
+    knowledgeBaseMap.set(base.id, base.title);
+  }
+
+  const newCards: DailyDigestItem[] = [];
+  for (const card of repository.listCards()) {
+    if (card.createdAt >= cutoffIso) {
+      newCards.push({
+        id: card.id,
+        type: 'card',
+        title: card.title,
+        knowledgeBaseId: card.knowledgeBaseId,
+        knowledgeBaseTitle: knowledgeBaseMap.get(card.knowledgeBaseId),
+        createdAt: card.createdAt,
+      });
+    }
+    if (newCards.length >= DIGEST_MAX_ITEMS_PER_TYPE) break;
+  }
+
+  const newMaterials: DailyDigestItem[] = [];
+  for (const material of repository.listMaterials()) {
+    if (material.createdAt >= cutoffIso) {
+      newMaterials.push({
+        id: material.id,
+        type: 'material',
+        title: material.title,
+        knowledgeBaseId: material.knowledgeBaseId,
+        knowledgeBaseTitle: material.knowledgeBaseId
+          ? knowledgeBaseMap.get(material.knowledgeBaseId)
+          : undefined,
+        createdAt: material.createdAt,
+      });
+    }
+    if (newMaterials.length >= DIGEST_MAX_ITEMS_PER_TYPE) break;
+  }
+
+  const newSignals: DailyDigestItem[] = [];
+  const recentSignals = repository.listAttentionSignals(undefined, 200);
+  for (const signal of recentSignals) {
+    if (signal.createdAt < cutoffIso) continue;
+    const contextText = typeof signal.contextData?.question === 'string'
+      ? signal.contextData.question
+      : typeof signal.contextData?.title === 'string'
+        ? signal.contextData.title
+        : signal.signalType;
+    newSignals.push({
+      id: signal.id,
+      type: 'signal',
+      title: String(contextText).slice(0, 60),
+      knowledgeBaseId: signal.knowledgeBaseId,
+      knowledgeBaseTitle: knowledgeBaseMap.get(signal.knowledgeBaseId),
+      createdAt: signal.createdAt,
+    });
+    if (newSignals.length >= DIGEST_MAX_ITEMS_PER_TYPE) break;
+  }
+
+  const profile = computeUserInterestProfile(INTEREST_WINDOW_DAYS);
+  const topInterestTopics = profile.topics.slice(0, DIGEST_TOP_INTEREST_LIMIT);
+
+  return {
+    date: today,
+    newCards,
+    newMaterials,
+    newSignals,
+    topInterestTopics,
+    totalNewItems: newCards.length + newMaterials.length + newSignals.length,
     generatedAt: new Date().toISOString(),
   };
 }

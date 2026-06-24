@@ -1,4 +1,5 @@
 import cors from '@fastify/cors';
+import cron from 'node-cron';
 import Fastify from 'fastify';
 import {
   archiveCard,
@@ -62,6 +63,7 @@ import {
   listCardRevisions,
   listAttentionSignals,
   computeUserInterestProfile,
+  generateDailyDigest,
   listAgentActionLogs,
   listInspectTables,
   inspectQuery,
@@ -521,6 +523,16 @@ export function buildApi() {
   app.get<{ Querystring: { days?: string } }>('/api/interest-profile', async (request) => {
     const days = Math.max(1, Math.min(Number(request.query.days) || 7, 90));
     return computeUserInterestProfile(days);
+  });
+
+  let dailyDigestCache: { date: string; data: ReturnType<typeof generateDailyDigest> } | null = null;
+
+  app.get('/api/daily-digest', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (dailyDigestCache && dailyDigestCache.date === today) {
+      return dailyDigestCache.data;
+    }
+    return generateDailyDigest();
   });
 
   app.get<{
@@ -1217,6 +1229,16 @@ export function buildApi() {
       }
       request.log.error({ error }, 'preview weread book failed');
       return reply.code(500).send({ error: 'Failed to preview WeRead book.' });
+    }
+  });
+
+  cron.schedule('0 8 * * *', () => {
+    try {
+      const digest = generateDailyDigest();
+      dailyDigestCache = { date: digest.date, data: digest };
+      app.log.info({ date: digest.date, totalNewItems: digest.totalNewItems }, 'daily digest generated');
+    } catch (error) {
+      app.log.error({ error }, 'daily digest generation failed');
     }
   });
 

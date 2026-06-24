@@ -1011,6 +1011,34 @@ export interface UserInterestProfile {
 }
 
 /**
+ * 每日关注摘要条目，表示今日新增的一个认知建构项。
+ * @author fxbin
+ */
+export interface DailyDigestItem {
+  id: string;
+  type: 'card' | 'material' | 'signal';
+  title: string;
+  knowledgeBaseId?: string;
+  knowledgeBaseTitle?: string;
+  createdAt: string;
+}
+
+/**
+ * 每日关注摘要，由后台调度器每日扫描生成，
+ * 汇总过去 24 小时内的新增卡片、材料、注意力信号及兴趣主题。
+ * @author fxbin
+ */
+export interface DailyDigest {
+  date: string;
+  newCards: DailyDigestItem[];
+  newMaterials: DailyDigestItem[];
+  newSignals: DailyDigestItem[];
+  topInterestTopics: InterestTopic[];
+  totalNewItems: number;
+  generatedAt: string;
+}
+
+/**
  * 回忆工具名称，标识 Recall Agent 使用的四种检索策略。
  * - direct_fetch 精确命中，零成本内存匹配
  * - shallow_recall 浅层回忆，基于 FTS5 + BM25 排序
