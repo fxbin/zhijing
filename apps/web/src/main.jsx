@@ -2,10 +2,13 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './i18n';
 import {
+  AlertCircle,
   AlertTriangle,
   Archive,
+  BookOpen,
   Database,
   FolderOpen,
+  GitCompare,
   Globe,
   Layers,
   Lightbulb,
@@ -607,13 +610,18 @@ function App() {
 
   const navItems = [
     { key: 'global', label: t('nav.global'), icon: Globe, group: 'core' },
-    { key: 'detail', label: t('nav.workspace'), icon: Database, group: 'core' },
+    { key: 'workspace', label: t('nav.workspace'), icon: Database, group: 'core' },
+    { key: 'detail', label: t('nav.detail'), icon: Layers, group: 'core' },
     { key: 'library', label: t('nav.library'), icon: FolderOpen, group: 'core' },
     { key: 'search', label: t('nav.search'), icon: Search, group: 'core' },
     { key: 'chat', label: t('nav.chat'), icon: MessageCircle, group: 'core' },
+    { key: 'insights', label: t('nav.insights'), icon: Lightbulb, group: 'insight' },
     { key: 'assets', label: t('nav.assets'), icon: Layers, group: 'insight' },
+    { key: 'compare', label: t('nav.compare'), icon: GitCompare, group: 'insight' },
     { key: 'path', label: t('nav.path'), icon: Map, group: 'insight' },
     { key: 'archive', label: t('nav.archive'), icon: Archive, group: 'tools' },
+    { key: 'conflicts', label: t('nav.conflicts'), icon: AlertCircle, group: 'tools' },
+    { key: 'weread', label: t('nav.weread'), icon: BookOpen, group: 'tools' },
     { key: 'settings', label: t('nav.settings'), icon: Settings, group: 'tools' },
   ];
 

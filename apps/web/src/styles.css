@@ -3904,6 +3904,15 @@ button { cursor: pointer; }
   gap: 8px;
 }
 
+.proposed-cards-error {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--error-container, #ffdad6);
+  color: var(--error, #ba1a1a);
+  font-size: 12px;
+}
+
 .proposed-cards-accept {
   padding: 6px 14px;
   border: none;

@@ -231,6 +231,7 @@ export default function DetailView({
   const [cannotAnswerFeedbackSent, setCannotAnswerFeedbackSent] = useState(false);
   const [proposedCardSelections, setProposedCardSelections] = useState(new Set());
   const [acceptingCards, setAcceptingCards] = useState(false);
+  const [acceptError, setAcceptError] = useState('');
 
   useEffect(() => {
     if (!selectedWorkspaceId) return;
@@ -337,17 +338,21 @@ export default function DetailView({
     const selectedIndices = Array.from(proposedCardSelections).sort((a, b) => a - b);
     if (selectedIndices.length === 0) return;
     setAcceptingCards(true);
+    setAcceptError('');
     try {
       const response = await fetch(`/api/messages/${messageId}/accept-cards`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ selectedIndices }),
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        setAcceptError(t('detail.proposedCardsAcceptFailed'));
+        return;
+      }
       const result = await response.json();
       if (onCardsAccepted) onCardsAccepted(result.cards ?? [], result.message);
     } catch {
-      // 静默失败
+      setAcceptError(t('detail.proposedCardsAcceptFailed'));
     } finally {
       setAcceptingCards(false);
     }
@@ -824,6 +829,9 @@ export default function DetailView({
                         {t('detail.proposedCardsDismiss')}
                       </button>
                     </div>
+                    {acceptError && (
+                      <p className="proposed-cards-error" role="alert">{acceptError}</p>
+                    )}
                   </div>
                 )}
                 {assistantAnswer.citations && (
