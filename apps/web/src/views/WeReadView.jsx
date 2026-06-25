@@ -20,68 +20,73 @@ import {
 } from 'lucide-react';
 
 import api from '../utils/api';
-
-const TAB_BOOKS = 'books';
-const TAB_ALBUMS = 'albums';
-const TAB_ARCHIVE = 'archive';
-const TAB_REVIEW = 'review';
-const TAB_STATS = 'stats';
-const TAB_RECOMMEND = 'recommend';
-
-const SORT_RECENT = 'recent';
-const SORT_TITLE = 'title';
-const SORT_AUTHOR = 'author';
-
-const VIEW_GRID = 'grid';
-const VIEW_LIST = 'list';
-
-const FILTER_ALL = 'all';
-const FILTER_FINISHED = 'finished';
-const FILTER_READING = 'reading';
-const FILTER_IMPORTED = 'imported';
-
-const PREVIEW_TYPE_ALL = 'all';
-const PREVIEW_TYPE_BOOKMARK = 'bookmark';
-const PREVIEW_TYPE_REVIEW = 'review';
-
-const PREVIEW_MODE_SINGLE = 'single';
-const PREVIEW_MODE_BATCH = 'batch';
-
-const INITIAL_PAGE_SIZE = 60;
-const PAGE_INCREMENT = 60;
-const SEARCH_DEBOUNCE_MS = 200;
-const SKELETON_COUNT = 12;
-const TOAST_AUTODISMISS_MS = 4000;
-const CATEGORY_FACET_LIMIT = 12;
-const CATEGORY_CHART_LIMIT = 6;
-const YEAR_CHART_MAX_BARS = 8;
-const YEAR_BAR_MIN_HEIGHT_PX = 8;
-const YEAR_BAR_MAX_HEIGHT_PX = 80;
-const MONTH_CHART_MAX_BARS = 12;
-const MONTH_BAR_MIN_HEIGHT_PX = 8;
-const MONTH_BAR_MAX_HEIGHT_PX = 80;
-
-const MS_PER_SECOND = 1000;
-const PERCENT_BASE = 100;
-
-const STATS_COLLAPSED_KEY = 'weread-stats-collapsed';
-
-const MINUTE_SECONDS = 60;
-const HOUR_SECONDS = 3600;
-const DAY_SECONDS = 86400;
-const MONTH_SECONDS = 2592000;
-const YEAR_SECONDS = 31536000;
-
-const FINISHED_FLAG = 1;
+import { useWeReadShelfState } from '../hooks/useWeReadShelfState';
+import { useWeReadCatalogState } from '../hooks/useWeReadCatalogState';
+import { useWeReadImportState } from '../hooks/useWeReadImportState';
+import {
+  TAB_BOOKS,
+  TAB_ALBUMS,
+  TAB_ARCHIVE,
+  TAB_REVIEW,
+  TAB_STATS,
+  TAB_RECOMMEND,
+  SORT_RECENT,
+  SORT_TITLE,
+  SORT_AUTHOR,
+  VIEW_GRID,
+  VIEW_LIST,
+  FILTER_ALL,
+  FILTER_FINISHED,
+  FILTER_READING,
+  FILTER_IMPORTED,
+  PREVIEW_TYPE_ALL,
+  PREVIEW_TYPE_BOOKMARK,
+  PREVIEW_TYPE_REVIEW,
+  PREVIEW_MODE_SINGLE,
+  PREVIEW_MODE_BATCH,
+  PAGE_INCREMENT,
+  SKELETON_COUNT,
+  CATEGORY_FACET_LIMIT,
+  CATEGORY_CHART_LIMIT,
+  YEAR_CHART_MAX_BARS,
+  YEAR_BAR_MIN_HEIGHT_PX,
+  YEAR_BAR_MAX_HEIGHT_PX,
+  MONTH_CHART_MAX_BARS,
+  MONTH_BAR_MIN_HEIGHT_PX,
+  MONTH_BAR_MAX_HEIGHT_PX,
+  MS_PER_SECOND,
+  PERCENT_BASE,
+  MINUTE_SECONDS,
+  HOUR_SECONDS,
+  DAY_SECONDS,
+  MONTH_SECONDS,
+  YEAR_SECONDS,
+  FINISHED_FLAG,
+  REASON_COVERAGE_GAP,
+  REASON_DEPTH,
+  REASON_CARD_LINKED,
+  WEREAD_WEB_ORIGIN,
+  WEREAD_WEB_READER_PATH,
+  WEREAD_WEB_SEARCH_PATH,
+  WEREAD_PREVIEW_PATH,
+  WEREAD_RECOMMENDATIONS_PATH,
+  CARD_STATE_IDLE,
+  CARD_STATE_IMPORTING,
+  CARD_STATE_DONE,
+  CARD_STATE_FAILED,
+  TOAST_TYPE_SUCCESS,
+  TOAST_TYPE_ERROR,
+  SCROLL_ROOT_MARGIN,
+} from '../constants/weread';
 
 const wereadWebBookUrl = (book) => {
   if (book?.bookIdLong) {
-    return `https://weread.qq.com/web/reader/${book.bookIdLong}`;
+    return `${WEREAD_WEB_ORIGIN}${WEREAD_WEB_READER_PATH}${book.bookIdLong}`;
   }
   if (book?.title) {
-    return `https://weread.qq.com/#search/${encodeURIComponent(book.title)}`;
+    return `${WEREAD_WEB_ORIGIN}${WEREAD_WEB_SEARCH_PATH}${encodeURIComponent(book.title)}`;
   }
-  return 'https://weread.qq.com';
+  return WEREAD_WEB_ORIGIN;
 };
 
 /**
@@ -207,9 +212,9 @@ const WeReadCard = memo(function WeReadCard({
 }) {
   const { t } = useTranslation();
   const showSelect = selecting;
-  const isDone = cardState === 'done';
-  const isFailed = cardState === 'failed';
-  const isImporting = cardState === 'importing';
+  const isDone = cardState === CARD_STATE_DONE;
+  const isFailed = cardState === CARD_STATE_FAILED;
+  const isImporting = cardState === CARD_STATE_IMPORTING;
   const submeta = meta ? buildBookSubmeta(meta, t) : null;
 
   const metatags = useMemo(() => {
@@ -577,7 +582,7 @@ function WeReadPreviewDrawer({ book, mode, batchCount, onClose, onImport, t }) {
     setCollapsedChapters(new Set());
     (async () => {
       try {
-        const result = await api.post('/api/weread/preview', { bookId: book.bookId });
+        const result = await api.post(WEREAD_PREVIEW_PATH, { bookId: book.bookId });
         if (!alive) return;
         setData(result);
         setLoading(false);
@@ -884,8 +889,8 @@ function WeReadRecommendPanel({ workspaceId, onImport, t, forceExpanded }) {
     (async () => {
       try {
         const url = workspaceId
-          ? `/api/weread/recommendations?workspaceId=${encodeURIComponent(workspaceId)}`
-          : '/api/weread/recommendations';
+          ? `${WEREAD_RECOMMENDATIONS_PATH}?workspaceId=${encodeURIComponent(workspaceId)}`
+          : WEREAD_RECOMMENDATIONS_PATH;
         const result = await api.get(url);
         if (!alive) return;
         setData(result);
@@ -902,8 +907,8 @@ function WeReadRecommendPanel({ workspaceId, onImport, t, forceExpanded }) {
   if (loading || !data || data.recommendations.length === 0) return null;
 
   const reasonLabel = (reason) => {
-    if (reason === 'coverage_gap') return t('weread.recommendCoverageGap');
-    if (reason === 'depth') return t('weread.recommendDepth');
+    if (reason === REASON_COVERAGE_GAP) return t('weread.recommendCoverageGap');
+    if (reason === REASON_DEPTH) return t('weread.recommendDepth');
     return t('weread.recommendCardLinked');
   };
 
@@ -974,143 +979,43 @@ function WeReadRecommendPanel({ workspaceId, onImport, t, forceExpanded }) {
 
 export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpenWorkspace }) {
   const { t } = useTranslation();
-
-  const [configured, setConfigured] = useState(null);
   const [activeTab, setActiveTab] = useState(TAB_BOOKS);
-  const [shelfBooks, setShelfBooks] = useState(null);
-  const [syncState, setSyncState] = useState(null);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncError, setSyncError] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const [query, setQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [sort, setSort] = useState(SORT_RECENT);
-  const [activeCategories, setActiveCategories] = useState(() => new Set());
-  const [view, setView] = useState(VIEW_GRID);
-  const [filter, setFilter] = useState(FILTER_ALL);
-
-  const [importingIds, setImportingIds] = useState(() => new Set());
-  const [importResults, setImportResults] = useState(() => ({}));
-
-  const [selecting, setSelecting] = useState(false);
-  const [selectedIds, setSelectedIds] = useState(() => new Set());
-  const [batch, setBatch] = useState(null);
-
-  const [visibleCount, setVisibleCount] = useState(INITIAL_PAGE_SIZE);
-  const [expandedArchives, setExpandedArchives] = useState(() => new Set());
-  const [targetKbId, setTargetKbId] = useState(selectedWorkspaceId || '');
-
-  const [toast, setToast] = useState(null);
   const sentinelRef = useRef(null);
 
-  const [stats, setStats] = useState(null);
-  const [statsCollapsed, setStatsCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem(STATS_COLLAPSED_KEY) === '1';
-    } catch {
-      return false;
-    }
-  });
+  const {
+    configured,
+    shelfBooks,
+    syncState,
+    isSyncing,
+    syncError,
+    loading,
+    error,
+    stats,
+    statsCollapsed,
+    loadMeta,
+    syncShelf,
+    handleToggleStatsCollapse,
+  } = useWeReadShelfState({ t });
 
-  const [previewBook, setPreviewBook] = useState(null);
-  const [previewMode, setPreviewMode] = useState(PREVIEW_MODE_SINGLE);
-
-  useEffect(() => {
-    setTargetKbId(selectedWorkspaceId || '');
-  }, [selectedWorkspaceId]);
-
-  /**
-   * 从 /api/weread/meta 读取本地缓存的书架数据
-   * 用于立即渲染，不触发同步
-   */
-  const loadMeta = useCallback(async () => {
-    try {
-      const data = await api.get('/api/weread/meta');
-      setShelfBooks(data.books || []);
-      setSyncState(data.syncState || null);
-      return data;
-    } catch {
-      setError(t('weread.loadShelfFailed'));
-      return null;
-    }
-  }, [t]);
-
-  /**
-   * 调用 /api/weread/sync 进行后台同步
-   * 同步成功后刷新 meta 数据
-   * @param {boolean} force - 是否强制同步
-   */
-  const syncShelf = useCallback(async (force = false) => {
-    setIsSyncing(true);
-    setSyncError(null);
-    try {
-      const data = await api.post('/api/weread/sync', { force });
-      if (data.error) {
-        setSyncError(data.error);
-      }
-      await loadMeta();
-      return data;
-    } catch {
-      setSyncError(t('weread.syncFailed'));
-      return null;
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [loadMeta, t]);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const data = await api.get('/api/weread/settings');
-        if (!alive) return;
-        setConfigured(Boolean(data.configured));
-        if (data.configured) {
-          await loadMeta();
-          setLoading(false);
-          syncShelf(false);
-        } else {
-          setLoading(false);
-        }
-      } catch {
-        if (!alive) return;
-        setConfigured(false);
-        setLoading(false);
-      }
-    })();
-    return () => { alive = false; };
-  }, [loadMeta, syncShelf]);
-
-  useEffect(() => {
-    if (!configured) return;
-    let alive = true;
-    (async () => {
-      try {
-        const data = await api.get('/api/weread/stats');
-        if (alive) setStats(data);
-      } catch {
-        /* 统计加载失败不影响主流程 */
-      }
-    })();
-    return () => { alive = false; };
-  }, [configured, shelfBooks, isSyncing]);
-
-  useEffect(() => {
-    const handle = setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(handle);
-  }, [query]);
-
-  useEffect(() => {
-    setVisibleCount(INITIAL_PAGE_SIZE);
-  }, [debouncedQuery, sort, activeCategories, activeTab, filter]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const handle = setTimeout(() => setToast(null), TOAST_AUTODISMISS_MS);
-    return () => clearTimeout(handle);
-  }, [toast]);
+  const {
+    query,
+    setQuery,
+    debouncedQuery,
+    sort,
+    setSort,
+    activeCategories,
+    setActiveCategories,
+    view,
+    setView,
+    filter,
+    setFilter,
+    visibleCount,
+    setVisibleCount,
+    expandedArchives,
+    toggleCategory,
+    clearFilters,
+    toggleArchive,
+  } = useWeReadCatalogState({ activeTab });
 
   const books = useMemo(() => shelfBooks ?? [], [shelfBooks]);
   const albums = useMemo(() => [], []);
@@ -1120,6 +1025,30 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
     for (const b of books) m.set(String(b.bookId), b);
     return m;
   }, [books]);
+
+  const {
+    importingIds,
+    importResults,
+    selecting,
+    selectedIds,
+    batch,
+    previewBook,
+    previewMode,
+    toast,
+    setToast,
+    targetKbId,
+    setTargetKbId,
+    importBook,
+    handleImport,
+    closePreview,
+    toggleSelect,
+    enterSelecting,
+    exitSelecting,
+    selectAllFiltered,
+    batchImport,
+    handlePreviewImport,
+    handleOpenImported,
+  } = useWeReadImportState({ t, onOpenWorkspace, bookMap, selectedWorkspaceId });
 
   const archiveGroups = useMemo(() => {
     const groups = new Map();
@@ -1196,170 +1125,11 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
           setVisibleCount((c) => c + PAGE_INCREMENT);
         }
       },
-      { rootMargin: '240px' },
+      { rootMargin: SCROLL_ROOT_MARGIN },
     );
     observer.observe(el);
     return () => observer.disconnect();
   }, [sortedBooks.length]);
-
-  const showToast = useCallback((next) => setToast(next), []);
-
-  const importBook = useCallback(async (bookId) => {
-    const id = String(bookId);
-    if (importingIds.has(id)) return null;
-    setImportingIds((prev) => {
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
-    const body = { bookId: id };
-    if (targetKbId) body.workspaceId = targetKbId;
-    try {
-      const data = await api.post('/api/weread/import', body);
-      const ok = {
-        ok: true,
-        title: data.title,
-        bookmarkCount: data.bookmarkCount,
-        reviewCount: data.reviewCount,
-        materialId: data.materialId,
-        workspaceId: targetKbId || null,
-      };
-      setImportResults((prev) => ({ ...prev, [id]: ok }));
-      return ok;
-    } catch {
-      const fail = { ok: false, error: t('weread.loadShelfFailed') };
-      setImportResults((prev) => ({ ...prev, [id]: fail }));
-      return fail;
-    } finally {
-      setImportingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }
-  }, [importingIds, targetKbId, t]);
-
-  /**
-   * 打开预览抽屉（单本导入模式）
-   */
-  const handleImport = useCallback((book) => {
-    setPreviewMode(PREVIEW_MODE_SINGLE);
-    setPreviewBook(book);
-  }, []);
-
-  /**
-   * 预览抽屉中确认导入后的处理
-   * 单本模式：导入当前预览的书
-   * 批量模式：导入所有选中的书
-   */
-  const handlePreviewImport = useCallback(async () => {
-    if (!previewBook) return;
-    if (previewMode === PREVIEW_MODE_BATCH) {
-      const ids = [...selectedIds];
-      if (ids.length === 0) return;
-      setPreviewBook(null);
-      setBatch({ total: ids.length, done: 0, success: 0, failed: 0 });
-      let success = 0;
-      let failed = 0;
-      for (const id of ids) {
-        const result = await importBook(id);
-        if (result && result.ok) success += 1;
-        else failed += 1;
-        setBatch({ total: ids.length, done: success + failed, success, failed });
-      }
-      showToast({
-        type: failed > 0 ? 'error' : 'success',
-        text: t('weread.batchDone', { success, failed }),
-        action: success > 0 && onOpenWorkspace ? { label: t('weread.viewCard'), run: () => onOpenWorkspace(targetKbId || null) } : null,
-      });
-      exitSelecting();
-    } else {
-      const book = previewBook;
-      setPreviewBook(null);
-      const result = await importBook(book.bookId);
-      if (!result) return;
-      if (result.ok) {
-        showToast({
-          type: 'success',
-          text: t('weread.importSuccess', { title: result.title, bookmarks: result.bookmarkCount, reviews: result.reviewCount }),
-          action: onOpenWorkspace ? { label: t('weread.viewCard'), run: () => onOpenWorkspace(result.workspaceId) } : null,
-        });
-      } else {
-        showToast({ type: 'error', text: t('weread.importFailed', { title: book.title }) });
-      }
-    }
-  }, [previewBook, previewMode, selectedIds, importBook, showToast, t, onOpenWorkspace, targetKbId]);
-
-  const handleOpenImported = useCallback((bookId) => {
-    const result = importResults[String(bookId)];
-    if (result && result.ok && onOpenWorkspace) {
-      onOpenWorkspace(result.workspaceId);
-    } else if (onOpenWorkspace) {
-      onOpenWorkspace(targetKbId || null);
-    }
-  }, [importResults, onOpenWorkspace, targetKbId]);
-
-  const toggleCategory = useCallback((category) => {
-    setActiveCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(category)) next.delete(category);
-      else next.add(category);
-      return next;
-    });
-  }, []);
-
-  const clearFilters = useCallback(() => {
-    setQuery('');
-    setActiveCategories(new Set());
-    setSort(SORT_RECENT);
-    setFilter(FILTER_ALL);
-  }, []);
-
-  const toggleSelect = useCallback((bookId) => {
-    const id = String(bookId);
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const enterSelecting = useCallback(() => {
-    setSelecting(true);
-    setSelectedIds(new Set());
-  }, []);
-
-  const exitSelecting = useCallback(() => {
-    setSelecting(false);
-    setSelectedIds(new Set());
-    setBatch(null);
-  }, []);
-
-  const selectAllFiltered = useCallback(() => {
-    setSelectedIds(new Set(sortedBooks.map((b) => String(b.bookId))));
-  }, [sortedBooks]);
-
-  /**
-   * 批量导入：先 preview 第一本选中的书
-   */
-  const batchImport = useCallback(() => {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    const firstBook = bookMap.get(ids[0]);
-    if (!firstBook) return;
-    setPreviewMode(PREVIEW_MODE_BATCH);
-    setPreviewBook(firstBook);
-  }, [selectedIds, bookMap]);
-
-  const toggleArchive = useCallback((name) => {
-    setExpandedArchives((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
-  }, []);
 
   const goToSettings = useCallback(() => {
     window.dispatchEvent(new CustomEvent('zhijing:navigate', { detail: { view: 'settings' } }));
@@ -1369,26 +1139,10 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
     syncShelf(true);
   }, [syncShelf]);
 
-  const handleToggleStatsCollapse = useCallback(() => {
-    setStatsCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(STATS_COLLAPSED_KEY, next ? '1' : '0');
-      } catch {
-        /* localStorage 不可用时忽略 */
-      }
-      return next;
-    });
-  }, []);
-
   const handleKpiClick = useCallback((kpiFilter) => {
     setFilter(kpiFilter);
     setActiveTab(TAB_BOOKS);
-  }, []);
-
-  const closePreview = useCallback(() => {
-    setPreviewBook(null);
-  }, []);
+  }, [setFilter]);
 
   const visibleBooks = useMemo(
     () => sortedBooks.slice(0, visibleCount),
@@ -1412,10 +1166,10 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
     const id = String(book.bookId);
     const importing = importingIds.has(id);
     const result = importResults[id];
-    let cardState = 'idle';
-    if (importing) cardState = 'importing';
-    else if (result && result.ok) cardState = 'done';
-    else if (result && !result.ok) cardState = 'failed';
+    let cardState = CARD_STATE_IDLE;
+    if (importing) cardState = CARD_STATE_IMPORTING;
+    else if (result && result.ok) cardState = CARD_STATE_DONE;
+    else if (result && !result.ok) cardState = CARD_STATE_FAILED;
     const meta = {
       archiveYear: book.archiveYear,
       readUpdateTime: book.readUpdateTime,
@@ -1611,7 +1365,7 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
             selecting ? (
               <>
                 <span className="weread-selected-count">{t('weread.selectedCount', { count: selectedIds.size })}</span>
-                <button type="button" className="weread-link-btn" onClick={selectAllFiltered} disabled={sortedBooks.length === 0}>
+                <button type="button" className="weread-link-btn" onClick={() => selectAllFiltered(sortedBooks)} disabled={sortedBooks.length === 0}>
                   {t('weread.selectAll')}
                 </button>
                 <button type="button" className="weread-link-btn" onClick={exitSelecting}>
@@ -1863,7 +1617,7 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
       {toast && (
         <div className={`weread-toast weread-toast--${toast.type}`} role="status" aria-live="polite">
           <span className="weread-toast-text">
-            {toast.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+            {toast.type === TOAST_TYPE_SUCCESS ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
             {toast.text}
           </span>
           {toast.action && (

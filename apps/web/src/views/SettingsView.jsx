@@ -1,6 +1,8 @@
 /**
  * @module views/SettingsView
  * 设置视图：配置多模型 Profile、系统透明度、数据控制。
+ * 状态层已下沉至 useSettingsProfile / useSettingsWeread / useSettingsStats 三个 hook，
+ * 本视图仅保留跨域共享的 status 文案与 activeSection 路由两个 UI state。
  * @author fxbin
  */
 
@@ -24,51 +26,25 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useTaskStatusLabel, useTaskWorkflowLabel } from '../utils/i18nLabels';
 import { formatDateTime } from '../utils/material';
-import api from '../utils/api';
+import {
+  useSettingsProfile,
+  KEY_SOURCE_KEYS,
+  formatDisplayName,
+} from '../hooks/useSettingsProfile';
+import { useSettingsWeread } from '../hooks/useSettingsWeread';
+import {
+  useSettingsStats,
+  DATA_ACTION_TYPE_EXPORT,
+  DATA_ACTION_TYPE_CLEAR,
+} from '../hooks/useSettingsStats';
 
 /**
- * 将 ID 格式化为可读名称（deepseek-v3 → Deepseek V3）
- * @param {string} id - 原始 ID
- * @returns {string} 格式化后的名称
+ * 设置分区默认激活 profiles。
  */
-function formatDisplayName(id) {
-  if (!id) return '';
-  return id
-    .replace(/[-_]/g, ' ')
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
+const INITIAL_ACTIVE_SECTION = 'profiles';
 
 /**
- * 后端 API 路径常量
- */
-const API_PATHS = {
-  v2Settings: '/api/settings/model-provider/v2',
-  profiles: '/api/settings/model-provider/profiles',
-  test: '/api/settings/model-provider/test',
-  dashboard: '/api/dashboard',
-};
-
-/**
- * Key 来源标签（在组件内通过 t() 动态获取）
- */
-const KEY_SOURCE_KEYS = {
-  none: 'settings.keyNotConfigured',
-  env: 'common.envVar',
-  runtime: 'common.runtime',
-};
-
-/**
- * 新建 Profile 表单的空值
- */
-const EMPTY_PROFILE_FORM = {
-  name: '',
-  provider: '',
-  model: '',
-  apiKey: '',
-};
-
-/**
- * 设置视图组件：多 Profile 管理 + 系统透明度 + 数据控制 + 微信读书
+ * 设置视图组件：多 Profile 管理 + 系统透明度 + 数据控制 + 微信读书。
  *
  * @param {object} props - 组件属性
  * @param {string|null} props.initialSection - 初始激活的设置分区
@@ -81,73 +57,69 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
   const { t } = useTranslation();
   const taskStatusLabel = useTaskStatusLabel();
   const taskWorkflowLabel = useTaskWorkflowLabel();
-  const [profiles, setProfiles] = useState([]);
-  const [activeProfileId, setActiveProfileId] = useState(null);
-  const [selectedProfileId, setSelectedProfileId] = useState(null);
-  const [providerOptions, setProviderOptions] = useState([]);
-  const [profileName, setProfileName] = useState('');
-  const [provider, setProvider] = useState('');
-  const [model, setModel] = useState('');
-  const [apiKey, setApiKey] = useState('');
-  const [enabled, setEnabled] = useState(true);
-  const [fallbackToMock, setFallbackToMock] = useState(true);
-  const [hasApiKey, setHasApiKey] = useState(false);
-  const [keySource, setKeySource] = useState('none');
-  const [updatedAt, setUpdatedAt] = useState(null);
   const [status, setStatus] = useState(t('settings.loadingModelSettings'));
-  const [systemStats, setSystemStats] = useState(null);
-  const [dataAction, setDataAction] = useState(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState(null);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newProfile, setNewProfile] = useState(EMPTY_PROFILE_FORM);
-  const [activeSection, setActiveSection] = useState('profiles');
-  const [wereadApiKey, setWereadApiKey] = useState('');
-  const [wereadConfigured, setWereadConfigured] = useState(false);
-  const [wereadSaving, setWereadSaving] = useState(false);
-  const [wereadTesting, setWereadTesting] = useState(false);
-  const [wereadTestResult, setWereadTestResult] = useState(null);
-  const [profileToDelete, setProfileToDelete] = useState(null);
+  const [activeSection, setActiveSection] = useState(INITIAL_ACTIVE_SECTION);
 
-  const activeProvider = providerOptions.find((item) => item.id === provider);
-  const modelOptions = activeProvider?.models ?? [];
-  const selectedProfile = profiles.find((item) => item.id === selectedProfileId);
+  const {
+    profiles,
+    selectedProfileId,
+    providerOptions,
+    profileName,
+    setProfileName,
+    provider,
+    setProvider,
+    model,
+    setModel,
+    apiKey,
+    setApiKey,
+    enabled,
+    setEnabled,
+    fallbackToMock,
+    setFallbackToMock,
+    hasApiKey,
+    keySource,
+    updatedAt,
+    isSaving,
+    isTesting,
+    testResult,
+    showCreateForm,
+    setShowCreateForm,
+    newProfile,
+    setNewProfile,
+    profileToDelete,
+    setProfileToDelete,
+    modelOptions,
+    selectedProfile,
+    selectProfile,
+    changeProvider,
+    activateProfile,
+    requestDeleteProfile,
+    confirmDeleteProfile,
+    saveProfile,
+    testSettings,
+    clearKey,
+    openCreateForm,
+    changeNewProfileProvider,
+    createProfile,
+  } = useSettingsProfile({ setStatus, t });
 
-  useEffect(() => {
-    let ignore = false;
-    async function loadSettings() {
-      try {
-        const result = await api.get(API_PATHS.v2Settings);
-        if (ignore) return;
-        applyV2Settings(result);
-        setStatus(t('settings.modelSettingsReady'));
-      } catch {
-        if (!ignore) setStatus(t('settings.modelSettingsOffline'));
-      }
-    }
-    loadSettings();
-    return () => {
-      ignore = true;
-    };
-  }, []);
+  const {
+    wereadApiKey,
+    setWereadApiKey,
+    wereadConfigured,
+    wereadSaving,
+    wereadTesting,
+    wereadTestResult,
+    saveWeReadKey,
+    testWeReadKey,
+  } = useSettingsWeread({ setStatus, t });
 
-  useEffect(() => {
-    let ignore = false;
-    async function loadWeReadSettings() {
-      try {
-        const result = await api.get('/api/weread/settings');
-        if (ignore) return;
-        setWereadConfigured(result.configured);
-      } catch {
-        if (!ignore) setWereadConfigured(false);
-      }
-    }
-    loadWeReadSettings();
-    return () => {
-      ignore = true;
-    };
-  }, []);
+  const {
+    systemStats,
+    dataAction,
+    exportAllData,
+    clearLocalCache,
+  } = useSettingsStats();
 
   useEffect(() => {
     if (initialSection) {
@@ -158,361 +130,6 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     }
   }, [initialSection, onSectionConsumed]);
 
-  useEffect(() => {
-    let ignore = false;
-    async function loadSystemStats() {
-      try {
-        const result = await api.get(API_PATHS.dashboard);
-        if (ignore) return;
-        setSystemStats({
-          apiOnline: true,
-          workspaces: result.workspaces?.length ?? 0,
-          materials: result.materials?.length ?? 0,
-          tasks: result.tasks?.length ?? 0,
-          recentTasks: (result.tasks ?? []).slice(0, 3),
-        });
-      } catch {
-        if (!ignore) setSystemStats({ apiOnline: false });
-      }
-    }
-    loadSystemStats();
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  /**
-   * 应用 V2 设置到本地 state
-   * @param {object} v2Result - V2 API 返回的设置
-   * @param {string|null} forceSelectId - 强制选中的 profile id
-   */
-  function applyV2Settings(v2Result, forceSelectId = null) {
-    const list = v2Result.profiles ?? [];
-    setProfiles(list);
-    setActiveProfileId(v2Result.activeProfileId ?? null);
-    setProviderOptions(v2Result.providers ?? []);
-    const selectedExists = Boolean(selectedProfileId) && list.some((item) => item.id === selectedProfileId);
-    const fallbackId = (selectedExists ? selectedProfileId : null)
-      ?? v2Result.activeProfileId
-      ?? list[0]?.id
-      ?? null;
-    const targetId = forceSelectId ?? fallbackId;
-    setSelectedProfileId(targetId);
-    syncFormFromProfiles(list, targetId);
-  }
-
-  /**
-   * 从 profile 列表同步表单字段到 state
-   * @param {Array} list - profile 列表
-   * @param {string|null} targetId - 目标 profile id
-   */
-  function syncFormFromProfiles(list, targetId) {
-    const target = list.find((item) => item.id === targetId);
-    if (!target) {
-      setProfileName('');
-      setProvider('');
-      setModel('');
-      setEnabled(true);
-      setFallbackToMock(true);
-      setHasApiKey(false);
-      setKeySource('none');
-      setUpdatedAt(null);
-      setApiKey('');
-      return;
-    }
-    setProfileName(target.name);
-    setProvider(target.provider);
-    setModel(target.model);
-    setEnabled(target.enabled);
-    setFallbackToMock(target.fallbackToMock);
-    setHasApiKey(target.hasApiKey);
-    setKeySource(target.keySource);
-    setUpdatedAt(target.updatedAt);
-    setApiKey('');
-  }
-
-  /**
-   * 选中指定 profile（仅切换选中，不激活）
-   * @param {string} id - profile id
-   */
-  function selectProfile(id) {
-    if (id === selectedProfileId) return;
-    setSelectedProfileId(id);
-    syncFormFromProfiles(profiles, id);
-    setTestResult(null);
-  }
-
-  /**
-   * 切换服务商，并自动选择第一个模型
-   * @param {string} nextProvider - 服务商 id
-   */
-  function changeProvider(nextProvider) {
-    setProvider(nextProvider);
-    const nextModels = providerOptions.find((item) => item.id === nextProvider)?.models ?? [];
-    setModel(nextModels[0]?.id ?? '');
-  }
-
-  /**
-   * 刷新 profile 列表（从后端重新拉取 V2 设置）
-   * @param {string|null} forceSelectId - 强制选中的 profile id
-   * @returns {Promise<object|null>} V2 设置结果
-   */
-  async function refreshProfiles(forceSelectId = null) {
-    try {
-      const result = await api.get(API_PATHS.v2Settings);
-      applyV2Settings(result, forceSelectId);
-      return result;
-    } catch {
-      setStatus(t('settings.refreshProfilesFailed'));
-      return null;
-    }
-  }
-
-  /**
-   * 激活指定 profile（设为默认，应用到运行时）
-   * @param {string} id - profile id
-   */
-  async function activateProfile(id) {
-    setStatus(t('settings.activatingProfile'));
-    try {
-      const result = await api.post(`${API_PATHS.profiles}/${id}/activate`);
-      setStatus(`${t('settings.profileActivated')}：${result.profile.name}`);
-      await refreshProfiles();
-    } catch {
-      setStatus(t('settings.activationFailed'));
-    }
-  }
-
-  /**
-   * 打开删除 Profile 确认弹窗
-   * @param {string} id - profile id
-   */
-  function requestDeleteProfile(id) {
-    const target = profiles.find((item) => item.id === id);
-    if (!target) return;
-    setProfileToDelete(id);
-  }
-
-  /**
-   * 确认删除当前待删除的 Profile
-   */
-  async function confirmDeleteProfile() {
-    if (!profileToDelete) return;
-    const id = profileToDelete;
-    const target = profiles.find((item) => item.id === id);
-    setProfileToDelete(null);
-    if (!target) return;
-    setStatus(t('settings.deletingProfile'));
-    try {
-      await api.del(`${API_PATHS.profiles}/${id}`);
-      const remaining = profiles.filter((item) => item.id !== id);
-      const nextSelected = selectedProfileId === id ? (remaining[0]?.id ?? null) : selectedProfileId;
-      setStatus(`${t('settings.profileDeleted')}：${target.name}`);
-      await refreshProfiles(nextSelected);
-    } catch {
-      setStatus(t('settings.deleteFailed'));
-    }
-  }
-
-  /**
-   * 保存当前选中 profile 的配置
-   */
-  async function saveProfile() {
-    if (!selectedProfileId || !provider || !model || isSaving) return;
-    setIsSaving(true);
-    setTestResult(null);
-    try {
-      const result = await api.patch(`${API_PATHS.profiles}/${selectedProfileId}`, {
-        name: profileName.trim(),
-        provider,
-        model,
-        apiKey: apiKey.trim() || undefined,
-        enabled,
-        fallbackToMock,
-      });
-      const updated = result.profile;
-      setProfiles((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-      setHasApiKey(updated.hasApiKey);
-      setKeySource(updated.keySource);
-      setUpdatedAt(updated.updatedAt);
-      setApiKey('');
-      setStatus(t('settings.saveSuccess'));
-    } catch {
-      setStatus(t('settings.saveFailed'));
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  /**
-   * 测试当前选中 profile 的模型配置
-   */
-  async function testSettings() {
-    if (!provider || !model || isTesting) return;
-    setIsTesting(true);
-    setTestResult(null);
-    try {
-      const result = await api.post(API_PATHS.test, {
-        provider,
-        model,
-        apiKey: apiKey.trim() || undefined,
-      });
-      setTestResult(result);
-      setStatus(result.ok ? t('settings.testPass') : t('settings.testFail'));
-    } catch {
-      setStatus(t('settings.testFailed'));
-    } finally {
-      setIsTesting(false);
-    }
-  }
-
-  /**
-   * 清除当前选中 profile 的运行期 API Key（不影响环境变量 Key）
-   */
-  async function clearKey() {
-    if (!selectedProfileId || !provider || !model || isSaving) return;
-    setIsSaving(true);
-    setTestResult(null);
-    try {
-      const result = await api.patch(`${API_PATHS.profiles}/${selectedProfileId}`, {
-        provider,
-        model,
-        enabled,
-        fallbackToMock,
-        clearApiKey: true,
-      });
-      const updated = result.profile;
-      setProfiles((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-      setHasApiKey(updated.hasApiKey);
-      setKeySource(updated.keySource);
-      setStatus(t('settings.clearKeySuccess'));
-    } catch {
-      setStatus(t('settings.clearKeyFailed'));
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  /**
-   * 保存微信读书 API Key
-   */
-  async function saveWeReadKey() {
-    const value = wereadApiKey.trim();
-    if (!value || wereadSaving) return;
-    setWereadSaving(true);
-    setWereadTestResult(null);
-    try {
-      await api.put('/api/weread/settings', { apiKey: value });
-      setWereadConfigured(true);
-      setWereadApiKey('');
-      setStatus(t('settings.weread.saveSuccess'));
-    } catch {
-      setStatus(t('settings.weread.saveFailed'));
-    } finally {
-      setWereadSaving(false);
-    }
-  }
-
-  /**
-   * 测试微信读书 API Key 连接
-   */
-  async function testWeReadKey() {
-    if (wereadTesting) return;
-    setWereadTesting(true);
-    setWereadTestResult(null);
-    try {
-      const result = await api.post('/api/weread/settings/test');
-      setWereadTestResult(result);
-      setStatus(result.ok ? t('settings.weread.testSuccess') : t('settings.weread.testFailed'));
-    } catch {
-      setWereadTestResult({ ok: false, error: t('settings.weread.testFailed') });
-      setStatus(t('settings.weread.testFailed'));
-    } finally {
-      setWereadTesting(false);
-    }
-  }
-
-  /**
-   * 打开创建 Profile 表单，并初始化默认值
-   */
-  function openCreateForm() {
-    const firstProvider = providerOptions[0]?.id ?? '';
-    const firstModel = providerOptions[0]?.models?.[0]?.id ?? '';
-    setNewProfile({ ...EMPTY_PROFILE_FORM, provider: firstProvider, model: firstModel });
-    setShowCreateForm(true);
-  }
-
-  /**
-   * 切换新建 Profile 表单中的服务商，并自动选择第一个模型
-   * @param {string} nextProvider - 服务商 id
-   */
-  function changeNewProfileProvider(nextProvider) {
-    const nextModels = providerOptions.find((item) => item.id === nextProvider)?.models ?? [];
-    setNewProfile((prev) => ({ ...prev, provider: nextProvider, model: nextModels[0]?.id ?? '' }));
-  }
-
-  /**
-   * 创建新的 Profile
-   */
-  async function createProfile() {
-    const name = newProfile.name.trim();
-    const providerValue = newProfile.provider;
-    const modelValue = newProfile.model;
-    if (!name || !providerValue || !modelValue) {
-      setStatus(t('settings.requiredFields'));
-      return;
-    }
-    setIsSaving(true);
-    try {
-      const result = await api.post(API_PATHS.profiles, {
-        name,
-        provider: providerValue,
-        model: modelValue,
-        apiKey: newProfile.apiKey.trim() || undefined,
-      });
-      setShowCreateForm(false);
-      setStatus(`${t('settings.profileCreated')}：${result.profile.name}`);
-      await refreshProfiles(result.profile.id);
-    } catch (error) {
-      setStatus(t('settings.createFailed'));
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  /**
-   * 导出全部数据为 JSON 文件
-   */
-  async function exportAllData() {
-    setDataAction({ type: 'export', loading: true });
-    try {
-      const result = await api.get(API_PATHS.dashboard);
-      const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `zhijing-backup-${Date.now()}.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-      setDataAction({ type: 'export', loading: false, ok: true });
-    } catch {
-      setDataAction({ type: 'export', loading: false, ok: false });
-    }
-  }
-
-  /**
-   * 清除本地缓存（localStorage 中 zhijing_ 前缀的项）
-   */
-  function clearLocalCache() {
-    try {
-      const keys = Object.keys(localStorage).filter((key) => key.startsWith('zhijing_'));
-      keys.forEach((key) => localStorage.removeItem(key));
-      setDataAction({ type: 'clear', loading: false, ok: true, count: keys.length });
-    } catch {
-      setDataAction({ type: 'clear', loading: false, ok: false });
-    }
-  }
-
   const SETTINGS_TABS = [
     { key: 'profiles', label: t('settings.profiles'), icon: PlugZap },
     { key: 'weread', label: t('settings.weread.title'), icon: BookOpen },
@@ -522,8 +139,9 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
   ];
 
   /**
-   * 渲染右侧上下文相关的状态摘要
+   * 渲染右侧上下文相关的状态摘要。
    * @returns {JSX.Element} 状态摘要面板
+   * @author fxbin
    */
   function renderStatusSidebar() {
     if (activeSection === 'profiles') {
@@ -1004,11 +622,11 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
             <div className="settings-actions">
               <button
                 type="button"
-                disabled={dataAction?.type === 'export' && dataAction?.loading}
+                disabled={dataAction?.type === DATA_ACTION_TYPE_EXPORT && dataAction?.loading}
                 onClick={exportAllData}
               >
                 <Download size={16} />
-                {dataAction?.type === 'export' && dataAction?.loading ? t('settings.exporting') : t('settings.exportAll')}
+                {dataAction?.type === DATA_ACTION_TYPE_EXPORT && dataAction?.loading ? t('settings.exporting') : t('settings.exportAll')}
               </button>
               <button
                 type="button"
@@ -1019,16 +637,16 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                 {t('settings.clearLocalCache')}
               </button>
             </div>
-            {dataAction?.type === 'export' && dataAction?.ok && (
+            {dataAction?.type === DATA_ACTION_TYPE_EXPORT && dataAction?.ok && (
               <p className="settings-note">{t('settings.exportSuccess')}</p>
             )}
-            {dataAction?.type === 'export' && dataAction?.ok === false && (
+            {dataAction?.type === DATA_ACTION_TYPE_EXPORT && dataAction?.ok === false && (
               <p className="settings-note">{t('settings.exportFailed')}</p>
             )}
-            {dataAction?.type === 'clear' && dataAction?.ok && (
+            {dataAction?.type === DATA_ACTION_TYPE_CLEAR && dataAction?.ok && (
               <p className="settings-note">{t('settings.clearSuccess')} {dataAction.count} {t('settings.items')}</p>
             )}
-            {dataAction?.type === 'clear' && dataAction?.ok === false && (
+            {dataAction?.type === DATA_ACTION_TYPE_CLEAR && dataAction?.ok === false && (
               <p className="settings-note">{t('settings.clearFailed')}</p>
             )}
           </section>
