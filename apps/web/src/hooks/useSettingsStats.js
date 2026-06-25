@@ -15,6 +15,11 @@ import api from '../utils/api';
 const DASHBOARD_PATH = '/api/dashboard';
 
 /**
+ * 打开本地数据目录接口路径。
+ */
+const REVEAL_DATA_DIR_PATH = '/api/system/reveal-data-dir';
+
+/**
  * 导出文件 MIME 类型。
  */
 const EXPORT_MIME_TYPE = 'application/json';
@@ -48,6 +53,11 @@ const DATA_ACTION_TYPE_EXPORT = 'export';
  * 数据操作类型：清理。
  */
 const DATA_ACTION_TYPE_CLEAR = 'clear';
+
+/**
+ * 数据操作类型：打开数据目录。
+ */
+const DATA_ACTION_TYPE_REVEAL = 'reveal';
 
 /**
  * 初始未拉取到系统统计。
@@ -126,15 +136,33 @@ export function useSettingsStats() {
     }
   }
 
+  /**
+   * 在系统文件管理器中打开知径本地数据目录。
+   * 调用后端 POST /api/system/reveal-data-dir，由后端调用平台原生命令打开目录。
+   * @author fxbin
+   */
+  async function revealDataDir() {
+    setDataAction({ type: DATA_ACTION_TYPE_REVEAL, loading: true });
+    try {
+      const result = await api.post(REVEAL_DATA_DIR_PATH);
+      setDataAction({ type: DATA_ACTION_TYPE_REVEAL, loading: false, ok: result.ok, path: result.path, error: result.error });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setDataAction({ type: DATA_ACTION_TYPE_REVEAL, loading: false, ok: false, error: message });
+    }
+  }
+
   return {
     systemStats,
     dataAction,
     exportAllData,
     clearLocalCache,
+    revealDataDir,
   };
 }
 
 export {
   DATA_ACTION_TYPE_EXPORT,
   DATA_ACTION_TYPE_CLEAR,
+  DATA_ACTION_TYPE_REVEAL,
 };

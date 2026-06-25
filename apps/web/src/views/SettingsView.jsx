@@ -14,6 +14,7 @@ import {
   Cpu,
   Database,
   Download,
+  FolderOpen,
   KeyRound,
   PlugZap,
   Plus,
@@ -36,6 +37,7 @@ import {
   useSettingsStats,
   DATA_ACTION_TYPE_EXPORT,
   DATA_ACTION_TYPE_CLEAR,
+  DATA_ACTION_TYPE_REVEAL,
 } from '../hooks/useSettingsStats';
 
 /**
@@ -119,6 +121,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     dataAction,
     exportAllData,
     clearLocalCache,
+    revealDataDir,
   } = useSettingsStats();
 
   useEffect(() => {
@@ -622,6 +625,14 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
             <div className="settings-actions">
               <button
                 type="button"
+                disabled={dataAction?.type === DATA_ACTION_TYPE_REVEAL && dataAction?.loading}
+                onClick={revealDataDir}
+              >
+                <FolderOpen size={16} />
+                {dataAction?.type === DATA_ACTION_TYPE_REVEAL && dataAction?.loading ? t('settings.openingDataDirectory') : t('settings.openDataDirectory')}
+              </button>
+              <button
+                type="button"
                 disabled={dataAction?.type === DATA_ACTION_TYPE_EXPORT && dataAction?.loading}
                 onClick={exportAllData}
               >
@@ -637,6 +648,12 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                 {t('settings.clearLocalCache')}
               </button>
             </div>
+            {dataAction?.type === DATA_ACTION_TYPE_REVEAL && dataAction?.ok && (
+              <p className="settings-note">{t('settings.openDataDirectorySuccess')} {dataAction.path}</p>
+            )}
+            {dataAction?.type === DATA_ACTION_TYPE_REVEAL && dataAction?.ok === false && (
+              <p className="settings-note">{t('settings.openDataDirectoryFailed')}{dataAction.error ? ` ${dataAction.error}` : ''}</p>
+            )}
             {dataAction?.type === DATA_ACTION_TYPE_EXPORT && dataAction?.ok && (
               <p className="settings-note">{t('settings.exportSuccess')}</p>
             )}

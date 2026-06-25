@@ -85,6 +85,7 @@ import {
   recordMaterialParsingFailure,
   requestMaterialParsing,
   resolveConflictGroup,
+  revealDataDirectory,
   runKnowledgeKit,
   saveFilter,
   saveModelProviderSettings,
@@ -172,6 +173,14 @@ export function buildApi() {
     service: 'zhijing-api',
     timestamp: new Date().toISOString(),
   }));
+
+  app.post('/api/system/reveal-data-dir', async () => {
+    const result = await revealDataDirectory();
+    if (!result.ok) {
+      return { ok: false, error: result.error };
+    }
+    return { ok: true, path: result.path };
+  });
 
   app.get<{ Querystring: { workspaceId?: string } }>('/api/dashboard', async (request) => {
     const kbId = typeof request.query.workspaceId === 'string' && request.query.workspaceId.trim()

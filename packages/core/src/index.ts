@@ -3511,6 +3511,54 @@ function defaultSqlitePath() {
   return process.env.ZHIJING_DB_PATH ?? join(process.cwd(), '.data', 'zhijing.sqlite');
 }
 
+/**
+ * 打开文件管理器命令的最大等待毫秒数。
+ */
+const REVEAL_PATH_TIMEOUT_MS = 5000;
+
+/**
+ * 各平台打开文件管理器的命令名。
+ */
+const REVEAL_PATH_COMMANDS: Record<string, string> = {
+  darwin: 'open',
+  win32: 'explorer',
+  linux: 'xdg-open',
+};
+
+/**
+ * 获取知径数据目录的绝对路径。
+ * 路径取自当前数据库路径的父目录，并保证目录存在。
+ * @returns 数据目录绝对路径
+ * @author fxbin
+ */
+export function getDataDirectory(): string {
+  const dir = dirname(defaultSqlitePath());
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/**
+ * 在系统文件管理器中打开知径数据目录。
+ * 通过 child_process 调用平台原生命令（macOS 为 open、Windows 为 explorer、Linux 为 xdg-open），
+ * 命令参数以数组形式传入，不经过 shell，避免命令注入风险。
+ * @returns 打开成功返回 { ok: true, path }；失败返回 { ok: false, error }
+ * @author fxbin
+ */
+export async function revealDataDirectory(): Promise<{ ok: boolean; path?: string; error?: string }> {
+  const command = REVEAL_PATH_COMMANDS[process.platform];
+  if (!command) {
+    return { ok: false, error: `当前平台 ${process.platform} 暂不支持打开数据目录` };
+  }
+  const dir = getDataDirectory();
+  try {
+    await execFileAsync(command, [dir], { timeout: REVEAL_PATH_TIMEOUT_MS });
+    return { ok: true, path: dir };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: message };
+  }
+}
+
 export function createMemoryKnowledgeRepository(): KnowledgeRepository {
   return new MemoryKnowledgeRepository();
 }
