@@ -374,7 +374,7 @@ function App() {
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new Error(body.error || '创建失败');
+      throw new Error(body.error || t('common.createFailed'));
     }
     const result = await response.json();
     if (result.workspace?.id) {
@@ -390,7 +390,7 @@ function App() {
   async function handleDeleteWorkspace(id) {
     try {
       const response = await fetch(`/api/workspaces/${id}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Delete failed.');
+      if (!response.ok) throw new Error(t('workspace.deleteFailed'));
       setWorkspaces((current) => current.filter((base) => base.id !== id));
       if (selectedWorkspaceId === id) {
         setSelectedWorkspaceId(null);
@@ -415,7 +415,7 @@ function App() {
       });
 
       if (!response.ok) {
-        throw new Error('API intake failed.');
+        throw new Error(t('activity.intakeFailed'));
       }
 
       const result = await response.json();
@@ -429,7 +429,7 @@ function App() {
         workflow: workflowFromKind(kind),
         status: 'failed',
         input: { input: value },
-        error: 'API unavailable',
+        error: t('activity.apiUnavailable'),
         createdAt: timestamp,
         updatedAt: timestamp,
       };
@@ -458,7 +458,7 @@ function App() {
       });
 
       if (!response.ok) {
-        throw new Error('Workspace ask failed.');
+        throw new Error(t('activity.askFailed'));
       }
 
       const result = await response.json();
@@ -872,7 +872,7 @@ function App() {
               });
               if (!response.ok) {
                 const body = await response.json().catch(() => ({}));
-                throw new Error(body.error || '创建失败');
+                throw new Error(body.error || t('common.createFailed'));
               }
               const result = await response.json();
               setCreateKbError(null);
@@ -893,7 +893,7 @@ function App() {
       )}
 
       {editingKb && (
-        <div className="modal-overlay" role="dialog" aria-modal="true">
+        <div className="modal-overlay" onClick={(event) => { if (event.target === event.currentTarget) setEditingKb(null); }} role="dialog" aria-modal="true">
           <div className="modal-card">
             <div className="modal-head">
               <h3>{t('workspace.edit')}</h3>
@@ -934,7 +934,7 @@ function App() {
       )}
 
       {deletingKb && (
-        <div className="modal-overlay" role="dialog" aria-modal="true">
+        <div className="modal-overlay" onClick={(event) => { if (event.target === event.currentTarget) setDeletingKb(null); }} role="dialog" aria-modal="true">
           <div className="modal-card">
             <div className="modal-head">
               <AlertTriangle size={24} />

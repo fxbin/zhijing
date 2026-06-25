@@ -41,7 +41,7 @@ export default function KnowledgeMapPanel({ selectedWorkspaceId, setView }) {
         if (!cancelled) setMapData(data);
       })
       .catch(() => {
-        if (!cancelled) setLoadError(t('workspace.map.error'));
+        if (!cancelled) setLoadError(t('maps.loadFailed'));
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);

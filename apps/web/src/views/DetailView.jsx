@@ -865,7 +865,9 @@ export default function DetailView({
                         }),
                       })
                         .then(() => setCannotAnswerFeedbackSent(true))
-                        .catch(() => {});
+                        .catch(() => {
+                          // 反馈上报失败不影响核心功能，静默处理
+                        });
                     }}
                     type="button"
                   >

@@ -5,6 +5,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Minimize2, Move, PanelRight, Sparkles } from 'lucide-react';
 
 const DRAG_CLICK_THRESHOLD_PX = 4;
@@ -35,6 +36,7 @@ export default function AIChatShell({
     toggleMinimized,
     setPosition,
   } = layout;
+  const { t } = useTranslation();
 
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const dragRef = useRef({
@@ -191,7 +193,7 @@ export default function AIChatShell({
           <button
             className="ai-chat-shell-minimize"
             onClick={toggleMinimized}
-            title="最小化"
+            title={t('common.minimize')}
             type="button"
           >
             <Minimize2 size={16} />

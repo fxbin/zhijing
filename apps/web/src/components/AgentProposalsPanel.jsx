@@ -29,9 +29,11 @@ export default function AgentProposalsPanel({ onCreateWorkspace }) {
   const [proposals, setProposals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   const loadProposals = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const response = await fetch('/api/agent-proposals');
       if (!response.ok) {
@@ -42,10 +44,11 @@ export default function AgentProposalsPanel({ onCreateWorkspace }) {
       setProposals(Array.isArray(payload.proposals) ? payload.proposals : []);
     } catch {
       setProposals([]);
+      setLoadError(t('agentProposals.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadProposals();
@@ -79,6 +82,21 @@ export default function AgentProposalsPanel({ onCreateWorkspace }) {
           <Sparkles size={20} />
         </div>
         <div className="agent-proposals-skeleton" />
+      </section>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <section className="bento-card agent-proposals-card">
+        <div className="bento-head">
+          <div>
+            <h2>{t('agentProposals.title')}</h2>
+            <span className="bento-meta">{t('agentProposals.subtitle')}</span>
+          </div>
+          <Sparkles size={20} />
+        </div>
+        <EmptyState icon={Lightbulb} title={t('agentProposals.loadFailed')} body={loadError} compact />
       </section>
     );
   }

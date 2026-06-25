@@ -791,7 +791,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
       </div>
       )}
       {deleteConfirm && (
-        <div className="modal-overlay" role="dialog" aria-modal="true">
+        <div className="modal-overlay" onClick={(event) => { if (event.target === event.currentTarget) setDeleteConfirm(null); }} role="dialog" aria-modal="true">
           <div className="modal-card">
             <div className="modal-head">
               <AlertTriangle size={24} />

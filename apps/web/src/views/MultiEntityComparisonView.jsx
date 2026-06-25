@@ -106,7 +106,7 @@ export default function MultiEntityComparisonView({ data, setView }) {
         <div>
           <span>{t('compare.title')}</span>
           <h2>{t('compare.heading')}</h2>
-          <p>把工作区当作第一版可比较实体，展示资料量、卡片量、产物量和来源健康度，并支持展开查看卡片明细。</p>
+          <p>{t('compare.hint')}</p>
         </div>
       </div>
       <AdvancedOpsTabs active="compare" setView={setView} />
@@ -155,7 +155,7 @@ export default function MultiEntityComparisonView({ data, setView }) {
                 items.push(
                   <div className="asset-list" key={`${row.id}-detail`}>
                     {cards.length === 0 ? (
-                      <article><small>该实体暂无卡片明细</small></article>
+                      <article><small>{t('compare.noCardDetail')}</small></article>
                     ) : (
                       cards.map((card, index) => (
                         <article
@@ -167,8 +167,8 @@ export default function MultiEntityComparisonView({ data, setView }) {
                               {cardTypeLabel(card.type)}
                             </span>
                           </div>
-                          <strong>{card.title ?? '未命名卡片'}</strong>
-                          <small>{card.body ?? '无正文'}</small>
+                          <strong>{card.title ?? t('compare.unnamedCard')}</strong>
+                          <small>{card.body ?? t('compare.noBody')}</small>
                         </article>
                       ))
                     )}
@@ -211,31 +211,31 @@ export default function MultiEntityComparisonView({ data, setView }) {
       <div className="comparison-insight-grid">
         <article>
           <Layers size={20} />
-          <strong>总资产最多</strong>
+          <strong>{t('compare.topAssets')}</strong>
           <p>
             {topAssetEntity
               ? `${topAssetEntity.title}（${totalAssets(topAssetEntity)} 项）`
-              : '暂无可对比实体'}
+              : t('compare.noEntitiesShort')}
           </p>
         </article>
         <article>
           <ShieldCheck size={20} />
-          <strong>来源健康度最高</strong>
+          <strong>{t('compare.topHealth')}</strong>
           <p>
             {topHealthEntity
               ? `${topHealthEntity.title}（${topHealthEntity.health}%）`
-              : '暂无可对比实体'}
+              : t('compare.noEntitiesShort')}
           </p>
         </article>
         <article>
           <Network size={20} />
-          <strong>对比口径</strong>
-          <p>当前阶段按工作区粒度比较，后续可升级到人物、品牌、概念或平台实体。</p>
+          <strong>{t('compare.scope')}</strong>
+          <p>{t('compare.scopeBody')}</p>
         </article>
         <article>
           <ChevronDown size={20} />
-          <strong>行内展开</strong>
-          <p>点击任意工作区行可展开查看该库的卡片明细（最多 5 条），再次点击收起。</p>
+          <strong>{t('compare.expand')}</strong>
+          <p>{t('compare.expandBody')}</p>
         </article>
       </div>
     </section>

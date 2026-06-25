@@ -39,6 +39,7 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact })
   const [filterSort, setFilterSort] = useState('updated_desc');
   const [filterKeyword, setFilterKeyword] = useState('');
   const [filterLoaded, setFilterLoaded] = useState(false);
+  const [filterError, setFilterError] = useState('');
   const [expandedMaterials, setExpandedMaterials] = useState(false);
   const [expandedCards, setExpandedCards] = useState(false);
   const [expandedArtifacts, setExpandedArtifacts] = useState(false);
@@ -79,7 +80,9 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact })
           sortKey: filterSort,
           keyword: filterKeyword,
         }),
-      }).catch(() => {});
+      }).catch((err) => {
+        setFilterError(err.message || '加载失败');
+      });
     }, 600);
     return () => clearTimeout(timer);
   }, [filterLoaded, filterCardType, filterClaimStatus, filterSort, filterKeyword]);
@@ -152,6 +155,10 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact })
         <button onClick={() => setView('library')} type="button">{t('assets.openLibrary')}</button>
       </div>
       <AdvancedOpsTabs active="assets" setView={setView} />
+
+      {filterError && (
+        <EmptyState title={t('common.empty')} body={filterError} />
+      )}
 
       <div className="advanced-metric-grid">
         {metrics.map((metric) => {
