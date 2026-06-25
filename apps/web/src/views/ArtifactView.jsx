@@ -250,7 +250,7 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
           </article>
           <article className="artifact-action-card">
             <h3>{t('artifact.nextActions')}</h3>
-            <button onClick={() => setView('chat')} type="button">{t('artifact.discussInChat')}</button>
+            <button onClick={() => window.dispatchEvent(new CustomEvent('zhijing:open-chat'))} type="button">{t('artifact.discussInChat')}</button>
             <button onClick={() => setView('recall')} type="button">{t('artifact.practiceCards')}</button>
             <button onClick={() => setView('export')} type="button">{t('artifact.exportBundle')}</button>
           </article>

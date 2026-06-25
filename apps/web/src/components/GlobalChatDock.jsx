@@ -1,43 +1,48 @@
 /**
- * 对话视图：独立的工作区对话页，展示历史消息与引用卡片。
- * @module views/ChatView
+ * 全局对话胶囊：跨视图常驻的浮动对话面板。
+ *
+ * 默认收起为右下角悬浮球，点击展开成 floating 窗口。
+ * 状态（mode/minimized/position）持久化在独立 localStorage 键下，
+ * 不影响工作区详情页内嵌的对话面板。
+ *
+ * @module components/GlobalChatDock
  */
 
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  CircleX,
   Clock3,
   Database,
   Send,
   Sparkles,
   SquareArrowOutUpRight,
 } from 'lucide-react';
-import { formatPercent } from '../utils/format';
 import { useCardTypeLabel } from '../utils/i18nLabels';
 import { useChatLayout } from '../hooks/useChatLayout';
-import AIChatShell from '../components/AIChatShell';
-import EmptyState from '../components/EmptyState';
-import SourceCitation from '../components/SourceCitation';
+import AIChatShell from './AIChatShell';
+import EmptyState from './EmptyState';
+import SourceCitation from './SourceCitation';
+
+const DOCK_STORAGE_KEY = 'zhijing-chat-dock';
 
 /**
- * 工作区对话视图。
+ * 全局对话胶囊组件。
  * @param {object} props - 组件属性
  * @param {string} props.apiStatus - API 在线状态
  * @param {object} props.assistantAnswer - 助手回答对象
  * @param {string} props.assistantQuestion - 当前问题输入
- * @param {object} props.detail - 工作区详情
+ * @param {object} props.detail - 当前工作区详情
  * @param {boolean} props.isAsking - 是否正在提问
- * @param {object[]} [props.workspaces=[]] - 全量工作区列表（用于全局入口选择）
+ * @param {object[]} [props.workspaces=[]] - 全量工作区列表
  * @param {object[]} [props.messages=[]] - 历史消息列表
  * @param {() => void} props.onAsk - 提问回调
  * @param {(artifact: object, meta?: object) => void} props.onOpenArtifact - 打开产物回调
  * @param {(workspaceId: string) => void} [props.onSelectWorkspace] - 选择工作区回调
  * @param {string} props.selectedWorkspaceId - 当前选中工作区 ID
  * @param {(value: string) => void} props.setAssistantQuestion - 设置问题输入
- * @param {(view: string) => void} props.setView - 切换视图
- * @returns {JSX.Element} 对话视图
+ * @returns {JSX.Element} 对话胶囊
  */
-export default function ChatView({
+export default function GlobalChatDock({
   apiStatus,
   assistantAnswer,
   assistantQuestion,
@@ -50,37 +55,60 @@ export default function ChatView({
   onSelectWorkspace,
   selectedWorkspaceId,
   setAssistantQuestion,
-  setView,
 }) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
-  const layout = useChatLayout();
+  const layout = useChatLayout(DOCK_STORAGE_KEY, {
+    initialMinimized: true,
+    initialMode: 'floating',
+  });
+
   const cards = detail.cards ?? [];
   const materials = detail.materials ?? [];
   const latestAnswerCards = assistantAnswer?.cards?.slice(0, 3) ?? [];
   const latestCitations = assistantAnswer?.citations ?? [];
   const canAsk = apiStatus === 'online' && Boolean(selectedWorkspaceId) && !isAsking;
-  const starterPrompts = [
-    { key: 'chat.starterPrompt.keyConcepts' },
-    { key: 'chat.starterPrompt.missingSources' },
-    { key: 'chat.starterPrompt.actionList' },
-  ];
 
-  if (!selectedWorkspaceId) {
-    return (
-      <section className="page-main full">
-        <div className="recall-workbench">
-          <div className="recall-head">
-            <button className="back-button" onClick={() => setView('workspace')} type="button">
-              ←
-              {t('common.back')}
-            </button>
-            <span>{t('chat.title')}</span>
-            <h2>{t('chat.selectWorkspace')}</h2>
-          </div>
-          {workspaces.length === 0 ? (
-            <EmptyState title={t('chat.noWorkspaces')} body={t('common.empty')} icon={Database} />
-          ) : (
+  /**
+   * 自动滚动对话线程到底部，确保最新消息可见。
+   */
+  useEffect(() => {
+    if (layout.minimized) {
+      return;
+    }
+    const thread = document.querySelector('.global-chat-dock .chat-conversation');
+    if (thread) {
+      thread.scrollTop = thread.scrollHeight;
+    }
+  }, [messages, assistantAnswer, layout.minimized]);
+
+  /**
+   * 监听「请打开对话胶囊」全局事件：产物页等外部入口可 dispatch
+   * CustomEvent('zhijing:open-chat') 触发 dock 展开，避免组件层层透传回调。
+   */
+  useEffect(() => {
+    function handleOpen() {
+      layout.setMinimized(false);
+    }
+    window.addEventListener('zhijing:open-chat', handleOpen);
+    return () => window.removeEventListener('zhijing:open-chat', handleOpen);
+  }, [layout]);
+
+  return (
+    <AIChatShell
+      layout={layout}
+      title={t('chat.title')}
+      className="global-chat-dock"
+    >
+      {!selectedWorkspaceId ? (
+        <div className="global-chat-dock-picker">
+          <EmptyState
+            title={t('chat.selectWorkspace')}
+            body={t('chat.noWorkspaces')}
+            icon={Database}
+            compact
+          />
+          {workspaces.length > 0 && (
             <div className="kb-picker-grid">
               {workspaces.map((kb) => (
                 <button
@@ -89,52 +117,29 @@ export default function ChatView({
                   onClick={() => onSelectWorkspace?.(kb.id)}
                   type="button"
                 >
-                  <Database size={18} />
+                  <Database size={16} />
                   <strong>{kb.title}</strong>
-                  {kb.summary && <span>{kb.summary}</span>}
                 </button>
               ))}
             </div>
           )}
         </div>
-      </section>
-    );
-  }
+      ) : (
+        <>
+          <div className="global-chat-dock-context">
+            <button
+              className="global-chat-dock-switch"
+              onClick={() => onSelectWorkspace?.('')}
+              type="button"
+            >
+              <Database size={14} />
+              <span>{detail.title}</span>
+            </button>
+            <span className="global-chat-dock-stats">
+              {t('chat.metric.sources')} {materials.length} · {t('chat.metric.cards')} {cards.length}
+            </span>
+          </div>
 
-  return (
-    <section className="page-main full">
-      <div className={`chat-workbench ${layout.mode === 'floating' ? 'ai-chat-floating' : ''}`}>
-        <aside className="chat-context-panel">
-          <button className="back-button" onClick={() => setView('detail')} type="button">
-            ←
-            {t('chat.backToWorkspace')}
-          </button>
-          <span>{t('chat.title')}</span>
-          <h2>{detail.title}</h2>
-          <p>{detail.summary}</p>
-          <div className="chat-context-stats">
-            <div><strong>{materials.length}</strong><span>{t('chat.metric.sources')}</span></div>
-            <div><strong>{cards.length}</strong><span>{t('chat.metric.cards')}</span></div>
-            <div><strong>{formatPercent(detail.sourcedRatio)}</strong><span>{t('chat.metric.sourced')}</span></div>
-          </div>
-          <div className="prompt-stack">
-            <strong>{t('chat.suggestedQuestions')}</strong>
-            {starterPrompts.map((prompt) => (
-              <button key={prompt.key} onClick={() => setAssistantQuestion(t(prompt.key))} type="button">
-                {t(prompt.key)}
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        <AIChatShell layout={layout} title={t('chat.title')} className="chat-main-panel">
-          <div className="chat-thread-head">
-            <Sparkles size={24} />
-            <div>
-              <span>{t('chat.assistantOnboarding')}</span>
-              <h3>{t('chat.askFromKnowledge')}</h3>
-            </div>
-          </div>
           <div className="chat-conversation">
             <div className="assistant-message">
               <Sparkles size={19} />
@@ -180,7 +185,7 @@ export default function ChatView({
             })}
             {assistantAnswer?.question && <div className="chat-user">{assistantAnswer.question}</div>}
             {assistantAnswer?.loading && <div className="assistant-message pending"><Clock3 size={19} /><p>{t('chat.loadingAnswer')}</p></div>}
-            {assistantAnswer?.error && <div className="assistant-message failed"><CircleX size={19} /><p>{assistantAnswer.error}</p></div>}
+            {assistantAnswer?.error && <div className="assistant-message failed"><Sparkles size={19} /><p>{assistantAnswer.error}</p></div>}
             {assistantAnswer?.message && (
               <div className="assistant-message">
                 <Sparkles size={19} />
@@ -214,6 +219,7 @@ export default function ChatView({
               </div>
             )}
           </div>
+
           <div className="chat-input-bar">
             <input
               aria-label={t('chat.askAria')}
@@ -229,8 +235,8 @@ export default function ChatView({
               {isAsking ? <Clock3 size={18} /> : <Send size={18} />}
             </button>
           </div>
-        </AIChatShell>
-      </div>
-    </section>
+        </>
+      )}
+    </AIChatShell>
   );
 }

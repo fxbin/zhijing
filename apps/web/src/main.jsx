@@ -34,6 +34,7 @@ import SystemNotice from './components/SystemNotice';
 import NotificationDropdown from './components/NotificationDropdown';
 import CreateKbModal from './components/CreateKbModal';
 import WorkspaceSwitcher from './components/WorkspaceSwitcher';
+import GlobalChatDock from './components/GlobalChatDock';
 const WorkspaceView = lazy(() => import('./views/WorkspaceView'));
 const DetailView = lazy(() => import('./views/DetailView'));
 const LibraryView = lazy(() => import('./views/LibraryView'));
@@ -48,7 +49,6 @@ const KnowledgeConflictResolverView = lazy(() => import('./views/KnowledgeConfli
 const InsightsView = lazy(() => import('./views/InsightsView'));
 const PathView = lazy(() => import('./views/PathView'));
 const ArchiveView = lazy(() => import('./views/ArchiveView'));
-const ChatView = lazy(() => import('./views/ChatView'));
 const RecallView = lazy(() => import('./views/RecallView'));
 const ExportView = lazy(() => import('./views/ExportView'));
 const SettingsView = lazy(() => import('./views/SettingsView'));
@@ -420,7 +420,6 @@ function App() {
     { key: 'detail', label: t('nav.detail'), icon: Layers, group: 'core' },
     { key: 'library', label: t('nav.library'), icon: FolderOpen, group: 'core' },
     { key: 'search', label: t('nav.search'), icon: Search, group: 'core' },
-    { key: 'chat', label: t('nav.chat'), icon: MessageCircle, group: 'core' },
     { key: 'insights', label: t('nav.insights'), icon: Lightbulb, group: 'insight' },
     { key: 'assets', label: t('nav.assets'), icon: Layers, group: 'insight' },
     { key: 'path', label: t('nav.path'), icon: Map, group: 'insight' },
@@ -618,26 +617,6 @@ function App() {
           )}
           {view === 'path' && <PathView selectedWorkspaceId={selectedWorkspaceId} setView={go} />}
           {view === 'archive' && <ArchiveView selectedWorkspaceId={selectedWorkspaceId} setView={go} />}
-          {view === 'chat' && (
-            <ChatView
-              apiStatus={apiStatus}
-              assistantAnswer={assistantAnswer}
-              assistantQuestion={assistantQuestion}
-              detail={workspaceDetail}
-              isAsking={isAsking}
-              workspaces={workspaces}
-              messages={workspaceMessages}
-              onAsk={askWorkspace}
-              onOpenArtifact={openArtifact}
-              onSelectWorkspace={(id) => {
-                setSelectedWorkspaceId(id);
-                go('chat');
-              }}
-              selectedWorkspaceId={selectedWorkspaceId}
-              setAssistantQuestion={setAssistantQuestion}
-              setView={go}
-            />
-          )}
           {view === 'recall' && (
             <RecallView
               detail={workspaceDetail}
@@ -765,6 +744,25 @@ function App() {
           </div>
         </div>
       )}
+
+      <GlobalChatDock
+        apiStatus={apiStatus}
+        assistantAnswer={assistantAnswer}
+        assistantQuestion={assistantQuestion}
+        detail={workspaceDetail}
+        isAsking={isAsking}
+        workspaces={workspaces}
+        messages={workspaceMessages}
+        onAsk={askWorkspace}
+        onOpenArtifact={openArtifact}
+        onSelectWorkspace={(id) => {
+          if (id) {
+            setSelectedWorkspaceId(id);
+          }
+        }}
+        selectedWorkspaceId={selectedWorkspaceId}
+        setAssistantQuestion={setAssistantQuestion}
+      />
     </main>
   );
 }

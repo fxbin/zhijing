@@ -33,6 +33,20 @@ function getDefaultMarkerPosition() {
 }
 
 /**
+ * 获取 floating 模式下面板的默认可见位置（右下角，略偏离悬浮球位置）。
+ * @returns {{ x: number; y: number }} 默认位置
+ */
+function getDefaultFloatingPosition() {
+  if (typeof window === 'undefined') {
+    return DEFAULT_LAYOUT.position;
+  }
+  return {
+    x: Math.max(SIDEBAR_WIDTH_PX, window.innerWidth - DEFAULT_LAYOUT.size.width - VIEWPORT_MARGIN_PX),
+    y: Math.max(VIEWPORT_MARGIN_PX, window.innerHeight - DEFAULT_LAYOUT.size.height - VIEWPORT_MARGIN_PX),
+  };
+}
+
+/**
  * 将悬浮球位置限制在可视区域内。
  * @param {{ x: number; y: number }} position - 目标位置
  * @returns {{ x: number; y: number }} 限制后的位置
@@ -105,11 +119,33 @@ function saveLayout(key, layout) {
 
 /**
  * 使用 AI 对话框布局状态。
+ *
+ * 首次访问（localStorage 无记录）时，最小化状态由 initialMinimized 决定。
+ * 一旦用户手动切换过，则以持久化的值为准；这样既能让全局 Dock 默认收起为悬浮球，
+ * 也不会污染工作区详情页内嵌对话面板（默认展开）的体验。
+ *
  * @param {string} [storageKey='zhijing-chat-layout'] - localStorage 键名
+ * @param {object} [options] - 可选配置
+ * @param {boolean} [options.initialMinimized=false] - 首次访问时是否默认最小化
+ * @param {'sidebar'|'floating'} [options.initialMode='sidebar'] - 首次访问时的初始模式
  * @returns {object} 布局状态与操作函数
  */
-export function useChatLayout(storageKey = DEFAULT_STORAGE_KEY) {
-  const [layout, setLayout] = useState(() => loadLayout(storageKey));
+export function useChatLayout(storageKey = DEFAULT_STORAGE_KEY, options = {}) {
+  const initialMinimized = options.initialMinimized ?? false;
+  const initialMode = options.initialMode === 'floating' ? 'floating' : 'sidebar';
+  const [layout, setLayout] = useState(() => {
+    const loaded = loadLayout(storageKey);
+    const hasPersisted = typeof window !== 'undefined' && window.localStorage.getItem(storageKey);
+    if (hasPersisted) {
+      return loaded;
+    }
+    return {
+      ...loaded,
+      mode: initialMode,
+      minimized: initialMinimized,
+      position: initialMode === 'floating' ? getDefaultFloatingPosition() : loaded.position,
+    };
+  });
 
   useEffect(() => {
     saveLayout(storageKey, layout);
