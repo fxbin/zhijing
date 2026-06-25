@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './i18n';
 import {
@@ -35,25 +35,25 @@ import SystemNotice from './components/SystemNotice';
 import NotificationDropdown from './components/NotificationDropdown';
 import CreateKbModal from './components/CreateKbModal';
 import WorkspaceSwitcher from './components/WorkspaceSwitcher';
-import WorkspaceView from './views/WorkspaceView';
-import DetailView from './views/DetailView';
-import LibraryView from './views/LibraryView';
-import SearchView from './views/SearchView';
-import KitView from './views/KitView';
-import WorkflowView from './views/WorkflowView';
-import ArtifactView from './views/ArtifactView';
-import MapsView from './views/MapsView';
-import GlobalAssetsDashboard from './views/GlobalAssetsDashboard';
-import MultiEntityComparisonView from './views/MultiEntityComparisonView';
-import KnowledgeConflictResolverView from './views/KnowledgeConflictResolverView';
-import InsightsView from './views/InsightsView';
-import PathView from './views/PathView';
-import ArchiveView from './views/ArchiveView';
-import ChatView from './views/ChatView';
-import RecallView from './views/RecallView';
-import ExportView from './views/ExportView';
-import SettingsView from './views/SettingsView';
-import WeReadView from './views/WeReadView';
+const WorkspaceView = lazy(() => import('./views/WorkspaceView'));
+const DetailView = lazy(() => import('./views/DetailView'));
+const LibraryView = lazy(() => import('./views/LibraryView'));
+const SearchView = lazy(() => import('./views/SearchView'));
+const KitView = lazy(() => import('./views/KitView'));
+const WorkflowView = lazy(() => import('./views/WorkflowView'));
+const ArtifactView = lazy(() => import('./views/ArtifactView'));
+const MapsView = lazy(() => import('./views/MapsView'));
+const GlobalAssetsDashboard = lazy(() => import('./views/GlobalAssetsDashboard'));
+const MultiEntityComparisonView = lazy(() => import('./views/MultiEntityComparisonView'));
+const KnowledgeConflictResolverView = lazy(() => import('./views/KnowledgeConflictResolverView'));
+const InsightsView = lazy(() => import('./views/InsightsView'));
+const PathView = lazy(() => import('./views/PathView'));
+const ArchiveView = lazy(() => import('./views/ArchiveView'));
+const ChatView = lazy(() => import('./views/ChatView'));
+const RecallView = lazy(() => import('./views/RecallView'));
+const ExportView = lazy(() => import('./views/ExportView'));
+const SettingsView = lazy(() => import('./views/SettingsView'));
+const WeReadView = lazy(() => import('./views/WeReadView'));
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from './components/LanguageSwitcher';
 
@@ -727,6 +727,7 @@ function App() {
 
         <div className="canvas">
           {apiStatus === 'offline' && <SystemNotice status="offline" />}
+          <Suspense fallback={<div className="view-loading">{t('common.loading')}</div>}>
           {view === 'workspace' && <WorkspaceView activity={activity} apiStatus={apiStatus} isSubmitting={isSubmitting} materials={materials} query={query} selectedWorkspaceId={selectedWorkspaceId} setQuery={setQuery} setView={go} submit={submit} onViewMaterialDetail={handleViewMaterialDetail} browserAiStatus={browserAiStatus} />}
           {view === 'detail' && (
             <DetailView
@@ -845,6 +846,7 @@ function App() {
             />
           )}
           {view === 'settings' && <SettingsView initialSection={settingsSection} onSectionConsumed={() => setSettingsSection(null)} setView={go} browserAiStatus={browserAiStatus} />}
+          </Suspense>
         </div>
       </section>
       {isCreateKbOpen && (

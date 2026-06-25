@@ -11,4 +11,17 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('react-dom') || /[\\/]react[\\/]/.test(id)) return 'react';
+          if (id.includes('i18next')) return 'i18n';
+          if (id.includes('lucide-react')) return 'icons';
+          return undefined;
+        },
+      },
+    },
+  },
 });

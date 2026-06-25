@@ -567,6 +567,14 @@ button { cursor: pointer; }
   padding: 48px 44px 64px;
 }
 
+.view-loading {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .workspace {
   min-width: 0;
 }
