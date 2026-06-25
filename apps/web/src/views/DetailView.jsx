@@ -35,6 +35,7 @@ import AIChatShell from '../components/AIChatShell';
 import { useChatLayout } from '../hooks/useChatLayout';
 import { PATH_CARD_ID_STORAGE_KEY } from '../constants/options';
 import { startReadingSession, flushReadingSession } from '../utils/readingTracker';
+import api, { ApiError } from '../utils/api';
 
 const BYTES_PER_GB = 1024 * 1024 * 1024;
 
@@ -60,9 +61,7 @@ function MaterialTranscriptPanel({ material }) {
     setLoadingReport(true);
     async function loadReport() {
       try {
-        const response = await fetch('/api/transcription/capability');
-        if (!response.ok) return;
-        const payload = await response.json();
+        const payload = await api.get('/api/transcription/capability');
         if (!ignore) setReport(payload);
       } catch {
         // 静默失败，保持无报告状态
@@ -257,9 +256,7 @@ export default function DetailView({
     setEntityError('');
     async function loadEntities() {
       try {
-        const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/entities`);
-        if (!response.ok) return;
-        const payload = await response.json();
+        const payload = await api.get(`/api/workspaces/${selectedWorkspaceId}/entities`);
         if (!ignore) setEntities(payload.entities ?? []);
       } catch {
         if (!ignore) setEntities([]);
@@ -340,16 +337,7 @@ export default function DetailView({
     setAcceptingCards(true);
     setAcceptError('');
     try {
-      const response = await fetch(`/api/messages/${messageId}/accept-cards`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ selectedIndices }),
-      });
-      if (!response.ok) {
-        setAcceptError(t('detail.proposedCardsAcceptFailed'));
-        return;
-      }
-      const result = await response.json();
+      const result = await api.post(`/api/messages/${messageId}/accept-cards`, { selectedIndices });
       if (onCardsAccepted) onCardsAccepted(result.cards ?? [], result.message);
     } catch {
       setAcceptError(t('detail.proposedCardsAcceptFailed'));
@@ -408,16 +396,14 @@ export default function DetailView({
     setExtracting(true);
     setEntityError('');
     try {
-      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/entities/extract`, { method: 'POST' });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        setEntityError(payload.error ?? t('detail.entityExtractFailed'));
-        return;
-      }
-      const payload = await response.json();
+      const payload = await api.post(`/api/workspaces/${selectedWorkspaceId}/entities/extract`);
       setEntities(payload.entities ?? []);
-    } catch {
-      setEntityError(t('detail.entityNetworkError'));
+    } catch (err) {
+      if (err instanceof ApiError && err.status > 0) {
+        setEntityError(err.serverMessage ?? t('detail.entityExtractFailed'));
+      } else {
+        setEntityError(t('detail.entityNetworkError'));
+      }
     } finally {
       setExtracting(false);
     }
@@ -856,13 +842,9 @@ export default function DetailView({
                   <button
                     className="assistant-link-button cannot-answer-btn"
                     onClick={() => {
-                      fetch('/api/cannot-answer-feedback', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          workspaceId: selectedWorkspaceId,
-                          question: assistantAnswer.question ?? assistantQuestion,
-                        }),
+                      api.post('/api/cannot-answer-feedback', {
+                        workspaceId: selectedWorkspaceId,
+                        question: assistantAnswer.question ?? assistantQuestion,
                       })
                         .then(() => setCannotAnswerFeedbackSent(true))
                         .catch(() => {

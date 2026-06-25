@@ -11,6 +11,7 @@ import AdvancedOpsTabs from '../components/AdvancedOpsTabs';
 import EmptyState from '../components/EmptyState';
 import { formatMaterialTime } from '../utils/material';
 import { useCardTypeLabel, useClaimStatusLabel, useParseStatusLabel } from '../utils/i18nLabels';
+import api from '../utils/api';
 
 /** 资料列表预览条数，超出后显示「显示全部」按钮。 */
 const PREVIEW_LIMIT_MATERIALS = 5;
@@ -49,9 +50,7 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact })
     let ignore = false;
     async function loadAssetsFilter() {
       try {
-        const response = await fetch('/api/saved-filters/assets');
-        if (!response.ok) return;
-        const payload = await response.json();
+        const payload = await api.get('/api/saved-filters/assets');
         const filter = payload.filter;
         if (ignore || !filter) return;
         if (filter.cardType) setFilterCardType(filter.cardType);
@@ -71,15 +70,11 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact })
   useEffect(() => {
     if (!filterLoaded) return;
     const timer = setTimeout(() => {
-      fetch('/api/saved-filters/assets', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cardType: filterCardType === 'all' ? '' : filterCardType,
-          claimStatus: filterClaimStatus === 'all' ? '' : filterClaimStatus,
-          sortKey: filterSort,
-          keyword: filterKeyword,
-        }),
+      api.put('/api/saved-filters/assets', {
+        cardType: filterCardType === 'all' ? '' : filterCardType,
+        claimStatus: filterClaimStatus === 'all' ? '' : filterClaimStatus,
+        sortKey: filterSort,
+        keyword: filterKeyword,
       }).catch((err) => {
         setFilterError(err.message || t('assets.loadFailed'));
       });
@@ -138,7 +133,7 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact })
     setFilterSort('updated_desc');
     setFilterKeyword('');
     try {
-      await fetch('/api/saved-filters/assets', { method: 'DELETE' });
+      await api.del('/api/saved-filters/assets');
     } catch {
       // 静默降级
     }

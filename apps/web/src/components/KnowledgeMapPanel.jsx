@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Compass, Loader2, Network } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { buildMapLayout } from '../utils/map';
+import api from '../utils/api';
 
 /**
  * 知识地图预览面板，基于真实地图数据渲染缩略图，点击可跳转到完整地图视图。
@@ -32,20 +33,16 @@ export default function KnowledgeMapPanel({ selectedWorkspaceId, setView }) {
     setIsLoading(true);
     setLoadError(null);
 
-    fetch(`/api/workspaces/${selectedWorkspaceId}/map`)
-      .then((response) => {
-        if (!response.ok) throw new Error('Map fetch failed.');
-        return response.json();
-      })
-      .then((data) => {
+    (async () => {
+      try {
+        const data = await api.get(`/api/workspaces/${selectedWorkspaceId}/map`);
         if (!cancelled) setMapData(data);
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setLoadError(t('maps.loadFailed'));
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setIsLoading(false);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;

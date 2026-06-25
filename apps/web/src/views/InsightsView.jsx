@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import AgentProposalsPanel from '../components/AgentProposalsPanel';
 import EmptyState from '../components/EmptyState';
+import api from '../utils/api';
 import { useCardTypeLabel, useClaimStatusLabel } from '../utils/i18nLabels';
 import { formatDate } from '../utils/material';
 
@@ -54,9 +55,7 @@ export default function InsightsView({ setView, onCreateWorkspace }) {
       setLoading(true);
       setError('');
       try {
-        const response = await fetch('/api/insights');
-        if (!response.ok) throw new Error('Insights unavailable.');
-        const payload = await response.json();
+        const payload = await api.get('/api/insights');
         if (!ignore) setInsights(payload);
       } catch {
         if (!ignore) setError(t('insights.loadError'));

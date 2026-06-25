@@ -16,6 +16,7 @@ import {
 import { downloadArtifactMarkdown } from '../utils/export';
 import { formatPercent } from '../utils/format';
 import { formatDate, formatDateTime } from '../utils/material';
+import api, { ApiError } from '../utils/api';
 
 /**
  * 产物详情视图组件
@@ -59,9 +60,7 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
     setRevisions([]);
     async function loadArtifactRevisions() {
       try {
-        const response = await fetch(`/api/artifacts/${activeArtifact.id}/revisions`);
-        if (!response.ok) return;
-        const payload = await response.json();
+        const payload = await api.get(`/api/artifacts/${activeArtifact.id}/revisions`);
         if (!ignore) setRevisions(payload.revisions ?? []);
       } catch {
         if (!ignore) setRevisions([]);
@@ -90,20 +89,17 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
         title: t(`artifact.variant.${variant}.section.${index}`, { defaultValue: title }),
         body: (sectionBlocks[index]?.length ? sectionBlocks[index] : [t('artifact.emptySection')]).join('\n\n'),
       }));
-      const response = await fetch(`/api/artifacts/${activeArtifact.id}/sections/initialize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sections: sectionInits }),
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        setEditError(payload.error ?? t('artifact.initSectionFailed'));
-        return;
-      }
-      const payload = await response.json();
+      const payload = await api.post(
+        `/api/artifacts/${activeArtifact.id}/sections/initialize`,
+        { sections: sectionInits },
+      );
       onArtifactUpdate?.(payload.artifact);
-    } catch {
-      setEditError(t('artifact.initSectionNetworkError'));
+    } catch (err) {
+      if (err instanceof ApiError && err.status >= 400) {
+        setEditError(err.serverMessage ?? t('artifact.initSectionFailed'));
+      } else {
+        setEditError(t('artifact.initSectionNetworkError'));
+      }
     } finally {
       setInitializing(false);
     }
@@ -125,22 +121,19 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
     setSaving(true);
     setEditError('');
     try {
-      const response = await fetch(`/api/artifacts/${activeArtifact.id}/sections/${editingSectionId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: draftTitle, body: draftBody }),
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        setEditError(payload.error ?? t('artifact.saveFailed'));
-        return;
-      }
-      const payload = await response.json();
+      const payload = await api.patch(
+        `/api/artifacts/${activeArtifact.id}/sections/${editingSectionId}`,
+        { title: draftTitle, body: draftBody },
+      );
       onArtifactUpdate?.(payload.artifact);
       if (payload.revision) setRevisions((current) => [...current, payload.revision]);
       setEditingSectionId(null);
-    } catch {
-      setEditError(t('artifact.saveNetworkError'));
+    } catch (err) {
+      if (err instanceof ApiError && err.status >= 400) {
+        setEditError(err.serverMessage ?? t('artifact.saveFailed'));
+      } else {
+        setEditError(t('artifact.saveNetworkError'));
+      }
     } finally {
       setSaving(false);
     }

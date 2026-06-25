@@ -4,6 +4,8 @@
  * @author fxbin
  */
 
+import api from './api';
+
 const READING_SESSION_MIN_DURATION_MS = 1000;
 
 let currentSession = null;
@@ -33,14 +35,10 @@ export async function flushReadingSession() {
   const durationMs = Date.now() - session.startedAt;
   if (durationMs < READING_SESSION_MIN_DURATION_MS) return;
   try {
-    await fetch('/api/reading-sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        cardId: session.workspaceId,
-        workspaceId: session.workspaceId,
-        durationMs,
-      }),
+    await api.post('/api/reading-sessions', {
+      cardId: session.workspaceId,
+      workspaceId: session.workspaceId,
+      durationMs,
     });
   } catch {
     // 静默失败，不影响用户体验

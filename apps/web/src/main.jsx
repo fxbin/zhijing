@@ -30,6 +30,7 @@ import {
   emptyDetail,
 } from './utils/knowledge';
 import { viewFromHash, classifyInput, workflowFromKind } from './utils/navigation';
+import api, { ApiError } from './utils/api';
 import useModalA11y from './hooks/useModalA11y';
 import SystemNotice from './components/SystemNotice';
 import NotificationDropdown from './components/NotificationDropdown';
@@ -157,9 +158,7 @@ function App() {
         const url = selectedWorkspaceId
           ? `/api/dashboard?workspaceId=${encodeURIComponent(selectedWorkspaceId)}`
           : '/api/dashboard';
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Dashboard unavailable.');
-        const dashboard = await response.json();
+        const dashboard = await api.get(url);
         if (ignore) return;
         const nextWorkspaces = dashboard.workspaces ?? [];
         const nextMaterials = dashboard.materials ?? [];
@@ -202,9 +201,7 @@ function App() {
     let ignore = false;
     async function loadDetail() {
       try {
-        const response = await fetch(`/api/workspaces/${selectedWorkspaceId}`);
-        if (!response.ok) return;
-        const detail = await response.json();
+        const detail = await api.get(`/api/workspaces/${selectedWorkspaceId}`);
         if (!ignore) setWorkspaceDetail(detail);
       } catch {
         if (!ignore) setWorkspaceDetail(fallbackDetail());
@@ -212,9 +209,7 @@ function App() {
     }
     async function loadMessages() {
       try {
-        const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/messages?limit=50`);
-        if (!response.ok) return;
-        const payload = await response.json();
+        const payload = await api.get(`/api/workspaces/${selectedWorkspaceId}/messages?limit=50`);
         if (!ignore) setWorkspaceMessages(payload.messages ?? []);
       } catch {
         if (!ignore) setWorkspaceMessages([]);
@@ -236,9 +231,7 @@ function App() {
     let ignore = false;
     async function loadAnalytics() {
       try {
-        const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/analytics`);
-        if (!response.ok) return;
-        const analytics = await response.json();
+        const analytics = await api.get(`/api/workspaces/${selectedWorkspaceId}/analytics`);
         if (!ignore) setWorkspaceAnalytics(analytics);
       } catch {
         if (!ignore) setWorkspaceAnalytics(null);
@@ -263,9 +256,7 @@ function App() {
 
     async function loadTask() {
       try {
-        const response = await fetch(`/api/tasks/${latestTaskId}`);
-        if (!response.ok) return;
-        const task = await response.json();
+        const task = await api.get(`/api/tasks/${latestTaskId}`);
         if (!cancelled) setLatestTask(task);
       } catch {
         // Keep the last task status when the API is not available.
@@ -353,31 +344,21 @@ function App() {
 
   async function handleSaveWorkspace(id, title, summary) {
     try {
-      const response = await fetch(`/api/workspaces/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, summary }),
-      });
-      if (!response.ok) throw new Error('Update failed.');
-      const result = await response.json();
+      const result = await api.put(`/api/workspaces/${id}`, { title, summary });
       setWorkspaces((current) => current.map((base) => base.id === id ? result.workspace : base));
       setEditingKb(null);
     } catch (err) {
-      setEditingKb((current) => ({ ...current, error: err.message || t('workspace.edit') }));
+      setEditingKb((current) => ({ ...current, error: err.serverMessage || err.message || t('workspace.edit') }));
     }
   }
 
   async function handleCreateWorkspace({ title, summary }) {
-    const response = await fetch('/api/workspaces', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, summary }),
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(body.error || t('common.createFailed'));
+    let result;
+    try {
+      result = await api.post('/api/workspaces', { title, summary });
+    } catch (err) {
+      throw new Error(err.serverMessage || err.message || t('common.createFailed'));
     }
-    const result = await response.json();
     if (result.workspace?.id) {
       setWorkspaces((current) => [
         result.workspace,
@@ -390,15 +371,14 @@ function App() {
 
   async function handleDeleteWorkspace(id) {
     try {
-      const response = await fetch(`/api/workspaces/${id}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error(t('workspace.deleteFailed'));
+      await api.del(`/api/workspaces/${id}`);
       setWorkspaces((current) => current.filter((base) => base.id !== id));
       if (selectedWorkspaceId === id) {
         setSelectedWorkspaceId(null);
       }
       setDeletingKb(null);
     } catch (err) {
-      setDeletingKb((current) => ({ ...current, error: err.message || t('workspace.delete') }));
+      setDeletingKb((current) => ({ ...current, error: err.serverMessage || err.message || t('workspace.delete') }));
     }
   }
 
@@ -409,17 +389,7 @@ function App() {
     setActivity(t('activity.captured'));
 
     try {
-      const response = await fetch('/api/intake', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: value, ...options }),
-      });
-
-      if (!response.ok) {
-        throw new Error(t('activity.intakeFailed'));
-      }
-
-      const result = await response.json();
+      const result = await api.post('/api/intake', { input: value, ...options });
       setActivity(`${result.message} ${t('activity.completed')} ${result.task.id}`);
       applyIntakeResult(result);
       setQuery('');
@@ -452,17 +422,7 @@ function App() {
     setActivity(t('activity.askWorkspace'));
 
     try {
-      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/ask`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: value }),
-      });
-
-      if (!response.ok) {
-        throw new Error(t('activity.askFailed'));
-      }
-
-      const result = await response.json();
+      const result = await api.post(`/api/workspaces/${selectedWorkspaceId}/ask`, { question: value });
       setActivity(`${result.message} ${t('activity.completed')} ${result.task.id}`);
       setLatestTaskId(result.task.id);
       setLatestTask(result.task);
@@ -542,13 +502,7 @@ function App() {
     setActivity(t('activity.runKit'));
 
     try {
-      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/kits/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kitId }),
-      });
-      if (!response.ok) throw new Error('Kit run failed.');
-      const result = await response.json();
+      const result = await api.post(`/api/workspaces/${selectedWorkspaceId}/kits/run`, { kitId });
       setActivity(`${result.message} ${t('activity.completed')} ${result.task.id}`);
       setLatestTaskId(result.task.id);
       setLatestTask(result.task);
@@ -576,13 +530,7 @@ function App() {
     setActivity(t('activity.parseMaterial'));
 
     try {
-      const response = await fetch(`/api/materials/${materialId}/parse`, {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        throw new Error('Material parsing failed.');
-      }
-      const result = await response.json();
+      const result = await api.post(`/api/materials/${materialId}/parse`);
       setActivity(result.message);
       setLatestTaskId(result.task.id);
       setLatestTask(result.task);
@@ -863,30 +811,23 @@ function App() {
             });
           }}
           onCreateEmpty={async (title, summary) => {
+            let result;
             try {
-              const response = await fetch('/api/workspaces', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, summary }),
-              });
-              if (!response.ok) {
-                const body = await response.json().catch(() => ({}));
-                throw new Error(body.error || t('common.createFailed'));
-              }
-              const result = await response.json();
-              setCreateKbError(null);
-              if (result.workspace?.id) {
-                setWorkspaces((current) => [
-                  result.workspace,
-                  ...current.filter((base) => base.id !== result.workspace.id),
-                ]);
-                setSelectedWorkspaceId(result.workspace.id);
-                go('detail');
-              }
-              setIsCreateKbOpen(false);
+              result = await api.post('/api/workspaces', { title, summary });
             } catch (err) {
-              setCreateKbError(err.message || t('activity.createWorkspaceFailed'));
+              setCreateKbError(err.serverMessage || err.message || t('common.createFailed'));
+              return;
             }
+            setCreateKbError(null);
+            if (result.workspace?.id) {
+              setWorkspaces((current) => [
+                result.workspace,
+                ...current.filter((base) => base.id !== result.workspace.id),
+              ]);
+              setSelectedWorkspaceId(result.workspace.id);
+              go('detail');
+            }
+            setIsCreateKbOpen(false);
           }}
         />
       )}

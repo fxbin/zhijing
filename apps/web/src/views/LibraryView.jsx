@@ -39,6 +39,7 @@ import ImportLifecyclePanel from '../components/ImportLifecyclePanel';
 import MediaPreview from '../components/MediaPreview';
 import ParseTimeline from '../components/ParseTimeline';
 import useModalA11y from '../hooks/useModalA11y';
+import api, { ApiError } from '../utils/api';
 
 /**
  * 资料库搜索防抖时长（毫秒），避免用户每输入一个字符就触发一次请求。
@@ -96,9 +97,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
       const params = new URLSearchParams({ limit: '180' });
       if (selectedWorkspaceId) params.set('workspaceId', selectedWorkspaceId);
       if (searchValue.trim()) params.set('q', searchValue.trim());
-      const response = await fetch(`/api/materials?${params.toString()}`);
-      if (!response.ok) throw new Error('Material list unavailable.');
-      const result = await response.json();
+      const result = await api.get(`/api/materials?${params.toString()}`);
       setItems(result.materials ?? []);
       setStatus(t('library.status.materialsSynced'));
     } catch {
@@ -118,9 +117,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
           const params = new URLSearchParams({ limit: '180' });
           if (selectedWorkspaceId) params.set('workspaceId', selectedWorkspaceId);
           if (searchValue.trim()) params.set('q', searchValue.trim());
-          const response = await fetch(`/api/materials?${params.toString()}`);
-          if (!response.ok) throw new Error('Material list unavailable.');
-          const result = await response.json();
+          const result = await api.get(`/api/materials?${params.toString()}`);
           if (!cancelled) {
             setItems(result.materials ?? []);
             setStatus(t('library.status.materialsSynced'));
@@ -180,8 +177,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
 
   async function archiveSingleMaterial(id) {
     try {
-      const response = await fetch(`/api/materials/${id}/archive`, { method: 'POST' });
-      if (!response.ok) throw new Error('Archive failed.');
+      await api.post(`/api/materials/${id}/archive`);
       setItems((current) => current.filter((item) => item.id !== id));
       setSelectedIds((current) => {
         const next = new Set(current);
@@ -249,15 +245,10 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
         let failed = 0;
         let lastResult = null;
         for (const input of batchItems) {
-          const response = await fetch('/api/intake', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ input }),
-          });
-          if (response.ok) {
-            lastResult = await response.json();
+          try {
+            lastResult = await api.post('/api/intake', { input });
             captured += 1;
-          } else {
+          } catch {
             failed += 1;
           }
         }
@@ -268,13 +259,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
         await loadMaterials();
         return;
       }
-      const response = await fetch('/api/intake', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: value }),
-      });
-      if (!response.ok) throw new Error('Capture failed.');
-      const result = await response.json();
+      const result = await api.post('/api/intake', { input: value });
       onCaptureResult(result);
       setCaptureValue('');
       setStatus(result.message);
@@ -310,13 +295,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
     try {
       const text = (await file.text()).trim();
       if (!text) throw new Error('Empty file.');
-      const response = await fetch('/api/intake', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: `本地文档：${file.name}\n\n${text}` }),
-      });
-      if (!response.ok) throw new Error('File import failed.');
-      const result = await response.json();
+      const result = await api.post('/api/intake', { input: `本地文档：${file.name}\n\n${text}` });
       onCaptureResult(result);
       setStatus(result.message);
       setCaptureSummary({ message: result.message || t('library.status.localFileCaptured'), count: 1, at: Date.now() });
@@ -348,18 +327,12 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
     setMutatingMaterialId(item.id);
     setStatus(markIngested ? t('library.status.completingMaterial') : t('library.status.savingReviewDraft'));
     try {
-      const response = await fetch(`/api/materials/${item.id}/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: reviewDraft.title,
-          contentText: reviewDraft.contentText,
-          mediaUrls: splitMediaUrls(reviewDraft.mediaUrls),
-          markIngested,
-        }),
+      const result = await api.post(`/api/materials/${item.id}/review`, {
+        title: reviewDraft.title,
+        contentText: reviewDraft.contentText,
+        mediaUrls: splitMediaUrls(reviewDraft.mediaUrls),
+        markIngested,
       });
-      if (!response.ok) throw new Error('Review save failed.');
-      const result = await response.json();
       onMaterialMutation?.(result);
       setStatus(result.message);
       if (markIngested) setReviewingId(null);
@@ -384,15 +357,10 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
     setMutatingMaterialId(item.id);
     setStatus(t('library.status.updatingAssignment'));
     try {
-      const response = await fetch(`/api/materials/${item.id}/assign`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(target === '__new'
-          ? { newWorkspaceTitle }
-          : { workspaceId: target }),
-      });
-      if (!response.ok) throw new Error('Assignment failed.');
-      const result = await response.json();
+      const result = await api.post(
+        `/api/materials/${item.id}/assign`,
+        target === '__new' ? { newWorkspaceTitle } : { workspaceId: target },
+      );
       onMaterialMutation?.(result);
       setStatus(result.message);
       setAssignDrafts((current) => ({ ...current, [item.id]: result.workspace.id }));
@@ -409,9 +377,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
     setMutatingMaterialId(item.id);
     setStatus(t('library.status.findingSuggestion'));
     try {
-      const response = await fetch(`/api/materials/${item.id}/assignment-suggestions`);
-      if (!response.ok) throw new Error('Suggestion failed.');
-      const result = await response.json();
+      const result = await api.get(`/api/materials/${item.id}/assignment-suggestions`);
       const suggestion = result.suggestions?.[0];
       if (suggestion?.isNew) {
         setAssignDrafts((current) => ({ ...current, [item.id]: '__new' }));
@@ -452,9 +418,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
     const failedIds = [];
     for (let i = 0; i < ids.length; i += 1) {
       try {
-        const response = await fetch(`/api/materials/${ids[i]}`, { method: 'DELETE' });
-        if (!response.ok) throw new Error('delete failed');
-        const result = await response.json();
+        const result = await api.del(`/api/materials/${ids[i]}`);
         onMaterialMutation?.(result);
       } catch {
         failed += 1;
@@ -510,13 +474,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
     let failed = 0;
     for (let i = 0; i < ids.length; i += 1) {
       try {
-        const response = await fetch(`/api/materials/${ids[i]}/assign`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ workspaceId: target }),
-        });
-        if (!response.ok) throw new Error('assign failed');
-        const result = await response.json();
+        const result = await api.post(`/api/materials/${ids[i]}/assign`, { workspaceId: target });
         onMaterialMutation?.(result);
       } catch {
         failed += 1;

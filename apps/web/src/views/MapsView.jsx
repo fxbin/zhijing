@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { CircleX, RefreshCw, Search, X } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { formatTime } from '../utils/material';
+import api, { ApiError } from '../utils/api';
 import {
   mapNodeMatches,
   buildMapLayout,
@@ -83,9 +84,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
     async function loadMap() {
       setStatus(t('maps.status.loading'));
       try {
-        const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/map`);
-        if (!response.ok) throw new Error('Map unavailable.');
-        const result = await response.json();
+        const result = await api.get(`/api/workspaces/${selectedWorkspaceId}/map`);
         if (!ignore) {
           setMap(result);
           setNodePositions(
@@ -230,12 +229,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
         x: point.x,
         y: point.y,
       }));
-      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/node-positions`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ positions: payload }),
-      });
-      if (!response.ok) throw new Error('Save node positions failed.');
+      await api.put(`/api/workspaces/${selectedWorkspaceId}/node-positions`, { positions: payload });
       setStatus(t('maps.status.synced'));
     } catch {
       setStatus(t('maps.status.saveFailed'));
@@ -255,9 +249,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   async function reloadMap() {
     if (!selectedWorkspaceId) return;
     try {
-      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/map`);
-      if (!response.ok) return;
-      const result = await response.json();
+      const result = await api.get(`/api/workspaces/${selectedWorkspaceId}/map`);
       setMap(result);
       setNodePositions(
         (result.nodePositions ?? []).reduce((acc, position) => {
@@ -276,19 +268,11 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   async function saveCustomRelation() {
     if (!selectedWorkspaceId || !relationEditor?.targetId || !selectedNode) return;
     try {
-      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/map/edges`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sourceNodeId: selectedNode.id,
-          targetNodeId: relationEditor.targetId,
-          relation: relationEditor.relation,
-        }),
+      await api.post(`/api/workspaces/${selectedWorkspaceId}/map/edges`, {
+        sourceNodeId: selectedNode.id,
+        targetNodeId: relationEditor.targetId,
+        relation: relationEditor.relation,
       });
-      if (!response.ok) {
-        setStatus(t('maps.status.saveFailed'));
-        return;
-      }
       setStatus(t('maps.status.relationAdded'));
       setRelationEditor(null);
       await reloadMap();
@@ -304,13 +288,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   async function deleteCustomEdge(edgeId) {
     if (!selectedWorkspaceId) return;
     try {
-      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/map/edges/${edgeId}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) {
-        setStatus(t('maps.status.saveFailed'));
-        return;
-      }
+      await api.del(`/api/workspaces/${selectedWorkspaceId}/map/edges/${edgeId}`);
       setStatus(t('maps.status.relationRemoved'));
       await reloadMap();
     } catch {

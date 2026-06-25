@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { FlaskConical, Gavel, Loader2, Search } from 'lucide-react';
 import { formatPercent } from '../utils/format';
 import { useClaimStatusLabel } from '../utils/i18nLabels';
+import api from '../utils/api';
 
 const VERDICT_TONE_MAP = {
   supported: 'positive',
@@ -40,15 +41,10 @@ function EvidenceAuditSection({ workspaceId }) {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`/api/workspaces/${workspaceId}/evidence-audit`);
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || t('evidenceTools.auditLoadFailed'));
-      }
-      const payload = await response.json();
+      const payload = await api.get(`/api/workspaces/${workspaceId}/evidence-audit`);
       setReport(payload);
     } catch (err) {
-      setError(err.message || t('evidenceTools.auditLoadFailed'));
+      setError(err.serverMessage || err.message || t('evidenceTools.auditLoadFailed'));
     } finally {
       setLoading(false);
     }
@@ -170,19 +166,12 @@ function HypothesisTestSection({ workspaceId }) {
     setError('');
     setResult(null);
     try {
-      const response = await fetch(`/api/workspaces/${workspaceId}/hypothesis-test`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hypothesis: trimmed }),
+      const payload = await api.post(`/api/workspaces/${workspaceId}/hypothesis-test`, {
+        hypothesis: trimmed,
       });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || t('evidenceTools.hypothesisFailed'));
-      }
-      const payload = await response.json();
       setResult(payload);
     } catch (err) {
-      setError(err.message || t('evidenceTools.hypothesisFailed'));
+      setError(err.serverMessage || err.message || t('evidenceTools.hypothesisFailed'));
     } finally {
       setLoading(false);
     }

@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Lightbulb, Sparkles } from 'lucide-react';
 import EmptyState from './EmptyState';
+import api from '../utils/api';
 
 const PROPOSAL_TYPE_ICON = {
   blind_spot: 'blind-spot',
@@ -35,12 +36,7 @@ export default function AgentProposalsPanel({ onCreateWorkspace }) {
     setLoading(true);
     setLoadError('');
     try {
-      const response = await fetch('/api/agent-proposals');
-      if (!response.ok) {
-        setProposals([]);
-        return;
-      }
-      const payload = await response.json();
+      const payload = await api.get('/api/agent-proposals');
       setProposals(Array.isArray(payload.proposals) ? payload.proposals : []);
     } catch {
       setProposals([]);

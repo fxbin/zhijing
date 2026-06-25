@@ -9,6 +9,7 @@ import { Archive, CheckCircle2, FileText, RotateCcw, StickyNote } from 'lucide-r
 import EmptyState from '../components/EmptyState';
 import { useCardTypeLabel } from '../utils/i18nLabels';
 import { formatDate } from '../utils/material';
+import api from '../utils/api';
 
 /** 恢复成功提示的自动消失时长（毫秒） */
 const RESTORE_FEEDBACK_MS = 2000;
@@ -42,9 +43,7 @@ export default function ArchiveView({ selectedWorkspaceId, setView }) {
       setError('');
       try {
         const query = filterBaseId && filterBaseId !== 'all' ? `?workspaceId=${encodeURIComponent(filterBaseId)}` : '';
-        const response = await fetch(`/api/archive${query}`);
-        if (!response.ok) throw new Error('Archive unavailable.');
-        const payload = await response.json();
+        const payload = await api.get(`/api/archive${query}`);
         if (!ignore) setItems(payload);
       } catch {
         if (!ignore) setError(t('archive.loadError'));
@@ -77,8 +76,7 @@ export default function ArchiveView({ selectedWorkspaceId, setView }) {
     setActionId(item.id);
     setRestoreErrorId((current) => (current === item.id ? null : current));
     try {
-      const response = await fetch(endpoint, { method: 'POST' });
-      if (!response.ok) throw new Error('Restore failed.');
+      await api.post(endpoint);
       setItems((current) => ({
         ...current,
         materials: item.kind === 'material'

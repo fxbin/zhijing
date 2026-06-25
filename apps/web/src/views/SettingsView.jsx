@@ -24,6 +24,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useTaskStatusLabel, useTaskWorkflowLabel } from '../utils/i18nLabels';
 import { formatDateTime } from '../utils/material';
+import api from '../utils/api';
 
 /**
  * 将 ID 格式化为可读名称（deepseek-v3 → Deepseek V3）
@@ -117,9 +118,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     let ignore = false;
     async function loadSettings() {
       try {
-        const response = await fetch(API_PATHS.v2Settings);
-        if (!response.ok) throw new Error('Settings unavailable.');
-        const result = await response.json();
+        const result = await api.get(API_PATHS.v2Settings);
         if (ignore) return;
         applyV2Settings(result);
         setStatus(t('settings.modelSettingsReady'));
@@ -137,9 +136,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     let ignore = false;
     async function loadWeReadSettings() {
       try {
-        const response = await fetch('/api/weread/settings');
-        if (!response.ok) throw new Error('WeRead settings unavailable.');
-        const result = await response.json();
+        const result = await api.get('/api/weread/settings');
         if (ignore) return;
         setWereadConfigured(result.configured);
       } catch {
@@ -165,9 +162,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     let ignore = false;
     async function loadSystemStats() {
       try {
-        const response = await fetch(API_PATHS.dashboard);
-        if (!response.ok) throw new Error('Dashboard unavailable.');
-        const result = await response.json();
+        const result = await api.get(API_PATHS.dashboard);
         if (ignore) return;
         setSystemStats({
           apiOnline: true,
@@ -264,9 +259,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
    */
   async function refreshProfiles(forceSelectId = null) {
     try {
-      const response = await fetch(API_PATHS.v2Settings);
-      if (!response.ok) throw new Error('Settings unavailable.');
-      const result = await response.json();
+      const result = await api.get(API_PATHS.v2Settings);
       applyV2Settings(result, forceSelectId);
       return result;
     } catch {
@@ -282,9 +275,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
   async function activateProfile(id) {
     setStatus(t('settings.activatingProfile'));
     try {
-      const response = await fetch(`${API_PATHS.profiles}/${id}/activate`, { method: 'POST' });
-      if (!response.ok) throw new Error('Activate failed.');
-      const result = await response.json();
+      const result = await api.post(`${API_PATHS.profiles}/${id}/activate`);
       setStatus(`${t('settings.profileActivated')}：${result.profile.name}`);
       await refreshProfiles();
     } catch {
@@ -313,8 +304,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     if (!target) return;
     setStatus(t('settings.deletingProfile'));
     try {
-      const response = await fetch(`${API_PATHS.profiles}/${id}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Delete failed.');
+      await api.del(`${API_PATHS.profiles}/${id}`);
       const remaining = profiles.filter((item) => item.id !== id);
       const nextSelected = selectedProfileId === id ? (remaining[0]?.id ?? null) : selectedProfileId;
       setStatus(`${t('settings.profileDeleted')}：${target.name}`);
@@ -332,20 +322,14 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     setIsSaving(true);
     setTestResult(null);
     try {
-      const response = await fetch(`${API_PATHS.profiles}/${selectedProfileId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: profileName.trim(),
-          provider,
-          model,
-          apiKey: apiKey.trim() || undefined,
-          enabled,
-          fallbackToMock,
-        }),
+      const result = await api.patch(`${API_PATHS.profiles}/${selectedProfileId}`, {
+        name: profileName.trim(),
+        provider,
+        model,
+        apiKey: apiKey.trim() || undefined,
+        enabled,
+        fallbackToMock,
       });
-      if (!response.ok) throw new Error('Save failed.');
-      const result = await response.json();
       const updated = result.profile;
       setProfiles((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       setHasApiKey(updated.hasApiKey);
@@ -368,17 +352,11 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     setIsTesting(true);
     setTestResult(null);
     try {
-      const response = await fetch(API_PATHS.test, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          provider,
-          model,
-          apiKey: apiKey.trim() || undefined,
-        }),
+      const result = await api.post(API_PATHS.test, {
+        provider,
+        model,
+        apiKey: apiKey.trim() || undefined,
       });
-      if (!response.ok) throw new Error('Test failed.');
-      const result = await response.json();
       setTestResult(result);
       setStatus(result.ok ? t('settings.testPass') : t('settings.testFail'));
     } catch {
@@ -396,19 +374,13 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     setIsSaving(true);
     setTestResult(null);
     try {
-      const response = await fetch(`${API_PATHS.profiles}/${selectedProfileId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          provider,
-          model,
-          enabled,
-          fallbackToMock,
-          clearApiKey: true,
-        }),
+      const result = await api.patch(`${API_PATHS.profiles}/${selectedProfileId}`, {
+        provider,
+        model,
+        enabled,
+        fallbackToMock,
+        clearApiKey: true,
       });
-      if (!response.ok) throw new Error('Clear failed.');
-      const result = await response.json();
       const updated = result.profile;
       setProfiles((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       setHasApiKey(updated.hasApiKey);
@@ -430,12 +402,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     setWereadSaving(true);
     setWereadTestResult(null);
     try {
-      const response = await fetch('/api/weread/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: value }),
-      });
-      if (!response.ok) throw new Error('Save failed.');
+      await api.put('/api/weread/settings', { apiKey: value });
       setWereadConfigured(true);
       setWereadApiKey('');
       setStatus(t('settings.weread.saveSuccess'));
@@ -454,9 +421,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     setWereadTesting(true);
     setWereadTestResult(null);
     try {
-      const response = await fetch('/api/weread/settings/test', { method: 'POST' });
-      if (!response.ok) throw new Error('Test failed.');
-      const result = await response.json();
+      const result = await api.post('/api/weread/settings/test');
       setWereadTestResult(result);
       setStatus(result.ok ? t('settings.weread.testSuccess') : t('settings.weread.testFailed'));
     } catch {
@@ -499,21 +464,12 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     }
     setIsSaving(true);
     try {
-      const response = await fetch(API_PATHS.profiles, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          provider: providerValue,
-          model: modelValue,
-          apiKey: newProfile.apiKey.trim() || undefined,
-        }),
+      const result = await api.post(API_PATHS.profiles, {
+        name,
+        provider: providerValue,
+        model: modelValue,
+        apiKey: newProfile.apiKey.trim() || undefined,
       });
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || 'Create failed.');
-      }
-      const result = await response.json();
       setShowCreateForm(false);
       setStatus(`${t('settings.profileCreated')}：${result.profile.name}`);
       await refreshProfiles(result.profile.id);
@@ -530,9 +486,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
   async function exportAllData() {
     setDataAction({ type: 'export', loading: true });
     try {
-      const response = await fetch(API_PATHS.dashboard);
-      if (!response.ok) throw new Error('Export failed.');
-      const result = await response.json();
+      const result = await api.get(API_PATHS.dashboard);
       const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');

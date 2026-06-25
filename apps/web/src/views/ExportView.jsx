@@ -14,6 +14,7 @@ import {
 } from '../utils/export';
 import { safeFilename } from '../utils/format';
 import { formatDateTime } from '../utils/material';
+import api from '../utils/api';
 
 /**
  * 导出视图，支持多格式导出、进度展示、历史记录和本地备份。
@@ -52,10 +53,8 @@ export default function ExportView({ detail, setView }) {
     let ignore = false;
     async function loadHistory() {
       try {
-        const response = await fetch(`/api/workspaces/${detail.id}/exports`);
-        if (!response.ok) return;
-        const payload = await response.json();
-        if (!ignore) setExportHistory(payload.exports ?? []);
+        const payload = await api.get(`/api/workspaces/${detail.id}/exports`);
+        if (!ignore) setExportHistory(payload?.exports ?? []);
       } catch {
         return;
       }
@@ -103,22 +102,16 @@ export default function ExportView({ detail, setView }) {
   async function recordExportHistory(prepared) {
     if (!detail?.id) return;
     try {
-      const response = await fetch(`/api/workspaces/${detail.id}/exports`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          format,
-          scope,
-          includeArtifacts,
-          filename: prepared.filename,
-          materialCount: options.includeMaterials ? materials.length : 0,
-          cardCount: options.includeCards ? cards.length : 0,
-          artifactCount: options.includeArtifacts ? artifacts.length : 0,
-        }),
+      const payload = await api.post(`/api/workspaces/${detail.id}/exports`, {
+        format,
+        scope,
+        includeArtifacts,
+        filename: prepared.filename,
+        materialCount: options.includeMaterials ? materials.length : 0,
+        cardCount: options.includeCards ? cards.length : 0,
+        artifactCount: options.includeArtifacts ? artifacts.length : 0,
       });
-      if (!response.ok) return;
-      const payload = await response.json();
-      if (payload.export) setExportHistory((current) => [payload.export, ...current]);
+      if (payload?.export) setExportHistory((current) => [payload.export, ...current]);
     } catch {
       return;
     }

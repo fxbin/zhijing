@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { Check, Lock, MapPin, Route, Sparkles } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { useCardTypeLabel } from '../utils/i18nLabels';
+import api from '../utils/api';
 import { PATH_CARD_ID_STORAGE_KEY } from '../constants/options';
 
 /**
@@ -35,9 +36,7 @@ export default function PathView({ selectedWorkspaceId, setView }) {
       setLoading(true);
       setError('');
       try {
-        const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/path`);
-        if (!response.ok) throw new Error('Path unavailable.');
-        const payload = await response.json();
+        const payload = await api.get(`/api/workspaces/${selectedWorkspaceId}/path`);
         if (!ignore) setPath(payload);
       } catch {
         if (!ignore) setError(t('path.loadError'));

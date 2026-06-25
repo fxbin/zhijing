@@ -19,6 +19,8 @@ import {
   X,
 } from 'lucide-react';
 
+import api from '../utils/api';
+
 const TAB_BOOKS = 'books';
 const TAB_ALBUMS = 'albums';
 const TAB_ARCHIVE = 'archive';
@@ -575,13 +577,7 @@ function WeReadPreviewDrawer({ book, mode, batchCount, onClose, onImport, t }) {
     setCollapsedChapters(new Set());
     (async () => {
       try {
-        const res = await fetch('/api/weread/preview', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bookId: book.bookId }),
-        });
-        if (!res.ok) throw new Error('preview');
-        const result = await res.json();
+        const result = await api.post('/api/weread/preview', { bookId: book.bookId });
         if (!alive) return;
         setData(result);
         setLoading(false);
@@ -890,9 +886,7 @@ function WeReadRecommendPanel({ workspaceId, onImport, t, forceExpanded }) {
         const url = workspaceId
           ? `/api/weread/recommendations?workspaceId=${encodeURIComponent(workspaceId)}`
           : '/api/weread/recommendations';
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('recommendations');
-        const result = await res.json();
+        const result = await api.get(url);
         if (!alive) return;
         setData(result);
         setLoading(false);
@@ -1033,9 +1027,7 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
    */
   const loadMeta = useCallback(async () => {
     try {
-      const res = await fetch('/api/weread/meta');
-      if (!res.ok) throw new Error('meta');
-      const data = await res.json();
+      const data = await api.get('/api/weread/meta');
       setShelfBooks(data.books || []);
       setSyncState(data.syncState || null);
       return data;
@@ -1054,13 +1046,7 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
     setIsSyncing(true);
     setSyncError(null);
     try {
-      const res = await fetch('/api/weread/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force }),
-      });
-      if (!res.ok) throw new Error('sync');
-      const data = await res.json();
+      const data = await api.post('/api/weread/sync', { force });
       if (data.error) {
         setSyncError(data.error);
       }
@@ -1078,9 +1064,7 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
     let alive = true;
     (async () => {
       try {
-        const res = await fetch('/api/weread/settings');
-        if (!res.ok) throw new Error('settings');
-        const data = await res.json();
+        const data = await api.get('/api/weread/settings');
         if (!alive) return;
         setConfigured(Boolean(data.configured));
         if (data.configured) {
@@ -1104,9 +1088,7 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
     let alive = true;
     (async () => {
       try {
-        const res = await fetch('/api/weread/stats');
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = await api.get('/api/weread/stats');
         if (alive) setStats(data);
       } catch {
         /* 统计加载失败不影响主流程 */
@@ -1233,13 +1215,7 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
     const body = { bookId: id };
     if (targetKbId) body.workspaceId = targetKbId;
     try {
-      const res = await fetch('/api/weread/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error('import');
-      const data = await res.json();
+      const data = await api.post('/api/weread/import', body);
       const ok = {
         ok: true,
         title: data.title,

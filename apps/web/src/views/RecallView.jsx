@@ -9,6 +9,7 @@ import { Database, History, Pencil, RefreshCw, Save } from 'lucide-react';
 
 import EmptyState from '../components/EmptyState';
 import { REVISION_FIELD_LABELS } from '../constants/labels';
+import api, { ApiError } from '../utils/api';
 import { formatRevisionTime } from '../utils/format';
 import { useCardTypeLabel, useClaimStatusLabel } from '../utils/i18nLabels';
 
@@ -50,9 +51,7 @@ export default function RecallView({
     let ignore = false;
     async function loadDue() {
       try {
-        const response = await fetch(`/api/workspaces/${detail.id}/due-cards?limit=20`);
-        if (!response.ok) return;
-        const payload = await response.json();
+        const payload = await api.get(`/api/workspaces/${detail.id}/due-cards?limit=20`);
         if (!ignore) setQueue(payload.cards ?? []);
       } catch {
         if (!ignore) setQueue(detail.cards ?? []);
@@ -72,9 +71,7 @@ export default function RecallView({
     setLoadingRevisions(true);
     async function loadRevisions() {
       try {
-        const response = await fetch(`/api/cards/${activeCard.id}/revisions`);
-        if (!response.ok) return;
-        const payload = await response.json();
+        const payload = await api.get(`/api/cards/${activeCard.id}/revisions`);
         if (!ignore) setRevisions(payload.revisions ?? []);
       } catch {
         if (!ignore) setRevisions([]);
@@ -138,20 +135,11 @@ export default function RecallView({
     setSaving(true);
     setActionError('');
     try {
-      const response = await fetch(`/api/cards/${activeCard.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: draftTitle,
-          body: draftBody,
-          type: draftType,
-        }),
+      const payload = await api.patch(`/api/cards/${activeCard.id}`, {
+        title: draftTitle,
+        body: draftBody,
+        type: draftType,
       });
-      if (!response.ok) {
-        setActionError(t('recall.saveFailed'));
-        return;
-      }
-      const payload = await response.json();
       const updatedCard = payload.card;
       setQueue((current) => current.map((card) => (card.id === updatedCard.id ? updatedCard : card)));
       setRevisions(payload.revision ? [...revisions, payload.revision] : revisions);
@@ -173,15 +161,7 @@ export default function RecallView({
     if (!activeCard?.id) return;
     setActionError('');
     try {
-      const response = await fetch(`/api/cards/${activeCard.id}/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grade }),
-      });
-      if (!response.ok) {
-        setActionError(t('recall.gradeFailed'));
-        return;
-      }
+      await api.post(`/api/cards/${activeCard.id}/review`, { grade });
     } catch {
       setActionError(t('recall.gradeFailed'));
       return;

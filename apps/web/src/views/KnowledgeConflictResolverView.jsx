@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { AlertTriangle } from 'lucide-react';
 import AdvancedOpsTabs from '../components/AdvancedOpsTabs';
 import EmptyState from '../components/EmptyState';
+import api from '../utils/api';
 import { formatDateTime } from '../utils/material';
 
 /**
@@ -32,13 +33,10 @@ export default function KnowledgeConflictResolverView({ data, setView }) {
       setLoading(true);
       setError('');
       try {
-        const [groupsRes, auditRes] = await Promise.all([
-          fetch('/api/conflicts/groups'),
-          fetch('/api/conflicts/audit'),
+        const [groupsData, auditData] = await Promise.all([
+          api.get('/api/conflicts/groups'),
+          api.get('/api/conflicts/audit'),
         ]);
-        if (!groupsRes.ok || !auditRes.ok) throw new Error(t('conflicts.loadFailed'));
-        const groupsData = await groupsRes.json();
-        const auditData = await auditRes.json();
         if (cancelled) return;
         setGroups(groupsData.groups ?? []);
         setAuditEntries(auditData.entries ?? []);
@@ -65,19 +63,15 @@ export default function KnowledgeConflictResolverView({ data, setView }) {
     setResolving(group.key);
     setError('');
     try {
-      const response = await fetch('/api/conflicts/resolve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind: group.kind, keepId, dropIds }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body.error || t('conflicts.mergeFailed'));
+      try {
+        await api.post('/api/conflicts/resolve', { kind: group.kind, keepId, dropIds });
+      } catch (err) {
+        throw new Error(err.serverMessage || t('conflicts.mergeFailed'));
       }
-      const groupsRes = await fetch('/api/conflicts/groups');
-      const auditRes = await fetch('/api/conflicts/audit');
-      setGroups((await groupsRes.json()).groups ?? []);
-      setAuditEntries((await auditRes.json()).entries ?? []);
+      const groupsData = await api.get('/api/conflicts/groups');
+      const auditData = await api.get('/api/conflicts/audit');
+      setGroups(groupsData.groups ?? []);
+      setAuditEntries(auditData.entries ?? []);
     } catch (err) {
       setError(err.message || t('conflicts.networkError'));
     } finally {

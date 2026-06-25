@@ -15,6 +15,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Lightbulb, X } from 'lucide-react';
+import api from '../utils/api';
 
 const DISMISS_ALL_THRESHOLD = 0;
 const RELEVANCE_PERCENT_MULTIPLIER = 100;
@@ -43,14 +44,9 @@ export default function RelatedSuggestionsPanel({ workspaceId, currentCardId, on
     async function loadSuggestions() {
       try {
         const params = currentCardId ? `?currentCardId=${encodeURIComponent(currentCardId)}` : '';
-        const response = await fetch(`/api/workspaces/${workspaceId}/related-suggestions${params}`);
-        if (!response.ok) {
-          if (!ignore) setSuggestions([]);
-          return;
-        }
-        const payload = await response.json();
+        const payload = await api.get(`/api/workspaces/${workspaceId}/related-suggestions${params}`);
         if (!ignore) {
-          setSuggestions(payload.suggestions ?? []);
+          setSuggestions(payload?.suggestions ?? []);
           setDismissedIds(new Set());
           setRejectedIds(new Set());
         }

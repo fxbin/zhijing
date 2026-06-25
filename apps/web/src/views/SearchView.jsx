@@ -22,6 +22,7 @@ import {
   getIntakeKindLabel,
   getParseStatusLabel,
 } from '../utils/i18nLabels';
+import api, { ApiError } from '../utils/api';
 
 const RESULT_KIND_WORKSPACE = 'workspace';
 const RESULT_KIND_MATERIAL = 'material';
@@ -169,9 +170,7 @@ export default function SearchView({ setView, setSelectedWorkspaceId, onOpenArti
     setStatus(t('search.status.searching'));
     try {
       const params = new URLSearchParams({ q: value, limit: '80' });
-      const response = await fetch(`/api/search?${params.toString()}`);
-      if (!response.ok) throw new Error('Search failed.');
-      const body = await response.json();
+      const body = await api.get(`/api/search?${params.toString()}`);
       setResults(body.results ?? []);
       setCounts(body.counts ?? {});
       setStatus((body.results ?? []).length ? t('search.resultsFound', { count: body.results.length }) : t('search.noResults'));
