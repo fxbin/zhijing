@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import './styles.css';
 
-import { TOP_SEARCH_EVENT, TOP_SEARCH_STORAGE_KEY } from './constants/options';
 import { buildAdvancedOpsData } from './utils/knowledge';
 import { viewFromHash, classifyInput, workflowFromKind } from './utils/navigation';
 import api from './utils/api';
@@ -35,10 +34,11 @@ import NotificationDropdown from './components/NotificationDropdown';
 import CreateKbModal from './components/CreateKbModal';
 import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import GlobalChatDock from './components/GlobalChatDock';
+import SearchCommand from './components/SearchCommand';
+import { useHotkey } from './hooks/useHotkey';
 const WorkspaceView = lazy(() => import('./views/WorkspaceView'));
 const DetailView = lazy(() => import('./views/DetailView'));
 const LibraryView = lazy(() => import('./views/LibraryView'));
-const SearchView = lazy(() => import('./views/SearchView'));
 const KitView = lazy(() => import('./views/KitView'));
 const WorkflowView = lazy(() => import('./views/WorkflowView'));
 const ArtifactView = lazy(() => import('./views/ArtifactView'));
@@ -138,6 +138,21 @@ function App() {
 
   const [selectedArtifact, setSelectedArtifact] = useState(null);
   const [artifactOrigin, setArtifactOrigin] = useState(null);
+
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchInitialQuery, setSearchInitialQuery] = useState('');
+
+  const openSearchCommand = (initialQuery = '') => {
+    setSearchInitialQuery(initialQuery);
+    setSearchOpen(true);
+  };
+  useHotkey('k', () => {
+    if (searchOpen) {
+      setSearchOpen(false);
+    } else {
+      openSearchCommand('');
+    }
+  });
 
   const editingModalRef = useRef(null);
   const deletingModalRef = useRef(null);
@@ -419,7 +434,6 @@ function App() {
     { key: 'workspace', label: t('nav.workspace'), icon: Database, group: 'core' },
     { key: 'detail', label: t('nav.detail'), icon: Layers, group: 'core' },
     { key: 'library', label: t('nav.library'), icon: FolderOpen, group: 'core' },
-    { key: 'search', label: t('nav.search'), icon: Search, group: 'core' },
     { key: 'insights', label: t('nav.insights'), icon: Lightbulb, group: 'insight' },
     { key: 'assets', label: t('nav.assets'), icon: Layers, group: 'insight' },
     { key: 'path', label: t('nav.path'), icon: Map, group: 'insight' },
@@ -504,7 +518,7 @@ function App() {
             <button
               type="button"
               className="search-pill"
-              onClick={() => go('search')}
+              onClick={() => openSearchCommand('')}
               aria-label={t('common.search')}
             >
               <Search size={18} />
@@ -514,11 +528,10 @@ function App() {
                 onChange={(event) => setTopSearchQuery(event.target.value)}
                 onClick={(event) => event.stopPropagation()}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter' && topSearchQuery.trim()) {
+                  if (event.key === 'Enter') {
                     const value = topSearchQuery.trim();
-                    sessionStorage.setItem(TOP_SEARCH_STORAGE_KEY, value);
-                    window.dispatchEvent(new CustomEvent(TOP_SEARCH_EVENT, { detail: value }));
-                    go('search');
+                    openSearchCommand(value);
+                    setTopSearchQuery('');
                   }
                 }}
               />
@@ -570,13 +583,6 @@ function App() {
               onParseMaterial={parseMaterial}
               parsingMaterialId={parsingMaterialId}
               selectedWorkspaceId={selectedWorkspaceId}
-            />
-          )}
-          {view === 'search' && (
-            <SearchView
-              setView={go}
-              setSelectedWorkspaceId={setSelectedWorkspaceId}
-              onOpenArtifact={openArtifact}
             />
           )}
           {view === 'kits' && (
@@ -762,6 +768,15 @@ function App() {
         }}
         selectedWorkspaceId={selectedWorkspaceId}
         setAssistantQuestion={setAssistantQuestion}
+      />
+
+      <SearchCommand
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        initialQuery={searchInitialQuery}
+        setView={go}
+        setSelectedWorkspaceId={setSelectedWorkspaceId}
+        onOpenArtifact={openArtifact}
       />
     </main>
   );
