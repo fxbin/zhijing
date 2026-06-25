@@ -134,7 +134,7 @@ export default function InsightsView({ setView, onCreateWorkspace }) {
             <span>{t('insights.metric.materials')}</span>
           </div>
         </article>
-        <article className="insights-metric-card">
+        <article className="insights-metric-card metric-card--primary">
           <Lightbulb size={22} />
           <div>
             <strong>{totals.cards}</strong>
