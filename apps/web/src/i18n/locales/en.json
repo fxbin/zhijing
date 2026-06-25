@@ -145,6 +145,7 @@
   "cardType.step": "Step",
   "cardType.viewpoint": "Viewpoint",
   "chat.answerHint": "I will prioritize materials and cards in the current workspace when answering; I will clearly mark it when no source is available.",
+  "chat.clearHistory": "Clear current chat",
   "chat.askAria": "Ask in standalone chat page",
   "chat.askFromKnowledge": "Ask from your sourced knowledge",
   "chat.askPlaceholderOffline": "Select a workspace and keep API online to ask.",

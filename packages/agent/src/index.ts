@@ -1,0 +1,26 @@
+/**
+ * @zhijing/agent —— 知径工作区 Agent 装配层
+ *
+ * 职责：基于 @earendil-works/pi-agent-core 装配可即用的 Agent 实例，
+ * 注入工作区检索工具集与知径默认系统提示词，
+ * 并复用 pi-runtime 同源的环境变量配置。
+ *
+ * @author fxbin
+ */
+
+export { createWorkspaceAgent, ZHIJING_AGENT_SYSTEM_PROMPT } from './agent-factory.js';
+export type { WorkspaceAgentOptions } from './agent-factory.js';
+
+export {
+  createWorkspaceTools,
+  createSearchCardsTool,
+  createSearchMaterialsTool,
+  createGetWorkspaceSummaryTool,
+} from './tools/index.js';
+
+export type {
+  SearchCardsDetails,
+} from './tools/search-cards.js';
+export type {
+  SearchMaterialsDetails,
+} from './tools/search-materials.js';

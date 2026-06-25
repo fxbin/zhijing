@@ -14,9 +14,11 @@ import {
   Clock3,
   Database,
   History,
+  Loader2,
   Send,
   Sparkles,
   SquareArrowOutUpRight,
+  Wrench,
 } from 'lucide-react';
 import { useCardTypeLabel } from '../utils/i18nLabels';
 import { useChatLayout } from '../hooks/useChatLayout';
@@ -38,7 +40,11 @@ const DOCK_STORAGE_KEY = 'zhijing-chat-dock';
  * @param {boolean} props.isAsking - 是否正在提问
  * @param {object[]} [props.workspaces=[]] - 全量工作区列表
  * @param {object[]} [props.messages=[]] - 历史消息列表
- * @param {() => void} props.onAsk - 提问回调
+ * @param {() => void} props.onAsk - 提问回调（旧一次性路径，保留兼容）
+ * @param {(text: string) => void} [props.onStreamAsk] - 流式 Agent 对话提交回调（新路径）
+ * @param {object[]} [props.chatMessages=[]] - 流式对话消息列表（由 useAssistantState.streamAsk 维护）
+ * @param {boolean} [props.isStreaming=false] - 流式对话运行态
+ * @param {() => void} [props.onClearChat] - 清空流式对话回调
  * @param {(artifact: object, meta?: object) => void} props.onOpenArtifact - 打开产物回调
  * @param {(workspaceId: string) => void} [props.onSelectWorkspace] - 选择工作区回调
  * @param {(newCards: object[], updatedMessage: object) => void} [props.onCardsAccepted] - 提议卡片采纳成功回调
@@ -55,6 +61,10 @@ export default function GlobalChatDock({
   workspaces = [],
   messages = [],
   onAsk,
+  onStreamAsk,
+  chatMessages = [],
+  isStreaming = false,
+  onClearChat,
   onOpenArtifact,
   onSelectWorkspace,
   onCardsAccepted,
@@ -72,7 +82,8 @@ export default function GlobalChatDock({
   const materials = detail.materials ?? [];
   const latestAnswerCards = assistantAnswer?.cards?.slice(0, 3) ?? [];
   const latestCitations = assistantAnswer?.citations ?? [];
-  const canAsk = apiStatus === 'online' && Boolean(selectedWorkspaceId) && !isAsking;
+  const canAsk = apiStatus === 'online' && Boolean(selectedWorkspaceId) && !isAsking && !isStreaming;
+  const hasStreamPath = typeof onStreamAsk === 'function';
   const questionHistory = materials.filter((material) => material.type === 'question').slice(0, 3);
 
   const {
@@ -168,6 +179,43 @@ export default function GlobalChatDock({
               <Sparkles size={19} />
               <p>{t('chat.answerHint')}</p>
             </div>
+            {(chatMessages ?? []).map((message) => (
+              <div key={message.id} className={`chat-stream-item chat-stream-${message.role}`}>
+                {message.role === 'user' ? (
+                  <p className="chat-stream-text">{message.text}</p>
+                ) : (
+                  <>
+                    <Sparkles size={19} />
+                    <div className="chat-stream-content">
+                      {message.toolCalls?.length > 0 && (
+                        <div className="chat-stream-tools">
+                          {message.toolCalls.map((tool) => (
+                            <div
+                              key={tool.toolCallId}
+                              className={`chat-stream-tool ${tool.isError ? 'failed' : ''} ${tool.isStreaming ? 'streaming' : ''}`}
+                            >
+                              <Wrench size={13} />
+                              <span>{tool.toolName}</span>
+                              {tool.isStreaming && <Loader2 size={12} className="chat-stream-tool-spinner" />}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {message.text && <p className="chat-stream-text">{message.text}</p>}
+                      {message.isStreaming && !message.text && (message.toolCalls?.length ?? 0) === 0 && (
+                        <p className="chat-stream-pending">{t('chat.loadingAnswer')}</p>
+                      )}
+                      {message.error && <p className="chat-stream-error" role="alert">{message.error}</p>}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+            {chatMessages.length > 0 && !isStreaming && onClearChat && (
+              <button className="chat-stream-clear" type="button" onClick={onClearChat}>
+                {t('chat.clearHistory')}
+              </button>
+            )}
             {(messages ?? []).map((message) => {
               const messageCards = (message.cardIds ?? [])
                 .map((cardId) => cards.find((card) => card.id === cardId))
@@ -319,13 +367,29 @@ export default function GlobalChatDock({
               disabled={!canAsk}
               onChange={(event) => setAssistantQuestion(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter') onAsk();
+                if (event.key === 'Enter') {
+                  if (hasStreamPath) {
+                    onStreamAsk(assistantQuestion);
+                  } else {
+                    onAsk();
+                  }
+                }
               }}
               placeholder={canAsk ? t('chat.askPlaceholderOnline') : t('chat.askPlaceholderOffline')}
               value={assistantQuestion}
             />
-            <button disabled={!canAsk || !assistantQuestion.trim()} onClick={onAsk} type="button">
-              {isAsking ? <Clock3 size={18} /> : <Send size={18} />}
+            <button
+              disabled={!canAsk || !assistantQuestion.trim()}
+              onClick={() => {
+                if (hasStreamPath) {
+                  onStreamAsk(assistantQuestion);
+                } else {
+                  onAsk();
+                }
+              }}
+              type="button"
+            >
+              {isAsking || isStreaming ? <Loader2 size={18} className="chat-stream-tool-spinner" /> : <Send size={18} />}
             </button>
           </div>
         </>

@@ -218,6 +218,10 @@ function App() {
     setWorkspaceMessages,
     loadMessages,
     askWorkspace,
+    chatMessages,
+    isStreaming,
+    streamAsk,
+    clearChat,
   } = useAssistantState({
     selectedWorkspaceId,
     apiStatus,
@@ -749,6 +753,10 @@ function App() {
         workspaces={workspaces}
         messages={workspaceMessages}
         onAsk={askWorkspace}
+        onStreamAsk={streamAsk}
+        chatMessages={chatMessages}
+        isStreaming={isStreaming}
+        onClearChat={clearChat}
         onOpenArtifact={openArtifact}
         onSelectWorkspace={(id) => {
           if (id) {

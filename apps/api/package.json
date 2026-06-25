@@ -9,7 +9,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@earendil-works/pi-agent-core": "0.79.4",
     "@fastify/cors": "^11.1.0",
+    "@zhijing/agent": "0.1.0",
     "@zhijing/core": "0.1.0",
     "@zhijing/shared": "0.1.0",
     "fastify": "^5.6.2",

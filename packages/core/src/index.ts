@@ -6838,6 +6838,111 @@ export function listAllArtifacts(options: {
   });
 }
 
+/**
+ * Agent 检索工具默认返回条数上限。
+ */
+const AGENT_SEARCH_RESULT_LIMIT = 8;
+
+/**
+ * 工作区内卡片检索结果（精简结构，供 Agent 工具消费，控制 token 消耗）。
+ */
+export interface WorkspaceCardSearchResult {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  claimStatus?: string;
+}
+
+/**
+ * 工作区内资料检索结果（精简结构，供 Agent 工具消费）。
+ */
+export interface WorkspaceMaterialSearchResult {
+  id: string;
+  type: string;
+  title: string;
+  platform?: string;
+  parseStatus?: string;
+  sourceUrl?: string;
+  preview: string;
+}
+
+/**
+ * 工作区概览（精简结构，供 Agent 工具消费）。
+ */
+export interface WorkspaceOverview {
+  id: string;
+  title: string;
+  summary: string;
+  stage?: string;
+  sourceCount: number;
+  cardCount: number;
+  materialCount: number;
+}
+
+/**
+ * 按关键词检索指定工作区内的知识卡片。
+ * 复用 repository.searchCardsByRelevance 的 TF-IDF 评分逻辑。
+ * @param workspaceId - 工作区 ID
+ * @param query - 检索关键词
+ * @param limit - 返回条数上限，默认 8
+ * @returns 精简后的卡片检索结果列表
+ */
+export function searchWorkspaceCards(workspaceId: string, query: string, limit: number = AGENT_SEARCH_RESULT_LIMIT): WorkspaceCardSearchResult[] {
+  if (!workspaceId || !query.trim()) return [];
+  const cards = repository.searchCardsByRelevance(workspaceId, query, limit);
+  return cards.map((card) => ({
+    id: card.id,
+    type: card.type,
+    title: card.title,
+    body: card.body,
+    claimStatus: card.claimStatus,
+  }));
+}
+
+/**
+ * 按关键词检索指定工作区内的资料。
+ * 复用 repository.searchMaterialsByRelevance 的 TF-IDF 评分逻辑。
+ * @param workspaceId - 工作区 ID
+ * @param query - 检索关键词
+ * @param limit - 返回条数上限，默认 8
+ * @returns 精简后的资料检索结果列表
+ */
+export function searchWorkspaceMaterials(workspaceId: string, query: string, limit: number = AGENT_SEARCH_RESULT_LIMIT): WorkspaceMaterialSearchResult[] {
+  if (!workspaceId || !query.trim()) return [];
+  const materials = repository.searchMaterialsByRelevance(workspaceId, query, limit);
+  return materials.map((material) => ({
+    id: material.id,
+    type: material.type,
+    title: material.title,
+    platform: material.platform,
+    parseStatus: material.parseStatus,
+    sourceUrl: material.sourceUrl,
+    preview: compactPreview(material.contentText ?? material.rawInput ?? material.title),
+  }));
+}
+
+/**
+ * 获取指定工作区的概览信息（标题、摘要、统计计数）。
+ * 工作区不存在时返回 undefined。
+ * @param workspaceId - 工作区 ID
+ * @returns 工作区概览，或 undefined
+ */
+export function getWorkspaceOverview(workspaceId: string): WorkspaceOverview | undefined {
+  if (!workspaceId) return undefined;
+  const base = repository.findWorkspace(workspaceId);
+  if (!base) return undefined;
+  return {
+    id: base.id,
+    title: base.title,
+    summary: base.summary,
+    stage: base.stage,
+    sourceCount: base.sourceCount,
+    cardCount: base.cardCount,
+    materialCount: repository.listMaterials(workspaceId).length,
+  };
+}
+
 export function searchKnowledgeAssets(input: { query?: string; limit?: number } = {}) {
   const query = input.query?.trim();
   if (!query) {
