@@ -1,6 +1,6 @@
 /**
  * @module views/KitView
- * @description Workflow Kits 视图，展示当前知识库可用的整理方式并触发 Kit 运行。
+ * @description Workflow Kits 视图，展示当前工作区可用的整理方式并触发 Kit 运行。
  * @author fxbin
  */
 
@@ -97,14 +97,14 @@ function RunningKitPanel({ steps, activeIndex }) {
  * @param {string} props.apiStatus - API 连接状态
  * @param {boolean} props.isRunningKit - 是否正在运行 Kit
  * @param {Function} props.onRunKit - 运行 Kit 回调
- * @param {string} props.selectedKnowledgeBaseId - 当前选中的知识库 ID
+ * @param {string} props.selectedWorkspaceId - 当前选中的工作区 ID
  * @param {Function} props.setView - 视图切换函数
  * @returns {JSX.Element} Workflow Kits 视图
  */
-export default function KitView({ apiStatus, isRunningKit, onRunKit, selectedKnowledgeBaseId, setView }) {
+export default function KitView({ apiStatus, isRunningKit, onRunKit, selectedWorkspaceId, setView }) {
   const { t } = useTranslation();
   const [selectedKitId, setSelectedKitId] = useState(null);
-  const canRun = apiStatus === 'online' && Boolean(selectedKnowledgeBaseId) && !isRunningKit;
+  const canRun = apiStatus === 'online' && Boolean(selectedWorkspaceId) && !isRunningKit;
 
   async function startKit(kitId) {
     const result = await onRunKit(kitId);
@@ -187,7 +187,7 @@ export default function KitView({ apiStatus, isRunningKit, onRunKit, selectedKno
           </div>
         );
       })}
-      {!selectedKnowledgeBaseId && <p className="kit-hint">{t('kit.selectKnowledgeBaseHint')}</p>}
+      {!selectedWorkspaceId && <p className="kit-hint">{t('kit.selectWorkspaceHint')}</p>}
     </section>
   );
 }

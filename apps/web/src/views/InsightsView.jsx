@@ -124,8 +124,8 @@ export default function InsightsView({ setView, onCreateWorkspace }) {
         <article className="insights-metric-card">
           <Layers size={22} />
           <div>
-            <strong>{totals.knowledgeBases}</strong>
-            <span>{t('insights.metric.knowledgeBases')}</span>
+            <strong>{totals.workspaces}</strong>
+            <span>{t('insights.metric.workspaces')}</span>
           </div>
         </article>
         <article className="insights-metric-card">
@@ -222,7 +222,7 @@ export default function InsightsView({ setView, onCreateWorkspace }) {
                   </div>
                   <h3>{card.title}</h3>
                   <footer>
-                    <span>{card.knowledgeBaseTitle}</span>
+                    <span>{card.workspaceTitle}</span>
                     <span>{formatDate(card.createdAt)}</span>
                   </footer>
                 </article>
@@ -235,7 +235,7 @@ export default function InsightsView({ setView, onCreateWorkspace }) {
           <div className="map-card-content">
             <div>
               <h2>{t('insights.mapTitle')}</h2>
-              <p>{t('insights.mapBody', { count: insights.mapPreview.nodeCount, kbCount: insights.mapPreview.knowledgeBaseCount })}</p>
+              <p>{t('insights.mapBody', { count: insights.mapPreview.nodeCount, kbCount: insights.mapPreview.workspaceCount })}</p>
               <button className="secondary" onClick={() => setView('maps')} type="button">
                 <Map size={18} />
                 {t('insights.mapAction')}

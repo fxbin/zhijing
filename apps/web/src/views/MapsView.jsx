@@ -1,6 +1,6 @@
 /**
  * @module views/MapsView
- * 知识地图视图：以 SVG 关系图展示知识库节点与边，并支持节点筛选、搜索与详情查看。
+ * 知识地图视图：以 SVG 关系图展示工作区节点与边，并支持节点筛选、搜索与详情查看。
  */
 
 import { useEffect, useState } from 'react';
@@ -23,16 +23,16 @@ import {
  * 知识地图视图组件
  * @param {Object} props - 组件属性
  * @param {string} props.apiStatus - API 连接状态
- * @param {string} props.selectedKnowledgeBaseId - 当前选中的知识库 ID
+ * @param {string} props.selectedWorkspaceId - 当前选中的工作区 ID
  * @param {Function} props.setView - 切换视图回调
  * @returns {JSX.Element} 知识地图视图
  */
-export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }) {
+export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   const { t } = useTranslation();
   const STORAGE_KEY_ZOOM = 'zhijing_map_zoom';
   const STORAGE_KEY_FILTER = 'zhijing_map_filter';
   const [map, setMap] = useState(null);
-  const [status, setStatus] = useState(t('maps.status.selectKnowledgeBase'));
+  const [status, setStatus] = useState(t('maps.status.selectWorkspace'));
   const [query, setQuery] = useState('');
   const [nodeFilter, setNodeFilter] = useState(() => {
     try {
@@ -73,9 +73,9 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
   }, [nodeFilter]);
 
   useEffect(() => {
-    if (!selectedKnowledgeBaseId || apiStatus !== 'online') {
+    if (!selectedWorkspaceId || apiStatus !== 'online') {
       setMap(null);
-      setStatus(apiStatus === 'online' ? t('maps.status.selectKnowledgeBase') : t('maps.status.apiOffline'));
+      setStatus(apiStatus === 'online' ? t('maps.status.selectWorkspace') : t('maps.status.apiOffline'));
       return;
     }
 
@@ -83,7 +83,7 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
     async function loadMap() {
       setStatus(t('maps.status.loading'));
       try {
-        const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/map`);
+        const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/map`);
         if (!response.ok) throw new Error('Map unavailable.');
         const result = await response.json();
         if (!ignore) {
@@ -108,7 +108,7 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
     return () => {
       ignore = true;
     };
-  }, [apiStatus, selectedKnowledgeBaseId]);
+  }, [apiStatus, selectedWorkspaceId]);
 
   const nodes = map?.nodes ?? [];
   const edges = map?.edges ?? [];
@@ -137,7 +137,7 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
   const typeCounts = nodes.reduce((acc, node) => ({ ...acc, [node.kind]: (acc[node.kind] ?? 0) + 1 }), {});
   const filterOptions = [
     { key: 'all', label: t('maps.filter.allNodes'), count: nodes.length },
-    { key: 'knowledge_base', label: t('maps.filter.knowledgeBase'), count: typeCounts.knowledge_base ?? 0 },
+    { key: 'workspace', label: t('maps.filter.workspace'), count: typeCounts.workspace ?? 0 },
     { key: 'material', label: t('maps.filter.materials'), count: typeCounts.material ?? 0 },
     { key: 'card', label: t('maps.filter.cards'), count: typeCounts.card ?? 0 },
   ];
@@ -223,14 +223,14 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
    * @param {Record<string, {x: number; y: number}>} positions - 节点位置映射
    */
   async function persistNodePositions(positions) {
-    if (!selectedKnowledgeBaseId) return;
+    if (!selectedWorkspaceId) return;
     try {
       const payload = Object.entries(positions).map(([nodeId, point]) => ({
         nodeId,
         x: point.x,
         y: point.y,
       }));
-      const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/node-positions`, {
+      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/node-positions`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ positions: payload }),
@@ -247,15 +247,15 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
   useEffect(() => {
     if (!pendingSave) return;
     persistNodePositions(nodePositions);
-  }, [pendingSave, nodePositions, selectedKnowledgeBaseId]);
+  }, [pendingSave, nodePositions, selectedWorkspaceId]);
 
   /**
    * 重新加载地图数据（添加/删除边后调用）。
    */
   async function reloadMap() {
-    if (!selectedKnowledgeBaseId) return;
+    if (!selectedWorkspaceId) return;
     try {
-      const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/map`);
+      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/map`);
       if (!response.ok) return;
       const result = await response.json();
       setMap(result);
@@ -274,9 +274,9 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
    * 保存自定义关系到后端。
    */
   async function saveCustomRelation() {
-    if (!selectedKnowledgeBaseId || !relationEditor?.targetId || !selectedNode) return;
+    if (!selectedWorkspaceId || !relationEditor?.targetId || !selectedNode) return;
     try {
-      const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/map/edges`, {
+      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/map/edges`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -302,9 +302,9 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
    * @param {string} edgeId - 边 ID
    */
   async function deleteCustomEdge(edgeId) {
-    if (!selectedKnowledgeBaseId) return;
+    if (!selectedWorkspaceId) return;
     try {
-      const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/map/edges/${edgeId}`, {
+      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/map/edges/${edgeId}`, {
         method: 'DELETE',
       });
       if (!response.ok) {
@@ -343,7 +343,7 @@ export default function MapsView({ apiStatus, selectedKnowledgeBaseId, setView }
         <header className="knowledge-map-topbar">
           <div className="map-breadcrumb">
             <button aria-label={t('maps.back')} onClick={() => setView('detail')} type="button"><CircleX size={18} /></button>
-            <span>{t('maps.breadcrumb.knowledgeBase')}</span>
+            <span>{t('maps.breadcrumb.workspace')}</span>
             <span>/</span>
             <strong>{t('maps.fullMap')}</strong>
           </div>

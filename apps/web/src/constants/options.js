@@ -42,7 +42,7 @@ export const maxImportedFileSize = 2 * 1024 * 1024;
 
 export const searchScopeOptions = [
   { key: 'all', label: 'search.scope.all' },
-  { key: 'knowledge_base', label: 'search.scope.knowledgeBase' },
+  { key: 'workspace', label: 'search.scope.workspace' },
   { key: 'material', label: 'search.scope.material' },
   { key: 'card', label: 'search.scope.card' },
   { key: 'artifact', label: 'search.scope.artifact' },

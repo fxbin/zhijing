@@ -25,10 +25,10 @@ const TAB_HYPOTHESIS_TEST = 'hypothesis-test';
 /**
  * 证据审计子区块：展示溯源状态统计与覆盖缺口。
  * @param {object} props - 组件属性
- * @param {string} props.knowledgeBaseId - 知识库 ID
+ * @param {string} props.workspaceId - 工作区 ID
  * @returns {JSX.Element} 证据审计区块
  */
-function EvidenceAuditSection({ knowledgeBaseId }) {
+function EvidenceAuditSection({ workspaceId }) {
   const { t } = useTranslation();
   const claimStatusLabel = useClaimStatusLabel();
   const [report, setReport] = useState(null);
@@ -36,11 +36,11 @@ function EvidenceAuditSection({ knowledgeBaseId }) {
   const [error, setError] = useState('');
 
   const loadReport = useCallback(async () => {
-    if (!knowledgeBaseId) return;
+    if (!workspaceId) return;
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`/api/knowledge-bases/${knowledgeBaseId}/evidence-audit`);
+      const response = await fetch(`/api/workspaces/${workspaceId}/evidence-audit`);
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload.error || t('evidenceTools.auditLoadFailed'));
@@ -52,7 +52,7 @@ function EvidenceAuditSection({ knowledgeBaseId }) {
     } finally {
       setLoading(false);
     }
-  }, [knowledgeBaseId, t]);
+  }, [workspaceId, t]);
 
   useEffect(() => {
     loadReport();
@@ -151,10 +151,10 @@ function EvidenceAuditSection({ knowledgeBaseId }) {
 /**
  * 假设检验子区块：用户输入假设，展示支持/反对证据与判定结果。
  * @param {object} props - 组件属性
- * @param {string} props.knowledgeBaseId - 知识库 ID
+ * @param {string} props.workspaceId - 工作区 ID
  * @returns {JSX.Element} 假设检验区块
  */
-function HypothesisTestSection({ knowledgeBaseId }) {
+function HypothesisTestSection({ workspaceId }) {
   const { t } = useTranslation();
   const claimStatusLabel = useClaimStatusLabel();
   const [hypothesis, setHypothesis] = useState('');
@@ -165,12 +165,12 @@ function HypothesisTestSection({ knowledgeBaseId }) {
   async function runTest(event) {
     event.preventDefault();
     const trimmed = hypothesis.trim();
-    if (!trimmed || !knowledgeBaseId) return;
+    if (!trimmed || !workspaceId) return;
     setLoading(true);
     setError('');
     setResult(null);
     try {
-      const response = await fetch(`/api/knowledge-bases/${knowledgeBaseId}/hypothesis-test`, {
+      const response = await fetch(`/api/workspaces/${workspaceId}/hypothesis-test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hypothesis: trimmed }),
@@ -283,10 +283,10 @@ function HypothesisEvidenceList({ title, items, claimStatusLabel, emptyHint }) {
 /**
  * 认知检验工具面板：通过 tab 切换证据审计与假设检验。
  * @param {object} props - 组件属性
- * @param {string} props.knowledgeBaseId - 知识库 ID
+ * @param {string} props.workspaceId - 工作区 ID
  * @returns {JSX.Element} 检验工具面板
  */
-export default function EvidenceToolsPanel({ knowledgeBaseId }) {
+export default function EvidenceToolsPanel({ workspaceId }) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState(TAB_EVIDENCE_AUDIT);
 
@@ -313,8 +313,8 @@ export default function EvidenceToolsPanel({ knowledgeBaseId }) {
         </button>
       </div>
       <div className="evidence-tools-body">
-        {activeTab === TAB_EVIDENCE_AUDIT && <EvidenceAuditSection knowledgeBaseId={knowledgeBaseId} />}
-        {activeTab === TAB_HYPOTHESIS_TEST && <HypothesisTestSection knowledgeBaseId={knowledgeBaseId} />}
+        {activeTab === TAB_EVIDENCE_AUDIT && <EvidenceAuditSection workspaceId={workspaceId} />}
+        {activeTab === TAB_HYPOTHESIS_TEST && <HypothesisTestSection workspaceId={workspaceId} />}
       </div>
     </section>
   );

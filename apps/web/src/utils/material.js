@@ -134,11 +134,11 @@ export function materialIcon(type) {
 
 /**
  * 根据结果类型返回对应图标组件。
- * @param {string} kind - 结果类型（knowledge_base/material/artifact）
+ * @param {string} kind - 结果类型（workspace/material/artifact）
  * @returns {object} lucide-react 图标组件
  */
 export function resultIcon(kind) {
-  if (kind === 'knowledge_base') return FolderOpen;
+  if (kind === 'workspace') return FolderOpen;
   if (kind === 'material') return FolderOpen;
   if (kind === 'artifact') return ClipboardList;
   return FileText;

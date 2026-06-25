@@ -23,13 +23,13 @@ const RELEVANCE_PERCENT_MULTIPLIER = 100;
  * "可能相关"建议面板。
  *
  * @param {object} props - 组件属性
- * @param {string} props.knowledgeBaseId - 知识库 ID
+ * @param {string} props.workspaceId - 工作区 ID
  * @param {string} [props.currentCardId] - 当前查看的卡片 ID
  * @param {function} [props.onCardClick] - 点击建议卡片的回调
  * @returns {JSX.Element | null} 建议面板
  * @author fxbin
  */
-export default function RelatedSuggestionsPanel({ knowledgeBaseId, currentCardId, onCardClick }) {
+export default function RelatedSuggestionsPanel({ workspaceId, currentCardId, onCardClick }) {
   const { t } = useTranslation();
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -37,13 +37,13 @@ export default function RelatedSuggestionsPanel({ knowledgeBaseId, currentCardId
   const [rejectedIds, setRejectedIds] = useState(new Set());
 
   useEffect(() => {
-    if (!knowledgeBaseId) return;
+    if (!workspaceId) return;
     let ignore = false;
     setLoading(true);
     async function loadSuggestions() {
       try {
         const params = currentCardId ? `?currentCardId=${encodeURIComponent(currentCardId)}` : '';
-        const response = await fetch(`/api/knowledge-bases/${knowledgeBaseId}/related-suggestions${params}`);
+        const response = await fetch(`/api/workspaces/${workspaceId}/related-suggestions${params}`);
         if (!response.ok) {
           if (!ignore) setSuggestions([]);
           return;
@@ -62,7 +62,7 @@ export default function RelatedSuggestionsPanel({ knowledgeBaseId, currentCardId
     }
     loadSuggestions();
     return () => { ignore = true; };
-  }, [knowledgeBaseId, currentCardId]);
+  }, [workspaceId, currentCardId]);
 
   const visibleSuggestions = suggestions.filter(
     (item) => !dismissedIds.has(item.cardId) && !rejectedIds.has(item.cardId),

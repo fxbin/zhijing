@@ -192,5 +192,5 @@ function conflictBody(signal) {
   if (signal.type === 'duplicate_card') return `${signal.count} 张卡片标题相近，建议保留证据最完整的一张。`;
   if (signal.type === 'needs_review') return '资料解析或内容补全需要人工复核，确认后再生成卡片。';
   if (signal.type === 'unsourced_card') return '这张卡片缺少明确来源，建议补充引用或降级为草稿。';
-  return '建议先进入来源或知识库详情页人工确认。';
+  return '建议先进入来源或工作区详情页人工确认。';
 }

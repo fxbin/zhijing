@@ -3,7 +3,7 @@
  * @module constants/seedData
  */
 
-export const seedKnowledgeBases = [
+export const seedWorkspaces = [
   { title: 'AI Agent 学习', meta: '12 materials · 42 cards', active: true },
   { title: '小红书运营', meta: '18 materials · 76 cards' },
   { title: '产品调研', meta: '9 materials · 31 cards' },

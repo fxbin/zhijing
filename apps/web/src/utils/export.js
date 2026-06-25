@@ -9,7 +9,7 @@ import { formatDateTime } from './material';
 /**
  * 生成单个 Artifact 的 Markdown 文本。
  * @param {object} artifact - 产物对象
- * @param {object} detail - 知识库详情
+ * @param {object} detail - 工作区详情
  * @returns {string} Markdown 文本
  */
 export function artifactMarkdown(artifact, detail) {
@@ -17,7 +17,7 @@ export function artifactMarkdown(artifact, detail) {
   return [
     `# ${artifact.title}`,
     '',
-    `- 知识库：${detail.title}`,
+    `- 工作区：${detail.title}`,
     `- 类型：${artifact.artifactType ?? 'summary'}`,
     `- 生成时间：${formatDateTime(artifact.createdAt)}`,
     `- 来源资料：${sourceCount}`,
@@ -32,7 +32,7 @@ export function artifactMarkdown(artifact, detail) {
 /**
  * 触发浏览器下载 Artifact 的 Markdown 文件。
  * @param {object} artifact - 产物对象
- * @param {object} detail - 知识库详情
+ * @param {object} detail - 工作区详情
  */
 export function downloadArtifactMarkdown(artifact, detail) {
   const blob = new Blob([artifactMarkdown(artifact, detail)], { type: 'text/markdown;charset=utf-8' });
@@ -47,12 +47,12 @@ export function downloadArtifactMarkdown(artifact, detail) {
 }
 
 /**
- * 生成知识库的完整 Markdown 文本。
- * @param {object} detail - 知识库详情
+ * 生成工作区的完整 Markdown 文本。
+ * @param {object} detail - 工作区详情
  * @param {object} options - 导出选项（includeCards/includeMaterials/includeArtifacts）
  * @returns {string} Markdown 文本
  */
-export function knowledgeBaseMarkdown(detail, options = {}) {
+export function workspaceMarkdown(detail, options = {}) {
   const materials = detail.materials ?? [];
   const cards = detail.cards ?? [];
   const artifacts = detail.artifacts ?? [];
@@ -90,12 +90,12 @@ export function knowledgeBaseMarkdown(detail, options = {}) {
 }
 
 /**
- * 生成知识库的 JSON 导出字符串。
- * @param {object} detail - 知识库详情
+ * 生成工作区的 JSON 导出字符串。
+ * @param {object} detail - 工作区详情
  * @param {object} options - 导出选项
  * @returns {string} JSON 字符串
  */
-export function knowledgeBaseExportJson(detail, options = {}) {
+export function workspaceExportJson(detail, options = {}) {
   return JSON.stringify({
     exportedAt: new Date().toISOString(),
     title: detail.title,

@@ -2,7 +2,7 @@ import { after, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import {
-  answerKnowledgeBaseQuestion,
+  answerWorkspaceQuestion,
   intakeKnowledge,
   normalizeXiaohongshuInitialStateHtml,
   requestMaterialParsing,
@@ -56,17 +56,17 @@ describe('assignment suggestions', () => {
     const memory = await intakeKnowledge({ input: '间隔重复记忆法' });
     await intakeKnowledge({
       input: '每隔一段时间复习一次，能提高长期记忆稳定性。\n复习间隔可以从一天、三天、一周逐步拉长。',
-      knowledgeBaseId: memory.knowledgeBase.id,
+      workspaceId: memory.workspace.id,
     });
     const product = await intakeKnowledge({ input: '产品设计研究' });
     const material = await intakeKnowledge({
       input: '间隔复习的核心是根据遗忘曲线安排复习。\n它适合学习语言、概念和考试内容。',
-      knowledgeBaseId: product.knowledgeBase.id,
+      workspaceId: product.workspace.id,
     });
 
     assert.ok(material.material);
     const suggestions = suggestMaterialAssignments(material.material.id);
-    assert.equal(suggestions.suggestions[0].knowledgeBaseId, memory.knowledgeBase.id);
+    assert.equal(suggestions.suggestions[0].workspaceId, memory.workspace.id);
   });
 });
 
@@ -81,9 +81,9 @@ describe('parse governance', () => {
     servers.push(server);
 
     const base = await intakeKnowledge({ input: '治理缓存测试' });
-    const firstMaterial = await intakeKnowledge({ input: `${url}/article`, knowledgeBaseId: base.knowledgeBase.id });
+    const firstMaterial = await intakeKnowledge({ input: `${url}/article`, workspaceId: base.workspace.id });
     const first = await requestMaterialParsing(firstMaterial.material?.id ?? '');
-    const secondMaterial = await intakeKnowledge({ input: `${url}/article`, knowledgeBaseId: base.knowledgeBase.id });
+    const secondMaterial = await intakeKnowledge({ input: `${url}/article`, workspaceId: base.workspace.id });
     const second = await requestMaterialParsing(secondMaterial.material?.id ?? '');
 
     assert.equal(first.material.parseStatus, 'ingested');
@@ -98,9 +98,9 @@ describe('parse governance', () => {
     servers.push(server);
 
     const base = await intakeKnowledge({ input: '治理限流测试' });
-    const firstMaterial = await intakeKnowledge({ input: `${url}/a`, knowledgeBaseId: base.knowledgeBase.id });
+    const firstMaterial = await intakeKnowledge({ input: `${url}/a`, workspaceId: base.workspace.id });
     await requestMaterialParsing(firstMaterial.material?.id ?? '');
-    const secondMaterial = await intakeKnowledge({ input: `${url}/b`, knowledgeBaseId: base.knowledgeBase.id });
+    const secondMaterial = await intakeKnowledge({ input: `${url}/b`, workspaceId: base.workspace.id });
     const throttled = await requestMaterialParsing(secondMaterial.material?.id ?? '');
 
     assert.equal(throttled.material.parseStatus, 'needs_review');
@@ -114,7 +114,7 @@ describe('parse governance', () => {
     servers.push(server);
 
     const base = await intakeKnowledge({ input: '失败分类测试' });
-    const material = await intakeKnowledge({ input: `${url}/short`, knowledgeBaseId: base.knowledgeBase.id });
+    const material = await intakeKnowledge({ input: `${url}/short`, workspaceId: base.workspace.id });
     const result = await requestMaterialParsing(material.material?.id ?? '');
 
     assert.equal(result.material.parseStatus, 'needs_review');
@@ -128,10 +128,10 @@ describe('question citations', () => {
     const topic = await intakeKnowledge({ input: '问答引用测试' });
     await intakeKnowledge({
       input: '这是引用测试的来源资料。\n它说明知识库问答应当展示来源资料和相关卡片。',
-      knowledgeBaseId: topic.knowledgeBase.id,
+      workspaceId: topic.workspace.id,
     });
 
-    const answer = await answerKnowledgeBaseQuestion(topic.knowledgeBase.id, '问答应该如何展示来源？');
+    const answer = await answerWorkspaceQuestion(topic.workspace.id, '问答应该如何展示来源？');
     assert.ok(answer.citations?.some((citation) => citation.kind === 'material'));
     assert.ok(answer.citations?.some((citation) => citation.kind === 'card'));
   });
@@ -142,7 +142,7 @@ describe('semantic search', () => {
     const base = await intakeKnowledge({ input: '长期记忆学习法' });
     await intakeKnowledge({
       input: '间隔重复会把练习拆到不同日期，主动回忆要求先尝试提取答案，再回看资料修正。\n这类方法适合语言、概念和考试内容的长期保持。',
-      knowledgeBaseId: base.knowledgeBase.id,
+      workspaceId: base.workspace.id,
     });
 
     const results = searchKnowledgeAssets({ query: '复习策略', limit: 10 });

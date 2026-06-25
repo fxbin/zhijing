@@ -11,7 +11,7 @@
  * @author fxbin
  */
 
-import type { KnowledgeCard, MaterialRecord, KnowledgeBaseSummary } from '@zhijing/shared';
+import type { KnowledgeCard, MaterialRecord, WorkspaceSummary } from '@zhijing/shared';
 
 const FRONTMATTER_DELIMITER = '---';
 const FRONTMATTER_ARRAY_PREFIX = '- ';
@@ -50,7 +50,7 @@ export interface CardFrontmatter {
   id: string;
   type: string;
   claimStatus: string;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   materialId?: string;
   recall?: {
     ease?: number;
@@ -76,7 +76,7 @@ export interface CardFrontmatter {
 export interface MaterialFrontmatter {
   id: string;
   type: string;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   sourceUrl?: string;
   platform?: string;
   parseStatus: string;
@@ -94,7 +94,7 @@ export interface MaterialFrontmatter {
  *
  * @author fxbin
  */
-export interface KnowledgeBaseFrontmatter {
+export interface WorkspaceFrontmatter {
   id: string;
   title: string;
   summary: string;
@@ -408,7 +408,7 @@ function mapToCardFrontmatter(parsed: Record<string, unknown>): CardFrontmatter 
     id: String(parsed.id ?? EMPTY_STRING),
     type: String(parsed.type ?? EMPTY_STRING),
     claimStatus: String(parsed.claimStatus ?? EMPTY_STRING),
-    knowledgeBaseId: String(parsed.knowledgeBaseId ?? EMPTY_STRING),
+    workspaceId: String(parsed.workspaceId ?? EMPTY_STRING),
     createdAt: String(parsed.createdAt ?? EMPTY_STRING),
     updatedAt: String(parsed.updatedAt ?? EMPTY_STRING),
   };
@@ -457,7 +457,7 @@ function mapToMaterialFrontmatter(parsed: Record<string, unknown>): MaterialFron
   const frontmatter: MaterialFrontmatter = {
     id: String(parsed.id ?? EMPTY_STRING),
     type: String(parsed.type ?? EMPTY_STRING),
-    knowledgeBaseId: String(parsed.knowledgeBaseId ?? EMPTY_STRING),
+    workspaceId: String(parsed.workspaceId ?? EMPTY_STRING),
     parseStatus: String(parsed.parseStatus ?? EMPTY_STRING),
     createdAt: String(parsed.createdAt ?? EMPTY_STRING),
   };
@@ -477,7 +477,7 @@ function mapToMaterialFrontmatter(parsed: Record<string, unknown>): MaterialFron
 }
 
 /**
- * 将解析后的普通对象映射为 KnowledgeBaseFrontmatter。
+ * 将解析后的普通对象映射为 WorkspaceFrontmatter。
  *
  * 对缺失的必填字段回退为空字符串。
  *
@@ -485,7 +485,7 @@ function mapToMaterialFrontmatter(parsed: Record<string, unknown>): MaterialFron
  * @returns 知识库 frontmatter
  * @author fxbin
  */
-function mapToKnowledgeBaseFrontmatter(parsed: Record<string, unknown>): KnowledgeBaseFrontmatter {
+function mapToWorkspaceFrontmatter(parsed: Record<string, unknown>): WorkspaceFrontmatter {
   return {
     id: String(parsed.id ?? EMPTY_STRING),
     title: String(parsed.title ?? EMPTY_STRING),
@@ -530,7 +530,7 @@ export class MarkdownFileAdapter {
       id: card.id,
       type: card.type,
       claimStatus: card.claimStatus,
-      knowledgeBaseId: card.knowledgeBaseId,
+      workspaceId: card.workspaceId,
       createdAt: card.createdAt,
       updatedAt: card.updatedAt,
     };
@@ -578,7 +578,7 @@ export class MarkdownFileAdapter {
     const frontmatter: MaterialFrontmatter = {
       id: material.id,
       type: material.type,
-      knowledgeBaseId: material.knowledgeBaseId,
+      workspaceId: material.workspaceId,
       parseStatus: material.parseStatus,
       createdAt: material.createdAt,
     };
@@ -654,8 +654,8 @@ export class MarkdownFileAdapter {
    * @returns Markdown 文件完整内容
    * @author fxbin
    */
-  static serializeKnowledgeBase(base: KnowledgeBaseSummary): string {
-    const frontmatter: KnowledgeBaseFrontmatter = {
+  static serializeWorkspace(base: WorkspaceSummary): string {
+    const frontmatter: WorkspaceFrontmatter = {
       id: base.id,
       title: base.title,
       summary: base.summary,
@@ -676,10 +676,10 @@ export class MarkdownFileAdapter {
    * @returns 知识库 frontmatter 元数据
    * @author fxbin
    */
-  static parseKnowledgeBaseFile(content: string): { frontmatter: KnowledgeBaseFrontmatter; body: string } {
+  static parseWorkspaceFile(content: string): { frontmatter: WorkspaceFrontmatter; body: string } {
     const { rawFrontmatter, body } = extractFrontmatter(content);
     const parsed = parseFrontmatter(rawFrontmatter);
-    const frontmatter = mapToKnowledgeBaseFrontmatter(parsed);
+    const frontmatter = mapToWorkspaceFrontmatter(parsed);
     return { frontmatter, body: body.trim() };
   }
 

@@ -84,21 +84,21 @@ function describeTaskStatus(status, t) {
 /**
  * Workflow 执行视图组件
  * @param {Object} props - 组件属性
- * @param {Object} props.detail - 知识库详情
+ * @param {Object} props.detail - 工作区详情
  * @param {boolean} props.isRunningKit - 是否正在运行 Kit
  * @param {Object} props.kitRunResult - Kit 运行结果
  * @param {Object} props.latestTask - 最近一次任务
  * @param {Function} props.onOpenArtifact - 打开产物回调
  * @param {Function} props.onRunKit - 运行 Kit 回调
- * @param {string} props.selectedKnowledgeBaseId - 当前选中的知识库 ID
+ * @param {string} props.selectedWorkspaceId - 当前选中的工作区 ID
  * @param {Function} props.setView - 切换视图回调
  * @returns {JSX.Element} Workflow 视图
  */
-export default function WorkflowView({ detail, isRunningKit, kitRunResult, latestTask, onOpenArtifact, onRunKit, selectedKnowledgeBaseId, setView }) {
+export default function WorkflowView({ detail, isRunningKit, kitRunResult, latestTask, onOpenArtifact, onRunKit, selectedWorkspaceId, setView }) {
   const { t } = useTranslation();
   const activeArtifact = kitRunResult?.artifact ?? detail.artifacts?.[0];
   const activeTask = kitRunResult?.task ?? latestTask;
-  const hasKnowledgeBase = Boolean(selectedKnowledgeBaseId);
+  const hasWorkspace = Boolean(selectedWorkspaceId);
   const materialsCount = detail.materials?.length ?? 0;
   const cardsCount = detail.cards?.length ?? 0;
   const artifactsCount = detail.artifacts?.length ?? 0;
@@ -110,18 +110,18 @@ export default function WorkflowView({ detail, isRunningKit, kitRunResult, lates
 
   const dynamicSteps = [
     {
-      title: t('workflow.step.readKnowledgeBase'),
+      title: t('workflow.step.readWorkspace'),
       description: t('workflow.step.readDescription', { materialsCount, cardsCount }),
-      state: hasKnowledgeBase ? 'done' : 'waiting',
+      state: hasWorkspace ? 'done' : 'waiting',
       timestamp: taskStartedAt,
-      evidence: hasKnowledgeBase ? t('workflow.step.readEvidence', { materialsCount, cardsCount }) : null,
+      evidence: hasWorkspace ? t('workflow.step.readEvidence', { materialsCount, cardsCount }) : null,
     },
     {
       title: t('workflow.step.organizeContext'),
       description: t('workflow.step.organizeDescription'),
-      state: hasKnowledgeBase ? 'done' : 'waiting',
+      state: hasWorkspace ? 'done' : 'waiting',
       timestamp: taskStartedAt,
-      evidence: hasKnowledgeBase ? t('workflow.step.organizeEvidence', { count: materialsCount + cardsCount + artifactsCount }) : null,
+      evidence: hasWorkspace ? t('workflow.step.organizeEvidence', { count: materialsCount + cardsCount + artifactsCount }) : null,
     },
     {
       title: t('workflow.step.generateArtifact'),
@@ -186,7 +186,7 @@ export default function WorkflowView({ detail, isRunningKit, kitRunResult, lates
           ))}
           <button
             className="run-kit-button"
-            disabled={!hasKnowledgeBase || isRunningKit}
+            disabled={!hasWorkspace || isRunningKit}
             onClick={() => onRunKit('learning_research')}
             type="button"
           >

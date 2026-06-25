@@ -26,14 +26,14 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type {
-  KnowledgeBaseSummary,
+  WorkspaceSummary,
   MaterialRecord,
   KnowledgeCard,
   MaterialType,
   CardType,
   ClaimStatus,
   ParseStatus,
-  KnowledgeBaseStage,
+  WorkspaceStage,
 } from '@zhijing/shared';
 import { MarkdownFileAdapter } from './markdown-file.js';
 
@@ -48,7 +48,7 @@ const BODY_TITLE_PREFIX = '# ';
 const EMPTY_STRING = '';
 const NEWLINE = '\n';
 
-const DEFAULT_KB_STAGE: KnowledgeBaseStage = 'ai_skeleton';
+const DEFAULT_KB_STAGE: WorkspaceStage = 'ai_skeleton';
 const DEFAULT_MATERIAL_TYPE: MaterialType = 'text';
 const DEFAULT_CARD_TYPE: CardType = 'concept';
 const DEFAULT_CLAIM_STATUS: ClaimStatus = 'ai_skeleton';
@@ -77,9 +77,9 @@ const VALID_KB_STAGES: readonly string[] = ['ai_skeleton', 'organizing', 'ground
  * @author fxbin
  */
 export interface FileSyncRepository {
-  findKnowledgeBase(id: string): KnowledgeBaseSummary | undefined;
-  deleteKnowledgeBase(id: string): void;
-  insertKnowledgeBase(base: KnowledgeBaseSummary): void;
+  findWorkspace(id: string): WorkspaceSummary | undefined;
+  deleteWorkspace(id: string): void;
+  insertWorkspace(base: WorkspaceSummary): void;
   insertMaterial(material: MaterialRecord): void;
   insertCards(cards: KnowledgeCard[]): void;
 }
@@ -89,8 +89,8 @@ export interface FileSyncRepository {
  *
  * @author fxbin
  */
-export interface ScannedKnowledgeBase {
-  knowledgeBase: KnowledgeBaseSummary;
+export interface ScannedWorkspace {
+  workspace: WorkspaceSummary;
   materials: MaterialRecord[];
   cards: KnowledgeCard[];
 }
@@ -101,7 +101,7 @@ export interface ScannedKnowledgeBase {
  * @author fxbin
  */
 export interface ScanVaultResult {
-  knowledgeBases: ScannedKnowledgeBase[];
+  workspaces: ScannedWorkspace[];
   totalFiles: number;
   skippedFiles: string[];
 }
@@ -115,9 +115,9 @@ export interface ScanVaultResult {
  * @author fxbin
  */
 export interface ExportRepository {
-  listKnowledgeBases(): KnowledgeBaseSummary[];
-  listMaterials(knowledgeBaseId?: string): MaterialRecord[];
-  listCards(knowledgeBaseId?: string): KnowledgeCard[];
+  listWorkspaces(): WorkspaceSummary[];
+  listMaterials(workspaceId?: string): MaterialRecord[];
+  listCards(workspaceId?: string): KnowledgeCard[];
 }
 
 /**
@@ -126,7 +126,7 @@ export interface ExportRepository {
  * @author fxbin
  */
 export interface ExportVaultResult {
-  exportedKnowledgeBases: number;
+  exportedWorkspaces: number;
   totalFiles: number;
   exportPath: string;
 }
@@ -207,14 +207,14 @@ function normalizeParseStatus(status: string): ParseStatus {
 }
 
 /**
- * 将字符串值规范化为合法的 KnowledgeBaseStage，非法值回退为默认阶段。
+ * 将字符串值规范化为合法的 WorkspaceStage，非法值回退为默认阶段。
  *
  * @param stage frontmatter 中的 stage 字段
- * @returns 合法的 KnowledgeBaseStage
+ * @returns 合法的 WorkspaceStage
  * @author fxbin
  */
-function normalizeKbStage(stage: string): KnowledgeBaseStage {
-  return VALID_KB_STAGES.includes(stage) ? (stage as KnowledgeBaseStage) : DEFAULT_KB_STAGE;
+function normalizeKbStage(stage: string): WorkspaceStage {
+  return VALID_KB_STAGES.includes(stage) ? (stage as WorkspaceStage) : DEFAULT_KB_STAGE;
 }
 
 /**
@@ -305,7 +305,7 @@ export class FileSyncAdapter {
    * @author fxbin
    */
   static async scanVault(vaultPath: string): Promise<ScanVaultResult> {
-    const knowledgeBases: ScannedKnowledgeBase[] = [];
+    const workspaces: ScannedWorkspace[] = [];
     const skippedFiles: string[] = [];
     let totalFiles = 0;
 
@@ -313,7 +313,7 @@ export class FileSyncAdapter {
     try {
       entries = await fs.readdir(vaultPath, { withFileTypes: true });
     } catch {
-      return { knowledgeBases, totalFiles, skippedFiles };
+      return { workspaces, totalFiles, skippedFiles };
     }
 
     for (const entry of entries) {
@@ -328,15 +328,15 @@ export class FileSyncAdapter {
       }
 
       const kbDirPath = path.join(vaultPath, entry.name);
-      const scanned = await FileSyncAdapter.scanKnowledgeBase(kbDirPath, entry.name, skippedFiles);
+      const scanned = await FileSyncAdapter.scanWorkspace(kbDirPath, entry.name, skippedFiles);
       if (scanned === null) {
         continue;
       }
       totalFiles += scanned.fileCount;
-      knowledgeBases.push(scanned.result);
+      workspaces.push(scanned.result);
     }
 
-    return { knowledgeBases, totalFiles, skippedFiles };
+    return { workspaces, totalFiles, skippedFiles };
   }
 
   /**
@@ -355,11 +355,11 @@ export class FileSyncAdapter {
    * @returns 扫描结果与文件数，若知识库 ID 无法确定则返回 null
    * @author fxbin
    */
-  private static async scanKnowledgeBase(
+  private static async scanWorkspace(
     kbDirPath: string,
     folderName: string,
     skippedFiles: string[],
-  ): Promise<{ result: ScannedKnowledgeBase; fileCount: number } | null> {
+  ): Promise<{ result: ScannedWorkspace; fileCount: number } | null> {
     let fileCount = 0;
     let kbId = EMPTY_STRING;
     let kbTitle = folderName;
@@ -373,7 +373,7 @@ export class FileSyncAdapter {
     try {
       const content = await fs.readFile(kbMetaPath, 'utf8');
       fileCount += 1;
-      const { frontmatter } = MarkdownFileAdapter.parseKnowledgeBaseFile(content);
+      const { frontmatter } = MarkdownFileAdapter.parseWorkspaceFile(content);
       kbId = frontmatter.id;
       if (frontmatter.title) {
         kbTitle = frontmatter.title;
@@ -401,7 +401,7 @@ export class FileSyncAdapter {
         const { title, content: bodyContent } = extractTitleAndContent(body);
         materials.push({
           id: frontmatter.id,
-          knowledgeBaseId: frontmatter.knowledgeBaseId || kbId,
+          workspaceId: frontmatter.workspaceId || kbId,
           type: normalizeMaterialType(frontmatter.type),
           rawInput: bodyContent,
           sourceUrl: frontmatter.sourceUrl,
@@ -435,7 +435,7 @@ export class FileSyncAdapter {
           : undefined;
         cards.push({
           id: frontmatter.id,
-          knowledgeBaseId: frontmatter.knowledgeBaseId || kbId,
+          workspaceId: frontmatter.workspaceId || kbId,
           materialId: frontmatter.materialId,
           type: normalizeCardType(frontmatter.type),
           title: title || frontmatter.id,
@@ -455,7 +455,7 @@ export class FileSyncAdapter {
     if (!kbId) {
       const firstCard = cards[0];
       const firstMaterial = materials[0];
-      kbId = firstCard?.knowledgeBaseId || firstMaterial?.knowledgeBaseId || EMPTY_STRING;
+      kbId = firstCard?.workspaceId || firstMaterial?.workspaceId || EMPTY_STRING;
     }
 
     if (!kbId) {
@@ -463,13 +463,13 @@ export class FileSyncAdapter {
     }
 
     for (const card of cards) {
-      if (!card.knowledgeBaseId) {
-        card.knowledgeBaseId = kbId;
+      if (!card.workspaceId) {
+        card.workspaceId = kbId;
       }
     }
     for (const material of materials) {
-      if (!material.knowledgeBaseId) {
-        material.knowledgeBaseId = kbId;
+      if (!material.workspaceId) {
+        material.workspaceId = kbId;
       }
     }
 
@@ -478,7 +478,7 @@ export class FileSyncAdapter {
     const sourcedCount = cards.filter((card) => card.claimStatus === SOURCED_CLAIM_STATUS).length;
     const sourcedRatio = cardCount > 0 ? sourcedCount / cardCount : DEFAULT_SOURCED_RATIO;
 
-    const knowledgeBase: KnowledgeBaseSummary = {
+    const workspace: WorkspaceSummary = {
       id: kbId,
       title: kbTitle,
       summary: kbSummary,
@@ -491,7 +491,7 @@ export class FileSyncAdapter {
     };
 
     return {
-      result: { knowledgeBase, materials, cards },
+      result: { workspace, materials, cards },
       fileCount,
     };
   }
@@ -514,12 +514,12 @@ export class FileSyncAdapter {
    */
   static async rebuildIndex(vaultPath: string, repository: FileSyncRepository): Promise<ScanVaultResult> {
     const result = await FileSyncAdapter.scanVault(vaultPath);
-    for (const kb of result.knowledgeBases) {
-      const existing = repository.findKnowledgeBase(kb.knowledgeBase.id);
+    for (const kb of result.workspaces) {
+      const existing = repository.findWorkspace(kb.workspace.id);
       if (existing) {
-        repository.deleteKnowledgeBase(kb.knowledgeBase.id);
+        repository.deleteWorkspace(kb.workspace.id);
       }
-      repository.insertKnowledgeBase(kb.knowledgeBase);
+      repository.insertWorkspace(kb.workspace);
       for (const material of kb.materials) {
         repository.insertMaterial(material);
       }
@@ -551,15 +551,15 @@ export class FileSyncAdapter {
    */
   static async exportToVault(repository: ExportRepository, vaultPath: string): Promise<ExportVaultResult> {
     await fs.mkdir(vaultPath, { recursive: true });
-    const knowledgeBases = repository.listKnowledgeBases();
+    const workspaces = repository.listWorkspaces();
     let totalFiles = 0;
 
-    for (const kb of knowledgeBases) {
+    for (const kb of workspaces) {
       const kbDirName = MarkdownFileAdapter.titleToSlug(kb.title) || kb.id;
       const kbDirPath = path.join(vaultPath, kbDirName);
       await fs.mkdir(kbDirPath, { recursive: true });
 
-      const kbContent = MarkdownFileAdapter.serializeKnowledgeBase(kb);
+      const kbContent = MarkdownFileAdapter.serializeWorkspace(kb);
       await fs.writeFile(path.join(kbDirPath, KNOWLEDGE_BASE_FILE_NAME), kbContent, 'utf8');
       totalFiles += 1;
 
@@ -591,7 +591,7 @@ export class FileSyncAdapter {
     }
 
     return {
-      exportedKnowledgeBases: knowledgeBases.length,
+      exportedWorkspaces: workspaces.length,
       totalFiles,
       exportPath: vaultPath,
     };

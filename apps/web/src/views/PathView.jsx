@@ -1,5 +1,5 @@
 /**
- * 路径视图：展示当前知识库的学习路径与进度。
+ * 路径视图：展示当前工作区的学习路径与进度。
  * @module views/PathView
  */
 
@@ -13,11 +13,11 @@ import { PATH_CARD_ID_STORAGE_KEY } from '../constants/options';
 /**
  * 路径视图组件。
  * @param {object} props - 组件属性
- * @param {string} props.selectedKnowledgeBaseId - 当前选中知识库 ID
+ * @param {string} props.selectedWorkspaceId - 当前选中工作区 ID
  * @param {Function} props.setView - 视图切换回调
  * @returns {JSX.Element} 路径视图
  */
-export default function PathView({ selectedKnowledgeBaseId, setView }) {
+export default function PathView({ selectedWorkspaceId, setView }) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
   const [path, setPath] = useState(null);
@@ -25,7 +25,7 @@ export default function PathView({ selectedKnowledgeBaseId, setView }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!selectedKnowledgeBaseId) {
+    if (!selectedWorkspaceId) {
       setLoading(false);
       setPath(null);
       return undefined;
@@ -35,7 +35,7 @@ export default function PathView({ selectedKnowledgeBaseId, setView }) {
       setLoading(true);
       setError('');
       try {
-        const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/path`);
+        const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/path`);
         if (!response.ok) throw new Error('Path unavailable.');
         const payload = await response.json();
         if (!ignore) setPath(payload);
@@ -47,7 +47,7 @@ export default function PathView({ selectedKnowledgeBaseId, setView }) {
     }
     loadPath();
     return () => { ignore = true; };
-  }, [selectedKnowledgeBaseId, t]);
+  }, [selectedWorkspaceId, t]);
 
   if (loading) {
     return (
@@ -65,7 +65,7 @@ export default function PathView({ selectedKnowledgeBaseId, setView }) {
     );
   }
 
-  if (!selectedKnowledgeBaseId) {
+  if (!selectedWorkspaceId) {
     return (
       <div className="page-main full path-page">
         <EmptyState
@@ -104,7 +104,7 @@ export default function PathView({ selectedKnowledgeBaseId, setView }) {
       <header className="path-header">
         <div>
           <h1>{t('path.title')}</h1>
-          <p>{t('path.subtitle', { title: path.knowledgeBaseTitle })}</p>
+          <p>{t('path.subtitle', { title: path.workspaceTitle })}</p>
         </div>
         <div className="path-progress">
           <div className="path-progress-info">

@@ -171,7 +171,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
         if (ignore) return;
         setSystemStats({
           apiOnline: true,
-          knowledgeBases: result.knowledgeBases?.length ?? 0,
+          workspaces: result.workspaces?.length ?? 0,
           materials: result.materials?.length ?? 0,
           tasks: result.tasks?.length ?? 0,
           recentTasks: (result.tasks ?? []).slice(0, 3),
@@ -664,7 +664,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
               <Database size={25} />
               <div>
                 <span>{t('settings.dataScale')}</span>
-                <strong>{t('settings.dataScaleCount', { kb: systemStats.knowledgeBases, materials: systemStats.materials })}</strong>
+                <strong>{t('settings.dataScaleCount', { kb: systemStats.workspaces, materials: systemStats.materials })}</strong>
                 <p>{t('settings.tasksRecorded', { count: systemStats.tasks })}</p>
               </div>
             </div>
@@ -682,7 +682,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
             <div>
               <span>{t('kit.title')}</span>
               <strong>{t('kit.subtitle')}</strong>
-              <p>{t('kit.selectKnowledgeBaseHint')}</p>
+              <p>{t('kit.selectWorkspaceHint')}</p>
             </div>
           </div>
           <p className="settings-note">{status}</p>
@@ -1016,7 +1016,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                   <ShieldCheck size={22} />
                   <div>
                     <span>{t('settings.dataScale')}</span>
-                    <strong>{t('settings.dataScaleCount', { kb: systemStats.knowledgeBases, materials: systemStats.materials })}</strong>
+                    <strong>{t('settings.dataScaleCount', { kb: systemStats.workspaces, materials: systemStats.materials })}</strong>
                     <p>{t('settings.tasksRecorded', { count: systemStats.tasks })}</p>
                   </div>
                 </div>

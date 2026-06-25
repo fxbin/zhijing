@@ -1,5 +1,5 @@
 /**
- * 导出视图组件：知识库导出为 Markdown/JSON/PDF，含历史记录和备份。
+ * 导出视图组件：工作区导出为 Markdown/JSON/PDF，含历史记录和备份。
  * @module views/ExportView
  */
 
@@ -8,8 +8,8 @@ import { useTranslation } from 'react-i18next';
 import { CheckCircle2, ClipboardList, Download, History, PackageCheck } from 'lucide-react';
 
 import {
-  knowledgeBaseMarkdown,
-  knowledgeBaseExportJson,
+  workspaceMarkdown,
+  workspaceExportJson,
   downloadTextFile,
 } from '../utils/export';
 import { safeFilename } from '../utils/format';
@@ -18,7 +18,7 @@ import { formatDateTime } from '../utils/material';
 /**
  * 导出视图，支持多格式导出、进度展示、历史记录和本地备份。
  * @param {object} props - 组件属性
- * @param {object} props.detail - 知识库详情
+ * @param {object} props.detail - 工作区详情
  * @param {function} props.setView - 视图切换函数
  * @returns {JSX.Element} 导出视图
  */
@@ -52,7 +52,7 @@ export default function ExportView({ detail, setView }) {
     let ignore = false;
     async function loadHistory() {
       try {
-        const response = await fetch(`/api/knowledge-bases/${detail.id}/exports`);
+        const response = await fetch(`/api/workspaces/${detail.id}/exports`);
         if (!response.ok) return;
         const payload = await response.json();
         if (!ignore) setExportHistory(payload.exports ?? []);
@@ -88,8 +88,8 @@ export default function ExportView({ detail, setView }) {
     const extension = format === 'json' ? 'json' : format === 'pdf' ? 'pdf' : 'md';
     const filename = `${safeFilename(detail.title)}-export.${extension}`;
     const content = format === 'json'
-      ? knowledgeBaseExportJson(detail, options)
-      : knowledgeBaseMarkdown(detail, options);
+      ? workspaceExportJson(detail, options)
+      : workspaceMarkdown(detail, options);
     const type = format === 'json' ? 'application/json;charset=utf-8' : 'text/markdown;charset=utf-8';
     return { filename, content, type };
   }
@@ -103,7 +103,7 @@ export default function ExportView({ detail, setView }) {
   async function recordExportHistory(prepared) {
     if (!detail?.id) return;
     try {
-      const response = await fetch(`/api/knowledge-bases/${detail.id}/exports`, {
+      const response = await fetch(`/api/workspaces/${detail.id}/exports`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -145,7 +145,7 @@ export default function ExportView({ detail, setView }) {
   function downloadBackup() {
     downloadTextFile(
       `${safeFilename(detail.title)}-backup.json`,
-      knowledgeBaseExportJson(detail, { includeMaterials: true, includeCards: true, includeArtifacts: true }),
+      workspaceExportJson(detail, { includeMaterials: true, includeCards: true, includeArtifacts: true }),
       'application/json;charset=utf-8',
     );
   }

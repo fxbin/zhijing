@@ -1,22 +1,22 @@
 /**
- * 知识库工具函数：标题查找、文本归一化、关键词提取、高级运维数据构建等。
+ * 工作区工具函数：标题查找、文本归一化、关键词提取、高级运维数据构建等。
  * @module utils/knowledge
  */
 
 /**
- * 根据知识库 ID 查找标题。
- * @param {Array<object>} knowledgeBases - 知识库列表
- * @param {string} knowledgeBaseId - 知识库 ID
- * @returns {string} 知识库标题（未找到时返回 "Unassigned"）
+ * 根据工作区 ID 查找标题。
+ * @param {Array<object>} workspaces - 工作区列表
+ * @param {string} workspaceId - 工作区 ID
+ * @returns {string} 工作区标题（未找到时返回 "Unassigned"）
  */
-export function knowledgeBaseTitle(knowledgeBases, knowledgeBaseId) {
-  const matched = knowledgeBases.find((base) => base.id === knowledgeBaseId);
+export function workspaceTitle(workspaces, workspaceId) {
+  const matched = workspaces.find((base) => base.id === workspaceId);
   return matched?.title ?? 'Unassigned';
 }
 
 /**
- * 格式化知识库元信息字符串。
- * @param {object} base - 知识库对象
+ * 格式化工作区元信息字符串。
+ * @param {object} base - 工作区对象
  * @returns {string} 元信息字符串
  */
 export function formatBaseMeta(base) {
@@ -39,7 +39,7 @@ export function normalizeKnowledgeText(value) {
  * @returns {string[]} 去重后的关键词数组
  */
 export function keywordTokens(...values) {
-  const stopWords = new Set(['and', 'the', 'for', 'with', 'this', 'that', '一个', '一种', '如何', '什么', '知识库']);
+  const stopWords = new Set(['and', 'the', 'for', 'with', 'this', 'that', '一个', '一种', '如何', '什么', '工作区']);
   return [...new Set(values
     .join(' ')
     .split(/\s+/)
@@ -107,13 +107,13 @@ export function groupCardsByType(cards) {
 /**
  * 构建高级运维面板所需的聚合数据（总数、跨库主题、对比实体、冲突信号）。
  * @param {object} params - 输入参数
- * @param {Array<object>} params.knowledgeBases - 知识库列表
+ * @param {Array<object>} params.workspaces - 工作区列表
  * @param {Array<object>} params.materials - 材料列表
- * @param {object} params.detail - 当前知识库详情
+ * @param {object} params.detail - 当前工作区详情
  * @param {Array<object>} params.tasks - 任务列表
  * @returns {object} 聚合后的高级运维数据
  */
-export function buildAdvancedOpsData({ knowledgeBases, materials, detail, tasks }) {
+export function buildAdvancedOpsData({ workspaces, materials, detail, tasks }) {
   const detailMaterials = detail.materials ?? [];
   const detailCards = detail.cards ?? [];
   const detailArtifacts = detail.artifacts ?? [];
@@ -126,7 +126,7 @@ export function buildAdvancedOpsData({ knowledgeBases, materials, detail, tasks 
   const reviewMaterials = allMaterials.filter((item) => item.parseStatus === 'needs_review' || item.parseStatus === 'failed');
   const duplicateMaterials = duplicateGroups(allMaterials, (item) => item.sourceUrl || item.rawInput || item.title);
   const duplicateCards = duplicateGroups(allCards, (item) => item.title);
-  const baseThemes = knowledgeBases.map((base) => ({
+  const baseThemes = workspaces.map((base) => ({
     ...base,
     tokens: keywordTokens(base.title, base.summary),
   }));
@@ -140,14 +140,14 @@ export function buildAdvancedOpsData({ knowledgeBases, materials, detail, tasks 
     overlap: base.tokens.slice(0, 3),
     score: base.tokens.length ? 1 : 0,
   }));
-  const comparisonEntities = (knowledgeBases.length ? knowledgeBases : [{ title: detail.title, sourceCount: allMaterials.length, cardCount: allCards.length }])
+  const comparisonEntities = (workspaces.length ? workspaces : [{ title: detail.title, sourceCount: allMaterials.length, cardCount: allCards.length }])
     .slice(0, 4)
     .map((base, index) => ({
       id: base.id ?? `entity-${index}`,
       title: base.title,
       materials: base.sourceCount ?? allMaterials.length,
       cards: base.cardCount ?? allCards.length,
-      artifacts: allArtifacts.filter((artifact) => artifact.knowledgeBaseId === base.id).length || (index === 0 ? allArtifacts.length : 0),
+      artifacts: allArtifacts.filter((artifact) => artifact.workspaceId === base.id).length || (index === 0 ? allArtifacts.length : 0),
       health: Math.round(((base.cardCount ?? allCards.length) ? sourcedCards / Math.max(base.cardCount ?? allCards.length, 1) : 0.3) * 100),
     }));
   const conflictSignals = [
@@ -158,7 +158,7 @@ export function buildAdvancedOpsData({ knowledgeBases, materials, detail, tasks 
   ];
   return {
     totals: {
-      knowledgeBases: knowledgeBases.length,
+      workspaces: workspaces.length,
       materials: totalMaterials,
       cards: totalCards,
       artifacts: allArtifacts.length,
@@ -177,7 +177,7 @@ export function buildAdvancedOpsData({ knowledgeBases, materials, detail, tasks 
 }
 
 /**
- * 返回离线演示用的知识库详情。
+ * 返回离线演示用的工作区详情。
  * @returns {object} 演示用详情对象
  */
 export function fallbackDetail() {
@@ -211,12 +211,12 @@ export function fallbackDetail() {
 }
 
 /**
- * 返回空知识库详情。
+ * 返回空工作区详情。
  * @returns {object} 空详情对象
  */
 export function emptyDetail() {
   return {
-    title: '尚未创建知识库',
+    title: '尚未创建工作区',
     summary: '从一个主题、链接或问题开始，知径会在这里形成可追溯的知识结构。',
     sourceCount: 0,
     cardCount: 0,

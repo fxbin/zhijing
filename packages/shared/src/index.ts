@@ -1,6 +1,6 @@
 export type IntakeKind = 'theme' | 'link' | 'question' | 'text';
 
-export type KnowledgeBaseStage = 'ai_skeleton' | 'organizing' | 'grounded';
+export type WorkspaceStage = 'ai_skeleton' | 'organizing' | 'grounded';
 
 export type MaterialType = 'link' | 'text' | 'question' | 'topic';
 
@@ -55,7 +55,7 @@ export type IntakeScope = typeof INTAKE_SCOPE_VALUES[number];
 
 export interface IntakeRequest {
   input: string;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   audience?: IntakeAudience;
   depth?: IntakeDepth;
   scope?: IntakeScope;
@@ -155,8 +155,8 @@ export interface TestModelProviderSettingsRequest {
 }
 
 export interface AssignMaterialRequest {
-  knowledgeBaseId?: string;
-  newKnowledgeBaseTitle?: string;
+  workspaceId?: string;
+  newWorkspaceTitle?: string;
 }
 
 export interface CompleteMaterialReviewRequest {
@@ -179,11 +179,11 @@ export interface ModelProviderTestResult {
   };
 }
 
-export interface KnowledgeBaseSummary {
+export interface WorkspaceSummary {
   id: string;
   title: string;
   summary: string;
-  stage: KnowledgeBaseStage;
+  stage: WorkspaceStage;
   sourceCount: number;
   cardCount: number;
   sourcedRatio: number;
@@ -199,7 +199,7 @@ export type ArchiveStatus = 'active' | 'archived';
 
 export interface MaterialRecord {
   id: string;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   type: MaterialType;
   rawInput: string;
   sourceUrl?: string;
@@ -230,7 +230,7 @@ export type RecallGrade = 'again' | 'hard' | 'good' | 'easy';
 
 export interface KnowledgeCard {
   id: string;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   materialId?: string;
   type: CardType;
   title: string;
@@ -258,7 +258,7 @@ export interface CardRevision {
 
 export interface ChatMessage {
   id: string;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   question: string;
   answer: string;
   cardIds: string[];
@@ -291,7 +291,7 @@ export interface AcceptProposedCardsRequest {
 
 export interface AgentTask {
   id: string;
-  workflow: 'create_knowledge_base' | 'ingest_material' | 'answer_question' | 'parse_material' | 'run_kit';
+  workflow: 'create_workspace' | 'ingest_material' | 'answer_question' | 'parse_material' | 'run_kit';
   status: TaskStatus;
   input: Record<string, unknown>;
   output?: Record<string, unknown>;
@@ -309,7 +309,7 @@ export type ArtifactSubtype =
 
 export interface ArtifactRecord {
   id: string;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   artifactType: 'summary' | 'research_report' | 'cards' | 'kit_report';
   subtype: ArtifactSubtype;
   title: string;
@@ -360,7 +360,7 @@ export type ExportScope = 'all' | 'materials' | 'cards';
 
 export interface ExportRecord {
   id: string;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   format: ExportFormat;
   scope: ExportScope;
   includeArtifacts: boolean;
@@ -394,7 +394,7 @@ export type EntityType = 'person' | 'organization' | 'concept' | 'tool' | 'place
 
 export interface Entity {
   id: string;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   name: string;
   type: EntityType;
   description: string;
@@ -415,7 +415,7 @@ export type ConflictResolutionAction = 'merge' | 'delete';
 
 export interface ConflictGroupItem {
   id: string;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   title: string;
   meta: string;
 }
@@ -433,7 +433,7 @@ export interface ConflictAuditEntry {
   action: ConflictResolutionAction;
   keepId: string;
   dropIds: string[];
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   note: string;
   createdAt: string;
 }
@@ -456,7 +456,7 @@ export interface KnowledgeCitation {
 
 export interface IntakeResult {
   kind: IntakeKind;
-  knowledgeBase: KnowledgeBaseSummary;
+  workspace: WorkspaceSummary;
   material?: MaterialRecord;
   cards: KnowledgeCard[];
   task: AgentTask;
@@ -470,7 +470,7 @@ export interface IntakeResult {
 export interface MaterialParseQueueResult {
   material: MaterialRecord;
   task: AgentTask;
-  knowledgeBase?: KnowledgeBaseSummary;
+  workspace?: WorkspaceSummary;
   cards?: KnowledgeCard[];
   artifact?: ArtifactRecord;
   queued: boolean;
@@ -480,13 +480,13 @@ export interface MaterialParseQueueResult {
 
 export interface MaterialAssignmentResult {
   material: MaterialRecord;
-  knowledgeBase: KnowledgeBaseSummary;
-  previousKnowledgeBaseId: string;
+  workspace: WorkspaceSummary;
+  previousWorkspaceId: string;
   message: string;
 }
 
 export interface MaterialAssignmentSuggestion {
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   title: string;
   score: number;
   reason: string;
@@ -501,7 +501,7 @@ export interface MaterialAssignmentSuggestionsResult {
 
 export interface MaterialReviewResult {
   material: MaterialRecord;
-  knowledgeBase: KnowledgeBaseSummary;
+  workspace: WorkspaceSummary;
   task?: AgentTask;
   cards?: KnowledgeCard[];
   artifact?: ArtifactRecord;
@@ -513,13 +513,13 @@ export interface RunKnowledgeKitRequest {
 }
 
 export interface KnowledgeKitRunResult {
-  knowledgeBase: KnowledgeBaseSummary;
+  workspace: WorkspaceSummary;
   artifact: ArtifactRecord;
   task: AgentTask;
   message: string;
 }
 
-export interface KnowledgeBaseDetail extends KnowledgeBaseSummary {
+export interface WorkspaceDetail extends WorkspaceSummary {
   materials: MaterialRecord[];
   cards: KnowledgeCard[];
   artifacts: ArtifactRecord[];
@@ -531,7 +531,7 @@ export interface KnowledgeBaseDetail extends KnowledgeBaseSummary {
  */
 export interface ArchiveItemResult {
   id: string;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   kind: 'material' | 'card';
   archived: boolean;
 }
@@ -543,7 +543,7 @@ export interface ArchiveItemResult {
 export interface ArchivedItemsResult {
   materials: MaterialRecord[];
   cards: KnowledgeCard[];
-  knowledgeBases: KnowledgeBaseSummary[];
+  workspaces: WorkspaceSummary[];
 }
 
 export interface AnalyticsDistributionItem {
@@ -557,8 +557,8 @@ export interface AnalyticsExportRow {
   value: string;
 }
 
-export interface KnowledgeBaseAnalytics {
-  knowledgeBaseId: string;
+export interface WorkspaceAnalytics {
+  workspaceId: string;
   generatedAt: string;
   totals: {
     materials: number;
@@ -576,7 +576,7 @@ export interface KnowledgeBaseAnalytics {
   exportRows: AnalyticsExportRow[];
 }
 
-export type KnowledgeMapNodeKind = 'knowledge_base' | 'material' | 'card';
+export type KnowledgeMapNodeKind = 'workspace' | 'material' | 'card';
 
 export interface KnowledgeMapNode {
   id: string;
@@ -596,7 +596,7 @@ export interface KnowledgeMapEdge {
 }
 
 export interface KnowledgeMapResult {
-  knowledgeBaseId: string;
+  workspaceId: string;
   generatedAt: string;
   nodes: KnowledgeMapNode[];
   edges: KnowledgeMapEdge[];
@@ -613,7 +613,7 @@ export interface KnowledgeMapResult {
 export interface GlobalInsights {
   generatedAt: string;
   totals: {
-    knowledgeBases: number;
+    workspaces: number;
     materials: number;
     cards: number;
     sourcedCards: number;
@@ -631,8 +631,8 @@ export interface GlobalInsights {
   }[];
   recentCards: {
     id: string;
-    knowledgeBaseId: string;
-    knowledgeBaseTitle: string;
+    workspaceId: string;
+    workspaceTitle: string;
     title: string;
     type: CardType;
     claimStatus: ClaimStatus;
@@ -641,7 +641,7 @@ export interface GlobalInsights {
   mapPreview: {
     nodeCount: number;
     edgeCount: number;
-    knowledgeBaseCount: number;
+    workspaceCount: number;
   };
 }
 
@@ -666,7 +666,7 @@ export type ConstructionStage = 'seedling' | 'growing' | 'mature';
  * @author fxbin
  */
 export interface ConstructionProgress {
-  knowledgeBaseId: string;
+  workspaceId: string;
   totalCards: number;
   skeletonCards: number;
   confirmedCards: number;
@@ -733,7 +733,7 @@ export interface SocraticQuestion {
  * @author fxbin
  */
 export interface SocraticQuestioningResult {
-  knowledgeBaseId: string;
+  workspaceId: string;
   questions: SocraticQuestion[];
   triggerContext: {
     trigger: SocraticTrigger;
@@ -769,7 +769,7 @@ export interface RelatedSuggestion {
  * @author fxbin
  */
 export interface RelatedSuggestionsResult {
-  knowledgeBaseId: string;
+  workspaceId: string;
   currentCardId?: string;
   suggestions: RelatedSuggestion[];
   generatedAt: string;
@@ -810,7 +810,7 @@ export type AgentAction =
 export interface AgentActionLog {
   id: string;
   action: AgentAction;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   input: Record<string, unknown>;
   output?: Record<string, unknown>;
   durationMs: number;
@@ -839,9 +839,9 @@ export interface PathStep {
   type: CardType | 'general';
 }
 
-export interface KnowledgeBasePath {
-  knowledgeBaseId: string;
-  knowledgeBaseTitle: string;
+export interface WorkspacePath {
+  workspaceId: string;
+  workspaceTitle: string;
   generatedAt: string;
   steps: PathStep[];
   currentStepIndex: number;
@@ -864,7 +864,7 @@ export interface SaveKnowledgeMapNodePositionsRequest {
  */
 export interface KnowledgeMapCustomEdge {
   id: string;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   sourceNodeId: string;
   targetNodeId: string;
   relation: 'supports' | 'contradicts' | 'related_to';
@@ -890,7 +890,7 @@ export interface AddMapEdgeRequest {
  * @author fxbin
  */
 export interface EvidenceAuditReport {
-  knowledgeBaseId: string;
+  workspaceId: string;
   generatedAt: string;
   totals: {
     cards: number;
@@ -927,7 +927,7 @@ export interface EvidenceGap {
  * @author fxbin
  */
 export interface HypothesisTestResult {
-  knowledgeBaseId: string;
+  workspaceId: string;
   hypothesis: string;
   generatedAt: string;
   verdict: 'supported' | 'contradicted' | 'mixed' | 'insufficient';
@@ -1003,7 +1003,7 @@ export type AttentionSignalTargetType = 'card' | 'material' | 'layout' | 'questi
  */
 export interface AttentionSignal {
   id: string;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   signalType: AttentionSignalType;
   signalStrength: AttentionSignalStrength;
   targetType: AttentionSignalTargetType;
@@ -1043,8 +1043,8 @@ export interface DailyDigestItem {
   id: string;
   type: 'card' | 'material' | 'signal';
   title: string;
-  knowledgeBaseId?: string;
-  knowledgeBaseTitle?: string;
+  workspaceId?: string;
+  workspaceTitle?: string;
   createdAt: string;
 }
 
@@ -1068,8 +1068,8 @@ export interface DailyDigest {
  * @author fxbin
  */
 export interface TopicCoverageCell {
-  knowledgeBaseId: string;
-  knowledgeBaseTitle: string;
+  workspaceId: string;
+  workspaceTitle: string;
   cardCount: number;
   materialCount: number;
 }
@@ -1108,7 +1108,7 @@ export interface RepeatedQuestionGroup {
     id: string;
     question: string;
     createdAt: string;
-    knowledgeBaseId?: string;
+    workspaceId?: string;
   }>;
   similarityScore: number;
   firstAskedAt: string;
@@ -1133,7 +1133,7 @@ export interface RepeatedThinkingReport {
  */
 export interface ReadingSessionRequest {
   cardId: string;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   durationMs: number;
 }
 
@@ -1142,7 +1142,7 @@ export interface ReadingSessionRequest {
  * @author fxbin
  */
 export interface CannotAnswerFeedbackRequest {
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   question: string;
 }
 
@@ -1153,8 +1153,8 @@ export interface CannotAnswerFeedbackRequest {
 export interface RecallDecayItem {
   cardId: string;
   cardTitle: string;
-  knowledgeBaseId?: string;
-  knowledgeBaseTitle: string;
+  workspaceId?: string;
+  workspaceTitle: string;
   lastAccessedAt: string;
   daysSinceLastAccess: number;
   recallScore: number;
@@ -1246,7 +1246,7 @@ export type RecallToolName = 'direct_fetch' | 'shallow_recall' | 'deep_recall' |
 export interface RecallResultItem {
   kind: 'card' | 'material';
   id: string;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   title: string;
   preview: string;
   relevanceScore: number;

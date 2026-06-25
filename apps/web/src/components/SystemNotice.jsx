@@ -15,7 +15,7 @@ export default function SystemNotice() {
       <CircleX size={21} />
       <div>
         <strong>API 未连接</strong>
-        <p>当前页面保留本地演示内容；启动 API 后会自动读取真实知识库、任务和资料。</p>
+        <p>当前页面保留本地演示内容；启动 API 后会自动读取真实工作区、任务和资料。</p>
       </div>
     </section>
   );

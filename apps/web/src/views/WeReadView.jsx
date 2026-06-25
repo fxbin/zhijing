@@ -872,11 +872,11 @@ function WeReadPreviewDrawer({ book, mode, batchCount, onClose, onImport, t }) {
  * 微信读书智能推荐面板
  * 基于覆盖缺口、深度推荐、卡片关联三种策略展示推荐书籍
  * @param {Object} props
- * @param {string|null} props.knowledgeBaseId - 当前知识库 ID
+ * @param {string|null} props.workspaceId - 当前工作区 ID
  * @param {Function} props.onImport - 导入回调
  * @param {Function} props.t - i18n 翻译函数
  */
-function WeReadRecommendPanel({ knowledgeBaseId, onImport, t, forceExpanded }) {
+function WeReadRecommendPanel({ workspaceId, onImport, t, forceExpanded }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
@@ -887,8 +887,8 @@ function WeReadRecommendPanel({ knowledgeBaseId, onImport, t, forceExpanded }) {
     setLoading(true);
     (async () => {
       try {
-        const url = knowledgeBaseId
-          ? `/api/weread/recommendations?knowledgeBaseId=${encodeURIComponent(knowledgeBaseId)}`
+        const url = workspaceId
+          ? `/api/weread/recommendations?workspaceId=${encodeURIComponent(workspaceId)}`
           : '/api/weread/recommendations';
         const res = await fetch(url);
         if (!res.ok) throw new Error('recommendations');
@@ -903,7 +903,7 @@ function WeReadRecommendPanel({ knowledgeBaseId, onImport, t, forceExpanded }) {
       }
     })();
     return () => { alive = false; };
-  }, [knowledgeBaseId]);
+  }, [workspaceId]);
 
   if (loading || !data || data.recommendations.length === 0) return null;
 
@@ -978,7 +978,7 @@ function WeReadRecommendPanel({ knowledgeBaseId, onImport, t, forceExpanded }) {
   );
 }
 
-export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseId, onOpenKnowledgeBase }) {
+export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpenWorkspace }) {
   const { t } = useTranslation();
 
   const [configured, setConfigured] = useState(null);
@@ -1006,7 +1006,7 @@ export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseI
 
   const [visibleCount, setVisibleCount] = useState(INITIAL_PAGE_SIZE);
   const [expandedArchives, setExpandedArchives] = useState(() => new Set());
-  const [targetKbId, setTargetKbId] = useState(selectedKnowledgeBaseId || '');
+  const [targetKbId, setTargetKbId] = useState(selectedWorkspaceId || '');
 
   const [toast, setToast] = useState(null);
   const sentinelRef = useRef(null);
@@ -1024,8 +1024,8 @@ export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseI
   const [previewMode, setPreviewMode] = useState(PREVIEW_MODE_SINGLE);
 
   useEffect(() => {
-    setTargetKbId(selectedKnowledgeBaseId || '');
-  }, [selectedKnowledgeBaseId]);
+    setTargetKbId(selectedWorkspaceId || '');
+  }, [selectedWorkspaceId]);
 
   /**
    * 从 /api/weread/meta 读取本地缓存的书架数据
@@ -1231,7 +1231,7 @@ export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseI
       return next;
     });
     const body = { bookId: id };
-    if (targetKbId) body.knowledgeBaseId = targetKbId;
+    if (targetKbId) body.workspaceId = targetKbId;
     try {
       const res = await fetch('/api/weread/import', {
         method: 'POST',
@@ -1246,7 +1246,7 @@ export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseI
         bookmarkCount: data.bookmarkCount,
         reviewCount: data.reviewCount,
         materialId: data.materialId,
-        knowledgeBaseId: targetKbId || null,
+        workspaceId: targetKbId || null,
       };
       setImportResults((prev) => ({ ...prev, [id]: ok }));
       return ok;
@@ -1294,7 +1294,7 @@ export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseI
       showToast({
         type: failed > 0 ? 'error' : 'success',
         text: t('weread.batchDone', { success, failed }),
-        action: success > 0 && onOpenKnowledgeBase ? { label: t('weread.viewCard'), run: () => onOpenKnowledgeBase(targetKbId || null) } : null,
+        action: success > 0 && onOpenWorkspace ? { label: t('weread.viewCard'), run: () => onOpenWorkspace(targetKbId || null) } : null,
       });
       exitSelecting();
     } else {
@@ -1306,22 +1306,22 @@ export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseI
         showToast({
           type: 'success',
           text: t('weread.importSuccess', { title: result.title, bookmarks: result.bookmarkCount, reviews: result.reviewCount }),
-          action: onOpenKnowledgeBase ? { label: t('weread.viewCard'), run: () => onOpenKnowledgeBase(result.knowledgeBaseId) } : null,
+          action: onOpenWorkspace ? { label: t('weread.viewCard'), run: () => onOpenWorkspace(result.workspaceId) } : null,
         });
       } else {
         showToast({ type: 'error', text: t('weread.importFailed', { title: book.title }) });
       }
     }
-  }, [previewBook, previewMode, selectedIds, importBook, showToast, t, onOpenKnowledgeBase, targetKbId]);
+  }, [previewBook, previewMode, selectedIds, importBook, showToast, t, onOpenWorkspace, targetKbId]);
 
   const handleOpenImported = useCallback((bookId) => {
     const result = importResults[String(bookId)];
-    if (result && result.ok && onOpenKnowledgeBase) {
-      onOpenKnowledgeBase(result.knowledgeBaseId);
-    } else if (onOpenKnowledgeBase) {
-      onOpenKnowledgeBase(targetKbId || null);
+    if (result && result.ok && onOpenWorkspace) {
+      onOpenWorkspace(result.workspaceId);
+    } else if (onOpenWorkspace) {
+      onOpenWorkspace(targetKbId || null);
     }
-  }, [importResults, onOpenKnowledgeBase, targetKbId]);
+  }, [importResults, onOpenWorkspace, targetKbId]);
 
   const toggleCategory = useCallback((category) => {
     setActiveCategories((prev) => {
@@ -1611,12 +1611,12 @@ export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseI
             value={targetKbId}
             onChange={(e) => setTargetKbId(e.target.value)}
             aria-label={t('weread.targetKb')}
-            disabled={knowledgeBases.length === 0}
+            disabled={workspaces.length === 0}
           >
-            {knowledgeBases.length === 0 ? (
-              <option value="">{t('weread.noKnowledgeBase')}</option>
+            {workspaces.length === 0 ? (
+              <option value="">{t('weread.noWorkspace')}</option>
             ) : (
-              knowledgeBases.map((kb) => (
+              workspaces.map((kb) => (
                 <option key={kb.id} value={kb.id}>{kb.name}</option>
               ))
             )}
@@ -1832,7 +1832,7 @@ export default function WeReadView({ knowledgeBases = [], selectedKnowledgeBaseI
 
         {configured && !error && activeTab === TAB_RECOMMEND && (
           <WeReadRecommendPanel
-            knowledgeBaseId={selectedKnowledgeBaseId}
+            workspaceId={selectedWorkspaceId}
             onImport={(book) => handleImport(book)}
             t={t}
             forceExpanded

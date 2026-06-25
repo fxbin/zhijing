@@ -1,5 +1,5 @@
 /**
- * Artifact 相关常量：subtype 映射、创建知识库推荐路径、Kit 卡片定义。
+ * Artifact 相关常量：subtype 映射、创建工作区推荐路径、Kit 卡片定义。
  * @module constants/artifact
  */
 
@@ -60,7 +60,7 @@ export const DEFAULT_KB_DEPTH = 'standard';
 export const DEFAULT_KB_SCOPE = 'panorama';
 
 export const kitCards = [
-  { id: 'learning_research', title: '学习研究 Kit', body: '把一个知识库整理成主题研究摘要、核心概念表和待补资料清单。', status: 'Ready', icon: BookOpen },
+  { id: 'learning_research', title: '学习研究 Kit', body: '把一个工作区整理成主题研究摘要、核心概念表和待补资料清单。', status: 'Ready', icon: BookOpen },
   { id: 'content_creation', title: '内容创作 Kit', body: '从资料和卡片生成选题库、标题方向、内容结构和风险提示。', status: 'Ready', icon: Sparkles },
   { id: 'product_research', title: '产品调研 Kit', body: '提炼竞品对比、用户痛点、功能机会点和下一步验证问题。', status: 'Ready', icon: ClipboardList },
   { id: 'topic_decomposition', title: '知识拆解 Kit', body: '把宽泛主题拆解为子主题树、学习路径和依赖关系，便于分步攻克。', status: 'Ready', icon: Layers },

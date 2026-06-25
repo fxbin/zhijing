@@ -1,6 +1,6 @@
 /**
  * @module views/MultiEntityComparisonView
- * @description 多实体对比视图，按知识库粒度展示资料量、卡片量、产物量与来源健康度，
+ * @description 多实体对比视图，按工作区粒度展示资料量、卡片量、产物量与来源健康度，
  * 并补充提取实体（卡片类型）对比、行内展开卡片明细与对比洞察。
  * @author fxbin
  */
@@ -36,13 +36,13 @@ function countCardsByType(cards) {
 
 /**
  * 取出某实体对应的卡片明细，最多 MAX_EXPANDED_CARDS 条
- * 优先按 knowledgeBaseId 精确匹配，无匹配时回退到全量卡片前 N 条
+ * 优先按 workspaceId 精确匹配，无匹配时回退到全量卡片前 N 条
  * @param {Array} allCards - 全量卡片列表
  * @param {string} rowId - 实体标识
  * @returns {Array} 卡片明细列表
  */
 function cardsForEntity(allCards, rowId) {
-  const matched = allCards.filter((card) => card.knowledgeBaseId === rowId);
+  const matched = allCards.filter((card) => card.workspaceId === rowId);
   if (matched.length > 0) {
     return matched.slice(0, MAX_EXPANDED_CARDS);
   }
@@ -106,7 +106,7 @@ export default function MultiEntityComparisonView({ data, setView }) {
         <div>
           <span>{t('compare.title')}</span>
           <h2>{t('compare.heading')}</h2>
-          <p>把知识库当作第一版可比较实体，展示资料量、卡片量、产物量和来源健康度，并支持展开查看卡片明细。</p>
+          <p>把工作区当作第一版可比较实体，展示资料量、卡片量、产物量和来源健康度，并支持展开查看卡片明细。</p>
         </div>
       </div>
       <AdvancedOpsTabs active="compare" setView={setView} />
@@ -230,12 +230,12 @@ export default function MultiEntityComparisonView({ data, setView }) {
         <article>
           <Network size={20} />
           <strong>对比口径</strong>
-          <p>当前阶段按知识库粒度比较，后续可升级到人物、品牌、概念或平台实体。</p>
+          <p>当前阶段按工作区粒度比较，后续可升级到人物、品牌、概念或平台实体。</p>
         </article>
         <article>
           <ChevronDown size={20} />
           <strong>行内展开</strong>
-          <p>点击任意知识库行可展开查看该库的卡片明细（最多 5 条），再次点击收起。</p>
+          <p>点击任意工作区行可展开查看该库的卡片明细（最多 5 条），再次点击收起。</p>
         </article>
       </div>
     </section>

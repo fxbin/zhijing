@@ -15,16 +15,16 @@ import { useCardTypeLabel, useClaimStatusLabel } from '../utils/i18nLabels';
 /**
  * 主动回忆视图，支持卡片队列、揭示答案、四档评分和内容编辑。
  * @param {object} props - 组件属性
- * @param {object} props.detail - 知识库详情
- * @param {object[]} [props.knowledgeBases=[]] - 全量知识库列表（用于全局入口选择）
- * @param {(knowledgeBaseId: string) => void} [props.onSelectKnowledgeBase] - 选择知识库回调
+ * @param {object} props.detail - 工作区详情
+ * @param {object[]} [props.workspaces=[]] - 全量工作区列表（用于全局入口选择）
+ * @param {(workspaceId: string) => void} [props.onSelectWorkspace] - 选择工作区回调
  * @param {function} props.setView - 视图切换函数
  * @returns {JSX.Element} 回忆视图
  */
 export default function RecallView({
   detail,
-  knowledgeBases = [],
-  onSelectKnowledgeBase,
+  workspaces = [],
+  onSelectWorkspace,
   setView,
 }) {
   const { t } = useTranslation();
@@ -49,7 +49,7 @@ export default function RecallView({
     let ignore = false;
     async function loadDue() {
       try {
-        const response = await fetch(`/api/knowledge-bases/${detail.id}/due-cards?limit=20`);
+        const response = await fetch(`/api/workspaces/${detail.id}/due-cards?limit=20`);
         if (!response.ok) return;
         const payload = await response.json();
         if (!ignore) setQueue(payload.cards ?? []);
@@ -95,17 +95,17 @@ export default function RecallView({
               {t('common.back')}
             </button>
             <span>{t('recall.activeRecall')}</span>
-            <h2>{t('recall.selectKnowledgeBase')}</h2>
+            <h2>{t('recall.selectWorkspace')}</h2>
           </div>
-          {knowledgeBases.length === 0 ? (
-            <EmptyState title={t('recall.noKnowledgeBases')} body={t('common.empty')} icon={Database} />
+          {workspaces.length === 0 ? (
+            <EmptyState title={t('recall.noWorkspaces')} body={t('common.empty')} icon={Database} />
           ) : (
             <div className="kb-picker-grid">
-              {knowledgeBases.map((kb) => (
+              {workspaces.map((kb) => (
                 <button
                   key={kb.id}
                   className="kb-picker-card"
-                  onClick={() => onSelectKnowledgeBase?.(kb.id)}
+                  onClick={() => onSelectWorkspace?.(kb.id)}
                   type="button"
                 >
                   <Database size={18} />
@@ -186,7 +186,7 @@ export default function RecallView({
     <section className="page-main full">
       <div className="recall-workbench">
         <div className="recall-head">
-          <button className="back-button" onClick={() => setView('detail')} type="button">{t('recall.backToKnowledgeBase')}</button>
+          <button className="back-button" onClick={() => setView('detail')} type="button">{t('recall.backToWorkspace')}</button>
           <span>{t('recall.activeRecall')}</span>
           <h2>{detail.title}</h2>
           <p>{t('recall.editDescription')}</p>

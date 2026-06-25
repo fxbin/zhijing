@@ -65,16 +65,16 @@ import {
   type IntakeRequest,
   type IntakeResult,
   type IntakeScope,
-  type KnowledgeBaseAnalytics,
-  type KnowledgeBaseDetail,
-  type KnowledgeBasePath,
+  type WorkspaceAnalytics,
+  type WorkspaceDetail,
+  type WorkspacePath,
   type KnowledgeMapResult,
   type KnowledgeMapNodePosition,
   type KnowledgeMapCustomEdge,
   type AddMapEdgeRequest,
   type PathStep,
   type SaveKnowledgeMapNodePositionsRequest,
-  type KnowledgeBaseSummary,
+  type WorkspaceSummary,
   type KnowledgeCitation,
   type KnowledgeCard,
   type KnowledgeKitId,
@@ -202,9 +202,9 @@ const LEGACY_MODEL_PROVIDER_SETTINGS_ID = 'default';
  *
  * @author fxbin
  */
-const DEFAULT_KB_ID = 'default';
-const DEFAULT_KB_TITLE = '全局工作区';
-const DEFAULT_KB_SUMMARY = '未指定工作区的卡片、资料与产物自动归入此处，可在全局视图中统一管理。';
+const DEFAULT_WORKSPACE_ID = 'default';
+const DEFAULT_WORKSPACE_TITLE = '全局工作区';
+const DEFAULT_WORKSPACE_SUMMARY = '未指定工作区的卡片、资料与产物自动归入此处，可在全局视图中统一管理。';
 const CONTEXT_RETRIEVAL_LIMIT = 8;
 const FTS_TOKENIZER = 'unicode61';
 const MEMORY_SEARCH_TITLE_WEIGHT = 3;
@@ -354,7 +354,7 @@ const AGENT_ACTION_SUCCESS_TRUE = 1;
 const AGENT_ACTION_SUCCESS_FALSE = 0;
 
 type StoreState = {
-  knowledgeBases: KnowledgeBaseSummary[];
+  workspaces: WorkspaceSummary[];
   materials: MaterialRecord[];
   cards: KnowledgeCard[];
   tasks: AgentTask[];
@@ -375,45 +375,45 @@ type StoreState = {
 };
 
 type KnowledgeRepository = {
-  insertKnowledgeBase(base: KnowledgeBaseSummary): void;
-  updateKnowledgeBase(base: KnowledgeBaseSummary): void;
-  listKnowledgeBases(): KnowledgeBaseSummary[];
-  findKnowledgeBase(id: string): KnowledgeBaseSummary | undefined;
-  findKnowledgeBaseByTitle(title: string): KnowledgeBaseSummary | undefined;
-  deleteKnowledgeBase(id: string): void;
+  insertWorkspace(base: WorkspaceSummary): void;
+  updateWorkspace(base: WorkspaceSummary): void;
+  listWorkspaces(): WorkspaceSummary[];
+  findWorkspace(id: string): WorkspaceSummary | undefined;
+  findWorkspaceByTitle(title: string): WorkspaceSummary | undefined;
+  deleteWorkspace(id: string): void;
   insertMaterial(material: MaterialRecord): void;
   updateMaterial(material: MaterialRecord): void;
   findMaterial(id: string): MaterialRecord | undefined;
-  listMaterials(knowledgeBaseId?: string, limit?: number): MaterialRecord[];
-  searchMaterialsByRelevance(knowledgeBaseId: string, query: string, limit: number): MaterialRecord[];
+  listMaterials(workspaceId?: string, limit?: number): MaterialRecord[];
+  searchMaterialsByRelevance(workspaceId: string, query: string, limit: number): MaterialRecord[];
   findCard(id: string): KnowledgeCard | undefined;
   deleteMaterial(id: string): void;
   archiveMaterial(id: string): void;
   unarchiveMaterial(id: string): void;
-  listArchivedMaterials(knowledgeBaseId?: string): MaterialRecord[];
-  getNodePositions(knowledgeBaseId: string): Array<{ nodeId: string; x: number; y: number }>;
-  saveNodePositions(knowledgeBaseId: string, positions: Array<{ nodeId: string; x: number; y: number }>): void;
-  listMapCustomEdges(knowledgeBaseId: string): KnowledgeMapCustomEdge[];
+  listArchivedMaterials(workspaceId?: string): MaterialRecord[];
+  getNodePositions(workspaceId: string): Array<{ nodeId: string; x: number; y: number }>;
+  saveNodePositions(workspaceId: string, positions: Array<{ nodeId: string; x: number; y: number }>): void;
+  listMapCustomEdges(workspaceId: string): KnowledgeMapCustomEdge[];
   insertMapCustomEdge(edge: KnowledgeMapCustomEdge): void;
-  deleteMapCustomEdge(knowledgeBaseId: string, edgeId: string): void;
+  deleteMapCustomEdge(workspaceId: string, edgeId: string): void;
   insertCards(cards: KnowledgeCard[]): void;
   updateCard(card: KnowledgeCard): void;
-  listCards(knowledgeBaseId?: string): KnowledgeCard[];
-  searchCardsByRelevance(knowledgeBaseId: string, query: string, limit: number): KnowledgeCard[];
+  listCards(workspaceId?: string): KnowledgeCard[];
+  searchCardsByRelevance(workspaceId: string, query: string, limit: number): KnowledgeCard[];
   archiveCard(id: string): void;
   unarchiveCard(id: string): void;
-  listArchivedCards(knowledgeBaseId?: string): KnowledgeCard[];
+  listArchivedCards(workspaceId?: string): KnowledgeCard[];
   insertCardRevision(revision: CardRevision): void;
   listCardRevisions(cardId: string): CardRevision[];
   insertExportRecord(record: ExportRecord): void;
-  listExportRecords(knowledgeBaseId?: string): ExportRecord[];
+  listExportRecords(workspaceId?: string): ExportRecord[];
   upsertSavedFilter(record: SavedFilter): void;
   listSavedFilters(scope?: SavedFilterScope): SavedFilter[];
   deleteSavedFilter(id: string): void;
   upsertEntity(record: Entity): void;
-  listEntities(knowledgeBaseId: string): Entity[];
+  listEntities(workspaceId: string): Entity[];
   deleteEntity(id: string): void;
-  deleteEntitiesByKnowledgeBase(knowledgeBaseId: string): void;
+  deleteEntitiesByWorkspace(workspaceId: string): void;
   deleteCard(id: string): void;
   insertConflictAudit(entry: ConflictAuditEntry): void;
   listConflictAudit(limit?: number): ConflictAuditEntry[];
@@ -423,12 +423,12 @@ type KnowledgeRepository = {
   findTask(id: string): AgentTask | undefined;
   insertArtifact(artifact: ArtifactRecord): void;
   updateArtifact(artifact: ArtifactRecord): void;
-  listArtifacts(knowledgeBaseId?: string, limit?: number): ArtifactRecord[];
+  listArtifacts(workspaceId?: string, limit?: number): ArtifactRecord[];
   insertArtifactRevision(revision: ArtifactRevision): void;
   listArtifactRevisions(artifactId: string): ArtifactRevision[];
   findArtifact(artifactId: string): ArtifactRecord | undefined;
   insertMessage(message: ChatMessage): void;
-  listMessages(knowledgeBaseId: string, limit?: number): ChatMessage[];
+  listMessages(workspaceId: string, limit?: number): ChatMessage[];
   findMessage(messageId: string): ChatMessage | undefined;
   updateMessageAcceptedCards(messageId: string, cardIds: string[]): void;
   readModelProviderConfig(): PersistedModelProviderConfig | undefined;
@@ -449,12 +449,12 @@ type KnowledgeRepository = {
   updateWeReadBookMetaImport(bookId: string, materialId: string, bookmarkCount: number): void;
   computeWeReadStats(): WeReadStatsResponse;
   insertAttentionSignal(signal: AttentionSignal): void;
-  listAttentionSignals(knowledgeBaseId?: string, limit?: number): AttentionSignal[];
+  listAttentionSignals(workspaceId?: string, limit?: number): AttentionSignal[];
   markAttentionConsumed(signalId: string): void;
-  deleteAttentionSignals(knowledgeBaseId: string): void;
+  deleteAttentionSignals(workspaceId: string): void;
   insertAgentActionLog(log: AgentActionLog): void;
-  listAgentActionLogs(options?: { knowledgeBaseId?: string; action?: string; limit?: number }): AgentActionLog[];
-  countAgentActionLogs(options?: { knowledgeBaseId?: string; action?: string }): number;
+  listAgentActionLogs(options?: { workspaceId?: string; action?: string; limit?: number }): AgentActionLog[];
+  countAgentActionLogs(options?: { workspaceId?: string; action?: string }): number;
   executeInspectQuery(sql: string, limit?: number): Array<Record<string, unknown>>;
   listInspectTables(): Array<{ name: string; sql: string }>;
 };
@@ -497,7 +497,7 @@ type XiaohongshuShareInfo = {
 
 class MemoryKnowledgeRepository implements KnowledgeRepository {
   private readonly state: StoreState = {
-    knowledgeBases: [],
+    workspaces: [],
     materials: [],
     cards: [],
     tasks: [],
@@ -518,34 +518,34 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
 
   private wereadApiKey: string | null = null;
 
-  insertKnowledgeBase(base: KnowledgeBaseSummary) {
-    this.state.knowledgeBases.unshift(base);
+  insertWorkspace(base: WorkspaceSummary) {
+    this.state.workspaces.unshift(base);
   }
 
-  updateKnowledgeBase(base: KnowledgeBaseSummary) {
-    const index = this.state.knowledgeBases.findIndex((item) => item.id === base.id);
-    if (index >= 0) this.state.knowledgeBases[index] = base;
+  updateWorkspace(base: WorkspaceSummary) {
+    const index = this.state.workspaces.findIndex((item) => item.id === base.id);
+    if (index >= 0) this.state.workspaces[index] = base;
   }
 
-  listKnowledgeBases() {
-    return this.state.knowledgeBases;
+  listWorkspaces() {
+    return this.state.workspaces;
   }
 
-  findKnowledgeBase(id: string) {
-    return this.state.knowledgeBases.find((item) => item.id === id);
+  findWorkspace(id: string) {
+    return this.state.workspaces.find((item) => item.id === id);
   }
 
-  findKnowledgeBaseByTitle(title: string) {
-    return this.state.knowledgeBases.find((item) => item.title === title);
+  findWorkspaceByTitle(title: string) {
+    return this.state.workspaces.find((item) => item.title === title);
   }
 
-  deleteKnowledgeBase(id: string) {
-    this.state.knowledgeBases = this.state.knowledgeBases.filter((item) => item.id !== id);
-    this.state.materials = this.state.materials.filter((item) => item.knowledgeBaseId !== id);
-    this.state.cards = this.state.cards.filter((item) => item.knowledgeBaseId !== id);
-    this.state.artifacts = this.state.artifacts.filter((item) => item.knowledgeBaseId !== id);
-    this.state.entities = this.state.entities.filter((item) => item.knowledgeBaseId !== id);
-    this.state.attentionSignals = this.state.attentionSignals.filter((item) => item.knowledgeBaseId !== id);
+  deleteWorkspace(id: string) {
+    this.state.workspaces = this.state.workspaces.filter((item) => item.id !== id);
+    this.state.materials = this.state.materials.filter((item) => item.workspaceId !== id);
+    this.state.cards = this.state.cards.filter((item) => item.workspaceId !== id);
+    this.state.artifacts = this.state.artifacts.filter((item) => item.workspaceId !== id);
+    this.state.entities = this.state.entities.filter((item) => item.workspaceId !== id);
+    this.state.attentionSignals = this.state.attentionSignals.filter((item) => item.workspaceId !== id);
   }
 
   insertMaterial(material: MaterialRecord) {
@@ -565,9 +565,9 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     return this.state.cards.find((item) => item.id === id);
   }
 
-  listMaterials(knowledgeBaseId?: string, limit?: number) {
-    const materials = (knowledgeBaseId
-      ? this.state.materials.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
+  listMaterials(workspaceId?: string, limit?: number) {
+    const materials = (workspaceId
+      ? this.state.materials.filter((item) => item.workspaceId === workspaceId)
       : this.state.materials
     ).filter((item) => !item.archived);
     return typeof limit === 'number' ? materials.slice(0, limit) : materials;
@@ -596,32 +596,32 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     }
   }
 
-  listArchivedMaterials(knowledgeBaseId?: string) {
-    const materials = knowledgeBaseId
-      ? this.state.materials.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
+  listArchivedMaterials(workspaceId?: string) {
+    const materials = workspaceId
+      ? this.state.materials.filter((item) => item.workspaceId === workspaceId)
       : this.state.materials;
     return materials.filter((item) => item.archived);
   }
 
-  getNodePositions(knowledgeBaseId: string) {
-    return this.state.nodePositions[knowledgeBaseId] ?? [];
+  getNodePositions(workspaceId: string) {
+    return this.state.nodePositions[workspaceId] ?? [];
   }
 
-  saveNodePositions(knowledgeBaseId: string, positions: Array<{ nodeId: string; x: number; y: number }>) {
-    this.state.nodePositions[knowledgeBaseId] = positions;
+  saveNodePositions(workspaceId: string, positions: Array<{ nodeId: string; x: number; y: number }>) {
+    this.state.nodePositions[workspaceId] = positions;
   }
 
-  listMapCustomEdges(knowledgeBaseId: string) {
-    return this.state.mapCustomEdges.filter((edge) => edge.knowledgeBaseId === knowledgeBaseId);
+  listMapCustomEdges(workspaceId: string) {
+    return this.state.mapCustomEdges.filter((edge) => edge.workspaceId === workspaceId);
   }
 
   insertMapCustomEdge(edge: KnowledgeMapCustomEdge) {
     this.state.mapCustomEdges.unshift(edge);
   }
 
-  deleteMapCustomEdge(knowledgeBaseId: string, edgeId: string) {
+  deleteMapCustomEdge(workspaceId: string, edgeId: string) {
     this.state.mapCustomEdges = this.state.mapCustomEdges.filter(
-      (edge) => !(edge.id === edgeId && edge.knowledgeBaseId === knowledgeBaseId),
+      (edge) => !(edge.id === edgeId && edge.workspaceId === workspaceId),
     );
   }
 
@@ -634,9 +634,9 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     if (index >= 0) this.state.cards[index] = card;
   }
 
-  listCards(knowledgeBaseId?: string) {
-    const cards = knowledgeBaseId
-      ? this.state.cards.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
+  listCards(workspaceId?: string) {
+    const cards = workspaceId
+      ? this.state.cards.filter((item) => item.workspaceId === workspaceId)
       : this.state.cards;
     return cards.filter((item) => !item.archived);
   }
@@ -657,9 +657,9 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     }
   }
 
-  listArchivedCards(knowledgeBaseId?: string) {
-    const cards = knowledgeBaseId
-      ? this.state.cards.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
+  listArchivedCards(workspaceId?: string) {
+    const cards = workspaceId
+      ? this.state.cards.filter((item) => item.workspaceId === workspaceId)
       : this.state.cards;
     return cards.filter((item) => item.archived);
   }
@@ -678,9 +678,9 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     this.state.exports.unshift(record);
   }
 
-  listExportRecords(knowledgeBaseId?: string) {
-    return knowledgeBaseId
-      ? this.state.exports.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
+  listExportRecords(workspaceId?: string) {
+    return workspaceId
+      ? this.state.exports.filter((item) => item.workspaceId === workspaceId)
       : this.state.exports;
   }
 
@@ -712,16 +712,16 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     }
   }
 
-  listEntities(knowledgeBaseId: string) {
-    return this.state.entities.filter((item) => item.knowledgeBaseId === knowledgeBaseId);
+  listEntities(workspaceId: string) {
+    return this.state.entities.filter((item) => item.workspaceId === workspaceId);
   }
 
   deleteEntity(id: string) {
     this.state.entities = this.state.entities.filter((item) => item.id !== id);
   }
 
-  deleteEntitiesByKnowledgeBase(knowledgeBaseId: string) {
-    this.state.entities = this.state.entities.filter((item) => item.knowledgeBaseId !== knowledgeBaseId);
+  deleteEntitiesByWorkspace(workspaceId: string) {
+    this.state.entities = this.state.entities.filter((item) => item.workspaceId !== workspaceId);
   }
 
   deleteCard(id: string) {
@@ -734,13 +734,13 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
    * 标题匹配权重高于正文匹配，按评分降序排序，限制返回数量。
    * 若查询字符串无有效搜索词，返回按更新时间排序的前 limit 条。
    * @author fxbin
-   * @param {string} knowledgeBaseId - 知识库ID
+   * @param {string} workspaceId - 知识库ID
    * @param {string} query - 查询文本
    * @param {number} limit - 最大返回数量
    * @returns {KnowledgeCard[]} 按相关性排序的卡片数组
    */
-  searchCardsByRelevance(knowledgeBaseId: string, query: string, limit: number): KnowledgeCard[] {
-    const cards = this.listCards(knowledgeBaseId);
+  searchCardsByRelevance(workspaceId: string, query: string, limit: number): KnowledgeCard[] {
+    const cards = this.listCards(workspaceId);
     const terms = extractSearchTerms(query);
     if (terms.length === 0) return cards.slice(0, limit);
     const scored = cards
@@ -755,13 +755,13 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
    * 标题匹配权重高于正文匹配，按评分降序排序，限制返回数量。
    * 若查询字符串无有效搜索词，返回按创建时间排序的前 limit 条。
    * @author fxbin
-   * @param {string} knowledgeBaseId - 知识库ID
+   * @param {string} workspaceId - 知识库ID
    * @param {string} query - 查询文本
    * @param {number} limit - 最大返回数量
    * @returns {MaterialRecord[]} 按相关性排序的资料数组
    */
-  searchMaterialsByRelevance(knowledgeBaseId: string, query: string, limit: number): MaterialRecord[] {
-    const materials = this.listMaterials(knowledgeBaseId);
+  searchMaterialsByRelevance(workspaceId: string, query: string, limit: number): MaterialRecord[] {
+    const materials = this.listMaterials(workspaceId);
     const terms = extractSearchTerms(query);
     if (terms.length === 0) return materials.slice(0, limit);
     const scored = materials
@@ -809,9 +809,9 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     if (index >= 0) this.state.artifacts[index] = artifact;
   }
 
-  listArtifacts(knowledgeBaseId?: string, limit?: number) {
-    const artifacts = knowledgeBaseId
-      ? this.state.artifacts.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
+  listArtifacts(workspaceId?: string, limit?: number) {
+    const artifacts = workspaceId
+      ? this.state.artifacts.filter((item) => item.workspaceId === workspaceId)
       : this.state.artifacts;
     return typeof limit === 'number' ? artifacts.slice(0, limit) : artifacts;
   }
@@ -834,9 +834,9 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     this.state.messages.push(message);
   }
 
-  listMessages(knowledgeBaseId: string, limit?: number) {
+  listMessages(workspaceId: string, limit?: number) {
     const messages = this.state.messages
-      .filter((item) => item.knowledgeBaseId === knowledgeBaseId)
+      .filter((item) => item.workspaceId === workspaceId)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     return typeof limit === 'number' ? messages.slice(-limit) : messages;
   }
@@ -1046,14 +1046,14 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
 
   /**
    * 查询注意力信号列表，按创建时间降序排序（内存实现）。
-   * @param knowledgeBaseId - 可选，知识库 ID 过滤
+   * @param workspaceId - 可选，知识库 ID 过滤
    * @param limit - 可选，最大返回数量，默认 ATTENTION_LOG_LIMIT
    * @returns 注意力信号数组
    * @author fxbin
    */
-  listAttentionSignals(knowledgeBaseId?: string, limit?: number): AttentionSignal[] {
-    const signals = knowledgeBaseId
-      ? this.state.attentionSignals.filter((item) => item.knowledgeBaseId === knowledgeBaseId)
+  listAttentionSignals(workspaceId?: string, limit?: number): AttentionSignal[] {
+    const signals = workspaceId
+      ? this.state.attentionSignals.filter((item) => item.workspaceId === workspaceId)
       : this.state.attentionSignals;
     const sorted = [...signals].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
     const maxRows = typeof limit === 'number' ? limit : ATTENTION_LOG_LIMIT;
@@ -1072,12 +1072,12 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
 
   /**
    * 删除指定知识库的所有注意力信号（内存实现）。
-   * @param knowledgeBaseId - 知识库 ID
+   * @param workspaceId - 知识库 ID
    * @author fxbin
    */
-  deleteAttentionSignals(knowledgeBaseId: string): void {
+  deleteAttentionSignals(workspaceId: string): void {
     this.state.attentionSignals = this.state.attentionSignals.filter(
-      (item) => item.knowledgeBaseId !== knowledgeBaseId,
+      (item) => item.workspaceId !== workspaceId,
     );
   }
 
@@ -1095,10 +1095,10 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
    * @param options - 查询选项
    * @author fxbin
    */
-  listAgentActionLogs(options?: { knowledgeBaseId?: string; action?: string; limit?: number }): AgentActionLog[] {
+  listAgentActionLogs(options?: { workspaceId?: string; action?: string; limit?: number }): AgentActionLog[] {
     let logs = this.state.agentActionLogs;
-    if (options?.knowledgeBaseId) {
-      logs = logs.filter((log) => log.knowledgeBaseId === options.knowledgeBaseId);
+    if (options?.workspaceId) {
+      logs = logs.filter((log) => log.workspaceId === options.workspaceId);
     }
     if (options?.action) {
       logs = logs.filter((log) => log.action === options.action);
@@ -1112,7 +1112,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
    * @param options - 查询选项
    * @author fxbin
    */
-  countAgentActionLogs(options?: { knowledgeBaseId?: string; action?: string }): number {
+  countAgentActionLogs(options?: { workspaceId?: string; action?: string }): number {
     return this.listAgentActionLogs({ ...options, limit: AGENT_ACTION_LOG_MAX_LIMIT }).length;
   }
 
@@ -1140,17 +1140,17 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
    */
   listInspectTables(): Array<{ name: string; sql: string }> {
     return [
-      { name: AGENT_ACTION_LOG_TABLE_NAME, sql: 'CREATE TABLE agent_action_log (id, action, knowledge_base_id, input_json, output_json, duration_ms, success, error, created_at)' },
-      { name: 'attention_log', sql: 'CREATE TABLE attention_log (id, knowledge_base_id, signal_type, signal_strength, target_type, target_id, context_data_json, consumed, created_at)' },
+      { name: AGENT_ACTION_LOG_TABLE_NAME, sql: 'CREATE TABLE agent_action_log (id, action, workspace_id, input_json, output_json, duration_ms, success, error, created_at)' },
+      { name: 'attention_log', sql: 'CREATE TABLE attention_log (id, workspace_id, signal_type, signal_strength, target_type, target_id, context_data_json, consumed, created_at)' },
     ];
   }
 }
 
-type KnowledgeBaseRow = {
+type WorkspaceRow = {
   id: string;
   title: string;
   summary: string;
-  stage: KnowledgeBaseSummary['stage'];
+  stage: WorkspaceSummary['stage'];
   source_count: number;
   card_count: number;
   sourced_ratio: number;
@@ -1160,7 +1160,7 @@ type KnowledgeBaseRow = {
 
 type MaterialRow = {
   id: string;
-  knowledge_base_id: string;
+  workspace_id: string;
   type: MaterialRecord['type'];
   raw_input: string;
   source_url: string | null;
@@ -1180,7 +1180,7 @@ type MaterialRow = {
 
 type CardRow = {
   id: string;
-  knowledge_base_id: string;
+  workspace_id: string;
   material_id: string | null;
   type: KnowledgeCard['type'];
   title: string;
@@ -1217,7 +1217,7 @@ type TaskRow = {
 
 type ArtifactRow = {
   id: string;
-  knowledge_base_id: string;
+  workspace_id: string;
   artifact_type: ArtifactRecord['artifactType'];
   subtype: string;
   title: string;
@@ -1240,7 +1240,7 @@ type ArtifactRevisionRow = {
 
 type MessageRow = {
   id: string;
-  knowledge_base_id: string;
+  workspace_id: string;
   question: string;
   answer: string;
   card_ids_json: string;
@@ -1290,34 +1290,34 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.migrate();
   }
 
-  insertKnowledgeBase(base: KnowledgeBaseSummary) {
+  insertWorkspace(base: WorkspaceSummary) {
     this.db.prepare(`
-      INSERT INTO knowledge_bases (
+      INSERT INTO workspaces (
         id, title, summary, stage, source_count, card_count, sourced_ratio, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(base.id, base.title, base.summary, base.stage, base.sourceCount, base.cardCount, base.sourcedRatio, base.createdAt, base.updatedAt);
   }
 
-  updateKnowledgeBase(base: KnowledgeBaseSummary) {
+  updateWorkspace(base: WorkspaceSummary) {
     this.db.prepare(`
-      UPDATE knowledge_bases
+      UPDATE workspaces
       SET title = ?, summary = ?, stage = ?, source_count = ?, card_count = ?, sourced_ratio = ?, updated_at = ?
       WHERE id = ?
     `).run(base.title, base.summary, base.stage, base.sourceCount, base.cardCount, base.sourcedRatio, base.updatedAt, base.id);
   }
 
-  listKnowledgeBases() {
-    return (this.db.prepare('SELECT * FROM knowledge_bases ORDER BY updated_at DESC, created_at DESC').all() as KnowledgeBaseRow[]).map(mapKnowledgeBase);
+  listWorkspaces() {
+    return (this.db.prepare('SELECT * FROM workspaces ORDER BY updated_at DESC, created_at DESC').all() as WorkspaceRow[]).map(mapWorkspace);
   }
 
-  findKnowledgeBase(id: string) {
-    const row = this.db.prepare('SELECT * FROM knowledge_bases WHERE id = ?').get(id) as KnowledgeBaseRow | undefined;
-    return row ? mapKnowledgeBase(row) : undefined;
+  findWorkspace(id: string) {
+    const row = this.db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as WorkspaceRow | undefined;
+    return row ? mapWorkspace(row) : undefined;
   }
 
-  findKnowledgeBaseByTitle(title: string) {
-    const row = this.db.prepare('SELECT * FROM knowledge_bases WHERE title = ? LIMIT 1').get(title) as KnowledgeBaseRow | undefined;
-    return row ? mapKnowledgeBase(row) : undefined;
+  findWorkspaceByTitle(title: string) {
+    const row = this.db.prepare('SELECT * FROM workspaces WHERE title = ? LIMIT 1').get(title) as WorkspaceRow | undefined;
+    return row ? mapWorkspace(row) : undefined;
   }
 
   /**
@@ -1329,13 +1329,13 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
    * @param id - 知识库 ID
    * @author fxbin
    */
-  deleteKnowledgeBase(id: string) {
+  deleteWorkspace(id: string) {
     this.db.exec('BEGIN');
     try {
-      this.db.prepare('DELETE FROM cards_fts WHERE knowledge_base_id = ?').run(id);
-      this.db.prepare('DELETE FROM materials_fts WHERE knowledge_base_id = ?').run(id);
-      this.db.prepare('DELETE FROM attention_log WHERE knowledge_base_id = ?').run(id);
-      this.db.prepare('DELETE FROM knowledge_bases WHERE id = ?').run(id);
+      this.db.prepare('DELETE FROM cards_fts WHERE workspace_id = ?').run(id);
+      this.db.prepare('DELETE FROM materials_fts WHERE workspace_id = ?').run(id);
+      this.db.prepare('DELETE FROM attention_log WHERE workspace_id = ?').run(id);
+      this.db.prepare('DELETE FROM workspaces WHERE id = ?').run(id);
       this.db.exec('COMMIT');
     } catch (error) {
       this.db.exec('ROLLBACK');
@@ -1346,11 +1346,11 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   insertMaterial(material: MaterialRecord) {
     this.db.prepare(`
       INSERT INTO materials (
-        id, knowledge_base_id, type, raw_input, source_url, platform, title, content_text, media_urls_json, parse_status, parse_error, transcript, transcript_status, transcript_error, created_at, archived
+        id, workspace_id, type, raw_input, source_url, platform, title, content_text, media_urls_json, parse_status, parse_error, transcript, transcript_status, transcript_error, created_at, archived
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       material.id,
-      resolveKnowledgeBaseId(material.knowledgeBaseId),
+      resolveWorkspaceId(material.workspaceId),
       material.type,
       material.rawInput,
       material.sourceUrl ?? null,
@@ -1372,10 +1372,10 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   updateMaterial(material: MaterialRecord) {
     this.db.prepare(`
       UPDATE materials
-      SET knowledge_base_id = ?, type = ?, raw_input = ?, source_url = ?, platform = ?, title = ?, content_text = ?, media_urls_json = ?, parse_status = ?, parse_error = ?, transcript = ?, transcript_status = ?, transcript_error = ?, created_at = ?, archived = ?
+      SET workspace_id = ?, type = ?, raw_input = ?, source_url = ?, platform = ?, title = ?, content_text = ?, media_urls_json = ?, parse_status = ?, parse_error = ?, transcript = ?, transcript_status = ?, transcript_error = ?, created_at = ?, archived = ?
       WHERE id = ?
     `).run(
-      resolveKnowledgeBaseId(material.knowledgeBaseId),
+      resolveWorkspaceId(material.workspaceId),
       material.type,
       material.rawInput,
       material.sourceUrl ?? null,
@@ -1405,9 +1405,9 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     return row ? mapCard(row) : undefined;
   }
 
-  listMaterials(knowledgeBaseId?: string, limit?: number) {
-    const rows = knowledgeBaseId
-      ? this.db.prepare('SELECT * FROM materials WHERE knowledge_base_id = ? AND archived = 0 ORDER BY created_at DESC').all(knowledgeBaseId)
+  listMaterials(workspaceId?: string, limit?: number) {
+    const rows = workspaceId
+      ? this.db.prepare('SELECT * FROM materials WHERE workspace_id = ? AND archived = 0 ORDER BY created_at DESC').all(workspaceId)
       : this.db.prepare(`SELECT * FROM materials WHERE archived = 0 ORDER BY created_at DESC${limit ? ` LIMIT ${limit}` : ''}`).all();
     return (rows as MaterialRow[]).map(mapMaterial);
   }
@@ -1420,9 +1420,9 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.db.prepare('UPDATE materials SET archived = 0 WHERE id = ?').run(id);
   }
 
-  listArchivedMaterials(knowledgeBaseId?: string) {
-    const rows = knowledgeBaseId
-      ? this.db.prepare('SELECT * FROM materials WHERE knowledge_base_id = ? AND archived = 1 ORDER BY created_at DESC').all(knowledgeBaseId)
+  listArchivedMaterials(workspaceId?: string) {
+    const rows = workspaceId
+      ? this.db.prepare('SELECT * FROM materials WHERE workspace_id = ? AND archived = 1 ORDER BY created_at DESC').all(workspaceId)
       : this.db.prepare('SELECT * FROM materials WHERE archived = 1 ORDER BY created_at DESC').all();
     return (rows as MaterialRow[]).map(mapMaterial);
   }
@@ -1442,26 +1442,26 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
   /**
    * 读取知识库的节点拖拽位置。
-   * @param {string} knowledgeBaseId - 知识库 ID
+   * @param {string} workspaceId - 知识库 ID
    * @returns {Array<{nodeId: string; x: number; y: number}>} 节点位置数组
    */
-  getNodePositions(knowledgeBaseId: string) {
+  getNodePositions(workspaceId: string) {
     const rows = this.db
-      .prepare('SELECT node_id, x, y FROM knowledge_base_node_positions WHERE knowledge_base_id = ?')
-      .all(knowledgeBaseId) as Array<{ node_id: string; x: number; y: number }>;
+      .prepare('SELECT node_id, x, y FROM workspace_node_positions WHERE workspace_id = ?')
+      .all(workspaceId) as Array<{ node_id: string; x: number; y: number }>;
     return rows.map((row) => ({ nodeId: row.node_id, x: row.x, y: row.y }));
   }
 
   /**
    * 保存或覆盖知识库的节点拖拽位置。
-   * @param {string} knowledgeBaseId - 知识库 ID
+   * @param {string} workspaceId - 知识库 ID
    * @param {Array<{nodeId: string; x: number; y: number}>} positions - 节点位置数组
    */
-  saveNodePositions(knowledgeBaseId: string, positions: Array<{ nodeId: string; x: number; y: number }>) {
+  saveNodePositions(workspaceId: string, positions: Array<{ nodeId: string; x: number; y: number }>) {
     const upsert = this.db.prepare(`
-      INSERT INTO knowledge_base_node_positions (knowledge_base_id, node_id, x, y, updated_at)
+      INSERT INTO workspace_node_positions (workspace_id, node_id, x, y, updated_at)
       VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(knowledge_base_id, node_id) DO UPDATE SET
+      ON CONFLICT(workspace_id, node_id) DO UPDATE SET
         x = excluded.x,
         y = excluded.y,
         updated_at = excluded.updated_at
@@ -1470,7 +1470,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.db.exec('BEGIN');
     try {
       for (const position of positions) {
-        upsert.run(knowledgeBaseId, position.nodeId, position.x, position.y, timestamp);
+        upsert.run(workspaceId, position.nodeId, position.x, position.y, timestamp);
       }
       this.db.exec('COMMIT');
     } catch (error) {
@@ -1486,48 +1486,48 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS ${MAP_EDGE_TABLE_NAME} (
         id TEXT PRIMARY KEY,
-        knowledge_base_id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
         source_node_id TEXT NOT NULL,
         target_node_id TEXT NOT NULL,
         relation TEXT NOT NULL,
         created_at TEXT NOT NULL
       );
-      CREATE INDEX IF NOT EXISTS idx_map_custom_edges_kb ON ${MAP_EDGE_TABLE_NAME}(knowledge_base_id);
+      CREATE INDEX IF NOT EXISTS idx_map_custom_edges_kb ON ${MAP_EDGE_TABLE_NAME}(workspace_id);
     `);
   }
 
-  listMapCustomEdges(knowledgeBaseId: string) {
+  listMapCustomEdges(workspaceId: string) {
     this.ensureMapCustomEdgeTable();
     const rows = this.db
-      .prepare(`SELECT id, knowledge_base_id, source_node_id, target_node_id, relation, created_at FROM ${MAP_EDGE_TABLE_NAME} WHERE knowledge_base_id = ? ORDER BY created_at DESC`)
-      .all(knowledgeBaseId) as Array<MapCustomEdgeRow>;
+      .prepare(`SELECT id, workspace_id, source_node_id, target_node_id, relation, created_at FROM ${MAP_EDGE_TABLE_NAME} WHERE workspace_id = ? ORDER BY created_at DESC`)
+      .all(workspaceId) as Array<MapCustomEdgeRow>;
     return rows.map(mapMapCustomEdge);
   }
 
   insertMapCustomEdge(edge: KnowledgeMapCustomEdge) {
     this.ensureMapCustomEdgeTable();
     this.db.prepare(`
-      INSERT INTO ${MAP_EDGE_TABLE_NAME} (id, knowledge_base_id, source_node_id, target_node_id, relation, created_at)
+      INSERT INTO ${MAP_EDGE_TABLE_NAME} (id, workspace_id, source_node_id, target_node_id, relation, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(edge.id, resolveKnowledgeBaseId(edge.knowledgeBaseId), edge.sourceNodeId, edge.targetNodeId, edge.relation, edge.createdAt);
+    `).run(edge.id, resolveWorkspaceId(edge.workspaceId), edge.sourceNodeId, edge.targetNodeId, edge.relation, edge.createdAt);
   }
 
-  deleteMapCustomEdge(knowledgeBaseId: string, edgeId: string) {
+  deleteMapCustomEdge(workspaceId: string, edgeId: string) {
     this.ensureMapCustomEdgeTable();
-    this.db.prepare(`DELETE FROM ${MAP_EDGE_TABLE_NAME} WHERE id = ? AND knowledge_base_id = ?`)
-      .run(edgeId, knowledgeBaseId);
+    this.db.prepare(`DELETE FROM ${MAP_EDGE_TABLE_NAME} WHERE id = ? AND workspace_id = ?`)
+      .run(edgeId, workspaceId);
   }
 
   insertCards(cards: KnowledgeCard[]) {
     const insert = this.db.prepare(`
       INSERT INTO cards (
-        id, knowledge_base_id, material_id, type, title, body, claim_status, recall_json, created_at, updated_at, archived
+        id, workspace_id, material_id, type, title, body, claim_status, recall_json, created_at, updated_at, archived
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     this.db.exec('BEGIN');
     try {
       for (const card of cards) {
-        insert.run(card.id, resolveKnowledgeBaseId(card.knowledgeBaseId), card.materialId ?? null, card.type, card.title, card.body, card.claimStatus, serializeCardRecall(card.recall), card.createdAt, card.updatedAt, card.archived ? 1 : 0);
+        insert.run(card.id, resolveWorkspaceId(card.workspaceId), card.materialId ?? null, card.type, card.title, card.body, card.claimStatus, serializeCardRecall(card.recall), card.createdAt, card.updatedAt, card.archived ? 1 : 0);
         this.upsertCardFts(card);
       }
       this.db.exec('COMMIT');
@@ -1540,10 +1540,10 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   updateCard(card: KnowledgeCard) {
     this.db.prepare(`
       UPDATE cards
-      SET knowledge_base_id = ?, material_id = ?, type = ?, title = ?, body = ?, claim_status = ?, recall_json = ?, created_at = ?, updated_at = ?, archived = ?
+      SET workspace_id = ?, material_id = ?, type = ?, title = ?, body = ?, claim_status = ?, recall_json = ?, created_at = ?, updated_at = ?, archived = ?
       WHERE id = ?
     `).run(
-      resolveKnowledgeBaseId(card.knowledgeBaseId),
+      resolveWorkspaceId(card.workspaceId),
       card.materialId ?? null,
       card.type,
       card.title,
@@ -1558,9 +1558,9 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.upsertCardFts(card);
   }
 
-  listCards(knowledgeBaseId?: string) {
-    const rows = knowledgeBaseId
-      ? this.db.prepare('SELECT * FROM cards WHERE knowledge_base_id = ? AND archived = 0 ORDER BY updated_at DESC, created_at DESC').all(knowledgeBaseId)
+  listCards(workspaceId?: string) {
+    const rows = workspaceId
+      ? this.db.prepare('SELECT * FROM cards WHERE workspace_id = ? AND archived = 0 ORDER BY updated_at DESC, created_at DESC').all(workspaceId)
       : this.db.prepare('SELECT * FROM cards WHERE archived = 0 ORDER BY updated_at DESC, created_at DESC').all();
     return (rows as CardRow[]).map(mapCard);
   }
@@ -1573,9 +1573,9 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.db.prepare('UPDATE cards SET archived = 0 WHERE id = ?').run(id);
   }
 
-  listArchivedCards(knowledgeBaseId?: string) {
-    const rows = knowledgeBaseId
-      ? this.db.prepare('SELECT * FROM cards WHERE knowledge_base_id = ? AND archived = 1 ORDER BY updated_at DESC, created_at DESC').all(knowledgeBaseId)
+  listArchivedCards(workspaceId?: string) {
+    const rows = workspaceId
+      ? this.db.prepare('SELECT * FROM cards WHERE workspace_id = ? AND archived = 1 ORDER BY updated_at DESC, created_at DESC').all(workspaceId)
       : this.db.prepare('SELECT * FROM cards WHERE archived = 1 ORDER BY updated_at DESC, created_at DESC').all();
     return (rows as CardRow[]).map(mapCard);
   }
@@ -1608,11 +1608,11 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   insertExportRecord(record: ExportRecord) {
     this.db.prepare(`
       INSERT INTO exports (
-        id, knowledge_base_id, format, scope, include_artifacts, material_count, card_count, artifact_count, filename, created_at
+        id, workspace_id, format, scope, include_artifacts, material_count, card_count, artifact_count, filename, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       record.id,
-      resolveKnowledgeBaseId(record.knowledgeBaseId),
+      resolveWorkspaceId(record.workspaceId),
       record.format,
       record.scope,
       record.includeArtifacts ? 1 : 0,
@@ -1624,9 +1624,9 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     );
   }
 
-  listExportRecords(knowledgeBaseId?: string) {
-    const rows = knowledgeBaseId
-      ? this.db.prepare('SELECT * FROM exports WHERE knowledge_base_id = ? ORDER BY created_at DESC').all(knowledgeBaseId)
+  listExportRecords(workspaceId?: string) {
+    const rows = workspaceId
+      ? this.db.prepare('SELECT * FROM exports WHERE workspace_id = ? ORDER BY created_at DESC').all(workspaceId)
       : this.db.prepare('SELECT * FROM exports ORDER BY created_at DESC').all();
     return (rows as ExportRow[]).map(mapExportRecord);
   }
@@ -1666,8 +1666,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
   upsertEntity(record: Entity) {
     this.db.prepare(`
-      INSERT INTO entities (id, knowledge_base_id, name, type, description, source_card_ids_json, created_at, updated_at)
-      VALUES (@id, @knowledge_base_id, @name, @type, @description, @source_card_ids_json, @created_at, @updated_at)
+      INSERT INTO entities (id, workspace_id, name, type, description, source_card_ids_json, created_at, updated_at)
+      VALUES (@id, @workspace_id, @name, @type, @description, @source_card_ids_json, @created_at, @updated_at)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
         type = excluded.type,
@@ -1676,7 +1676,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         updated_at = excluded.updated_at
     `).run({
       id: record.id,
-      knowledge_base_id: resolveKnowledgeBaseId(record.knowledgeBaseId),
+      workspace_id: resolveWorkspaceId(record.workspaceId),
       name: record.name,
       type: record.type,
       description: record.description,
@@ -1686,8 +1686,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     });
   }
 
-  listEntities(knowledgeBaseId: string) {
-    const rows = this.db.prepare('SELECT * FROM entities WHERE knowledge_base_id = ? ORDER BY updated_at DESC').all(knowledgeBaseId);
+  listEntities(workspaceId: string) {
+    const rows = this.db.prepare('SELECT * FROM entities WHERE workspace_id = ? ORDER BY updated_at DESC').all(workspaceId);
     return (rows as EntityRow[]).map(mapEntity);
   }
 
@@ -1695,8 +1695,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.db.prepare('DELETE FROM entities WHERE id = ?').run(id);
   }
 
-  deleteEntitiesByKnowledgeBase(knowledgeBaseId: string) {
-    this.db.prepare('DELETE FROM entities WHERE knowledge_base_id = ?').run(knowledgeBaseId);
+  deleteEntitiesByWorkspace(workspaceId: string) {
+    this.db.prepare('DELETE FROM entities WHERE workspace_id = ?').run(workspaceId);
   }
 
   deleteCard(id: string) {
@@ -1713,11 +1713,11 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   private upsertMaterialFts(material: MaterialRecord) {
     this.db.prepare('DELETE FROM materials_fts WHERE material_id = ?').run(material.id);
     this.db.prepare(`
-      INSERT INTO materials_fts (material_id, knowledge_base_id, title, content_text)
+      INSERT INTO materials_fts (material_id, workspace_id, title, content_text)
       VALUES (?, ?, ?, ?)
     `).run(
       material.id,
-      resolveKnowledgeBaseId(material.knowledgeBaseId),
+      resolveWorkspaceId(material.workspaceId),
       material.title,
       material.contentText ?? material.rawInput,
     );
@@ -1732,11 +1732,11 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   private upsertCardFts(card: KnowledgeCard) {
     this.db.prepare('DELETE FROM cards_fts WHERE card_id = ?').run(card.id);
     this.db.prepare(`
-      INSERT INTO cards_fts (card_id, knowledge_base_id, title, body)
+      INSERT INTO cards_fts (card_id, workspace_id, title, body)
       VALUES (?, ?, ?, ?)
     `).run(
       card.id,
-      resolveKnowledgeBaseId(card.knowledgeBaseId),
+      resolveWorkspaceId(card.workspaceId),
       card.title,
       card.body,
     );
@@ -1765,22 +1765,22 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
    * 仅返回未归档的卡片，按相关性从高到低排序，限制返回数量。
    * 若查询字符串清理后为空或检索失败，返回空数组。
    * @author fxbin
-   * @param {string} knowledgeBaseId - 知识库ID
+   * @param {string} workspaceId - 知识库ID
    * @param {string} query - 查询文本
    * @param {number} limit - 最大返回数量
    * @returns {KnowledgeCard[]} 按相关性排序的卡片数组
    */
-  searchCardsByRelevance(knowledgeBaseId: string, query: string, limit: number): KnowledgeCard[] {
+  searchCardsByRelevance(workspaceId: string, query: string, limit: number): KnowledgeCard[] {
     const sanitized = sanitizeFtsQuery(query);
     if (!sanitized) return [];
     try {
       const rows = this.db.prepare(`
         SELECT c.* FROM cards c
         JOIN cards_fts ON c.id = cards_fts.card_id
-        WHERE cards_fts.knowledge_base_id = ? AND cards_fts MATCH ? AND c.archived = 0
+        WHERE cards_fts.workspace_id = ? AND cards_fts MATCH ? AND c.archived = 0
         ORDER BY bm25(cards_fts)
         LIMIT ?
-      `).all(knowledgeBaseId, sanitized, limit) as CardRow[];
+      `).all(workspaceId, sanitized, limit) as CardRow[];
       return rows.map(mapCard);
     } catch {
       return [];
@@ -1792,22 +1792,22 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
    * 仅返回未归档的资料，按相关性从高到低排序，限制返回数量。
    * 若查询字符串清理后为空或检索失败，返回空数组。
    * @author fxbin
-   * @param {string} knowledgeBaseId - 知识库ID
+   * @param {string} workspaceId - 知识库ID
    * @param {string} query - 查询文本
    * @param {number} limit - 最大返回数量
    * @returns {MaterialRecord[]} 按相关性排序的资料数组
    */
-  searchMaterialsByRelevance(knowledgeBaseId: string, query: string, limit: number): MaterialRecord[] {
+  searchMaterialsByRelevance(workspaceId: string, query: string, limit: number): MaterialRecord[] {
     const sanitized = sanitizeFtsQuery(query);
     if (!sanitized) return [];
     try {
       const rows = this.db.prepare(`
         SELECT m.* FROM materials m
         JOIN materials_fts ON m.id = materials_fts.material_id
-        WHERE materials_fts.knowledge_base_id = ? AND materials_fts MATCH ? AND m.archived = 0
+        WHERE materials_fts.workspace_id = ? AND materials_fts MATCH ? AND m.archived = 0
         ORDER BY bm25(materials_fts)
         LIMIT ?
-      `).all(knowledgeBaseId, sanitized, limit) as MaterialRow[];
+      `).all(workspaceId, sanitized, limit) as MaterialRow[];
       return rows.map(mapMaterial);
     } catch {
       return [];
@@ -1816,15 +1816,15 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
   insertConflictAudit(entry: ConflictAuditEntry) {
     this.db.prepare(`
-      INSERT INTO conflict_audit (id, kind, action, keep_id, drop_ids_json, knowledge_base_id, note, created_at)
-      VALUES (@id, @kind, @action, @keep_id, @drop_ids_json, @knowledge_base_id, @note, @created_at)
+      INSERT INTO conflict_audit (id, kind, action, keep_id, drop_ids_json, workspace_id, note, created_at)
+      VALUES (@id, @kind, @action, @keep_id, @drop_ids_json, @workspace_id, @note, @created_at)
     `).run({
       id: entry.id,
       kind: entry.kind,
       action: entry.action,
       keep_id: entry.keepId,
       drop_ids_json: JSON.stringify(entry.dropIds),
-      knowledge_base_id: resolveKnowledgeBaseId(entry.knowledgeBaseId),
+      workspace_id: resolveWorkspaceId(entry.workspaceId),
       note: entry.note,
       created_at: entry.createdAt,
     });
@@ -1866,11 +1866,11 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   insertArtifact(artifact: ArtifactRecord) {
     this.db.prepare(`
       INSERT INTO artifacts (
-        id, knowledge_base_id, artifact_type, subtype, title, body, source_material_ids_json, sections_json, created_at
+        id, workspace_id, artifact_type, subtype, title, body, source_material_ids_json, sections_json, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       artifact.id,
-      resolveKnowledgeBaseId(artifact.knowledgeBaseId),
+      resolveWorkspaceId(artifact.workspaceId),
       artifact.artifactType,
       artifact.subtype,
       artifact.title,
@@ -1884,10 +1884,10 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   updateArtifact(artifact: ArtifactRecord) {
     this.db.prepare(`
       UPDATE artifacts
-      SET knowledge_base_id = ?, artifact_type = ?, subtype = ?, title = ?, body = ?, source_material_ids_json = ?, sections_json = ?, created_at = ?
+      SET workspace_id = ?, artifact_type = ?, subtype = ?, title = ?, body = ?, source_material_ids_json = ?, sections_json = ?, created_at = ?
       WHERE id = ?
     `).run(
-      resolveKnowledgeBaseId(artifact.knowledgeBaseId),
+      resolveWorkspaceId(artifact.workspaceId),
       artifact.artifactType,
       artifact.subtype,
       artifact.title,
@@ -1899,9 +1899,9 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     );
   }
 
-  listArtifacts(knowledgeBaseId?: string, limit?: number) {
-    const rows = knowledgeBaseId
-      ? this.db.prepare('SELECT * FROM artifacts WHERE knowledge_base_id = ? ORDER BY created_at DESC').all(knowledgeBaseId)
+  listArtifacts(workspaceId?: string, limit?: number) {
+    const rows = workspaceId
+      ? this.db.prepare('SELECT * FROM artifacts WHERE workspace_id = ? ORDER BY created_at DESC').all(workspaceId)
       : this.db.prepare(`SELECT * FROM artifacts ORDER BY created_at DESC${limit ? ` LIMIT ${limit}` : ''}`).all();
     return (rows as ArtifactRow[]).map(mapArtifact);
   }
@@ -1938,11 +1938,11 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   insertMessage(message: ChatMessage) {
     this.db.prepare(`
       INSERT INTO messages (
-        id, knowledge_base_id, question, answer, card_ids_json, artifact_id, material_id, created_at, proposed_cards_json
+        id, workspace_id, question, answer, card_ids_json, artifact_id, material_id, created_at, proposed_cards_json
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       message.id,
-      resolveKnowledgeBaseId(message.knowledgeBaseId),
+      resolveWorkspaceId(message.workspaceId),
       message.question,
       message.answer,
       JSON.stringify(message.cardIds),
@@ -1953,10 +1953,10 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     );
   }
 
-  listMessages(knowledgeBaseId: string, limit?: number) {
+  listMessages(workspaceId: string, limit?: number) {
     const rows = limit
-      ? this.db.prepare('SELECT * FROM (SELECT * FROM messages WHERE knowledge_base_id = ? ORDER BY created_at DESC LIMIT ?) ORDER BY created_at ASC').all(knowledgeBaseId, limit)
-      : this.db.prepare('SELECT * FROM messages WHERE knowledge_base_id = ? ORDER BY created_at ASC').all(knowledgeBaseId);
+      ? this.db.prepare('SELECT * FROM (SELECT * FROM messages WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ?) ORDER BY created_at ASC').all(workspaceId, limit)
+      : this.db.prepare('SELECT * FROM messages WHERE workspace_id = ? ORDER BY created_at ASC').all(workspaceId);
     return (rows as MessageRow[]).map(mapMessage);
   }
 
@@ -2105,11 +2105,11 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   insertAttentionSignal(signal: AttentionSignal): void {
     this.db.prepare(`
       INSERT INTO attention_log (
-        id, knowledge_base_id, signal_type, signal_strength, target_type, target_id, context_data_json, consumed, created_at
+        id, workspace_id, signal_type, signal_strength, target_type, target_id, context_data_json, consumed, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       signal.id,
-      resolveKnowledgeBaseId(signal.knowledgeBaseId),
+      resolveWorkspaceId(signal.workspaceId),
       signal.signalType,
       signal.signalStrength,
       signal.targetType,
@@ -2122,15 +2122,15 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
   /**
    * 查询注意力信号列表，按创建时间降序排序。
-   * @param knowledgeBaseId - 可选，知识库 ID 过滤；未指定时返回全库信号
+   * @param workspaceId - 可选，知识库 ID 过滤；未指定时返回全库信号
    * @param limit - 可选，最大返回数量，默认 ATTENTION_LOG_LIMIT
    * @returns 注意力信号数组
    * @author fxbin
    */
-  listAttentionSignals(knowledgeBaseId?: string, limit?: number): AttentionSignal[] {
+  listAttentionSignals(workspaceId?: string, limit?: number): AttentionSignal[] {
     const maxRows = typeof limit === 'number' ? limit : ATTENTION_LOG_LIMIT;
-    const rows = knowledgeBaseId
-      ? this.db.prepare('SELECT * FROM attention_log WHERE knowledge_base_id = ? ORDER BY created_at DESC LIMIT ?').all(knowledgeBaseId, maxRows) as AttentionLogRow[]
+    const rows = workspaceId
+      ? this.db.prepare('SELECT * FROM attention_log WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ?').all(workspaceId, maxRows) as AttentionLogRow[]
       : this.db.prepare('SELECT * FROM attention_log ORDER BY created_at DESC LIMIT ?').all(maxRows) as AttentionLogRow[];
     return rows.map(mapAttentionSignal);
   }
@@ -2146,16 +2146,39 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
   /**
    * 删除指定知识库的所有注意力信号。
-   * @param knowledgeBaseId - 知识库 ID
+   * @param workspaceId - 知识库 ID
    * @author fxbin
    */
-  deleteAttentionSignals(knowledgeBaseId: string): void {
-    this.db.prepare('DELETE FROM attention_log WHERE knowledge_base_id = ?').run(knowledgeBaseId);
+  deleteAttentionSignals(workspaceId: string): void {
+    this.db.prepare('DELETE FROM attention_log WHERE workspace_id = ?').run(workspaceId);
+  }
+
+  private ensureWorkspaceRename() {
+    const oldTable = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_bases'").get() as { name: string } | undefined;
+    if (oldTable) {
+      this.db.exec('ALTER TABLE knowledge_bases RENAME TO workspaces');
+    }
+    const columnRenameTargets = ['cards', 'materials', 'artifacts', 'messages', 'attention_log', 'map_custom_edges', 'exports', 'entities', 'conflict_audit', 'agent_action_log'];
+    for (const table of columnRenameTargets) {
+      const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+      if (columns.some((column) => column.name === 'knowledge_base_id')) {
+        this.db.exec(`ALTER TABLE ${table} RENAME COLUMN knowledge_base_id TO workspace_id`);
+      }
+    }
+    const oldNodePositionsTable = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_base_node_positions'").get() as { name: string } | undefined;
+    if (oldNodePositionsTable) {
+      this.db.exec('ALTER TABLE knowledge_base_node_positions RENAME TO workspace_node_positions');
+    }
+    const nodePositionsColumns = this.db.prepare('PRAGMA table_info(workspace_node_positions)').all() as Array<{ name: string }>;
+    if (nodePositionsColumns.some((column) => column.name === 'knowledge_base_id')) {
+      this.db.exec('ALTER TABLE workspace_node_positions RENAME COLUMN knowledge_base_id TO workspace_id');
+    }
   }
 
   private migrate() {
+    this.ensureWorkspaceRename();
     this.db.exec(`
-      CREATE TABLE IF NOT EXISTS knowledge_bases (
+      CREATE TABLE IF NOT EXISTS workspaces (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         summary TEXT NOT NULL,
@@ -2169,7 +2192,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
       CREATE TABLE IF NOT EXISTS materials (
         id TEXT PRIMARY KEY,
-        knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
         type TEXT NOT NULL,
         raw_input TEXT NOT NULL,
         source_url TEXT,
@@ -2185,7 +2208,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
       CREATE TABLE IF NOT EXISTS cards (
         id TEXT PRIMARY KEY,
-        knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
         material_id TEXT REFERENCES materials(id) ON DELETE SET NULL,
         type TEXT NOT NULL,
         title TEXT NOT NULL,
@@ -2211,7 +2234,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
       CREATE TABLE IF NOT EXISTS exports (
         id TEXT PRIMARY KEY,
-        knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
         format TEXT NOT NULL,
         scope TEXT NOT NULL,
         include_artifacts INTEGER NOT NULL,
@@ -2235,7 +2258,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
       CREATE TABLE IF NOT EXISTS artifacts (
         id TEXT PRIMARY KEY,
-        knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
         artifact_type TEXT NOT NULL,
         subtype TEXT NOT NULL DEFAULT 'summary',
         title TEXT NOT NULL,
@@ -2256,7 +2279,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
       CREATE TABLE IF NOT EXISTS messages (
         id TEXT PRIMARY KEY,
-        knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
         question TEXT NOT NULL,
         answer TEXT NOT NULL,
         card_ids_json TEXT NOT NULL,
@@ -2271,13 +2294,13 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         updated_at TEXT NOT NULL
       );
 
-      CREATE INDEX IF NOT EXISTS idx_materials_knowledge_base_id ON materials(knowledge_base_id);
-      CREATE INDEX IF NOT EXISTS idx_cards_knowledge_base_id ON cards(knowledge_base_id);
+      CREATE INDEX IF NOT EXISTS idx_materials_workspace_id ON materials(workspace_id);
+      CREATE INDEX IF NOT EXISTS idx_cards_workspace_id ON cards(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_card_revisions_card_id ON card_revisions(card_id, version);
-      CREATE INDEX IF NOT EXISTS idx_exports_knowledge_base_id ON exports(knowledge_base_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_exports_workspace_id ON exports(workspace_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at);
-      CREATE INDEX IF NOT EXISTS idx_artifacts_knowledge_base_id ON artifacts(knowledge_base_id);
-      CREATE INDEX IF NOT EXISTS idx_messages_knowledge_base_id ON messages(knowledge_base_id);
+      CREATE INDEX IF NOT EXISTS idx_artifacts_workspace_id ON artifacts(workspace_id);
+      CREATE INDEX IF NOT EXISTS idx_messages_workspace_id ON messages(workspace_id);
     `);
     this.ensureWeReadSettingsTable();
     this.ensureWeReadBookMetaTable();
@@ -2293,9 +2316,9 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureEntitiesTable();
     this.ensureConflictAuditTable();
     this.ensureModelProviderProfilesTable();
-    this.ensureKnowledgeBaseNodePositionsTable();
+    this.ensureWorkspaceNodePositionsTable();
     this.ensureArchivedColumns();
-    this.ensureKnowledgeBaseTitleUnique();
+    this.ensureWorkspaceTitleUnique();
     this.ensureFtsTables();
     this.ensureAttentionLogTable();
     this.ensureMessagesProposedCardsColumn();
@@ -2303,7 +2326,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
   /**
    * 创建 FTS5 全文检索虚拟表，用于 cards 与 materials 的相关性排序检索。
-   * 虚拟表为派生索引，可随时重建；card_id/material_id/knowledge_base_id 标记为 UNINDEXED（只存储不索引）。
+   * 虚拟表为派生索引，可随时重建；card_id/material_id/workspace_id 标记为 UNINDEXED（只存储不索引）。
    * 使用 IF NOT EXISTS 保证幂等，兼容新旧数据库。
    * @author fxbin
    */
@@ -2311,7 +2334,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.db.exec(`
       CREATE VIRTUAL TABLE IF NOT EXISTS cards_fts USING fts5(
         card_id UNINDEXED,
-        knowledge_base_id UNINDEXED,
+        workspace_id UNINDEXED,
         title,
         body,
         tokenize = '${FTS_TOKENIZER}'
@@ -2319,7 +2342,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
       CREATE VIRTUAL TABLE IF NOT EXISTS materials_fts USING fts5(
         material_id UNINDEXED,
-        knowledge_base_id UNINDEXED,
+        workspace_id UNINDEXED,
         title,
         content_text,
         tokenize = '${FTS_TOKENIZER}'
@@ -2389,7 +2412,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS entities (
         id TEXT PRIMARY KEY,
-        knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
         name TEXT NOT NULL,
         type TEXT NOT NULL,
         description TEXT NOT NULL,
@@ -2397,7 +2420,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
-      CREATE INDEX IF NOT EXISTS idx_entities_kb ON entities(knowledge_base_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_entities_kb ON entities(workspace_id, updated_at DESC);
     `);
   }
 
@@ -2409,7 +2432,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         action TEXT NOT NULL,
         keep_id TEXT NOT NULL,
         drop_ids_json TEXT NOT NULL,
-        knowledge_base_id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
         note TEXT NOT NULL,
         created_at TEXT NOT NULL
       );
@@ -2480,17 +2503,17 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     }
   }
 
-  private ensureKnowledgeBaseNodePositionsTable() {
+  private ensureWorkspaceNodePositionsTable() {
     this.db.exec(`
-      CREATE TABLE IF NOT EXISTS knowledge_base_node_positions (
-        knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+      CREATE TABLE IF NOT EXISTS workspace_node_positions (
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
         node_id TEXT NOT NULL,
         x REAL NOT NULL,
         y REAL NOT NULL,
         updated_at TEXT NOT NULL,
-        PRIMARY KEY (knowledge_base_id, node_id)
+        PRIMARY KEY (workspace_id, node_id)
       );
-      CREATE INDEX IF NOT EXISTS idx_kb_node_positions_kb ON knowledge_base_node_positions(knowledge_base_id);
+      CREATE INDEX IF NOT EXISTS idx_workspace_node_positions_ws ON workspace_node_positions(workspace_id);
     `);
   }
 
@@ -2503,23 +2526,23 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     if (!materialColumns.some((column) => column.name === 'archived')) {
       this.db.exec('ALTER TABLE materials ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;');
     }
-    this.db.exec('CREATE INDEX IF NOT EXISTS idx_materials_archived ON materials(archived, knowledge_base_id);');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_materials_archived ON materials(archived, workspace_id);');
 
     const cardColumns = this.db.prepare('PRAGMA table_info(cards)').all() as Array<{ name: string }>;
     if (!cardColumns.some((column) => column.name === 'archived')) {
       this.db.exec('ALTER TABLE cards ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;');
     }
-    this.db.exec('CREATE INDEX IF NOT EXISTS idx_cards_archived ON cards(archived, knowledge_base_id);');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_cards_archived ON cards(archived, workspace_id);');
   }
 
   /**
-   * 为 knowledge_bases.title 建立唯一索引（兜底防重名）。
+   * 为 workspaces.title 建立唯一索引（兜底防重名）。
    * 迁移前先检测重名：无重名则建索引升级为双重保护；有重名则跳过并告警，退化为应用层检查，不阻断启动。
    * @author fxbin
    */
-  private ensureKnowledgeBaseTitleUnique() {
+  private ensureWorkspaceTitleUnique() {
     const duplicates = this.db.prepare(
-      'SELECT title, COUNT(*) AS cnt FROM knowledge_bases GROUP BY title HAVING cnt > 1'
+      'SELECT title, COUNT(*) AS cnt FROM workspaces GROUP BY title HAVING cnt > 1'
     ).all() as Array<{ title: string; cnt: number }>;
 
     if (duplicates.length > 0) {
@@ -2530,7 +2553,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     }
 
     this.db.exec(
-      'CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_bases_title ON knowledge_bases(title)'
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_title ON workspaces(title)'
     );
   }
 
@@ -2773,7 +2796,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS attention_log (
         id TEXT PRIMARY KEY,
-        knowledge_base_id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
         signal_type TEXT NOT NULL,
         signal_strength TEXT NOT NULL,
         target_type TEXT NOT NULL,
@@ -2782,7 +2805,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         consumed INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL
       );
-      CREATE INDEX IF NOT EXISTS idx_attention_log_kb ON attention_log(knowledge_base_id);
+      CREATE INDEX IF NOT EXISTS idx_attention_log_kb ON attention_log(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_attention_log_created ON attention_log(created_at DESC);
     `);
   }
@@ -2809,7 +2832,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       CREATE TABLE IF NOT EXISTS agent_action_log (
         id TEXT PRIMARY KEY,
         action TEXT NOT NULL,
-        knowledge_base_id TEXT,
+        workspace_id TEXT,
         input_json TEXT NOT NULL,
         output_json TEXT,
         duration_ms INTEGER NOT NULL,
@@ -2817,7 +2840,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         error TEXT,
         created_at TEXT NOT NULL
       );
-      CREATE INDEX IF NOT EXISTS idx_agent_action_log_kb ON agent_action_log(knowledge_base_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_action_log_kb ON agent_action_log(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_agent_action_log_action ON agent_action_log(action);
       CREATE INDEX IF NOT EXISTS idx_agent_action_log_created ON agent_action_log(created_at DESC);
     `);
@@ -2832,12 +2855,12 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureAgentActionLogTable();
     this.db.prepare(`
       INSERT INTO agent_action_log (
-        id, action, knowledge_base_id, input_json, output_json, duration_ms, success, error, created_at
+        id, action, workspace_id, input_json, output_json, duration_ms, success, error, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       log.id,
       log.action,
-      log.knowledgeBaseId ?? null,
+      log.workspaceId ?? null,
       JSON.stringify(log.input),
       log.output ? JSON.stringify(log.output) : null,
       log.durationMs,
@@ -2852,14 +2875,14 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
    * @param options - 查询选项
    * @author fxbin
    */
-  listAgentActionLogs(options?: { knowledgeBaseId?: string; action?: string; limit?: number }): AgentActionLog[] {
+  listAgentActionLogs(options?: { workspaceId?: string; action?: string; limit?: number }): AgentActionLog[] {
     this.ensureAgentActionLogTable();
     const limit = Math.min(options?.limit ?? AGENT_ACTION_LOG_DEFAULT_LIMIT, AGENT_ACTION_LOG_MAX_LIMIT);
     const conditions: string[] = [];
     const params: Array<string | number> = [];
-    if (options?.knowledgeBaseId) {
-      conditions.push('knowledge_base_id = ?');
-      params.push(options.knowledgeBaseId);
+    if (options?.workspaceId) {
+      conditions.push('workspace_id = ?');
+      params.push(options.workspaceId);
     }
     if (options?.action) {
       conditions.push('action = ?');
@@ -2877,13 +2900,13 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
    * @param options - 查询选项
    * @author fxbin
    */
-  countAgentActionLogs(options?: { knowledgeBaseId?: string; action?: string }): number {
+  countAgentActionLogs(options?: { workspaceId?: string; action?: string }): number {
     this.ensureAgentActionLogTable();
     const conditions: string[] = [];
     const params: Array<string | number> = [];
-    if (options?.knowledgeBaseId) {
-      conditions.push('knowledge_base_id = ?');
-      params.push(options.knowledgeBaseId);
+    if (options?.workspaceId) {
+      conditions.push('workspace_id = ?');
+      params.push(options.workspaceId);
     }
     if (options?.action) {
       conditions.push('action = ?');
@@ -2928,7 +2951,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   }
 }
 
-function mapKnowledgeBase(row: KnowledgeBaseRow): KnowledgeBaseSummary {
+function mapWorkspace(row: WorkspaceRow): WorkspaceSummary {
   return {
     id: row.id,
     title: row.title,
@@ -2945,7 +2968,7 @@ function mapKnowledgeBase(row: KnowledgeBaseRow): KnowledgeBaseSummary {
 function mapMaterial(row: MaterialRow): MaterialRecord {
   return {
     id: row.id,
-    knowledgeBaseId: row.knowledge_base_id,
+    workspaceId: row.workspace_id,
     type: row.type,
     rawInput: row.raw_input,
     sourceUrl: row.source_url ?? undefined,
@@ -3014,7 +3037,7 @@ function stampMaterialStatus(
 function mapCard(row: CardRow): KnowledgeCard {
   return {
     id: row.id,
-    knowledgeBaseId: row.knowledge_base_id,
+    workspaceId: row.workspace_id,
     materialId: row.material_id ?? undefined,
     type: row.type,
     title: row.title,
@@ -3136,7 +3159,7 @@ function parseRevisionFields(json: string): CardRevisionField[] {
 
 type ExportRow = {
   id: string;
-  knowledge_base_id: string;
+  workspace_id: string;
   format: ExportFormat;
   scope: ExportScope;
   include_artifacts: number;
@@ -3150,7 +3173,7 @@ type ExportRow = {
 function mapExportRecord(row: ExportRow): ExportRecord {
   return {
     id: row.id,
-    knowledgeBaseId: row.knowledge_base_id,
+    workspaceId: row.workspace_id,
     format: row.format,
     scope: row.scope,
     includeArtifacts: row.include_artifacts === 1,
@@ -3186,7 +3209,7 @@ function mapSavedFilter(row: SavedFilterRow): SavedFilter {
 
 type EntityRow = {
   id: string;
-  knowledge_base_id: string;
+  workspace_id: string;
   name: string;
   type: EntityType;
   description: string;
@@ -3198,7 +3221,7 @@ type EntityRow = {
 function mapEntity(row: EntityRow): Entity {
   return {
     id: row.id,
-    knowledgeBaseId: row.knowledge_base_id,
+    workspaceId: row.workspace_id,
     name: row.name,
     type: row.type,
     description: row.description,
@@ -3214,7 +3237,7 @@ type ConflictAuditRow = {
   action: ConflictResolutionAction;
   keep_id: string;
   drop_ids_json: string;
-  knowledge_base_id: string;
+  workspace_id: string;
   note: string;
   created_at: string;
 };
@@ -3226,7 +3249,7 @@ function mapConflictAudit(row: ConflictAuditRow): ConflictAuditEntry {
     action: row.action,
     keepId: row.keep_id,
     dropIds: JSON.parse(row.drop_ids_json) as string[],
-    knowledgeBaseId: row.knowledge_base_id,
+    workspaceId: row.workspace_id,
     note: row.note,
     createdAt: row.created_at,
   };
@@ -3234,7 +3257,7 @@ function mapConflictAudit(row: ConflictAuditRow): ConflictAuditEntry {
 
 type AttentionLogRow = {
   id: string;
-  knowledge_base_id: string;
+  workspace_id: string;
   signal_type: AttentionSignalType;
   signal_strength: AttentionSignalStrength;
   target_type: AttentionSignalTargetType;
@@ -3253,7 +3276,7 @@ type AttentionLogRow = {
 function mapAttentionSignal(row: AttentionLogRow): AttentionSignal {
   return {
     id: row.id,
-    knowledgeBaseId: row.knowledge_base_id,
+    workspaceId: row.workspace_id,
     signalType: row.signal_type,
     signalStrength: row.signal_strength,
     targetType: row.target_type,
@@ -3267,7 +3290,7 @@ function mapAttentionSignal(row: AttentionLogRow): AttentionSignal {
 type AgentActionLogRow = {
   id: string;
   action: string;
-  knowledge_base_id: string | null;
+  workspace_id: string | null;
   input_json: string;
   output_json: string | null;
   duration_ms: number;
@@ -3286,7 +3309,7 @@ function mapAgentActionLog(row: AgentActionLogRow): AgentActionLog {
   return {
     id: row.id,
     action: row.action as AgentAction,
-    knowledgeBaseId: row.knowledge_base_id ?? undefined,
+    workspaceId: row.workspace_id ?? undefined,
     input: JSON.parse(row.input_json) as Record<string, unknown>,
     output: row.output_json ? JSON.parse(row.output_json) as Record<string, unknown> : undefined,
     durationMs: row.duration_ms,
@@ -3298,7 +3321,7 @@ function mapAgentActionLog(row: AgentActionLogRow): AgentActionLog {
 
 type MapCustomEdgeRow = {
   id: string;
-  knowledge_base_id: string;
+  workspace_id: string;
   source_node_id: string;
   target_node_id: string;
   relation: string;
@@ -3314,7 +3337,7 @@ type MapCustomEdgeRow = {
 function mapMapCustomEdge(row: MapCustomEdgeRow): KnowledgeMapCustomEdge {
   return {
     id: row.id,
-    knowledgeBaseId: row.knowledge_base_id,
+    workspaceId: row.workspace_id,
     sourceNodeId: row.source_node_id,
     targetNodeId: row.target_node_id,
     relation: row.relation as 'supports' | 'contradicts' | 'related_to',
@@ -3401,7 +3424,7 @@ function mapArtifact(row: ArtifactRow): ArtifactRecord {
   const sections = parseArtifactSections(row.sections_json);
   return {
     id: row.id,
-    knowledgeBaseId: row.knowledge_base_id,
+    workspaceId: row.workspace_id,
     artifactType: row.artifact_type,
     subtype,
     title: row.title,
@@ -3449,7 +3472,7 @@ function mapMessage(row: MessageRow): ChatMessage {
   const proposedCardsJson = row.proposed_cards_json ?? undefined;
   return {
     id: row.id,
-    knowledgeBaseId: row.knowledge_base_id,
+    workspaceId: row.workspace_id,
     question: row.question,
     answer: row.answer,
     cardIds: JSON.parse(row.card_ids_json) as string[],
@@ -3987,12 +4010,12 @@ const TITLE_DUPLICATE_SUFFIX_MAX = 99;
  */
 function ensureUniqueTitle(rawTitle: string): string {
   const compacted = compactTitle(rawTitle);
-  if (!repository.findKnowledgeBaseByTitle(compacted)) {
+  if (!repository.findWorkspaceByTitle(compacted)) {
     return compacted;
   }
   for (let suffix = TITLE_DUPLICATE_SUFFIX_START; suffix <= TITLE_DUPLICATE_SUFFIX_MAX; suffix += 1) {
     const candidate = `${compacted} (${suffix})`;
-    if (!repository.findKnowledgeBaseByTitle(candidate)) {
+    if (!repository.findWorkspaceByTitle(candidate)) {
       return candidate;
     }
   }
@@ -4041,9 +4064,9 @@ function failTask(task: AgentTask, error: unknown) {
   repository.updateTask(task);
 }
 
-function createKnowledgeBase(title: string, summary: string): KnowledgeBaseSummary {
+function createWorkspace(title: string, summary: string): WorkspaceSummary {
   const timestamp = now();
-  const base: KnowledgeBaseSummary = {
+  const base: WorkspaceSummary = {
     id: id('kb'),
     title,
     summary,
@@ -4054,14 +4077,14 @@ function createKnowledgeBase(title: string, summary: string): KnowledgeBaseSumma
     createdAt: timestamp,
     updatedAt: timestamp,
   };
-  repository.insertKnowledgeBase(base);
+  repository.insertWorkspace(base);
   return base;
 }
 
-function upsertDefaultKnowledgeBase(input: string) {
-  const bases = repository.listKnowledgeBases();
+function upsertDefaultWorkspace(input: string) {
+  const bases = repository.listWorkspaces();
   if (bases.length > 0) return bases[0];
-  return createKnowledgeBase(compactTitle(input), `围绕「${compactTitle(input)}」生成的知识库骨架。`);
+  return createWorkspace(compactTitle(input), `围绕「${compactTitle(input)}」生成的知识库骨架。`);
 }
 
 /**
@@ -4073,14 +4096,14 @@ function upsertDefaultKnowledgeBase(input: string) {
  * @returns 默认工作区摘要
  * @author fxbin
  */
-export function ensureDefaultWorkspace(): KnowledgeBaseSummary {
-  const existing = repository.findKnowledgeBase(DEFAULT_KB_ID);
+export function ensureDefaultWorkspace(): WorkspaceSummary {
+  const existing = repository.findWorkspace(DEFAULT_WORKSPACE_ID);
   if (existing) return existing;
   const timestamp = now();
-  const base: KnowledgeBaseSummary = {
-    id: DEFAULT_KB_ID,
-    title: DEFAULT_KB_TITLE,
-    summary: DEFAULT_KB_SUMMARY,
+  const base: WorkspaceSummary = {
+    id: DEFAULT_WORKSPACE_ID,
+    title: DEFAULT_WORKSPACE_TITLE,
+    summary: DEFAULT_WORKSPACE_SUMMARY,
     stage: 'ai_skeleton',
     sourceCount: 0,
     cardCount: 0,
@@ -4088,42 +4111,42 @@ export function ensureDefaultWorkspace(): KnowledgeBaseSummary {
     createdAt: timestamp,
     updatedAt: timestamp,
   };
-  repository.insertKnowledgeBase(base);
+  repository.insertWorkspace(base);
   return base;
 }
 
 /**
  * 解析知识库 ID，未指定时返回默认工作区 ID。
  *
- * 单池存储迁移的核心兜底函数：所有落库点在写入 knowledgeBaseId 前，
+ * 单池存储迁移的核心兜底函数：所有落库点在写入 workspaceId 前，
  * 应通过此函数解析，确保 SQLite NOT NULL 约束不被违反。
  *
- * @param knowledgeBaseId - 可选的知识库 ID
+ * @param workspaceId - 可选的知识库 ID
  * @returns 解析后的知识库 ID（永不为空）
  * @author fxbin
  */
-export function resolveKnowledgeBaseId(knowledgeBaseId?: string): string {
-  return knowledgeBaseId && knowledgeBaseId.trim() ? knowledgeBaseId.trim() : DEFAULT_KB_ID;
+export function resolveWorkspaceId(workspaceId?: string): string {
+  return workspaceId && workspaceId.trim() ? workspaceId.trim() : DEFAULT_WORKSPACE_ID;
 }
 
 /**
  * 显式创建空知识库，不触发 LLM 生成。
  * 用户可通过模态输入标题和可选摘要，后续再导入资料或运行 Kit。
  */
-export function createEmptyKnowledgeBase(title: string, summary?: string): KnowledgeBaseSummary {
+export function createEmptyWorkspace(title: string, summary?: string): WorkspaceSummary {
   const trimmedTitle = title.trim();
   if (!trimmedTitle) {
     throw new KnowledgeCoreError('知识库标题不能为空。', 400);
   }
   const finalTitle = compactTitle(trimmedTitle);
-  if (repository.findKnowledgeBaseByTitle(finalTitle)) {
+  if (repository.findWorkspaceByTitle(finalTitle)) {
     throw new KnowledgeCoreError(`标题「${finalTitle}」已存在。`, 409);
   }
   const finalSummary = (summary?.trim()) || `围绕「${finalTitle}」的知识库，等待导入资料。`;
-  return createKnowledgeBase(finalTitle, finalSummary);
+  return createWorkspace(finalTitle, finalSummary);
 }
 
-function createMaterial(base: KnowledgeBaseSummary, request: IntakeRequest, type: MaterialRecord['type']) {
+function createMaterial(base: WorkspaceSummary, request: IntakeRequest, type: MaterialRecord['type']) {
   const timestamp = now();
   const platform = detectPlatform(request.input);
   const sourceUrl = type === 'link' ? extractFirstUrl(request.input) ?? request.input.trim() : undefined;
@@ -4132,7 +4155,7 @@ function createMaterial(base: KnowledgeBaseSummary, request: IntakeRequest, type
   if (initialStatus === 'ingested') timeline.ingestedAt = timestamp;
   const material: MaterialRecord = {
     id: id('mat'),
-    knowledgeBaseId: base.id,
+    workspaceId: base.id,
     type,
     rawInput: request.input.trim(),
     sourceUrl,
@@ -4147,7 +4170,7 @@ function createMaterial(base: KnowledgeBaseSummary, request: IntakeRequest, type
   base.sourceCount += 1;
   base.updatedAt = timestamp;
   repository.insertMaterial(material);
-  repository.updateKnowledgeBase(base);
+  repository.updateWorkspace(base);
   return material;
 }
 
@@ -4159,7 +4182,7 @@ function extractMaterialTitle(input: string) {
 }
 
 function createCards(
-  base: KnowledgeBaseSummary,
+  base: WorkspaceSummary,
   material: MaterialRecord | undefined,
   seed: string,
   generatedCards: GeneratedCard[] | undefined,
@@ -4183,7 +4206,7 @@ function createCards(
   ];
   const cards: KnowledgeCard[] = (generated.length ? generated : fallbackCards).map((card) => ({
       id: id('card'),
-      knowledgeBaseId: base.id,
+      workspaceId: base.id,
       materialId: material?.id,
       type: normalizeCardType(card.type),
       title: compactTitle(card.title ?? `${compactTitle(seed)} 的知识卡片`),
@@ -4202,7 +4225,7 @@ function createCards(
     if (card.type === 'question') {
       repository.insertAttentionSignal({
         id: id('attn'),
-        knowledgeBaseId: base.id,
+        workspaceId: base.id,
         signalType: ATTENTION_SIGNAL_QUESTION_CARD,
         signalStrength: ATTENTION_SIGNAL_STRONG,
         targetType: ATTENTION_TARGET_TYPE_CARD,
@@ -4213,12 +4236,12 @@ function createCards(
       });
     }
   }
-  repository.updateKnowledgeBase(base);
+  repository.updateWorkspace(base);
   return cards;
 }
 
 function createArtifact(
-  base: KnowledgeBaseSummary,
+  base: WorkspaceSummary,
   material: MaterialRecord | undefined,
   seed: string,
   generated: GeneratedKnowledgeOutput,
@@ -4227,7 +4250,7 @@ function createArtifact(
   const sourceMaterialIds = material && material.type !== 'question' ? [material.id] : [];
   const artifact: ArtifactRecord = {
     id: id('art'),
-    knowledgeBaseId: base.id,
+    workspaceId: base.id,
     artifactType: 'summary',
     subtype: 'summary',
     title: compactTitle(generated.artifactTitle ?? `${compactTitle(seed)} 摘要`),
@@ -4242,7 +4265,7 @@ function createArtifact(
 }
 
 function createKitArtifact(
-  base: KnowledgeBaseSummary,
+  base: WorkspaceSummary,
   kitId: KnowledgeKitId,
   sourceMaterialIds: string[],
   generated: GeneratedKnowledgeOutput,
@@ -4250,7 +4273,7 @@ function createKitArtifact(
   const timestamp = now();
   const artifact: ArtifactRecord = {
     id: id('art'),
-    knowledgeBaseId: base.id,
+    workspaceId: base.id,
     artifactType: 'kit_report',
     subtype: kitToSubtype(kitId),
     title: compactTitle(generated.artifactTitle ?? `${base.title} ${kitLabel(kitId)}`),
@@ -4261,7 +4284,7 @@ function createKitArtifact(
   repository.insertArtifact(artifact);
   base.stage = sourceMaterialIds.length > 0 ? 'grounded' : 'organizing';
   base.updatedAt = timestamp;
-  repository.updateKnowledgeBase(base);
+  repository.updateWorkspace(base);
   return artifact;
 }
 
@@ -4272,7 +4295,7 @@ function kitLabel(kitId: KnowledgeKitId) {
   return '学习研究摘要';
 }
 
-function buildFallbackKitBody(base: KnowledgeBaseSummary, kitId: KnowledgeKitId) {
+function buildFallbackKitBody(base: WorkspaceSummary, kitId: KnowledgeKitId) {
   return [
     `# ${base.title}`,
     '',
@@ -4301,7 +4324,7 @@ function normalizeCardType(type: GeneratedCard['type']): KnowledgeCard['type'] {
 }
 
 async function generateKnowledge(
-  task: 'knowledge_base_skeleton' | 'material_summary' | 'knowledge_cards' | 'question_answer',
+  task: 'workspace_skeleton' | 'material_summary' | 'knowledge_cards' | 'question_answer',
   prompt: string,
   context: Record<string, unknown>,
 ) {
@@ -4325,20 +4348,20 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
   }
 
   const kind = classifyInput(value);
-  const workflow = kind === 'question' ? 'answer_question' : kind === 'theme' ? 'create_knowledge_base' : 'ingest_material';
+  const workflow = kind === 'question' ? 'answer_question' : kind === 'theme' ? 'create_workspace' : 'ingest_material';
   const task = createTask(workflow, {
     input: value,
-    knowledgeBaseId: request.knowledgeBaseId,
+    workspaceId: request.workspaceId,
     audience: request.audience,
     depth: request.depth,
     scope: request.scope,
   });
 
   try {
-    let base: KnowledgeBaseSummary | undefined;
+    let base: WorkspaceSummary | undefined;
     let material: MaterialRecord | undefined;
     if (kind !== 'theme') {
-      base = (request.knowledgeBaseId ? repository.findKnowledgeBase(request.knowledgeBaseId) : undefined) ?? upsertDefaultKnowledgeBase(value);
+      base = (request.workspaceId ? repository.findWorkspace(request.workspaceId) : undefined) ?? upsertDefaultWorkspace(value);
       material = createMaterial(base, request, kind === 'link' ? 'link' : kind === 'question' ? 'question' : 'text');
     }
 
@@ -4348,7 +4371,7 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
           const parseResult = await requestMaterialParsing(material.id);
           finishTask(task, {
             kind,
-            knowledgeBaseId: base.id,
+            workspaceId: base.id,
             materialId: parseResult.material.id,
             parseStatus: parseResult.material.parseStatus,
             platform: parseResult.material.platform,
@@ -4356,7 +4379,7 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
           });
           return {
             kind,
-            knowledgeBase: parseResult.knowledgeBase ?? base,
+            workspace: parseResult.workspace ?? base,
             material: parseResult.material,
             cards: parseResult.cards ?? [],
             task: parseResult.task ?? task,
@@ -4366,7 +4389,7 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
         } catch {
           finishTask(task, {
             kind,
-            knowledgeBaseId: base.id,
+            workspaceId: base.id,
             materialId: material.id,
             parseStatus: material.parseStatus,
             platform: material.platform,
@@ -4374,7 +4397,7 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
           });
           return {
             kind,
-            knowledgeBase: base,
+            workspace: base,
             material,
             cards: [],
             task,
@@ -4385,7 +4408,7 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
 
       finishTask(task, {
         kind,
-        knowledgeBaseId: base.id,
+        workspaceId: base.id,
         materialId: material.id,
         parseStatus: material.parseStatus,
         platform: material.platform,
@@ -4394,7 +4417,7 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
 
       return {
         kind,
-        knowledgeBase: base,
+        workspace: base,
         material,
         cards: [],
         task,
@@ -4403,11 +4426,11 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
     }
 
     const generation = await generateKnowledge(
-      kind === 'theme' ? 'knowledge_base_skeleton' : kind === 'question' ? 'question_answer' : 'material_summary',
+      kind === 'theme' ? 'workspace_skeleton' : kind === 'question' ? 'question_answer' : 'material_summary',
       value,
       {
         kind,
-        knowledgeBaseId: base?.id,
+        workspaceId: base?.id,
         materialId: material?.id,
         hasSourceMaterial: Boolean(material),
         parseStatus: material?.parseStatus,
@@ -4420,22 +4443,22 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
     );
     const generated = generation.output;
 
-    const knowledgeBase = base ?? createKnowledgeBase(
+    const workspace = base ?? createWorkspace(
       ensureUniqueTitle(generated.title ?? value),
       generated.summary ?? `围绕「${compactTitle(value)}」生成的知识库骨架。`,
     );
 
-    const cards = createCards(knowledgeBase, material, value, generated.cards);
-    const artifact = createArtifact(knowledgeBase, material, value, generated);
+    const cards = createCards(workspace, material, value, generated.cards);
+    const artifact = createArtifact(workspace, material, value, generated);
 
     if (kind !== 'theme' && generated.summary) {
-      knowledgeBase.summary = generated.summary;
-      repository.updateKnowledgeBase(knowledgeBase);
+      workspace.summary = generated.summary;
+      repository.updateWorkspace(workspace);
     }
 
     finishTask(task, {
       kind,
-      knowledgeBaseId: knowledgeBase.id,
+      workspaceId: workspace.id,
       materialId: material?.id,
       cardIds: cards.map((card) => card.id),
       artifactId: artifact.id,
@@ -4446,7 +4469,7 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
 
     return {
       kind,
-      knowledgeBase,
+      workspace,
       material,
       cards,
       task,
@@ -4465,24 +4488,24 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
   }
 }
 
-export async function answerKnowledgeBaseQuestion(knowledgeBaseId: string, question: string): Promise<IntakeResult> {
+export async function answerWorkspaceQuestion(workspaceId: string, question: string): Promise<IntakeResult> {
   const value = question.trim();
   if (!value) {
     throw new KnowledgeCoreError('Question is required.', 400);
   }
 
-  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  const base = repository.findWorkspace(workspaceId);
   if (!base) {
     throw new KnowledgeCoreError('Knowledge base not found.', 404);
   }
 
-  const task = createTask('answer_question', { input: value, knowledgeBaseId });
+  const task = createTask('answer_question', { input: value, workspaceId });
 
   try {
-    const material = createMaterial(base, { input: value, knowledgeBaseId }, 'question');
+    const material = createMaterial(base, { input: value, workspaceId }, 'question');
     repository.insertAttentionSignal({
       id: id('attn'),
-      knowledgeBaseId: base.id,
+      workspaceId: base.id,
       signalType: ATTENTION_SIGNAL_ASK_QUESTION,
       signalStrength: ATTENTION_SIGNAL_MEDIUM,
       targetType: ATTENTION_TARGET_TYPE_QUESTION,
@@ -4494,7 +4517,7 @@ export async function answerKnowledgeBaseQuestion(knowledgeBaseId: string, quest
     const generationContext = buildQuestionContext(base.id, material.id, value);
     const generation = await generateKnowledge('question_answer', value, {
       kind: 'question',
-      knowledgeBaseId: base.id,
+      workspaceId: base.id,
       materialId: material.id,
       hasSourceMaterial: generationContext.materials.length > 0,
       parseStatus: material.parseStatus,
@@ -4512,7 +4535,7 @@ export async function answerKnowledgeBaseQuestion(knowledgeBaseId: string, quest
 
     finishTask(task, {
       kind: 'question',
-      knowledgeBaseId: base.id,
+      workspaceId: base.id,
       materialId: material.id,
       cardIds: [],
       proposedCardCount: proposedCards.length,
@@ -4527,7 +4550,7 @@ export async function answerKnowledgeBaseQuestion(knowledgeBaseId: string, quest
 
     repository.insertMessage({
       id: messageId,
-      knowledgeBaseId: base.id,
+      workspaceId: base.id,
       question: value,
       answer: generated.summary ?? artifact.body,
       cardIds: [],
@@ -4539,7 +4562,7 @@ export async function answerKnowledgeBaseQuestion(knowledgeBaseId: string, quest
 
     return {
       kind: 'question',
-      knowledgeBase: base,
+      workspace: base,
       material,
       cards: [],
       task,
@@ -4573,7 +4596,7 @@ export function acceptProposedCards(messageId: string, selectedIndices?: number[
     throw new KnowledgeCoreError('No proposed cards to accept.', 400);
   }
 
-  const base = repository.findKnowledgeBase(resolveKnowledgeBaseId(message.knowledgeBaseId));
+  const base = repository.findWorkspace(resolveWorkspaceId(message.workspaceId));
   if (!base) {
     throw new KnowledgeCoreError('Knowledge base not found.', 404);
   }
@@ -4592,7 +4615,7 @@ export function acceptProposedCards(messageId: string, selectedIndices?: number[
   const timestamp = now();
   const cards: KnowledgeCard[] = selectedProposals.map((card) => ({
     id: id('card'),
-    knowledgeBaseId: base.id,
+    workspaceId: base.id,
     materialId: material?.id,
     type: normalizeCardType(card.type),
     title: compactTitle(card.title),
@@ -4612,7 +4635,7 @@ export function acceptProposedCards(messageId: string, selectedIndices?: number[
     if (card.type === 'question') {
       repository.insertAttentionSignal({
         id: id('attn'),
-        knowledgeBaseId: base.id,
+        workspaceId: base.id,
         signalType: ATTENTION_SIGNAL_QUESTION_CARD,
         signalStrength: ATTENTION_SIGNAL_STRONG,
         targetType: ATTENTION_TARGET_TYPE_CARD,
@@ -4623,7 +4646,7 @@ export function acceptProposedCards(messageId: string, selectedIndices?: number[
       });
     }
   }
-  repository.updateKnowledgeBase(base);
+  repository.updateWorkspace(base);
 
   const updatedCardIds = [...message.cardIds, ...cards.map((card) => card.id)];
   repository.updateMessageAcceptedCards(message.id, updatedCardIds);
@@ -4636,15 +4659,15 @@ export function acceptProposedCards(messageId: string, selectedIndices?: number[
 }
 
 export async function runKnowledgeKit(
-  knowledgeBaseId: string,
+  workspaceId: string,
   kitId: KnowledgeKitId = 'learning_research',
 ): Promise<KnowledgeKitRunResult> {
-  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  const base = repository.findWorkspace(workspaceId);
   if (!base) {
     throw new KnowledgeCoreError('Knowledge base not found.', 404);
   }
 
-  const task = createTask('run_kit', { knowledgeBaseId, kitId });
+  const task = createTask('run_kit', { workspaceId, kitId });
 
   try {
     const context = buildKitContext(base.id);
@@ -4668,9 +4691,9 @@ export async function runKnowledgeKit(
     const generation = await generateKnowledge('question_answer', prompt, {
       kind: 'kit_run',
       kitId,
-      knowledgeBaseId: base.id,
-      knowledgeBaseTitle: base.title,
-      knowledgeBaseSummary: base.summary,
+      workspaceId: base.id,
+      workspaceTitle: base.title,
+      workspaceSummary: base.summary,
       ...context,
     });
     const artifact = createKitArtifact(
@@ -4683,7 +4706,7 @@ export async function runKnowledgeKit(
     finishTask(task, {
       kind: 'kit_run',
       kitId,
-      knowledgeBaseId: base.id,
+      workspaceId: base.id,
       artifactId: artifact.id,
       sourceMaterialCount: context.materials.length,
       cardCount: context.cards.length,
@@ -4693,7 +4716,7 @@ export async function runKnowledgeKit(
     });
 
     return {
-      knowledgeBase: base,
+      workspace: base,
       artifact,
       task,
       message: `${kitLabel(kitId)}已生成。`,
@@ -4704,27 +4727,27 @@ export async function runKnowledgeKit(
   }
 }
 
-export function assignMaterialToKnowledgeBase(
+export function assignMaterialToWorkspace(
   materialId: string,
   input: AssignMaterialRequest,
 ): MaterialAssignmentResult {
   const material = requireMaterial(materialId);
-  const previousKnowledgeBaseId = resolveKnowledgeBaseId(material.knowledgeBaseId);
+  const previousWorkspaceId = resolveWorkspaceId(material.workspaceId);
   const targetBase = resolveMaterialAssignmentTarget(input, material);
 
-  material.knowledgeBaseId = targetBase.id;
+  material.workspaceId = targetBase.id;
   repository.updateMaterial(material);
-  moveMaterialAssets(material.id, previousKnowledgeBaseId, targetBase.id);
-  reconcileKnowledgeBaseStats(previousKnowledgeBaseId);
-  const knowledgeBase = reconcileKnowledgeBaseStats(targetBase.id) ?? targetBase;
+  moveMaterialAssets(material.id, previousWorkspaceId, targetBase.id);
+  reconcileWorkspaceStats(previousWorkspaceId);
+  const workspace = reconcileWorkspaceStats(targetBase.id) ?? targetBase;
 
   return {
     material,
-    knowledgeBase,
-    previousKnowledgeBaseId,
-    message: previousKnowledgeBaseId === targetBase.id
+    workspace,
+    previousWorkspaceId,
+    message: previousWorkspaceId === targetBase.id
       ? '资料已在当前知识库中。'
-      : `资料已移动到「${knowledgeBase.title}」。`,
+      : `资料已移动到「${workspace.title}」。`,
   };
 }
 
@@ -4737,15 +4760,15 @@ export function suggestMaterialAssignments(materialId: string): MaterialAssignme
     material.platform,
   ].filter(Boolean).join(' ');
   const terms = tokenizeSuggestionText(materialText);
-  const scored = repository.listKnowledgeBases()
-    .map((base) => scoreKnowledgeBaseSuggestion(base, material, terms))
+  const scored = repository.listWorkspaces()
+    .map((base) => scoreWorkspaceSuggestion(base, material, terms))
     .filter((suggestion) => suggestion.score > 0)
     .sort((left, right) => right.score - left.score)
     .slice(0, 4);
-  const currentBase = repository.findKnowledgeBase(resolveKnowledgeBaseId(material.knowledgeBaseId));
-  const currentSuggestion: MaterialAssignmentSuggestion[] = currentBase && !scored.some((item) => item.knowledgeBaseId === currentBase.id)
+  const currentBase = repository.findWorkspace(resolveWorkspaceId(material.workspaceId));
+  const currentSuggestion: MaterialAssignmentSuggestion[] = currentBase && !scored.some((item) => item.workspaceId === currentBase.id)
     ? [{
-        knowledgeBaseId: currentBase.id,
+        workspaceId: currentBase.id,
         title: currentBase.title,
         score: 1,
         reason: '当前资料已归属这个知识库。',
@@ -4771,8 +4794,8 @@ export function suggestMaterialAssignments(materialId: string): MaterialAssignme
   };
 }
 
-function scoreKnowledgeBaseSuggestion(
-  base: KnowledgeBaseSummary,
+function scoreWorkspaceSuggestion(
+  base: WorkspaceSummary,
   material: MaterialRecord,
   terms: Set<string>,
 ): MaterialAssignmentSuggestion {
@@ -4789,15 +4812,15 @@ function scoreKnowledgeBaseSuggestion(
   for (const term of terms) {
     if (baseTerms.has(term)) score += term.length > 1 ? 2 : 1;
   }
-  if (material.knowledgeBaseId === base.id) score += 3;
+  if (material.workspaceId === base.id) score += 3;
   const matched = [...terms].filter((term) => baseTerms.has(term)).slice(0, 3);
   return {
-    knowledgeBaseId: base.id,
+    workspaceId: base.id,
     title: base.title,
     score,
     reason: matched.length
       ? `匹配关键词：${matched.join('、')}`
-      : material.knowledgeBaseId === base.id
+      : material.workspaceId === base.id
         ? '当前资料已归属这个知识库。'
         : '与知识库标题或卡片内容相近。',
   };
@@ -4821,8 +4844,8 @@ export async function completeMaterialReview(
   input: CompleteMaterialReviewRequest,
 ): Promise<MaterialReviewResult> {
   const material = requireMaterial(materialId);
-  const knowledgeBase = repository.findKnowledgeBase(resolveKnowledgeBaseId(material.knowledgeBaseId));
-  if (!knowledgeBase) {
+  const workspace = repository.findWorkspace(resolveWorkspaceId(material.workspaceId));
+  if (!workspace) {
     throw new KnowledgeCoreError('Knowledge base not found.', 404);
   }
 
@@ -4847,19 +4870,19 @@ export async function completeMaterialReview(
   stampMaterialStatus(material, markIngested ? 'ingested' : 'needs_review');
   material.parseError = markIngested ? undefined : '等待用户补充更多正文或媒体。';
   repository.updateMaterial(material);
-  reconcileKnowledgeBaseStats(material.knowledgeBaseId);
+  reconcileWorkspaceStats(material.workspaceId);
 
   if (!markIngested) {
     return {
       material,
-      knowledgeBase: repository.findKnowledgeBase(resolveKnowledgeBaseId(material.knowledgeBaseId)) ?? knowledgeBase,
+      workspace: repository.findWorkspace(resolveWorkspaceId(material.workspaceId)) ?? workspace,
       message: '资料补充已保存，仍保留为待复核状态。',
     };
   }
 
   const task = createTask('parse_material', {
     materialId: material.id,
-    knowledgeBaseId: material.knowledgeBaseId,
+    workspaceId: material.workspaceId,
     source: 'manual_review',
     previousParseStatus: 'needs_review',
   });
@@ -4867,7 +4890,7 @@ export async function completeMaterialReview(
   try {
     const generation = await generateKnowledge('material_summary', contentForGeneration, {
       kind: 'manual_review',
-      knowledgeBaseId: material.knowledgeBaseId,
+      workspaceId: material.workspaceId,
       materialId: material.id,
       hasSourceMaterial: true,
       parseStatus: material.parseStatus,
@@ -4875,10 +4898,10 @@ export async function completeMaterialReview(
       mediaUrls: material.mediaUrls,
       mediaCount: material.mediaUrls.length,
     });
-    const base = repository.findKnowledgeBase(resolveKnowledgeBaseId(material.knowledgeBaseId)) ?? knowledgeBase;
+    const base = repository.findWorkspace(resolveWorkspaceId(material.workspaceId)) ?? workspace;
     const cards = createCards(base, material, contentForGeneration, generation.output.cards);
     const artifact = createArtifact(base, material, contentForGeneration, generation.output);
-    const reconciledBase = reconcileKnowledgeBaseStats(base.id) ?? base;
+    const reconciledBase = reconcileWorkspaceStats(base.id) ?? base;
 
     finishTask(task, {
       materialId: material.id,
@@ -4893,7 +4916,7 @@ export async function completeMaterialReview(
 
     return {
       material,
-      knowledgeBase: reconciledBase,
+      workspace: reconciledBase,
       task,
       cards,
       artifact,
@@ -4906,47 +4929,47 @@ export async function completeMaterialReview(
 }
 
 function resolveMaterialAssignmentTarget(input: AssignMaterialRequest, material: MaterialRecord) {
-  const targetId = normalizeSecret(input.knowledgeBaseId);
+  const targetId = normalizeSecret(input.workspaceId);
   if (targetId) {
-    const target = repository.findKnowledgeBase(targetId);
+    const target = repository.findWorkspace(targetId);
     if (!target) {
       throw new KnowledgeCoreError('Target knowledge base not found.', 404);
     }
     return target;
   }
 
-  const title = normalizeSecret(input.newKnowledgeBaseTitle);
+  const title = normalizeSecret(input.newWorkspaceTitle);
   if (title) {
-    return createKnowledgeBase(ensureUniqueTitle(title), `由资料「${material.title}」新建的知识库。`);
+    return createWorkspace(ensureUniqueTitle(title), `由资料「${material.title}」新建的知识库。`);
   }
 
   throw new KnowledgeCoreError('Target knowledge base or new title is required.', 400);
 }
 
-function moveMaterialAssets(materialId: string, previousKnowledgeBaseId: string, nextKnowledgeBaseId: string) {
-  if (previousKnowledgeBaseId === nextKnowledgeBaseId) return;
+function moveMaterialAssets(materialId: string, previousWorkspaceId: string, nextWorkspaceId: string) {
+  if (previousWorkspaceId === nextWorkspaceId) return;
   const movedCardIds = new Set<string>();
-  for (const card of repository.listCards(previousKnowledgeBaseId)) {
+  for (const card of repository.listCards(previousWorkspaceId)) {
     if (card.materialId !== materialId) continue;
-    card.knowledgeBaseId = nextKnowledgeBaseId;
+    card.workspaceId = nextWorkspaceId;
     card.updatedAt = now();
     repository.updateCard(card);
     movedCardIds.add(card.id);
   }
-  for (const artifact of repository.listArtifacts(previousKnowledgeBaseId)) {
+  for (const artifact of repository.listArtifacts(previousWorkspaceId)) {
     if (!artifact.sourceMaterialIds.includes(materialId)) continue;
-    artifact.knowledgeBaseId = nextKnowledgeBaseId;
+    artifact.workspaceId = nextWorkspaceId;
     repository.updateArtifact(artifact);
   }
-  for (const entity of repository.listEntities(previousKnowledgeBaseId)) {
+  for (const entity of repository.listEntities(previousWorkspaceId)) {
     if (!entity.sourceCardIds.some((id) => movedCardIds.has(id))) continue;
     repository.deleteEntity(entity.id);
   }
 }
 
-function reconcileKnowledgeBaseStats(knowledgeBaseId?: string) {
-  const resolved = resolveKnowledgeBaseId(knowledgeBaseId);
-  const base = repository.findKnowledgeBase(resolved);
+function reconcileWorkspaceStats(workspaceId?: string) {
+  const resolved = resolveWorkspaceId(workspaceId);
+  const base = repository.findWorkspace(resolved);
   if (!base) return undefined;
   const materials = repository.listMaterials(base.id);
   const cards = repository.listCards(base.id);
@@ -4960,24 +4983,24 @@ function reconcileKnowledgeBaseStats(knowledgeBaseId?: string) {
       ? 'organizing'
       : 'ai_skeleton';
   base.updatedAt = now();
-  repository.updateKnowledgeBase(base);
+  repository.updateWorkspace(base);
   return base;
 }
 
-export function deleteMaterial(materialId: string): { materialId: string; knowledgeBaseId: string } {
+export function deleteMaterial(materialId: string): { materialId: string; workspaceId: string } {
   const material = repository.findMaterial(materialId);
   if (!material) {
     throw new KnowledgeCoreError('Material not found.', 404);
   }
-  const knowledgeBaseId = resolveKnowledgeBaseId(material.knowledgeBaseId);
+  const workspaceId = resolveWorkspaceId(material.workspaceId);
   for (const artifact of repository.listArtifacts()) {
     if (!artifact.sourceMaterialIds.includes(materialId)) continue;
     artifact.sourceMaterialIds = artifact.sourceMaterialIds.filter((id) => id !== materialId);
     repository.updateArtifact(artifact);
   }
   repository.deleteMaterial(materialId);
-  reconcileKnowledgeBaseStats(knowledgeBaseId);
-  return { materialId, knowledgeBaseId };
+  reconcileWorkspaceStats(workspaceId);
+  return { materialId, workspaceId };
 }
 
 function normalizeMediaUrls(values: string[]) {
@@ -4987,8 +5010,8 @@ function normalizeMediaUrls(values: string[]) {
     .filter((value) => /^https?:\/\//i.test(value)));
 }
 
-function buildKitContext(knowledgeBaseId: string) {
-  const materials = repository.listMaterials(knowledgeBaseId)
+function buildKitContext(workspaceId: string) {
+  const materials = repository.listMaterials(workspaceId)
     .slice(0, 12)
     .map((material) => ({
       id: material.id,
@@ -5000,7 +5023,7 @@ function buildKitContext(knowledgeBaseId: string) {
       mediaUrls: material.mediaUrls ?? [],
       contentPreview: compactPreview(material.contentText ?? material.rawInput),
     }));
-  const cards = repository.listCards(knowledgeBaseId)
+  const cards = repository.listCards(workspaceId)
     .slice(0, 16)
     .map((card) => ({
       id: card.id,
@@ -5009,7 +5032,7 @@ function buildKitContext(knowledgeBaseId: string) {
       bodyPreview: compactPreview(card.body),
       claimStatus: card.claimStatus,
     }));
-  const artifacts = repository.listArtifacts(knowledgeBaseId, 4)
+  const artifacts = repository.listArtifacts(workspaceId, 4)
     .map((artifact) => ({
       id: artifact.id,
       type: artifact.artifactType,
@@ -5019,8 +5042,8 @@ function buildKitContext(knowledgeBaseId: string) {
   return { materials, cards, artifacts };
 }
 
-function buildQuestionContext(knowledgeBaseId: string, questionMaterialId: string, question: string) {
-  const materials = repository.searchMaterialsByRelevance(knowledgeBaseId, question, CONTEXT_RETRIEVAL_LIMIT)
+function buildQuestionContext(workspaceId: string, questionMaterialId: string, question: string) {
+  const materials = repository.searchMaterialsByRelevance(workspaceId, question, CONTEXT_RETRIEVAL_LIMIT)
     .filter((material) => material.id !== questionMaterialId)
     .map((material) => ({
       id: material.id,
@@ -5032,7 +5055,7 @@ function buildQuestionContext(knowledgeBaseId: string, questionMaterialId: strin
       mediaUrls: material.mediaUrls ?? [],
       contentPreview: compactPreview(material.contentText ?? material.rawInput),
     }));
-  const cards = repository.searchCardsByRelevance(knowledgeBaseId, question, CONTEXT_RETRIEVAL_LIMIT)
+  const cards = repository.searchCardsByRelevance(workspaceId, question, CONTEXT_RETRIEVAL_LIMIT)
     .map((card) => ({
       id: card.id,
       type: card.type,
@@ -5081,7 +5104,7 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
       stampMaterialStatus(material, 'parsing');
       material.parseError = undefined;
       repository.updateMaterial(material);
-      touchKnowledgeBase(material.knowledgeBaseId);
+      touchWorkspace(material.workspaceId);
     }
     return {
       material,
@@ -5097,7 +5120,7 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
       'parse_material',
       {
         materialId: material.id,
-        knowledgeBaseId: material.knowledgeBaseId,
+        workspaceId: material.workspaceId,
         sourceUrl: material.sourceUrl,
         platform: material.platform,
         previousParseStatus: material.parseStatus,
@@ -5126,7 +5149,7 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
       'parse_material',
       {
         materialId: material.id,
-        knowledgeBaseId: material.knowledgeBaseId,
+        workspaceId: material.workspaceId,
         sourceUrl: material.sourceUrl,
         platform: material.platform,
         previousParseStatus: material.parseStatus,
@@ -5147,7 +5170,7 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
       'parse_material',
       {
         materialId: material.id,
-        knowledgeBaseId: material.knowledgeBaseId,
+        workspaceId: material.workspaceId,
         sourceUrl: material.sourceUrl,
         platform: material.platform,
         previousParseStatus: material.parseStatus,
@@ -5158,7 +5181,7 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
     stampMaterialStatus(material, 'needs_review');
     material.parseError = throttle.message;
     repository.updateMaterial(material);
-    touchKnowledgeBase(material.knowledgeBaseId);
+    touchWorkspace(material.workspaceId);
     task.output = {
       materialId: material.id,
       parseStatus: material.parseStatus,
@@ -5181,14 +5204,14 @@ export async function requestMaterialParsing(materialId: string): Promise<Materi
   stampMaterialStatus(material, 'parsing');
   material.parseError = undefined;
   repository.updateMaterial(material);
-  touchKnowledgeBase(material.knowledgeBaseId);
+  touchWorkspace(material.workspaceId);
 
   const retry = previousStatus === 'failed' || previousStatus === 'needs_review';
   const task = createTask(
     'parse_material',
     {
       materialId: material.id,
-      knowledgeBaseId: material.knowledgeBaseId,
+      workspaceId: material.workspaceId,
       sourceUrl: material.sourceUrl,
       platform: material.platform,
       previousParseStatus: previousStatus,
@@ -5232,7 +5255,7 @@ async function applyParsedMaterialResult(
     scheduleMaterialTranscription(material);
   }
 
-  const base = repository.findKnowledgeBase(resolveKnowledgeBaseId(material.knowledgeBaseId));
+  const base = repository.findWorkspace(resolveWorkspaceId(material.workspaceId));
   if (!base) {
     throw new KnowledgeCoreError('Knowledge base not found.', 404);
   }
@@ -5246,7 +5269,7 @@ async function applyParsedMaterialResult(
   try {
     const generation = await generateKnowledge('material_summary', parsed.text, {
       kind: 'link',
-      knowledgeBaseId: base.id,
+      workspaceId: base.id,
       materialId: material.id,
       hasSourceMaterial: true,
       parseStatus: material.parseStatus,
@@ -5288,7 +5311,7 @@ async function applyParsedMaterialResult(
   return {
     material,
     task,
-    knowledgeBase: base,
+    workspace: base,
     cards,
     artifact,
     queued: false,
@@ -5385,7 +5408,7 @@ function queueMaterialParsing(material: MaterialRecord): MaterialParseQueueResul
       stampMaterialStatus(material, 'parsing');
       material.parseError = undefined;
       repository.updateMaterial(material);
-      touchKnowledgeBase(material.knowledgeBaseId);
+      touchWorkspace(material.workspaceId);
     }
     return {
       material,
@@ -5400,14 +5423,14 @@ function queueMaterialParsing(material: MaterialRecord): MaterialParseQueueResul
   stampMaterialStatus(material, 'parsing');
   material.parseError = undefined;
   repository.updateMaterial(material);
-  touchKnowledgeBase(material.knowledgeBaseId);
+  touchWorkspace(material.workspaceId);
 
   const retry = previousStatus === 'failed' || previousStatus === 'needs_review';
   const task = createTask(
     'parse_material',
     {
       materialId: material.id,
-      knowledgeBaseId: material.knowledgeBaseId,
+      workspaceId: material.workspaceId,
       sourceUrl: material.sourceUrl,
       platform: material.platform,
       previousParseStatus: previousStatus,
@@ -5441,7 +5464,7 @@ export function recordMaterialParsingFailure(
     'parse_material',
     {
       materialId: material.id,
-      knowledgeBaseId: material.knowledgeBaseId,
+      workspaceId: material.workspaceId,
       sourceUrl: material.sourceUrl,
       platform: material.platform,
       previousParseStatus: material.parseStatus,
@@ -5452,7 +5475,7 @@ export function recordMaterialParsingFailure(
   stampMaterialStatus(material, 'failed');
   material.parseError = parseError;
   repository.updateMaterial(material);
-  touchKnowledgeBase(material.knowledgeBaseId);
+  touchWorkspace(material.workspaceId);
 
   task.status = 'failed';
   task.error = parseError;
@@ -6148,7 +6171,7 @@ function failMaterialParsingTask(
   stampMaterialStatus(material, failure.recoverable ? 'needs_review' : 'failed');
   material.parseError = parseError;
   repository.updateMaterial(material);
-  touchKnowledgeBase(material.knowledgeBaseId);
+  touchWorkspace(material.workspaceId);
 
   task.status = failure.recoverable ? 'needs_user_action' : 'failed';
   task.error = parseError;
@@ -6239,12 +6262,12 @@ function cleanParseError(errorMessage: string) {
   return (trimmed || 'Material parsing failed.').slice(0, 500);
 }
 
-function touchKnowledgeBase(knowledgeBaseId?: string) {
-  const resolved = resolveKnowledgeBaseId(knowledgeBaseId);
-  const base = repository.findKnowledgeBase(resolved);
+function touchWorkspace(workspaceId?: string) {
+  const resolved = resolveWorkspaceId(workspaceId);
+  const base = repository.findWorkspace(resolved);
   if (!base) return;
   base.updatedAt = now();
-  repository.updateKnowledgeBase(base);
+  repository.updateWorkspace(base);
 }
 
 const execFileAsync = promisify(execFile);
@@ -6466,8 +6489,8 @@ export function resetTranscriptionCapabilityCache() {
   cachedTranscriptionCapability = undefined;
 }
 
-export function listKnowledgeBases() {
-  return repository.listKnowledgeBases();
+export function listWorkspaces() {
+  return repository.listWorkspaces();
 }
 
 /**
@@ -6478,8 +6501,8 @@ export function listKnowledgeBases() {
  * @returns 更新后的知识库摘要，知识库不存在时返回 undefined
  * @author fxbin
  */
-export function updateKnowledgeBaseMeta(id: string, title?: string, summary?: string): KnowledgeBaseSummary | undefined {
-  const base = repository.findKnowledgeBase(id);
+export function updateWorkspaceMeta(id: string, title?: string, summary?: string): WorkspaceSummary | undefined {
+  const base = repository.findWorkspace(id);
   if (!base) return undefined;
   const trimmedTitle = title?.trim();
   if (trimmedTitle !== undefined && !trimmedTitle) {
@@ -6487,18 +6510,18 @@ export function updateKnowledgeBaseMeta(id: string, title?: string, summary?: st
   }
   const nextTitle = trimmedTitle ? compactTitle(trimmedTitle) : base.title;
   if (nextTitle !== base.title) {
-    const existing = repository.findKnowledgeBaseByTitle(nextTitle);
+    const existing = repository.findWorkspaceByTitle(nextTitle);
     if (existing && existing.id !== id) {
       throw new KnowledgeCoreError(`标题「${nextTitle}」已被其他知识库占用。`, 409);
     }
   }
-  const next: KnowledgeBaseSummary = {
+  const next: WorkspaceSummary = {
     ...base,
     title: nextTitle,
     summary: summary !== undefined ? (summary.trim() || base.summary) : base.summary,
     updatedAt: now(),
   };
-  repository.updateKnowledgeBase(next);
+  repository.updateWorkspace(next);
   return next;
 }
 
@@ -6508,15 +6531,15 @@ export function updateKnowledgeBaseMeta(id: string, title?: string, summary?: st
  * @returns true 表示删除成功，false 表示知识库不存在
  * @author fxbin
  */
-export function deleteKnowledgeBase(id: string): boolean {
-  const base = repository.findKnowledgeBase(id);
+export function deleteWorkspace(id: string): boolean {
+  const base = repository.findWorkspace(id);
   if (!base) return false;
-  repository.deleteKnowledgeBase(id);
+  repository.deleteWorkspace(id);
   return true;
 }
 
 type ListMaterialsOptions = {
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   type?: MaterialRecord['type'];
   status?: MaterialRecord['parseStatus'];
   query?: string;
@@ -6525,10 +6548,10 @@ type ListMaterialsOptions = {
 
 type KnowledgeSearchResult = {
   id: string;
-  kind: 'knowledge_base' | 'material' | 'card' | 'artifact';
+  kind: 'workspace' | 'material' | 'card' | 'artifact';
   title: string;
   preview: string;
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   metadata: Record<string, string | number | boolean | undefined>;
   score: number;
 };
@@ -6617,7 +6640,7 @@ function buildIdfMap(): Map<string, number> {
     }
     documentCount += 1;
   };
-  for (const base of repository.listKnowledgeBases()) {
+  for (const base of repository.listWorkspaces()) {
     collectTokens(base.title);
     collectTokens(base.summary);
   }
@@ -6676,7 +6699,7 @@ function scoreWithTfidf(
 
 export function listMaterials(options: ListMaterialsOptions = {}) {
   const query = options.query?.trim().toLowerCase();
-  const materials = repository.listMaterials(options.knowledgeBaseId);
+  const materials = repository.listMaterials(options.workspaceId);
   const filtered = materials.filter((material) => {
     if (options.type && material.type !== options.type) return false;
     if (options.status && material.parseStatus !== options.status) return false;
@@ -6776,14 +6799,14 @@ export function searchKnowledgeAssets(input: { query?: string; limit?: number } 
   const idfMap = buildIdfMap();
   const results: KnowledgeSearchResult[] = [];
 
-  for (const base of repository.listKnowledgeBases()) {
+  for (const base of repository.listWorkspaces()) {
     const match = scoreWithTfidf(terms, base.title, idfMap, base.summary);
     addSearchResult(results, {
       id: base.id,
-      kind: 'knowledge_base',
+      kind: 'workspace',
       title: base.title,
       preview: base.summary,
-      knowledgeBaseId: base.id,
+      workspaceId: base.id,
       metadata: withSearchMetadata(match, {
         stage: base.stage,
         sourceCount: base.sourceCount,
@@ -6810,7 +6833,7 @@ export function searchKnowledgeAssets(input: { query?: string; limit?: number } 
       kind: 'material',
       title: material.title,
       preview: compactPreview(material.contentText ?? material.rawInput),
-      knowledgeBaseId: material.knowledgeBaseId,
+      workspaceId: material.workspaceId,
       metadata: withSearchMetadata(match, {
         type: material.type,
         platform: material.platform ?? 'local',
@@ -6828,7 +6851,7 @@ export function searchKnowledgeAssets(input: { query?: string; limit?: number } 
       kind: 'card',
       title: card.title,
       preview: compactPreview(card.body),
-      knowledgeBaseId: card.knowledgeBaseId,
+      workspaceId: card.workspaceId,
       metadata: withSearchMetadata(match, {
         type: card.type,
         claimStatus: card.claimStatus,
@@ -6844,7 +6867,7 @@ export function searchKnowledgeAssets(input: { query?: string; limit?: number } 
       kind: 'artifact',
       title: artifact.title,
       preview: compactPreview(artifact.body),
-      knowledgeBaseId: artifact.knowledgeBaseId,
+      workspaceId: artifact.workspaceId,
       metadata: withSearchMetadata(match, {
         artifactType: artifact.artifactType,
         sourceMaterialCount: artifact.sourceMaterialIds.length,
@@ -6933,8 +6956,8 @@ function withSearchMetadata(match: SearchScore, metadata: KnowledgeSearchResult[
   };
 }
 
-export function getKnowledgeBase(id: string): KnowledgeBaseDetail | undefined {
-  const base = repository.findKnowledgeBase(id);
+export function getWorkspace(id: string): WorkspaceDetail | undefined {
+  const base = repository.findWorkspace(id);
   if (!base) return undefined;
   return {
     ...base,
@@ -6944,8 +6967,8 @@ export function getKnowledgeBase(id: string): KnowledgeBaseDetail | undefined {
   };
 }
 
-export function listMessages(knowledgeBaseId: string, limit?: number): ChatMessage[] {
-  return repository.listMessages(knowledgeBaseId, limit);
+export function listMessages(workspaceId: string, limit?: number): ChatMessage[] {
+  return repository.listMessages(workspaceId, limit);
 }
 
 export function recordCardReview(cardId: string, grade: RecallGrade): KnowledgeCard | undefined {
@@ -7091,10 +7114,10 @@ export type ExportSummary = {
   artifactCount: number;
 };
 
-export function recordExport(knowledgeBaseId: string, summary: ExportSummary): ExportRecord {
+export function recordExport(workspaceId: string, summary: ExportSummary): ExportRecord {
   const record: ExportRecord = {
     id: `export_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-    knowledgeBaseId,
+    workspaceId,
     format: summary.format,
     scope: summary.scope,
     includeArtifacts: summary.includeArtifacts,
@@ -7108,8 +7131,8 @@ export function recordExport(knowledgeBaseId: string, summary: ExportSummary): E
   return record;
 }
 
-export function listExports(knowledgeBaseId: string): ExportRecord[] {
-  return repository.listExportRecords(knowledgeBaseId);
+export function listExports(workspaceId: string): ExportRecord[] {
+  return repository.listExportRecords(workspaceId);
 }
 
 const SAVED_FILTER_DEFAULT_SORT = 'updated_desc';
@@ -7166,12 +7189,12 @@ function normalizeEntityType(raw: string): EntityType {
  * 若 piRuntime 未提供，则使用 mock 数据生成占位实体。
  * 已有同名同类型实体会被合并（sourceCardIds 取并集），不会重复创建。
  */
-export async function extractEntities(knowledgeBaseId: string, piRuntime?: PiRuntime): Promise<Entity[]> {
-  const base = repository.findKnowledgeBase(knowledgeBaseId);
+export async function extractEntities(workspaceId: string, piRuntime?: PiRuntime): Promise<Entity[]> {
+  const base = repository.findWorkspace(workspaceId);
   if (!base) {
-    throw new KnowledgeCoreError(`Knowledge base ${knowledgeBaseId} not found.`, 404);
+    throw new KnowledgeCoreError(`Knowledge base ${workspaceId} not found.`, 404);
   }
-  const cards = repository.listCards(knowledgeBaseId);
+  const cards = repository.listCards(workspaceId);
   if (cards.length === 0) {
     throw new KnowledgeCoreError('当前知识库没有卡片，无法提取实体。', 400);
   }
@@ -7193,7 +7216,7 @@ export async function extractEntities(knowledgeBaseId: string, piRuntime?: PiRun
   }
   const now = new Date().toISOString();
   const cardIds = cards.map((card) => card.id);
-  const existing = repository.listEntities(knowledgeBaseId);
+  const existing = repository.listEntities(workspaceId);
   const merged: Entity[] = [];
   for (const seed of seeds) {
     const match = existing.find((item) => item.name === seed.name && item.type === seed.type);
@@ -7205,7 +7228,7 @@ export async function extractEntities(knowledgeBaseId: string, piRuntime?: PiRun
     } else {
       const entity: Entity = {
         id: `${ENTITY_ID_PREFIX}${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-        knowledgeBaseId,
+        workspaceId,
         name: seed.name,
         type: seed.type,
         description: seed.description,
@@ -7220,8 +7243,8 @@ export async function extractEntities(knowledgeBaseId: string, piRuntime?: PiRun
   return merged;
 }
 
-export function listEntities(knowledgeBaseId: string): Entity[] {
-  return repository.listEntities(knowledgeBaseId);
+export function listEntities(workspaceId: string): Entity[] {
+  return repository.listEntities(workspaceId);
 }
 
 const CONFLICT_ID_PREFIX = 'conflict';
@@ -7265,7 +7288,7 @@ function detectCardConflictGroups(): ConflictGroup[] {
       title: bucket[0].title,
       items: bucket.slice(0, CONFLICT_GROUP_ITEM_LIMIT).map((card) => ({
         id: card.id,
-        knowledgeBaseId: card.knowledgeBaseId,
+        workspaceId: card.workspaceId,
         title: card.title,
         meta: card.claimStatus === 'sourced' ? '已溯源' : `类型 ${card.type}`,
       })),
@@ -7293,7 +7316,7 @@ function detectMaterialConflictGroups(): ConflictGroup[] {
       title: bucket[0].title,
       items: bucket.slice(0, CONFLICT_GROUP_ITEM_LIMIT).map((material) => ({
         id: material.id,
-        knowledgeBaseId: material.knowledgeBaseId,
+        workspaceId: material.workspaceId,
         title: material.title,
         meta: material.sourceUrl ? material.sourceUrl : `状态 ${material.parseStatus}`,
       })),
@@ -7319,16 +7342,16 @@ function normalizeConflictKey(value: string): string {
  */
 function detectSemanticTensionGroups(): ConflictGroup[] {
   const cards = repository.listCards();
-  const byKnowledgeBase = new Map<string, KnowledgeCard[]>();
+  const byWorkspace = new Map<string, KnowledgeCard[]>();
   for (const card of cards) {
-    const kbId = resolveKnowledgeBaseId(card.knowledgeBaseId);
-    const bucket = byKnowledgeBase.get(kbId) ?? [];
+    const kbId = resolveWorkspaceId(card.workspaceId);
+    const bucket = byWorkspace.get(kbId) ?? [];
     bucket.push(card);
-    byKnowledgeBase.set(kbId, bucket);
+    byWorkspace.set(kbId, bucket);
   }
 
   const groups: ConflictGroup[] = [];
-  for (const [knowledgeBaseId, kbCards] of byKnowledgeBase) {
+  for (const [workspaceId, kbCards] of byWorkspace) {
     for (const [keywordA, keywordB] of TENSION_KEYWORD_PAIRS) {
       const sideA = kbCards.filter((card) => card.title.includes(keywordA));
       const sideB = kbCards.filter((card) => card.title.includes(keywordB));
@@ -7340,14 +7363,14 @@ function detectSemanticTensionGroups(): ConflictGroup[] {
         .slice(0, CONFLICT_GROUP_ITEM_LIMIT)
         .map((card) => ({
           id: card.id,
-          knowledgeBaseId: card.knowledgeBaseId,
+          workspaceId: card.workspaceId,
           title: card.title,
           meta: TENSION_META_TEMPLATE
             .replace('{status}', card.claimStatus === 'sourced' ? '已溯源' : card.claimStatus === 'ai_skeleton' ? '骨架' : '已确认')
             .replace('{type}', card.type),
         }));
 
-      const key = `${TENSION_KEY_PREFIX}${keywordA}${TENSION_KEY_SEPARATOR}${keywordB}:${knowledgeBaseId}`;
+      const key = `${TENSION_KEY_PREFIX}${keywordA}${TENSION_KEY_SEPARATOR}${keywordB}:${workspaceId}`;
       const title = TENSION_TITLE_TEMPLATE.replace('{a}', keywordA).replace('{b}', keywordB);
 
       groups.push({
@@ -7375,7 +7398,7 @@ export function resolveConflictGroup(request: ConflictResolutionRequest): Confli
   if (request.dropIds.includes(request.keepId)) {
     throw new KnowledgeCoreError('保留项不能同时出现在被合并列表中。', 400);
   }
-  const knowledgeBaseId = request.kind === 'duplicate_card'
+  const workspaceId = request.kind === 'duplicate_card'
     ? resolveCardConflict(request.keepId, request.dropIds)
     : resolveMaterialConflict(request.keepId, request.dropIds);
   const entry: ConflictAuditEntry = {
@@ -7384,12 +7407,12 @@ export function resolveConflictGroup(request: ConflictResolutionRequest): Confli
     action: 'merge',
     keepId: request.keepId,
     dropIds: [...request.dropIds],
-    knowledgeBaseId,
+    workspaceId,
     note: `合并 ${request.dropIds.length} 个重复${request.kind === 'duplicate_card' ? '卡片' : '资料'}到保留项。`,
     createdAt: new Date().toISOString(),
   };
   repository.insertConflictAudit(entry);
-  reconcileKnowledgeBaseStats(knowledgeBaseId);
+  reconcileWorkspaceStats(workspaceId);
   return entry;
 }
 
@@ -7404,7 +7427,7 @@ function resolveCardConflict(keepId: string, dropIds: string[]): string {
     }
     repository.deleteCard(dropId);
   }
-  return resolveKnowledgeBaseId(keepCard.knowledgeBaseId);
+  return resolveWorkspaceId(keepCard.workspaceId);
 }
 
 function resolveMaterialConflict(keepId: string, dropIds: string[]): string {
@@ -7425,7 +7448,7 @@ function resolveMaterialConflict(keepId: string, dropIds: string[]): string {
   for (const dropId of dropIds) {
     deleteMaterial(dropId);
   }
-  return resolveKnowledgeBaseId(keepMaterial.knowledgeBaseId);
+  return resolveWorkspaceId(keepMaterial.workspaceId);
 }
 
 /**
@@ -7463,9 +7486,9 @@ export function describeCloudBackupStatus(): CloudBackupStub {
   };
 }
 
-export function listDueCards(knowledgeBaseId: string, limit?: number): KnowledgeCard[] {
+export function listDueCards(workspaceId: string, limit?: number): KnowledgeCard[] {
   const now = new Date().toISOString();
-  const all = repository.listCards(knowledgeBaseId);
+  const all = repository.listCards(workspaceId);
   const due = all
     .filter((card) => !card.recall || card.recall.dueAt <= now)
     .sort((a, b) => {
@@ -7477,7 +7500,7 @@ export function listDueCards(knowledgeBaseId: string, limit?: number): Knowledge
 }
 
 export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {
-  const base = repository.findKnowledgeBase(id);
+  const base = repository.findWorkspace(id);
   if (!base) return undefined;
 
   const materials = repository.listMaterials(id);
@@ -7512,8 +7535,8 @@ export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {
   }));
   const nodes = [
     {
-      id: `knowledge_base:${base.id}`,
-      kind: 'knowledge_base' as const,
+      id: `workspace:${base.id}`,
+      kind: 'workspace' as const,
       label: base.title,
       summary: base.summary,
       status: base.stage,
@@ -7531,7 +7554,7 @@ export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {
   const structuralEdges = [
     ...materialNodes.map((node) => ({
       id: `edge:${base.id}:${node.id}`,
-      sourceId: `knowledge_base:${base.id}`,
+      sourceId: `workspace:${base.id}`,
       targetId: node.id,
       relation: 'contains' as const,
     })),
@@ -7539,7 +7562,7 @@ export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {
       const materialId = typeof node.metadata?.materialId === 'string' ? node.metadata.materialId : undefined;
       const sourceId = materialId && visibleMaterialIds.has(materialId)
         ? `material:${materialId}`
-        : `knowledge_base:${base.id}`;
+        : `workspace:${base.id}`;
       return {
         id: `edge:${sourceId}:${node.id}`,
         sourceId,
@@ -7560,7 +7583,7 @@ export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {
   const edges = [...structuralEdges, ...tensionEdges, ...customEdges];
 
   return {
-    knowledgeBaseId: id,
+    workspaceId: id,
     generatedAt: now(),
     nodes,
     edges,
@@ -7582,15 +7605,15 @@ export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {
  * 生成 contradicts 类型的边，帮助用户在地图上直观发现认知冲突。
  *
  * @author fxbin
- * @param knowledgeBaseId - 知识库 ID
+ * @param workspaceId - 知识库 ID
  * @param visibleCardIds - 当前地图上可见的卡片 ID 集合
  * @returns 张力边数组
  */
 function buildTensionEdges(
-  knowledgeBaseId: string,
+  workspaceId: string,
   visibleCardIds: Set<string>,
 ): Array<{ id: string; sourceId: string; targetId: string; relation: 'contradicts'; custom?: boolean }> {
-  const cards = repository.listCards(knowledgeBaseId);
+  const cards = repository.listCards(workspaceId);
   const tensionGroups: Array<{ sideA: KnowledgeCard[]; sideB: KnowledgeCard[] }> = [];
   for (const [keywordA, keywordB] of TENSION_KEYWORD_PAIRS) {
     const sideA = cards.filter((card) => card.title.includes(keywordA));
@@ -7625,23 +7648,23 @@ function buildTensionEdges(
  * @param {string} id - 知识库 ID
  * @returns {KnowledgeMapNodePosition[]|undefined} 节点位置数组，知识库不存在时返回 undefined
  */
-export function getKnowledgeBaseNodePositions(id: string): KnowledgeMapNodePosition[] | undefined {
-  const base = repository.findKnowledgeBase(id);
+export function getWorkspaceNodePositions(id: string): KnowledgeMapNodePosition[] | undefined {
+  const base = repository.findWorkspace(id);
   if (!base) return undefined;
   return repository.getNodePositions(id);
 }
 
 /**
  * 保存知识库的节点拖拽位置。
- * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {string} workspaceId - 知识库 ID
  * @param {SaveKnowledgeMapNodePositionsRequest} request - 保存请求
  * @returns {KnowledgeMapNodePosition[]} 保存后的节点位置数组
  */
-export function saveKnowledgeBaseNodePositions(
-  knowledgeBaseId: string,
+export function saveWorkspaceNodePositions(
+  workspaceId: string,
   request: SaveKnowledgeMapNodePositionsRequest,
 ): KnowledgeMapNodePosition[] {
-  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  const base = repository.findWorkspace(workspaceId);
   if (!base) throw new KnowledgeCoreError('Knowledge base not found.', 404);
   const positions = (request.positions ?? []).filter(
     (position): position is KnowledgeMapNodePosition =>
@@ -7651,14 +7674,14 @@ export function saveKnowledgeBaseNodePositions(
       && Number.isFinite(position.x)
       && Number.isFinite(position.y),
   );
-  repository.saveNodePositions(knowledgeBaseId, positions);
+  repository.saveNodePositions(workspaceId, positions);
   repository.insertAttentionSignal({
     id: id('attn'),
-    knowledgeBaseId: knowledgeBaseId,
+    workspaceId: workspaceId,
     signalType: ATTENTION_SIGNAL_MANUAL_LAYOUT,
     signalStrength: ATTENTION_SIGNAL_MEDIUM,
     targetType: ATTENTION_TARGET_TYPE_LAYOUT,
-    targetId: knowledgeBaseId,
+    targetId: workspaceId,
     contextData: { nodeCount: positions.length },
     consumed: false,
     createdAt: now(),
@@ -7673,12 +7696,12 @@ export function saveKnowledgeBaseNodePositions(
  * 持久化到 map_custom_edges 表，在 getKnowledgeMap 时合并返回。
  *
  * @author fxbin
- * @param knowledgeBaseId - 知识库 ID
+ * @param workspaceId - 知识库 ID
  * @param request - 添加边请求
  * @returns 创建的自定义边对象
  */
-export function addMapEdge(knowledgeBaseId: string, request: AddMapEdgeRequest): KnowledgeMapCustomEdge {
-  const base = repository.findKnowledgeBase(knowledgeBaseId);
+export function addMapEdge(workspaceId: string, request: AddMapEdgeRequest): KnowledgeMapCustomEdge {
+  const base = repository.findWorkspace(workspaceId);
   if (!base) throw new KnowledgeCoreError('Knowledge base not found.', 404);
   if (!request.sourceNodeId || !request.targetNodeId) {
     throw new KnowledgeCoreError('边的源节点和目标节点不能为空。', 400);
@@ -7691,7 +7714,7 @@ export function addMapEdge(knowledgeBaseId: string, request: AddMapEdgeRequest):
   }
   const edge: KnowledgeMapCustomEdge = {
     id: id(MAP_EDGE_ID_PREFIX),
-    knowledgeBaseId,
+    workspaceId,
     sourceNodeId: request.sourceNodeId,
     targetNodeId: request.targetNodeId,
     relation: request.relation,
@@ -7705,13 +7728,13 @@ export function addMapEdge(knowledgeBaseId: string, request: AddMapEdgeRequest):
  * 删除自定义地图边（P12-2）。
  *
  * @author fxbin
- * @param knowledgeBaseId - 知识库 ID
+ * @param workspaceId - 知识库 ID
  * @param edgeId - 边 ID
  */
-export function removeMapEdge(knowledgeBaseId: string, edgeId: string): void {
-  const base = repository.findKnowledgeBase(knowledgeBaseId);
+export function removeMapEdge(workspaceId: string, edgeId: string): void {
+  const base = repository.findWorkspace(workspaceId);
   if (!base) throw new KnowledgeCoreError('Knowledge base not found.', 404);
-  repository.deleteMapCustomEdge(knowledgeBaseId, edgeId);
+  repository.deleteMapCustomEdge(workspaceId, edgeId);
 }
 
 /**
@@ -7723,14 +7746,14 @@ export function removeMapEdge(knowledgeBaseId: string, edgeId: string): void {
  * 遵循"镜子不保姆"铁律——只呈现事实，不替代用户判断。
  *
  * @author fxbin
- * @param knowledgeBaseId - 知识库 ID
+ * @param workspaceId - 知识库 ID
  * @returns 证据审计报告
  */
-export function generateEvidenceAudit(knowledgeBaseId: string): EvidenceAuditReport {
-  const base = repository.findKnowledgeBase(knowledgeBaseId);
+export function generateEvidenceAudit(workspaceId: string): EvidenceAuditReport {
+  const base = repository.findWorkspace(workspaceId);
   if (!base) throw new KnowledgeCoreError('Knowledge base not found.', 404);
 
-  const cards = repository.listCards(knowledgeBaseId);
+  const cards = repository.listCards(workspaceId);
   const totals = {
     cards: cards.length,
     sourced: cards.filter((card) => card.claimStatus === 'sourced').length,
@@ -7766,7 +7789,7 @@ export function generateEvidenceAudit(knowledgeBaseId: string): EvidenceAuditRep
   gaps.sort((a, b) => b.skeletonRatio - a.skeletonRatio);
 
   return {
-    knowledgeBaseId,
+    workspaceId,
     generatedAt: now(),
     totals,
     sourcedRatio,
@@ -7785,19 +7808,19 @@ export function generateEvidenceAudit(knowledgeBaseId: string): EvidenceAuditRep
  * verdict 是基于证据数量的统计判定，不是真理裁决。
  *
  * @author fxbin
- * @param knowledgeBaseId - 知识库 ID
+ * @param workspaceId - 知识库 ID
  * @param hypothesis - 用户假设文本
  * @returns 假设检验结果
  */
-export function testHypothesis(knowledgeBaseId: string, hypothesis: string): HypothesisTestResult {
-  const base = repository.findKnowledgeBase(knowledgeBaseId);
+export function testHypothesis(workspaceId: string, hypothesis: string): HypothesisTestResult {
+  const base = repository.findWorkspace(workspaceId);
   if (!base) throw new KnowledgeCoreError('Knowledge base not found.', 404);
   const trimmed = hypothesis.trim();
   if (!trimmed) {
     throw new KnowledgeCoreError('假设不能为空。', 400);
   }
 
-  const cards = repository.searchCardsByRelevance(knowledgeBaseId, trimmed, HYPOTHESIS_SEARCH_LIMIT);
+  const cards = repository.searchCardsByRelevance(workspaceId, trimmed, HYPOTHESIS_SEARCH_LIMIT);
   const supportingCards: HypothesisEvidence[] = [];
   const contradictingCards: HypothesisEvidence[] = [];
   const neutralCards: HypothesisEvidence[] = [];
@@ -7839,7 +7862,7 @@ export function testHypothesis(knowledgeBaseId: string, hypothesis: string): Hyp
   }
 
   return {
-    knowledgeBaseId,
+    workspaceId,
     hypothesis: trimmed,
     generatedAt: now(),
     verdict,
@@ -7852,13 +7875,13 @@ export function testHypothesis(knowledgeBaseId: string, hypothesis: string): Hyp
 
 /**
  * 查询注意力信号列表，供 Recall Agent 检索用户认知建构活动。
- * @param knowledgeBaseId - 可选，知识库 ID 过滤；未指定时返回全库信号
+ * @param workspaceId - 可选，知识库 ID 过滤；未指定时返回全库信号
  * @param limit - 可选，最大返回数量
  * @returns 注意力信号数组
  * @author fxbin
  */
-export function listAttentionSignals(knowledgeBaseId?: string, limit?: number): AttentionSignal[] {
-  return repository.listAttentionSignals(knowledgeBaseId, limit);
+export function listAttentionSignals(workspaceId?: string, limit?: number): AttentionSignal[] {
+  return repository.listAttentionSignals(workspaceId, limit);
 }
 
 const INTEREST_WINDOW_DAYS = 7;
@@ -7956,9 +7979,9 @@ export function generateDailyDigest(): DailyDigest {
   const cutoffIso = new Date(cutoffMs).toISOString();
   const today = new Date(nowMs).toISOString().slice(0, 10);
 
-  const knowledgeBaseMap = new Map<string, string>();
-  for (const base of repository.listKnowledgeBases()) {
-    knowledgeBaseMap.set(base.id, base.title);
+  const workspaceMap = new Map<string, string>();
+  for (const base of repository.listWorkspaces()) {
+    workspaceMap.set(base.id, base.title);
   }
 
   const newCards: DailyDigestItem[] = [];
@@ -7968,8 +7991,8 @@ export function generateDailyDigest(): DailyDigest {
         id: card.id,
         type: 'card',
         title: card.title,
-        knowledgeBaseId: card.knowledgeBaseId,
-        knowledgeBaseTitle: knowledgeBaseMap.get(resolveKnowledgeBaseId(card.knowledgeBaseId)),
+        workspaceId: card.workspaceId,
+        workspaceTitle: workspaceMap.get(resolveWorkspaceId(card.workspaceId)),
         createdAt: card.createdAt,
       });
     }
@@ -7983,9 +8006,9 @@ export function generateDailyDigest(): DailyDigest {
         id: material.id,
         type: 'material',
         title: material.title,
-        knowledgeBaseId: material.knowledgeBaseId,
-        knowledgeBaseTitle: material.knowledgeBaseId
-          ? knowledgeBaseMap.get(material.knowledgeBaseId)
+        workspaceId: material.workspaceId,
+        workspaceTitle: material.workspaceId
+          ? workspaceMap.get(material.workspaceId)
           : undefined,
         createdAt: material.createdAt,
       });
@@ -8006,8 +8029,8 @@ export function generateDailyDigest(): DailyDigest {
       id: signal.id,
       type: 'signal',
       title: String(contextText).slice(0, 60),
-      knowledgeBaseId: signal.knowledgeBaseId,
-      knowledgeBaseTitle: knowledgeBaseMap.get(resolveKnowledgeBaseId(signal.knowledgeBaseId)),
+      workspaceId: signal.workspaceId,
+      workspaceTitle: workspaceMap.get(resolveWorkspaceId(signal.workspaceId)),
       createdAt: signal.createdAt,
     });
     if (newSignals.length >= DIGEST_MAX_ITEMS_PER_TYPE) break;
@@ -8041,7 +8064,7 @@ const COVERAGE_MAX_TOPICS = 15;
  */
 export function computeTopicCoverage(): TopicCoverageHeatmap {
   const profile = computeUserInterestProfile(INTEREST_WINDOW_DAYS);
-  const bases = repository.listKnowledgeBases();
+  const bases = repository.listWorkspaces();
   const allCards = repository.listCards();
   const allMaterials = repository.listMaterials();
 
@@ -8053,20 +8076,20 @@ export function computeTopicCoverage(): TopicCoverageHeatmap {
       let totalMaterials = 0;
       const cells: TopicCoverageCell[] = bases.map((base) => {
         const cardCount = allCards.filter(
-          (card) => card.knowledgeBaseId === base.id
+          (card) => card.workspaceId === base.id
             && (card.title.toLowerCase().includes(termLower)
               || card.body.toLowerCase().includes(termLower)),
         ).length;
         const materialCount = allMaterials.filter(
-          (material) => material.knowledgeBaseId === base.id
+          (material) => material.workspaceId === base.id
             && (material.title.toLowerCase().includes(termLower)
               || (material.contentText ?? material.rawInput ?? '').toLowerCase().includes(termLower)),
         ).length;
         totalCards += cardCount;
         totalMaterials += materialCount;
         return {
-          knowledgeBaseId: base.id,
-          knowledgeBaseTitle: base.title,
+          workspaceId: base.id,
+          workspaceTitle: base.title,
           cardCount,
           materialCount,
         };
@@ -8116,7 +8139,7 @@ export function detectRepeatedThinking(): RepeatedThinkingReport {
         ? signal.contextData.question
         : '',
       createdAt: signal.createdAt,
-      knowledgeBaseId: signal.knowledgeBaseId,
+      workspaceId: signal.workspaceId,
     }))
     .filter((item) => item.question.length > 0);
 
@@ -8213,12 +8236,12 @@ const READING_SESSION_MIN_DURATION_MS = 1000;
 /**
  * 记录卡片阅读行为，将停留时长作为 card_opened 注意力信号持久化。
  * 供用户兴趣画像与遗忘机制使用。
- * @param request - 阅读行为记录请求（cardId、knowledgeBaseId、durationMs）
+ * @param request - 阅读行为记录请求（cardId、workspaceId、durationMs）
  * @returns 记录结果
  * @author fxbin
  */
 export function recordReadingSession(request: ReadingSessionRequest): { recorded: boolean } {
-  if (!request.cardId || !request.knowledgeBaseId) {
+  if (!request.cardId || !request.workspaceId) {
     return { recorded: false };
   }
   if (typeof request.durationMs !== 'number' || request.durationMs < READING_SESSION_MIN_DURATION_MS) {
@@ -8227,7 +8250,7 @@ export function recordReadingSession(request: ReadingSessionRequest): { recorded
   const timestamp = now();
   repository.insertAttentionSignal({
     id: id('attn'),
-    knowledgeBaseId: request.knowledgeBaseId,
+    workspaceId: request.workspaceId,
     signalType: ATTENTION_SIGNAL_CARD_OPENED,
     signalStrength: ATTENTION_SIGNAL_WEAK,
     targetType: ATTENTION_TARGET_TYPE_CARD,
@@ -8242,22 +8265,22 @@ export function recordReadingSession(request: ReadingSessionRequest): { recorded
 /**
  * 记录"答不上来"反馈，将用户对 AI 回答的不满意作为 cannot_answer 注意力信号持久化。
  * 用于识别知识盲区，驱动后续知识补充。
- * @param request - 反馈请求（knowledgeBaseId、question）
+ * @param request - 反馈请求（workspaceId、question）
  * @returns 记录结果
  * @author fxbin
  */
 export function recordCannotAnswerFeedback(request: CannotAnswerFeedbackRequest): { recorded: boolean } {
-  if (!request.knowledgeBaseId || !request.question?.trim()) {
+  if (!request.workspaceId || !request.question?.trim()) {
     return { recorded: false };
   }
   const timestamp = now();
   repository.insertAttentionSignal({
     id: id('attn'),
-    knowledgeBaseId: request.knowledgeBaseId,
+    workspaceId: request.workspaceId,
     signalType: ATTENTION_SIGNAL_CANNOT_ANSWER,
     signalStrength: ATTENTION_SIGNAL_MEDIUM,
     targetType: ATTENTION_TARGET_TYPE_QUESTION,
-    targetId: request.knowledgeBaseId,
+    targetId: request.workspaceId,
     contextData: { question: request.question.trim().slice(0, ATTENTION_CONTEXT_QUESTION_MAX_LENGTH) },
     consumed: false,
     createdAt: timestamp,
@@ -8277,7 +8300,7 @@ const RECALL_DECAY_MS_PER_DAY = 24 * 60 * 60 * 1000;
  */
 export function computeRecallDecay(): RecallDecayReport {
   const cards = repository.listCards();
-  const bases = repository.listKnowledgeBases();
+  const bases = repository.listWorkspaces();
   const baseMap = new Map(bases.map((base) => [base.id, base.title]));
   const signals = repository.listAttentionSignals(undefined, 1000);
 
@@ -8300,8 +8323,8 @@ export function computeRecallDecay(): RecallDecayReport {
     return {
       cardId: card.id,
       cardTitle: card.title,
-      knowledgeBaseId: card.knowledgeBaseId,
-      knowledgeBaseTitle: baseMap.get(resolveKnowledgeBaseId(card.knowledgeBaseId)) ?? '',
+      workspaceId: card.workspaceId,
+      workspaceTitle: baseMap.get(resolveWorkspaceId(card.workspaceId)) ?? '',
       lastAccessedAt,
       daysSinceLastAccess: Math.round(daysSinceLastAccess * 10) / 10,
       recallScore: Math.round(recallScore * 1000) / 1000,
@@ -8372,12 +8395,12 @@ const EMERGENCE_MAX_CLUSTERS = 5;
  * @author fxbin
  */
 export function detectWorkspaceEmergence(): WorkspaceEmergenceCluster[] {
-  const defaultCards = repository.listCards(DEFAULT_KB_ID);
+  const defaultCards = repository.listCards(DEFAULT_WORKSPACE_ID);
   if (defaultCards.length < EMERGENCE_MIN_CARD_COUNT) {
     return [];
   }
 
-  const existingTitles = repository.listKnowledgeBases().map((base) => base.title.toLowerCase());
+  const existingTitles = repository.listWorkspaces().map((base) => base.title.toLowerCase());
 
   const keywordToCards = new Map<string, Set<string>>();
   const cardTitleMap = new Map<string, string>();
@@ -8507,7 +8530,7 @@ export function generateAgentProposals(): AgentProposalReport {
  * @author fxbin
  * @param {AgentAction} action - 行为类型
  * @param {object} options - 选项
- * @param {string} [options.knowledgeBaseId] - 知识库 ID
+ * @param {string} [options.workspaceId] - 知识库 ID
  * @param {Record<string, unknown>} [options.input] - 输入参数
  * @param {Record<string, unknown>} [options.output] - 输出结果
  * @param {string} [options.error] - 错误信息
@@ -8517,7 +8540,7 @@ export function generateAgentProposals(): AgentProposalReport {
 export function logAgentAction(
   action: AgentAction,
   options: {
-    knowledgeBaseId?: string;
+    workspaceId?: string;
     input?: Record<string, unknown>;
     output?: Record<string, unknown>;
     error?: string;
@@ -8527,7 +8550,7 @@ export function logAgentAction(
   const log: AgentActionLog = {
     id: id(AGENT_ACTION_LOG_ID_PREFIX),
     action,
-    knowledgeBaseId: options.knowledgeBaseId,
+    workspaceId: options.workspaceId,
     input: options.input ?? {},
     output: options.output,
     durationMs: options.durationMs ?? 0,
@@ -8544,13 +8567,13 @@ export function logAgentAction(
  *
  * @author fxbin
  * @param {object} options - 查询选项
- * @param {string} [options.knowledgeBaseId] - 知识库 ID 过滤
+ * @param {string} [options.workspaceId] - 知识库 ID 过滤
  * @param {string} [options.action] - 行为类型过滤
  * @param {number} [options.limit] - 最大返回数量
  * @returns {AgentActionLogResult} 日志查询结果
  */
 export function listAgentActionLogs(options?: {
-  knowledgeBaseId?: string;
+  workspaceId?: string;
   action?: string;
   limit?: number;
 }): AgentActionLogResult {
@@ -8590,12 +8613,12 @@ export function getTask(id: string) {
   return repository.findTask(id);
 }
 
-export function getDashboard(knowledgeBaseId?: string) {
+export function getDashboard(workspaceId?: string) {
   return {
-    knowledgeBases: repository.listKnowledgeBases(),
-    materials: repository.listMaterials(knowledgeBaseId, 6),
+    workspaces: repository.listWorkspaces(),
+    materials: repository.listMaterials(workspaceId, 6),
     tasks: repository.listTasks(6),
-    artifacts: repository.listArtifacts(knowledgeBaseId, 6),
+    artifacts: repository.listArtifacts(workspaceId, 6),
   };
 }
 
@@ -8610,7 +8633,7 @@ export function archiveMaterial(id: string): ArchiveItemResult {
   const material = repository.findMaterial(id);
   if (!material) throw new KnowledgeCoreError('Material not found.', 404);
   repository.archiveMaterial(id);
-  return { id, knowledgeBaseId: material.knowledgeBaseId, kind: 'material', archived: true };
+  return { id, workspaceId: material.workspaceId, kind: 'material', archived: true };
 }
 
 /**
@@ -8623,7 +8646,7 @@ export function unarchiveMaterial(id: string): ArchiveItemResult {
   const material = repository.findMaterial(id);
   if (!material) throw new KnowledgeCoreError('Material not found.', 404);
   repository.unarchiveMaterial(id);
-  return { id, knowledgeBaseId: material.knowledgeBaseId, kind: 'material', archived: false };
+  return { id, workspaceId: material.workspaceId, kind: 'material', archived: false };
 }
 
 /**
@@ -8637,7 +8660,7 @@ export function archiveCard(id: string): ArchiveItemResult {
   const card = repository.findCard(id);
   if (!card) throw new KnowledgeCoreError('Card not found.', 404);
   repository.archiveCard(id);
-  return { id, knowledgeBaseId: card.knowledgeBaseId, kind: 'card', archived: true };
+  return { id, workspaceId: card.workspaceId, kind: 'card', archived: true };
 }
 
 /**
@@ -8650,38 +8673,38 @@ export function unarchiveCard(id: string): ArchiveItemResult {
   const card = repository.findCard(id);
   if (!card) throw new KnowledgeCoreError('Card not found.', 404);
   repository.unarchiveCard(id);
-  return { id, knowledgeBaseId: card.knowledgeBaseId, kind: 'card', archived: false };
+  return { id, workspaceId: card.workspaceId, kind: 'card', archived: false };
 }
 
 /**
  * 获取全局或指定知识库下的归档资料与卡片列表。
  * @param {Object} options - 查询选项
- * @param {string} [options.knowledgeBaseId] - 可选知识库 ID
+ * @param {string} [options.workspaceId] - 可选知识库 ID
  * @returns {ArchivedItemsResult} 归档列表
  * @author fxbin
  */
-export function listArchivedItems(options: { knowledgeBaseId?: string } = {}): ArchivedItemsResult {
-  const materials = repository.listArchivedMaterials(options.knowledgeBaseId);
-  const cards = repository.listArchivedCards(options.knowledgeBaseId);
-  const allBases = repository.listKnowledgeBases();
-  const baseIds = new Set([...materials.map((m) => m.knowledgeBaseId), ...cards.map((c) => c.knowledgeBaseId)]);
-  const knowledgeBases = options.knowledgeBaseId
-    ? allBases.filter((base) => base.id === options.knowledgeBaseId)
+export function listArchivedItems(options: { workspaceId?: string } = {}): ArchivedItemsResult {
+  const materials = repository.listArchivedMaterials(options.workspaceId);
+  const cards = repository.listArchivedCards(options.workspaceId);
+  const allBases = repository.listWorkspaces();
+  const baseIds = new Set([...materials.map((m) => m.workspaceId), ...cards.map((c) => c.workspaceId)]);
+  const workspaces = options.workspaceId
+    ? allBases.filter((base) => base.id === options.workspaceId)
     : allBases.filter((base) => baseIds.has(base.id));
-  return { materials, cards, knowledgeBases };
+  return { materials, cards, workspaces };
 }
 
-export async function getKnowledgeBaseAnalytics(id: string): Promise<KnowledgeBaseAnalytics | undefined> {
-  const base = repository.findKnowledgeBase(id);
+export async function getWorkspaceAnalytics(id: string): Promise<WorkspaceAnalytics | undefined> {
+  const base = repository.findWorkspace(id);
   if (!base) return undefined;
 
   const materials = repository.listMaterials(id);
   const cards = repository.listCards(id);
   const artifacts = repository.listArtifacts(id);
   const tasks = repository.listTasks().filter((task) => {
-    const inputKnowledgeBaseId = typeof task.input.knowledgeBaseId === 'string' ? task.input.knowledgeBaseId : undefined;
-    const outputKnowledgeBaseId = typeof task.output?.knowledgeBaseId === 'string' ? task.output.knowledgeBaseId : undefined;
-    return inputKnowledgeBaseId === id || outputKnowledgeBaseId === id;
+    const inputWorkspaceId = typeof task.input.workspaceId === 'string' ? task.input.workspaceId : undefined;
+    const outputWorkspaceId = typeof task.output?.workspaceId === 'string' ? task.output.workspaceId : undefined;
+    return inputWorkspaceId === id || outputWorkspaceId === id;
   });
 
   const connection = await DuckDBConnection.create();
@@ -8765,7 +8788,7 @@ export async function getKnowledgeBaseAnalytics(id: string): Promise<KnowledgeBa
     const sourcedCards = Number(totals.sourcedCards ?? 0);
 
     return {
-      knowledgeBaseId: id,
+      workspaceId: id,
       generatedAt: now(),
       totals: {
         materials: Number(totals.materials ?? 0),
@@ -8788,7 +8811,7 @@ export async function getKnowledgeBaseAnalytics(id: string): Promise<KnowledgeBa
 }
 
 export function getGlobalInsights(): GlobalInsights {
-  const bases = repository.listKnowledgeBases();
+  const bases = repository.listWorkspaces();
   const materials = repository.listMaterials();
   const cards = repository.listCards();
   const artifacts = repository.listArtifacts();
@@ -8829,12 +8852,12 @@ export function getGlobalInsights(): GlobalInsights {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 8)
     .map((card) => {
-      const kbId = resolveKnowledgeBaseId(card.knowledgeBaseId);
+      const kbId = resolveWorkspaceId(card.workspaceId);
       const base = bases.find((b) => b.id === kbId);
       return {
         id: card.id,
-        knowledgeBaseId: kbId,
-        knowledgeBaseTitle: base?.title ?? kbId,
+        workspaceId: kbId,
+        workspaceTitle: base?.title ?? kbId,
         title: card.title,
         type: card.type,
         claimStatus: card.claimStatus,
@@ -8848,7 +8871,7 @@ export function getGlobalInsights(): GlobalInsights {
   return {
     generatedAt: now(),
     totals: {
-      knowledgeBases: bases.length,
+      workspaces: bases.length,
       materials: materials.length,
       cards: totalCards,
       sourcedCards,
@@ -8861,7 +8884,7 @@ export function getGlobalInsights(): GlobalInsights {
     mapPreview: {
       nodeCount,
       edgeCount,
-      knowledgeBaseCount: bases.length,
+      workspaceCount: bases.length,
     },
   };
 }
@@ -8878,14 +8901,14 @@ export function getGlobalInsights(): GlobalInsights {
  * 若知识库不存在或无卡片，返回 undefined。
  *
  * @author fxbin
- * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {string} workspaceId - 知识库 ID
  * @returns {ConstructionProgress | undefined} 建构进度报告
  */
-export function getConstructionProgress(knowledgeBaseId: string): ConstructionProgress | undefined {
-  const base = repository.findKnowledgeBase(knowledgeBaseId);
+export function getConstructionProgress(workspaceId: string): ConstructionProgress | undefined {
+  const base = repository.findWorkspace(workspaceId);
   if (!base) return undefined;
 
-  const cards = repository.listCards(knowledgeBaseId);
+  const cards = repository.listCards(workspaceId);
   const totalCards = cards.length;
   if (totalCards === 0) return undefined;
 
@@ -8913,7 +8936,7 @@ export function getConstructionProgress(knowledgeBaseId: string): ConstructionPr
   }
 
   return {
-    knowledgeBaseId,
+    workspaceId,
     totalCards,
     skeletonCards,
     confirmedCards,
@@ -8933,12 +8956,12 @@ export function getConstructionProgress(knowledgeBaseId: string): ConstructionPr
  * 用于"骨架卡强制建构流程"（P11-1）前端展示"待建构"列表。
  *
  * @author fxbin
- * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {string} workspaceId - 知识库 ID
  * @returns {KnowledgeCard[]} 骨架卡数组
  */
-export function listSkeletonCards(knowledgeBaseId: string): KnowledgeCard[] {
+export function listSkeletonCards(workspaceId: string): KnowledgeCard[] {
   return repository
-    .listCards(knowledgeBaseId)
+    .listCards(workspaceId)
     .filter((card) => card.claimStatus === 'ai_skeleton');
 }
 
@@ -8960,7 +8983,7 @@ export function listSkeletonCards(knowledgeBaseId: string): KnowledgeCard[] {
  *  - 问题数量限制在 3-5 个，覆盖不同追问维度
  *
  * @author fxbin
- * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {string} workspaceId - 知识库 ID
  * @param {object} options - 可选参数
  * @param {string} options.cardId - 目标卡片 ID（skeleton_card 触发时使用）
  * @param {string} options.tensionKey - 张力组 key（semantic_tension 触发时使用）
@@ -8968,20 +8991,20 @@ export function listSkeletonCards(knowledgeBaseId: string): KnowledgeCard[] {
  * @returns {Promise<SocraticQuestioningResult>} 苏格拉底追问结果
  */
 export async function generateSocraticQuestions(
-  knowledgeBaseId: string,
+  workspaceId: string,
   options?: { cardId?: string; tensionKey?: string; trigger?: SocraticTrigger },
 ): Promise<SocraticQuestioningResult> {
   const startTime = Date.now();
-  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  const base = repository.findWorkspace(workspaceId);
   if (!base) {
-    throw new KnowledgeCoreError(`Knowledge base ${knowledgeBaseId} not found.`, 404);
+    throw new KnowledgeCoreError(`Knowledge base ${workspaceId} not found.`, 404);
   }
 
   const trigger = options?.trigger ?? SOCRATIC_TRIGGER_MANUAL as SocraticTrigger;
   const cardId = options?.cardId;
   const tensionKey = options?.tensionKey;
 
-  const cards = repository.listCards(knowledgeBaseId);
+  const cards = repository.listCards(workspaceId);
   if (cards.length === 0) {
     throw new KnowledgeCoreError('知识库没有卡片，无法生成苏格拉底追问。', 400);
   }
@@ -9001,7 +9024,7 @@ export async function generateSocraticQuestions(
 
   const generatedAt = now();
   const questioningResult: SocraticQuestioningResult = {
-    knowledgeBaseId,
+    workspaceId,
     questions,
     triggerContext: {
       trigger,
@@ -9013,11 +9036,11 @@ export async function generateSocraticQuestions(
 
   repository.insertAttentionSignal({
     id: id('att'),
-    knowledgeBaseId,
+    workspaceId,
     signalType: SOCRATIC_ATTENTION_SIGNAL_TYPE as AttentionSignalType,
     signalStrength: SOCRATIC_ATTENTION_SIGNAL_STRENGTH as AttentionSignalStrength,
     targetType: SOCRATIC_ATTENTION_TARGET_TYPE as AttentionSignalTargetType,
-    targetId: knowledgeBaseId,
+    targetId: workspaceId,
     contextData: {
       trigger,
       cardId,
@@ -9030,7 +9053,7 @@ export async function generateSocraticQuestions(
   });
 
   logAgentAction('socratic_questioning', {
-    knowledgeBaseId,
+    workspaceId,
     input: { trigger, cardId, tensionKey },
     output: { questionCount: questions.length, questionTypes: questions.map((q) => q.type) },
     durationMs: Date.now() - startTime,
@@ -9086,7 +9109,7 @@ function buildSocraticPrompt(
 /**
  * 解析张力组 key，提取对立关键词对。
  *
- * 张力 key 格式：tension:{keywordA}-vs-:{keywordB}:{knowledgeBaseId}
+ * 张力 key 格式：tension:{keywordA}-vs-:{keywordB}:{workspaceId}
  *
  * @author fxbin
  * @param {string} [tensionKey] - 张力组 key
@@ -9123,17 +9146,17 @@ function parseTensionKey(tensionKey?: string): [string, string] | undefined {
  *  - 提议权不写入权：建议不自动修改任何数据
  *
  * @author fxbin
- * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {string} workspaceId - 知识库 ID
  * @param {string} [currentCardId] - 当前查看的卡片 ID，用作检索种子
  * @returns {RelatedSuggestionsResult} 建议结果
  */
 export function generateRelatedSuggestions(
-  knowledgeBaseId: string,
+  workspaceId: string,
   currentCardId?: string,
 ): RelatedSuggestionsResult {
-  const base = repository.findKnowledgeBase(knowledgeBaseId);
+  const base = repository.findWorkspace(workspaceId);
   if (!base) {
-    throw new KnowledgeCoreError(`Knowledge base ${knowledgeBaseId} not found.`, 404);
+    throw new KnowledgeCoreError(`Knowledge base ${workspaceId} not found.`, 404);
   }
 
   const suggestions: RelatedSuggestion[] = [];
@@ -9141,8 +9164,8 @@ export function generateRelatedSuggestions(
 
   if (currentCardId) {
     const seedCard = repository.findCard(currentCardId);
-    if (seedCard && seedCard.knowledgeBaseId === knowledgeBaseId) {
-      const topicResult = recallTopicExploration(knowledgeBaseId, currentCardId, RELATED_SUGGESTION_LIMIT);
+    if (seedCard && seedCard.workspaceId === workspaceId) {
+      const topicResult = recallTopicExploration(workspaceId, currentCardId, RELATED_SUGGESTION_LIMIT);
       for (const item of topicResult.items) {
         if (item.kind !== 'card') continue;
         if (item.id === currentCardId) continue;
@@ -9158,7 +9181,7 @@ export function generateRelatedSuggestions(
         });
       }
 
-      const shallowResult = recallShallow(knowledgeBaseId, seedCard.title, RELATED_SUGGESTION_LIMIT);
+      const shallowResult = recallShallow(workspaceId, seedCard.title, RELATED_SUGGESTION_LIMIT);
       for (const item of shallowResult.items) {
         if (item.kind !== 'card') continue;
         if (item.id === currentCardId) continue;
@@ -9175,7 +9198,7 @@ export function generateRelatedSuggestions(
       }
     }
   } else {
-    const directResult = recallDirectFetch(knowledgeBaseId, base.title, RELATED_SUGGESTION_LIMIT);
+    const directResult = recallDirectFetch(workspaceId, base.title, RELATED_SUGGESTION_LIMIT);
     for (const item of directResult.items) {
       if (item.kind !== 'card') continue;
       if (seenCardIds.has(item.id)) continue;
@@ -9195,15 +9218,15 @@ export function generateRelatedSuggestions(
   const limited = suggestions.slice(0, RELATED_SUGGESTION_LIMIT);
 
   return {
-    knowledgeBaseId,
+    workspaceId,
     currentCardId,
     suggestions: limited,
     generatedAt: now(),
   };
 }
 
-export function getKnowledgeBasePath(id: string): KnowledgeBasePath | undefined {
-  const base = repository.findKnowledgeBase(id);
+export function getWorkspacePath(id: string): WorkspacePath | undefined {
+  const base = repository.findWorkspace(id);
   if (!base) return undefined;
 
   const cards = repository.listCards(id).slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -9245,8 +9268,8 @@ export function getKnowledgeBasePath(id: string): KnowledgeBasePath | undefined 
   const currentStepIndex = steps.findIndex((step) => step.status === 'current');
 
   return {
-    knowledgeBaseId: id,
-    knowledgeBaseTitle: base.title,
+    workspaceId: id,
+    workspaceTitle: base.title,
     generatedAt: now(),
     steps,
     currentStepIndex: currentStepIndex === -1 ? steps.length : currentStepIndex,
@@ -9340,10 +9363,10 @@ export async function getWeReadShelf(): Promise<WeReadShelf> {
  * 导入单本微信读书书籍的笔记与划线为知径 material。
  *
  * @param bookId - 微信读书书籍 ID
- * @param knowledgeBaseId - 可选目标知识库 ID，未提供时自动创建/复用默认知识库
+ * @param workspaceId - 可选目标知识库 ID，未提供时自动创建/复用默认知识库
  * @returns 导入结果
  */
-export async function importWeReadBook(bookId: string, knowledgeBaseId?: string): Promise<WeReadImportResult> {
+export async function importWeReadBook(bookId: string, workspaceId?: string): Promise<WeReadImportResult> {
   const apiKey = repository.readWeReadApiKey();
   if (!apiKey) {
     throw new KnowledgeCoreError('未配置微信读书 API Key', 400);
@@ -9357,7 +9380,7 @@ export async function importWeReadBook(bookId: string, knowledgeBaseId?: string)
   ]);
 
   const contentText = buildWeReadMaterialMarkdown(bookInfo, bookmarks, reviews);
-  const base = (knowledgeBaseId ? repository.findKnowledgeBase(knowledgeBaseId) : undefined) ?? upsertDefaultKnowledgeBase(bookInfo.title);
+  const base = (workspaceId ? repository.findWorkspace(workspaceId) : undefined) ?? upsertDefaultWorkspace(bookInfo.title);
 
   const metaRow = repository.readWeReadBookMetaList().find((row) => row.bookId === bookId);
   const readerId = metaRow?.bookIdLong ?? bookId;
@@ -9366,7 +9389,7 @@ export async function importWeReadBook(bookId: string, knowledgeBaseId?: string)
   const timestamp = now();
   const material: MaterialRecord = {
     id: id('mat'),
-    knowledgeBaseId: base.id,
+    workspaceId: base.id,
     type: 'text',
     rawInput: contentText,
     sourceUrl,
@@ -9382,11 +9405,11 @@ export async function importWeReadBook(bookId: string, knowledgeBaseId?: string)
   base.sourceCount += 1;
   base.updatedAt = timestamp;
   repository.insertMaterial(material);
-  repository.updateKnowledgeBase(base);
+  repository.updateWorkspace(base);
 
   const generation = await generateKnowledge('material_summary', contentText, {
     kind: 'text',
-    knowledgeBaseId: base.id,
+    workspaceId: base.id,
     materialId: material.id,
     hasSourceMaterial: true,
     parseStatus: material.parseStatus,
@@ -9395,7 +9418,7 @@ export async function importWeReadBook(bookId: string, knowledgeBaseId?: string)
 
   createCards(base, material, contentText, generated.cards);
   createArtifact(base, material, contentText, generated);
-  touchKnowledgeBase(base.id);
+  touchWorkspace(base.id);
 
   const importedBookmarkCount = bookmarks.updated?.length ?? 0;
   repository.updateWeReadBookMetaImport(bookId, material.id, importedBookmarkCount);
@@ -9531,19 +9554,19 @@ function resolveThemeByCategory(category: string | null): string {
 /**
  * 计算微信读书书籍推荐列表。
  * 基于三种策略：覆盖缺口（知识库缺少的主题）、深度推荐（同主题进阶）、卡片关联（已导入笔记的同主题书）。
- * @param knowledgeBaseId - 当前知识库 ID，用于计算覆盖缺口
+ * @param workspaceId - 当前知识库 ID，用于计算覆盖缺口
  * @returns 推荐结果，包含推荐书籍列表和覆盖缺口分析
  */
-export function computeWeReadRecommendations(knowledgeBaseId?: string): WeReadRecommendResult {
+export function computeWeReadRecommendations(workspaceId?: string): WeReadRecommendResult {
   const books = repository.readWeReadBookMetaList().filter((b) => b.presentOnShelf === 1);
   const unimportedBooks = books.filter((b) => !b.materialId);
   const importedBooks = books.filter((b) => b.materialId);
 
   let kbCards: { type: string }[] = [];
-  if (knowledgeBaseId) {
-    const detail = repository.findKnowledgeBase(knowledgeBaseId);
+  if (workspaceId) {
+    const detail = repository.findWorkspace(workspaceId);
     if (detail) {
-      kbCards = repository.listCards(knowledgeBaseId);
+      kbCards = repository.listCards(workspaceId);
     }
   }
 
@@ -9846,40 +9869,40 @@ function relabelRecallResult(result: RecallResult, tool: RecallToolName): Recall
  * 精确命中回忆工具：遍历知识库内卡片与资料，按标题精确或包含匹配检索。
  * 纯内存操作，零 LLM 成本，适用于查询词与已有标题高度重合的场景。
  * @author fxbin
- * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {string} workspaceId - 知识库 ID
  * @param {string} query - 查询串
  * @param {number} [limit] - 返回上限，默认 RECALL_DEFAULT_LIMIT
  * @returns {RecallResult} 检索结果，recalledBy 为 direct_fetch
  */
-export function recallDirectFetch(knowledgeBaseId: string, query: string, limit?: number): RecallResult {
+export function recallDirectFetch(workspaceId: string, query: string, limit?: number): RecallResult {
   const trimmedQuery = query.trim();
   const maxItems = limit ?? RECALL_DEFAULT_LIMIT;
   const items: RecallResultItem[] = [];
   if (!trimmedQuery) {
     return { items, tool: RECALL_TOOL_DIRECT_FETCH, query: trimmedQuery, totalFound: 0 };
   }
-  for (const card of repository.listCards(knowledgeBaseId)) {
+  for (const card of repository.listCards(workspaceId)) {
     if (items.length >= maxItems) break;
     const score = scoreDirectFetch(card.title, trimmedQuery);
     if (score <= 0) continue;
     items.push({
       kind: 'card',
       id: card.id,
-      knowledgeBaseId: card.knowledgeBaseId,
+      workspaceId: card.workspaceId,
       title: card.title,
       preview: recallPreview(card.body),
       relevanceScore: score,
       recalledBy: RECALL_TOOL_DIRECT_FETCH,
     });
   }
-  for (const material of repository.listMaterials(knowledgeBaseId)) {
+  for (const material of repository.listMaterials(workspaceId)) {
     if (items.length >= maxItems) break;
     const score = scoreDirectFetch(material.title, trimmedQuery);
     if (score <= 0) continue;
     items.push({
       kind: 'material',
       id: material.id,
-      knowledgeBaseId: material.knowledgeBaseId,
+      workspaceId: material.workspaceId,
       title: material.title,
       preview: recallPreview(material.contentText ?? material.rawInput),
       relevanceScore: score,
@@ -9894,20 +9917,20 @@ export function recallDirectFetch(knowledgeBaseId: string, query: string, limit?
  * 并基于内部文本相关性打分归一化为 0-1 区间的 relevanceScore。
  * 零 LLM 成本，查询为空时返回空结果。
  * @author fxbin
- * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {string} workspaceId - 知识库 ID
  * @param {string} query - 查询串
  * @param {number} [limit] - 返回上限，默认 RECALL_DEFAULT_LIMIT
  * @returns {RecallResult} 检索结果，recalledBy 为 shallow_recall
  */
-export function recallShallow(knowledgeBaseId: string, query: string, limit?: number): RecallResult {
+export function recallShallow(workspaceId: string, query: string, limit?: number): RecallResult {
   const trimmedQuery = query.trim();
   const maxItems = limit ?? RECALL_DEFAULT_LIMIT;
   if (!trimmedQuery) {
     return { items: [], tool: RECALL_TOOL_SHALLOW, query: trimmedQuery, totalFound: 0 };
   }
   const terms = extractSearchTerms(trimmedQuery);
-  const cards = repository.searchCardsByRelevance(knowledgeBaseId, trimmedQuery, maxItems);
-  const materials = repository.searchMaterialsByRelevance(knowledgeBaseId, trimmedQuery, maxItems);
+  const cards = repository.searchCardsByRelevance(workspaceId, trimmedQuery, maxItems);
+  const materials = repository.searchMaterialsByRelevance(workspaceId, trimmedQuery, maxItems);
   const cardScored = cards.map((card) => ({
     card,
     score: scoreTextRelevance(card.title, card.body, terms),
@@ -9929,7 +9952,7 @@ export function recallShallow(knowledgeBaseId: string, query: string, limit?: nu
     items.push({
       kind: 'card',
       id: card.id,
-      knowledgeBaseId: card.knowledgeBaseId,
+      workspaceId: card.workspaceId,
       title: card.title,
       preview: recallPreview(card.body),
       relevanceScore: roundRelevance(relevance),
@@ -9943,7 +9966,7 @@ export function recallShallow(knowledgeBaseId: string, query: string, limit?: nu
     items.push({
       kind: 'material',
       id: material.id,
-      knowledgeBaseId: material.knowledgeBaseId,
+      workspaceId: material.workspaceId,
       title: material.title,
       preview: recallPreview(material.contentText ?? material.rawInput),
       relevanceScore: roundRelevance(relevance),
@@ -9960,14 +9983,14 @@ export function recallShallow(knowledgeBaseId: string, query: string, limit?: nu
  * 当 piRuntime 未提供、调用异常或无法解析出有效扩展词时，降级为浅层回忆。
  * 注意本函数为 async，调用方需 await。
  * @author fxbin
- * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {string} workspaceId - 知识库 ID
  * @param {string} query - 查询串
  * @param {number} [limit] - 返回上限，默认 RECALL_DEFAULT_LIMIT
  * @param {PiRuntime} [piRuntime] - 结构化输出运行时，可选
  * @returns {Promise<RecallResult>} 检索结果，recalledBy 为 deep_recall
  */
 export async function recallDeep(
-  knowledgeBaseId: string,
+  workspaceId: string,
   query: string,
   limit?: number,
   piRuntime?: PiRuntime,
@@ -9977,15 +10000,15 @@ export async function recallDeep(
     return { items: [], tool: RECALL_TOOL_DEEP, query: trimmedQuery, totalFound: 0 };
   }
   if (!piRuntime) {
-    const shallow = recallShallow(knowledgeBaseId, trimmedQuery, limit);
+    const shallow = recallShallow(workspaceId, trimmedQuery, limit);
     return relabelRecallResult(shallow, RECALL_TOOL_DEEP);
   }
   const expandedQuery = await expandQueryWithRuntime(piRuntime, trimmedQuery);
   if (!expandedQuery) {
-    const shallow = recallShallow(knowledgeBaseId, trimmedQuery, limit);
+    const shallow = recallShallow(workspaceId, trimmedQuery, limit);
     return relabelRecallResult(shallow, RECALL_TOOL_DEEP);
   }
-  const shallow = recallShallow(knowledgeBaseId, expandedQuery, limit);
+  const shallow = recallShallow(workspaceId, expandedQuery, limit);
   return relabelRecallResult(shallow, RECALL_TOOL_DEEP);
 }
 
@@ -9994,14 +10017,14 @@ export async function recallDeep(
  * 直接邻居 relevanceScore 为 0.9，二度邻居为 0.6；仅返回 card 类型节点。
  * 适用于用户已聚焦某张卡片、需要扩展其关联上下文的场景。
  * @author fxbin
- * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {string} workspaceId - 知识库 ID
  * @param {string} seedCardId - 种子卡片 ID
  * @param {number} [limit] - 返回上限，默认 RECALL_DEFAULT_LIMIT
  * @returns {RecallResult} 检索结果，recalledBy 为 topic_exploration
  */
-export function recallTopicExploration(knowledgeBaseId: string, seedCardId: string, limit?: number): RecallResult {
+export function recallTopicExploration(workspaceId: string, seedCardId: string, limit?: number): RecallResult {
   const maxItems = limit ?? RECALL_DEFAULT_LIMIT;
-  const map = getKnowledgeMap(knowledgeBaseId);
+  const map = getKnowledgeMap(workspaceId);
   if (!map) {
     return { items: [], tool: RECALL_TOOL_TOPIC_EXPLORATION, query: seedCardId, totalFound: 0 };
   }
@@ -10039,7 +10062,7 @@ export function recallTopicExploration(knowledgeBaseId: string, seedCardId: stri
     items.push({
       kind: 'card',
       id: card.id,
-      knowledgeBaseId: card.knowledgeBaseId,
+      workspaceId: card.workspaceId,
       title: card.title,
       preview: recallPreview(card.body),
       relevanceScore: score,
@@ -10060,23 +10083,23 @@ export function recallTopicExploration(knowledgeBaseId: string, seedCardId: stri
  * 跨工具去重策略：同一 id 仅保留 relevanceScore 最高的条目，且只出现在对应工具结果中。
  * 每个 RecallResult 内部 items 按 relevanceScore 降序排序，便于审计追踪各工具贡献。
  * @author fxbin
- * @param {string} knowledgeBaseId - 知识库 ID
+ * @param {string} workspaceId - 知识库 ID
  * @param {string} query - 查询串
  * @param {{ seedCardId?: string; piRuntime?: PiRuntime; limit?: number }} [options] - 可选参数
  * @returns {Promise<RecallResult[]>} 各工具的检索结果数组
  */
 export async function recall(
-  knowledgeBaseId: string,
+  workspaceId: string,
   query: string,
   options?: { seedCardId?: string; piRuntime?: PiRuntime; limit?: number },
 ): Promise<RecallResult[]> {
   const limit = options?.limit ?? RECALL_DEFAULT_LIMIT;
   const [direct, shallow, deep, topic] = await Promise.all([
-    Promise.resolve(recallDirectFetch(knowledgeBaseId, query, limit)),
-    Promise.resolve(recallShallow(knowledgeBaseId, query, limit)),
-    recallDeep(knowledgeBaseId, query, limit, options?.piRuntime),
+    Promise.resolve(recallDirectFetch(workspaceId, query, limit)),
+    Promise.resolve(recallShallow(workspaceId, query, limit)),
+    recallDeep(workspaceId, query, limit, options?.piRuntime),
     options?.seedCardId
-      ? Promise.resolve(recallTopicExploration(knowledgeBaseId, options.seedCardId, limit))
+      ? Promise.resolve(recallTopicExploration(workspaceId, options.seedCardId, limit))
       : Promise.resolve(null),
   ]);
   const rawResults: RecallResult[] = [direct, shallow, deep];
@@ -10102,14 +10125,14 @@ export {
   MarkdownFileAdapter,
   type CardFrontmatter,
   type MaterialFrontmatter,
-  type KnowledgeBaseFrontmatter,
+  type WorkspaceFrontmatter,
 } from './markdown-file.js';
 
 export {
   FileSyncAdapter,
   type FileSyncRepository,
   type ExportRepository,
-  type ScannedKnowledgeBase,
+  type ScannedWorkspace,
   type ScanVaultResult,
   type ExportVaultResult,
 } from './file-sync-adapter.js';

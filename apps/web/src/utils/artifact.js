@@ -21,7 +21,7 @@ export function resolveArtifactVariant(artifact) {
 /**
  * 推断 artifact 变体（兼容旧调用，内部委托 resolveArtifactVariant）。
  * @param {object} artifact - 产物对象
- * @param {object} detail - 知识库详情（未使用，保留参数兼容）
+ * @param {object} detail - 工作区详情（未使用，保留参数兼容）
  * @returns {string} 变体标识
  */
 export function inferArtifactVariant(artifact, detail) {
@@ -62,7 +62,7 @@ export function artifactVariantConfig(variant) {
     summary: {
       label: 'Summary',
       title: '知识产物',
-      lead: '当前知识库生成的结构化摘要与来源边界。',
+      lead: '当前工作区生成的结构化摘要与来源边界。',
       sections: ['Summary', 'Source Boundary', 'Next Actions'],
     },
   };

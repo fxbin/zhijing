@@ -32,7 +32,7 @@ import {
   splitBatchCaptureInput,
   splitMediaUrls,
 } from '../utils/material';
-import { knowledgeBaseTitle } from '../utils/knowledge';
+import { workspaceTitle } from '../utils/knowledge';
 import CaptureSuccessBanner from '../components/CaptureSuccessBanner';
 import EmptyState from '../components/EmptyState';
 import ImportLifecyclePanel from '../components/ImportLifecyclePanel';
@@ -48,7 +48,7 @@ const SEARCH_DEBOUNCE_MS = 300;
  * 资料库视图组件
  * @param {Object} props - 组件参数
  * @param {string} props.apiStatus - API 连接状态
- * @param {Array} props.knowledgeBases - 知识库列表
+ * @param {Array} props.workspaces - 工作区列表
  * @param {Function} props.onCaptureResult - 收集结果回调
  * @param {Function} props.onMaterialMutation - 资料变更回调
  * @param {Function} props.onNavigate - 视图跳转回调，用于跳转到其他视图（如微信读书导入）
@@ -57,7 +57,7 @@ const SEARCH_DEBOUNCE_MS = 300;
  * @returns {JSX.Element} 资料库视图
  * @author fxbin
  */
-export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult, onMaterialMutation, onNavigate, onParseMaterial, parsingMaterialId, selectedKnowledgeBaseId }) {
+export default function LibraryView({ apiStatus, workspaces, onCaptureResult, onMaterialMutation, onNavigate, onParseMaterial, parsingMaterialId, selectedWorkspaceId }) {
   const { t } = useTranslation();
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState('all');
@@ -91,7 +91,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
     setIsLoading(true);
     try {
       const params = new URLSearchParams({ limit: '180' });
-      if (selectedKnowledgeBaseId) params.set('knowledgeBaseId', selectedKnowledgeBaseId);
+      if (selectedWorkspaceId) params.set('workspaceId', selectedWorkspaceId);
       if (searchValue.trim()) params.set('q', searchValue.trim());
       const response = await fetch(`/api/materials?${params.toString()}`);
       if (!response.ok) throw new Error('Material list unavailable.');
@@ -113,7 +113,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
         setIsLoading(true);
         try {
           const params = new URLSearchParams({ limit: '180' });
-          if (selectedKnowledgeBaseId) params.set('knowledgeBaseId', selectedKnowledgeBaseId);
+          if (selectedWorkspaceId) params.set('workspaceId', selectedWorkspaceId);
           if (searchValue.trim()) params.set('q', searchValue.trim());
           const response = await fetch(`/api/materials?${params.toString()}`);
           if (!response.ok) throw new Error('Material list unavailable.');
@@ -137,7 +137,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [searchValue, selectedKnowledgeBaseId, t]);
+  }, [searchValue, selectedWorkspaceId, t]);
 
   const filteredItems = items.filter((item) => {
     if (filter === 'all') return true;
@@ -370,10 +370,10 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
 
   async function assignMaterial(item) {
     if (!item?.id || apiStatus !== 'online' || mutatingMaterialId) return;
-    const target = assignDrafts[item.id] ?? item.knowledgeBaseId ?? '';
-    const newKnowledgeBaseTitle = (newBaseTitles[item.id] ?? item.title ?? '').trim();
+    const target = assignDrafts[item.id] ?? item.workspaceId ?? '';
+    const newWorkspaceTitle = (newBaseTitles[item.id] ?? item.title ?? '').trim();
     if (!target) return;
-    if (target === item.knowledgeBaseId && target !== '__new') {
+    if (target === item.workspaceId && target !== '__new') {
       setStatus(t('library.status.alreadyInThisKb'));
       setAssignDrafts((current) => ({ ...current, [item.id]: undefined }));
       return;
@@ -385,14 +385,14 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(target === '__new'
-          ? { newKnowledgeBaseTitle }
-          : { knowledgeBaseId: target }),
+          ? { newWorkspaceTitle }
+          : { workspaceId: target }),
       });
       if (!response.ok) throw new Error('Assignment failed.');
       const result = await response.json();
       onMaterialMutation?.(result);
       setStatus(result.message);
-      setAssignDrafts((current) => ({ ...current, [item.id]: result.knowledgeBase.id }));
+      setAssignDrafts((current) => ({ ...current, [item.id]: result.workspace.id }));
       await loadMaterials();
     } catch {
       setStatus(t('library.status.moveMaterialFailed'));
@@ -413,8 +413,8 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
       if (suggestion?.isNew) {
         setAssignDrafts((current) => ({ ...current, [item.id]: '__new' }));
         setNewBaseTitles((current) => ({ ...current, [item.id]: suggestion.title }));
-      } else if (suggestion?.knowledgeBaseId) {
-        setAssignDrafts((current) => ({ ...current, [item.id]: suggestion.knowledgeBaseId }));
+      } else if (suggestion?.workspaceId) {
+        setAssignDrafts((current) => ({ ...current, [item.id]: suggestion.workspaceId }));
       }
       setAssignmentHints((current) => ({
         ...current,
@@ -510,7 +510,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
         const response = await fetch(`/api/materials/${ids[i]}/assign`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ knowledgeBaseId: target }),
+          body: JSON.stringify({ workspaceId: target }),
         });
         if (!response.ok) throw new Error('assign failed');
         const result = await response.json();
@@ -663,7 +663,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
               disabled={isBatchProcessing || apiStatus !== 'online'}
             >
               <option value="">{t('library.moveTo')}</option>
-              {knowledgeBases.map((base) => <option key={base.id ?? base.title} value={base.id}>{base.title}</option>)}
+              {workspaces.map((base) => <option key={base.id ?? base.title} value={base.id}>{base.title}</option>)}
             </select>
             <button type="button" disabled={isBatchProcessing || apiStatus !== 'online' || !batchAssignTarget} onClick={assignSelected}>
               {t('library.move')}
@@ -709,7 +709,7 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
             <ParseTimeline item={item} />
             {item.parseError && <p className="library-error">{item.parseError}</p>}
             <div className="tag-row">
-              <span>{knowledgeBaseTitle(knowledgeBases, item.knowledgeBaseId)}</span>
+              <span>{workspaceTitle(workspaces, item.workspaceId)}</span>
               <span>{item.platform ?? t('library.localPlatform')}</span>
               <span>{formatMaterialTime(item.createdAt)}</span>
               {materialMediaUrls(item).length > 0 && <span>{t('library.mediaCount', { count: materialMediaUrls(item).length })}</span>}
@@ -718,14 +718,14 @@ export default function LibraryView({ apiStatus, knowledgeBases, onCaptureResult
             <div className="assignment-row">
               <select
                 aria-label={t('library.selectKb')}
-                value={assignDrafts[item.id] ?? item.knowledgeBaseId ?? ''}
+                value={assignDrafts[item.id] ?? item.workspaceId ?? ''}
                 onChange={(event) => setAssignDrafts((current) => ({ ...current, [item.id]: event.target.value }))}
               >
                 <option value="">{t('library.moveTo')}</option>
-                {knowledgeBases.map((base) => <option key={base.id ?? base.title} value={base.id}>{base.title}</option>)}
-                <option value="__new">{t('library.newKnowledgeBase')}</option>
+                {workspaces.map((base) => <option key={base.id ?? base.title} value={base.id}>{base.title}</option>)}
+                <option value="__new">{t('library.newWorkspace')}</option>
               </select>
-              {(assignDrafts[item.id] ?? item.knowledgeBaseId) === '__new' && (
+              {(assignDrafts[item.id] ?? item.workspaceId) === '__new' && (
                 <input
                   aria-label={t('library.newKbTitle')}
                   value={newBaseTitles[item.id] ?? item.title ?? ''}

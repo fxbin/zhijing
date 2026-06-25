@@ -1,5 +1,5 @@
 /**
- * 归档视图：管理已归档的资料与卡片，支持按知识库筛选与恢复。
+ * 归档视图：管理已归档的资料与卡片，支持按工作区筛选与恢复。
  * @module views/ArchiveView
  */
 
@@ -16,15 +16,15 @@ const RESTORE_FEEDBACK_MS = 2000;
 /**
  * 归档视图组件。
  * @param {object} props - 组件属性
- * @param {string|null} props.selectedKnowledgeBaseId - 当前选中的知识库 ID
+ * @param {string|null} props.selectedWorkspaceId - 当前选中的工作区 ID
  * @param {Function} props.setView - 视图切换回调
  * @returns {JSX.Element} 归档视图
  */
-export default function ArchiveView({ selectedKnowledgeBaseId, setView }) {
+export default function ArchiveView({ selectedWorkspaceId, setView }) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
-  const [items, setItems] = useState({ materials: [], cards: [], knowledgeBases: [] });
-  const [filterBaseId, setFilterBaseId] = useState(selectedKnowledgeBaseId ?? 'all');
+  const [items, setItems] = useState({ materials: [], cards: [], workspaces: [] });
+  const [filterBaseId, setFilterBaseId] = useState(selectedWorkspaceId ?? 'all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionId, setActionId] = useState(null);
@@ -32,8 +32,8 @@ export default function ArchiveView({ selectedKnowledgeBaseId, setView }) {
   const [restoreErrorId, setRestoreErrorId] = useState(null);
 
   useEffect(() => {
-    setFilterBaseId(selectedKnowledgeBaseId ?? 'all');
-  }, [selectedKnowledgeBaseId]);
+    setFilterBaseId(selectedWorkspaceId ?? 'all');
+  }, [selectedWorkspaceId]);
 
   useEffect(() => {
     let ignore = false;
@@ -41,7 +41,7 @@ export default function ArchiveView({ selectedKnowledgeBaseId, setView }) {
       setLoading(true);
       setError('');
       try {
-        const query = filterBaseId && filterBaseId !== 'all' ? `?knowledgeBaseId=${encodeURIComponent(filterBaseId)}` : '';
+        const query = filterBaseId && filterBaseId !== 'all' ? `?workspaceId=${encodeURIComponent(filterBaseId)}` : '';
         const response = await fetch(`/api/archive${query}`);
         if (!response.ok) throw new Error('Archive unavailable.');
         const payload = await response.json();
@@ -62,13 +62,13 @@ export default function ArchiveView({ selectedKnowledgeBaseId, setView }) {
     return [...materials, ...cards].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [items]);
 
-  const knowledgeBaseMap = useMemo(() => {
+  const workspaceMap = useMemo(() => {
     const map = new Map();
-    for (const base of items.knowledgeBases ?? []) {
+    for (const base of items.workspaces ?? []) {
       map.set(base.id, base.title);
     }
     return map;
-  }, [items.knowledgeBases]);
+  }, [items.workspaces]);
 
   async function restore(item) {
     const endpoint = item.kind === 'material'
@@ -141,7 +141,7 @@ export default function ArchiveView({ selectedKnowledgeBaseId, setView }) {
             aria-label={t('archive.filterLabel')}
           >
             <option value="all">{t('archive.allBases')}</option>
-            {items.knowledgeBases.map((base) => (
+            {items.workspaces.map((base) => (
               <option key={base.id} value={base.id}>{base.title}</option>
             ))}
           </select>
@@ -189,12 +189,12 @@ export default function ArchiveView({ selectedKnowledgeBaseId, setView }) {
                   <strong>{item.title}</strong>
                   <span className="archive-row-meta">
                     {meta.join(' · ')}
-                    {item.knowledgeBaseId && (
+                    {item.workspaceId && (
                       <span className="archive-row-base">
                         {' · '}
-                        {knowledgeBaseMap.has(item.knowledgeBaseId)
-                          ? knowledgeBaseMap.get(item.knowledgeBaseId)
-                          : <span className="archive-row-base-deleted">{t('archive.deletedKnowledgeBase')}</span>}
+                        {workspaceMap.has(item.workspaceId)
+                          ? workspaceMap.get(item.workspaceId)
+                          : <span className="archive-row-base-deleted">{t('archive.deletedWorkspace')}</span>}
                       </span>
                     )}
                   </span>

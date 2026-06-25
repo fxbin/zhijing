@@ -1,5 +1,5 @@
 /**
- * 知识库详情视图：展示卡片、来源、实体、Roadmap 与 AI 助手面板。
+ * 工作区详情视图：展示卡片、来源、实体、Roadmap 与 AI 助手面板。
  * @module views/DetailView
  */
 
@@ -133,13 +133,13 @@ function MaterialTranscriptPanel({ material }) {
 }
 
 /**
- * 知识库详情视图。
+ * 工作区详情视图。
  * @param {object} props - 组件属性
  * @param {string} props.apiStatus - API 在线状态
- * @param {object} props.analytics - 知识库分析数据
+ * @param {object} props.analytics - 工作区分析数据
  * @param {object} props.assistantAnswer - 助手回答对象
  * @param {string} props.assistantQuestion - 当前问题输入
- * @param {object} props.detail - 知识库详情
+ * @param {object} props.detail - 工作区详情
  * @param {boolean} props.isAsking - 是否正在提问
  * @param {object} props.latestTask - 最近任务
  * @param {Array} props.messages - 历史消息列表
@@ -148,7 +148,7 @@ function MaterialTranscriptPanel({ material }) {
  * @param {(newCards: object[], updatedMessage: object) => void} props.onCardsAccepted - 提议卡片采纳成功回调
  * @param {(materialId: string) => void} props.onParseMaterial - 解析资料回调
  * @param {string} props.parsingMaterialId - 正在解析的资料 ID
- * @param {string} props.selectedKnowledgeBaseId - 当前选中知识库 ID
+ * @param {string} props.selectedWorkspaceId - 当前选中工作区 ID
  * @param {(value: string) => void} props.setAssistantQuestion - 设置问题输入
  * @param {(view: string) => void} props.setView - 切换视图
  * @returns {JSX.Element} 详情视图
@@ -167,7 +167,7 @@ export default function DetailView({
   onOpenArtifact,
   onParseMaterial,
   parsingMaterialId,
-  selectedKnowledgeBaseId,
+  selectedWorkspaceId,
   setAssistantQuestion,
   setView,
 }) {
@@ -189,7 +189,7 @@ export default function DetailView({
   const roadmapCards = cards.slice(0, 4);
   const conceptTags = extractConceptTags(cards);
   const cardGroups = groupCardsByType(cards);
-  const canAsk = apiStatus === 'online' && Boolean(selectedKnowledgeBaseId) && !isAsking;
+  const canAsk = apiStatus === 'online' && Boolean(selectedWorkspaceId) && !isAsking;
   const latestAnswerCards = assistantAnswer?.cards ?? [];
   const pendingSourceCount = cards.filter((card) => card.claimStatus !== 'sourced').length;
   const guideMessage = materials.length === 0
@@ -233,12 +233,12 @@ export default function DetailView({
   const [acceptingCards, setAcceptingCards] = useState(false);
 
   useEffect(() => {
-    if (!selectedKnowledgeBaseId) return;
-    startReadingSession(selectedKnowledgeBaseId);
+    if (!selectedWorkspaceId) return;
+    startReadingSession(selectedWorkspaceId);
     return () => {
       void flushReadingSession();
     };
-  }, [selectedKnowledgeBaseId]);
+  }, [selectedWorkspaceId]);
 
   useEffect(() => {
     setCannotAnswerFeedbackSent(false);
@@ -250,13 +250,13 @@ export default function DetailView({
   }, [assistantAnswer?.proposedCards]);
 
   useEffect(() => {
-    if (!selectedKnowledgeBaseId) return;
+    if (!selectedWorkspaceId) return;
     let ignore = false;
     setLoadingEntities(true);
     setEntityError('');
     async function loadEntities() {
       try {
-        const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/entities`);
+        const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/entities`);
         if (!response.ok) return;
         const payload = await response.json();
         if (!ignore) setEntities(payload.entities ?? []);
@@ -268,7 +268,7 @@ export default function DetailView({
     }
     loadEntities();
     return () => { ignore = true; };
-  }, [selectedKnowledgeBaseId]);
+  }, [selectedWorkspaceId]);
 
   /**
    * 挂载时读取路径视图传递的卡片 ID，滚动并高亮对应卡片。
@@ -399,11 +399,11 @@ export default function DetailView({
   }
 
   async function extractEntitiesAction() {
-    if (!selectedKnowledgeBaseId || extracting) return;
+    if (!selectedWorkspaceId || extracting) return;
     setExtracting(true);
     setEntityError('');
     try {
-      const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/entities/extract`, { method: 'POST' });
+      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/entities/extract`, { method: 'POST' });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         setEntityError(payload.error ?? t('detail.entityExtractFailed'));
@@ -497,8 +497,8 @@ export default function DetailView({
             </div>
           </section>
         )}
-        {selectedKnowledgeBaseId && cards.length > 0 && (
-          <EvidenceToolsPanel knowledgeBaseId={selectedKnowledgeBaseId} />
+        {selectedWorkspaceId && cards.length > 0 && (
+          <EvidenceToolsPanel workspaceId={selectedWorkspaceId} />
         )}
         <div className="detail-layout">
           <aside className="roadmap">
@@ -522,7 +522,7 @@ export default function DetailView({
             ))}
           </aside>
           <RelatedSuggestionsPanel
-            knowledgeBaseId={selectedKnowledgeBaseId}
+            workspaceId={selectedWorkspaceId}
             currentCardId={highlightedCardId}
             onCardClick={handleRoadmapNodeClick}
           />
@@ -852,7 +852,7 @@ export default function DetailView({
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                          knowledgeBaseId: selectedKnowledgeBaseId,
+                          workspaceId: selectedWorkspaceId,
                           question: assistantAnswer.question ?? assistantQuestion,
                         }),
                       })
@@ -889,7 +889,7 @@ export default function DetailView({
             onKeyDown={(event) => {
               if (event.key === 'Enter') onAsk();
             }}
-            placeholder={apiStatus === 'online' && selectedKnowledgeBaseId ? t('detail.askPlaceholderOnline') : t('detail.askPlaceholderOffline')}
+            placeholder={apiStatus === 'online' && selectedWorkspaceId ? t('detail.askPlaceholderOnline') : t('detail.askPlaceholderOffline')}
             value={assistantQuestion}
           />
           <button disabled={!canAsk || !assistantQuestion.trim()} onClick={onAsk} title={t('detail.askTitle')} type="button">

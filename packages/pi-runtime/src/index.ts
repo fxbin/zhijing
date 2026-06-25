@@ -108,7 +108,7 @@ export const socraticQuestioningSchema = Type.Object({
 });
 
 export const structuredSchemas = {
-  knowledge_base_skeleton: topicSkeletonSchema,
+  workspace_skeleton: topicSkeletonSchema,
   material_summary: materialSummarySchema,
   knowledge_cards: knowledgeCardsSchema,
   question_answer: questionAnswerSchema,
@@ -157,7 +157,7 @@ export type ArtifactSubtype = keyof typeof artifactSubtypeSchemas;
 const ARTIFACT_SUBTYPE_LIST = Object.keys(artifactSubtypeSchemas) as ArtifactSubtype[];
 
 export interface StructuredGenerationRequest<TSchemaInput = unknown> {
-  task: 'knowledge_base_skeleton' | 'material_summary' | 'knowledge_cards' | 'question_answer' | 'entity_extraction' | 'socratic_questioning';
+  task: 'workspace_skeleton' | 'material_summary' | 'knowledge_cards' | 'question_answer' | 'entity_extraction' | 'socratic_questioning';
   prompt: string;
   schema?: TSchemaInput;
   context?: Record<string, unknown>;
@@ -496,7 +496,7 @@ export class StructuredOutputValidationError extends Error {
 export function validateStructuredOutput(task: StructuredGenerationTask, output: unknown): void {
   const value = requirePlainObject(output, task);
 
-  if (task === 'knowledge_base_skeleton') {
+  if (task === 'workspace_skeleton') {
     requireNonEmptyString(value.title, `${task}.title`);
     requireNonEmptyString(value.summary, `${task}.summary`);
     validateCards(value.cards, `${task}.cards`);
@@ -762,7 +762,7 @@ function usageFromMessage(response: AssistantMessage): StructuredGenerationResul
 
 function mockOutputFor(request: StructuredGenerationRequest) {
   const title = compactTitle(request.prompt);
-  if (request.task === 'knowledge_base_skeleton') {
+  if (request.task === 'workspace_skeleton') {
     return {
       title,
       summary: `围绕「${title}」生成的本地知识库骨架。配置 Pi provider 后会替换为真实结构化生成。`,

@@ -11,7 +11,7 @@ const MAP_LAYOUT = {
     card: { startAngle: 280, endAngle: 440, radius: 320 },
     other: { startAngle: 260, endAngle: 280, radius: 260 },
   },
-  nodeRadius: { knowledge_base: 34, material: 22, card: 18, other: 16 },
+  nodeRadius: { workspace: 34, material: 22, card: 18, other: 16 },
 };
 
 const NODE_METADATA_SPECS = {
@@ -24,7 +24,7 @@ const NODE_METADATA_SPECS = {
     { key: 'type', label: '卡片类型' },
     { key: 'materialId', label: '来源资料' },
   ],
-  knowledge_base: [
+  workspace: [
     { key: 'sourceCount', label: '资料数' },
     { key: 'cardCount', label: '卡片数' },
   ],
@@ -75,7 +75,7 @@ export function mapNodeMatches(node, filter, query) {
  * @returns {Array<object>} 带坐标的节点数组
  */
 export function buildMapLayout(nodes, nodePositions = {}) {
-  const center = nodes.find((node) => node.kind === 'knowledge_base') ?? nodes[0];
+  const center = nodes.find((node) => node.kind === 'workspace') ?? nodes[0];
   const remaining = nodes.filter((node) => node.id !== center?.id);
   const materialNodes = remaining.filter((node) => node.kind === 'material');
   const cardNodes = remaining.filter((node) => node.kind === 'card');
@@ -90,7 +90,7 @@ export function buildMapLayout(nodes, nodePositions = {}) {
           y: MAP_LAYOUT.centerY,
           originalX: MAP_LAYOUT.centerX,
           originalY: MAP_LAYOUT.centerY,
-          radius: MAP_LAYOUT.nodeRadius.knowledge_base,
+          radius: MAP_LAYOUT.nodeRadius.workspace,
         },
       ]
     : [];
@@ -156,7 +156,7 @@ export function truncateNodeLabel(label) {
  * @returns {string} 中文标签
  */
 export function mapKindLabel(kind) {
-  if (kind === 'knowledge_base') return 'Knowledge Base';
+  if (kind === 'workspace') return 'Workspace';
   if (kind === 'material') return 'Material';
   return 'Card';
 }

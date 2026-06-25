@@ -21,7 +21,7 @@ import { formatDate, formatDateTime } from '../utils/material';
  * 产物详情视图组件
  * @param {Object} props - 组件属性
  * @param {Object} [props.artifact] - 当前打开的产物
- * @param {Object} props.detail - 知识库详情
+ * @param {Object} props.detail - 工作区详情
  * @param {Function} props.setView - 切换视图回调
  * @param {Object} [props.artifactOrigin] - 产物来源信息
  * @param {Function} [props.onClearOrigin] - 清除来源标记回调
@@ -163,7 +163,7 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
       <div className="artifact-hero">
         <div>
           <div className="back-button-row">
-            <button className="back-button" onClick={() => { onClearOrigin?.(); setView('detail'); }} type="button">{t('artifact.backToKnowledgeBase')}</button>
+            <button className="back-button" onClick={() => { onClearOrigin?.(); setView('detail'); }} type="button">{t('artifact.backToWorkspace')}</button>
             {artifactOrigin?.label && (
               <button className="back-button artifact-origin-link" type="button" onClick={() => { onClearOrigin?.(); setView('detail'); }}>
                 {t('artifact.fromChat', { label: artifactOrigin.label })}

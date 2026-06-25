@@ -17,7 +17,7 @@ import { useTranslation } from 'react-i18next';
  * @param {boolean} props.isSubmitting - 是否正在提交
  * @param {Array<object>} props.materials - 最近导入资料列表
  * @param {string} props.query - 输入框当前值
- * @param {string|null} props.selectedKnowledgeBaseId - 当前选中的知识库 ID
+ * @param {string|null} props.selectedWorkspaceId - 当前选中的工作区 ID
  * @param {(value: string) => void} props.setQuery - 设置输入值
  * @param {(view: string) => void} props.setView - 切换视图
  * @param {() => void} props.submit - 提交回调
@@ -25,7 +25,7 @@ import { useTranslation } from 'react-i18next';
  * @param {string} props.browserAiStatus - 浏览器内置 AI 模型状态
  * @returns {JSX.Element} 工作区视图
  */
-export default function WorkspaceView({ activity, apiStatus, isSubmitting, materials, query, selectedKnowledgeBaseId, setQuery, setView, submit, onViewMaterialDetail, browserAiStatus = 'checking' }) {
+export default function WorkspaceView({ activity, apiStatus, isSubmitting, materials, query, selectedWorkspaceId, setQuery, setView, submit, onViewMaterialDetail, browserAiStatus = 'checking' }) {
   const { t } = useTranslation();
   const hasContent = materials.length > 0;
   const offline = apiStatus !== 'online';
@@ -88,7 +88,7 @@ export default function WorkspaceView({ activity, apiStatus, isSubmitting, mater
                 onViewDetail={onViewMaterialDetail}
                 browserAiStatus={browserAiStatus}
               />
-              <KnowledgeMapPanel selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={setView} />
+              <KnowledgeMapPanel selectedWorkspaceId={selectedWorkspaceId} setView={setView} />
             </>
           )}
         </section>

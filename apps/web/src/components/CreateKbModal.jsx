@@ -1,5 +1,5 @@
 /**
- * 创建知识库模态框组件：支持 AI 自动生成和创建空知识库两种模式。
+ * 创建工作区模态框组件：支持 AI 自动生成和创建空工作区两种模式。
  * AI 模式下提供受众、深度、范围三个意图澄清字段，减少 AI 对模糊主题的曲解。
  * @module components/CreateKbModal
  * @author fxbin
@@ -51,12 +51,12 @@ function ChipField({ fieldPrefix, value, options, onChange, t }) {
 }
 
 /**
- * 创建知识库模态框，双模式：AI 自动生成 / 创建空知识库。
+ * 创建工作区模态框，双模式：AI 自动生成 / 创建空工作区。
  * @param {object} props - 组件属性
- * @param {string|null} props.error - 创建空知识库失败时的错误文案，传入则在弹窗内展示
+ * @param {string|null} props.error - 创建空工作区失败时的错误文案，传入则在弹窗内展示
  * @param {function} props.onClose - 关闭模态框回调
  * @param {function} props.onSubmit - 提交主题回调（AI 模式），接收 { theme, audience, depth, scope } 对象
- * @param {function} props.onCreateEmpty - 创建空知识库回调（标题, 摘要）
+ * @param {function} props.onCreateEmpty - 创建空工作区回调（标题, 摘要）
  * @returns {JSX.Element} 模态框
  * @author fxbin
  */

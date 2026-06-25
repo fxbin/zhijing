@@ -1,6 +1,6 @@
 /**
  * @module views/SearchView
- * 语义搜索视图：支持跨知识库资产搜索、结果聚类与语义发现标签。
+ * 语义搜索视图：支持跨工作区资产搜索、结果聚类与语义发现标签。
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -23,7 +23,7 @@ import {
   getParseStatusLabel,
 } from '../utils/i18nLabels';
 
-const RESULT_KIND_KNOWLEDGE_BASE = 'knowledge_base';
+const RESULT_KIND_WORKSPACE = 'workspace';
 const RESULT_KIND_MATERIAL = 'material';
 const RESULT_KIND_CARD = 'card';
 const RESULT_KIND_ARTIFACT = 'artifact';
@@ -67,11 +67,11 @@ function buildSearchMetaEntries(result, t) {
  * 语义搜索视图组件
  * @param {object} props - 组件属性
  * @param {Function} [props.setView] - 视图切换回调
- * @param {Function} [props.setSelectedKnowledgeBaseId] - 选中知识库回调
+ * @param {Function} [props.setSelectedWorkspaceId] - 选中工作区回调
  * @param {Function} [props.onOpenArtifact] - 打开产物详情回调
  * @returns {JSX.Element} 搜索视图
  */
-export default function SearchView({ setView, setSelectedKnowledgeBaseId, onOpenArtifact }) {
+export default function SearchView({ setView, setSelectedWorkspaceId, onOpenArtifact }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState('all');
@@ -154,8 +154,8 @@ export default function SearchView({ setView, setSelectedKnowledgeBaseId, onOpen
     if (visibleResults.length === 0) return [];
     const buckets = {};
     for (const result of visibleResults) {
-      const key = result.knowledgeBaseId ?? 'unassigned';
-      if (!buckets[key]) buckets[key] = { id: key, title: result.metadata?.knowledgeBaseTitle ?? t('search.unassignedKnowledgeBase', { id: key.slice(0, 8) }), count: 0, results: [] };
+      const key = result.workspaceId ?? 'unassigned';
+      if (!buckets[key]) buckets[key] = { id: key, title: result.metadata?.workspaceTitle ?? t('search.unassignedWorkspace', { id: key.slice(0, 8) }), count: 0, results: [] };
       buckets[key].count += 1;
       buckets[key].results.push(result);
     }
@@ -193,7 +193,7 @@ export default function SearchView({ setView, setSelectedKnowledgeBaseId, onOpen
   function buildArtifactFallback(result) {
     return {
       id: result.id,
-      knowledgeBaseId: result.knowledgeBaseId ?? null,
+      workspaceId: result.workspaceId ?? null,
       title: result.title,
       body: result.preview ?? '',
       artifactType: result.metadata?.artifactType ?? 'summary',
@@ -209,25 +209,25 @@ export default function SearchView({ setView, setSelectedKnowledgeBaseId, onOpen
    */
   function handleResultClick(result) {
     if (!result || !setView) return;
-    const targetKnowledgeBaseId = result.knowledgeBaseId ?? result.id;
-    if (result.kind === RESULT_KIND_KNOWLEDGE_BASE) {
-      if (setSelectedKnowledgeBaseId) setSelectedKnowledgeBaseId(result.id);
+    const targetWorkspaceId = result.workspaceId ?? result.id;
+    if (result.kind === RESULT_KIND_WORKSPACE) {
+      if (setSelectedWorkspaceId) setSelectedWorkspaceId(result.id);
       setView('detail');
       return;
     }
     if (result.kind === RESULT_KIND_MATERIAL) {
-      if (setSelectedKnowledgeBaseId && targetKnowledgeBaseId) setSelectedKnowledgeBaseId(targetKnowledgeBaseId);
+      if (setSelectedWorkspaceId && targetWorkspaceId) setSelectedWorkspaceId(targetWorkspaceId);
       setView('library');
       return;
     }
     if (result.kind === RESULT_KIND_CARD) {
-      if (setSelectedKnowledgeBaseId && targetKnowledgeBaseId) setSelectedKnowledgeBaseId(targetKnowledgeBaseId);
+      if (setSelectedWorkspaceId && targetWorkspaceId) setSelectedWorkspaceId(targetWorkspaceId);
       sessionStorage.setItem(PATH_CARD_ID_STORAGE_KEY, result.id);
       setView('detail');
       return;
     }
     if (result.kind === RESULT_KIND_ARTIFACT) {
-      if (setSelectedKnowledgeBaseId && targetKnowledgeBaseId) setSelectedKnowledgeBaseId(targetKnowledgeBaseId);
+      if (setSelectedWorkspaceId && targetWorkspaceId) setSelectedWorkspaceId(targetWorkspaceId);
       if (onOpenArtifact) {
         onOpenArtifact(buildArtifactFallback(result), { label: 'search', from: 'search' });
         return;

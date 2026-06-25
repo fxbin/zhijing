@@ -1,5 +1,5 @@
 /**
- * 全局资产仪表盘组件：聚合所有知识库的资料、卡片、产物和任务，支持持久化筛选。
+ * 全局资产仪表盘组件：聚合所有工作区的资料、卡片、产物和任务，支持持久化筛选。
  * @module views/GlobalAssetsDashboard
  */
 
@@ -85,7 +85,7 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact })
   }, [filterLoaded, filterCardType, filterClaimStatus, filterSort, filterKeyword]);
 
   const metrics = [
-    { id: 'knowledgeBases', label: t('assets.metric.knowledgeBases'), value: data.totals.knowledgeBases, body: t('assets.metric.knowledgeBasesBody'), drillTarget: null },
+    { id: 'workspaces', label: t('assets.metric.workspaces'), value: data.totals.workspaces, body: t('assets.metric.workspacesBody'), drillTarget: null },
     { id: 'materials', label: t('assets.metric.materials'), value: data.totals.materials, body: t('assets.metric.materialsBody'), drillTarget: 'library' },
     { id: 'cards', label: t('assets.metric.cards'), value: data.totals.cards, body: t('assets.metric.cardsBody'), drillTarget: 'detail' },
     { id: 'artifacts', label: t('assets.metric.artifacts'), value: data.totals.artifacts, body: t('assets.metric.artifactsBody'), drillTarget: 'export' },

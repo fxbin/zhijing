@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import './styles.css';
 
-import { seedKnowledgeBases, seedMaterials } from './constants/seedData';
+import { seedWorkspaces, seedMaterials } from './constants/seedData';
 import { TOP_SEARCH_EVENT, TOP_SEARCH_STORAGE_KEY } from './constants/options';
 import { materialFromApi } from './utils/material';
 import {
@@ -33,7 +33,7 @@ import { viewFromHash, classifyInput, workflowFromKind } from './utils/navigatio
 import SystemNotice from './components/SystemNotice';
 import NotificationDropdown from './components/NotificationDropdown';
 import CreateKbModal from './components/CreateKbModal';
-import KnowledgeBaseSwitcher from './components/KnowledgeBaseSwitcher';
+import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import WorkspaceView from './views/WorkspaceView';
 import DetailView from './views/DetailView';
 import LibraryView from './views/LibraryView';
@@ -64,18 +64,18 @@ function App() {
   const [activity, setActivity] = useState(t('activity.ready'));
   const [apiStatus, setApiStatus] = useState('checking');
   const [browserAiStatus, setBrowserAiStatus] = useState('checking');
-  const [knowledgeBases, setKnowledgeBases] = useState(seedKnowledgeBases);
+  const [workspaces, setWorkspaces] = useState(seedWorkspaces);
   const [materials, setMaterials] = useState(seedMaterials);
   const [tasks, setTasks] = useState([]);
-  const [selectedKnowledgeBaseId, setSelectedKnowledgeBaseId] = useState(null);
-  const [knowledgeBaseDetail, setKnowledgeBaseDetail] = useState(fallbackDetail);
-  const [knowledgeBaseAnalytics, setKnowledgeBaseAnalytics] = useState(null);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(null);
+  const [workspaceDetail, setWorkspaceDetail] = useState(fallbackDetail);
+  const [workspaceAnalytics, setWorkspaceAnalytics] = useState(null);
   const [latestTaskId, setLatestTaskId] = useState(null);
   const [latestTask, setLatestTask] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [assistantQuestion, setAssistantQuestion] = useState('');
   const [assistantAnswer, setAssistantAnswer] = useState(null);
-  const [knowledgeBaseMessages, setKnowledgeBaseMessages] = useState([]);
+  const [workspaceMessages, setWorkspaceMessages] = useState([]);
   const [isAsking, setIsAsking] = useState(false);
   const [selectedArtifact, setSelectedArtifact] = useState(null);
   const [artifactOrigin, setArtifactOrigin] = useState(null);
@@ -91,11 +91,11 @@ function App() {
   const [topSearchQuery, setTopSearchQuery] = useState('');
   const kind = useMemo(() => (query.trim() ? classifyInput(query.trim()) : 'Theme, Link, or Question'), [query]);
   const advancedOpsData = useMemo(() => buildAdvancedOpsData({
-    knowledgeBases,
+    workspaces,
     materials,
-    detail: knowledgeBaseDetail,
+    detail: workspaceDetail,
     tasks,
-  }), [knowledgeBases, materials, knowledgeBaseDetail, tasks]);
+  }), [workspaces, materials, workspaceDetail, tasks]);
 
   useEffect(() => {
     const handleHashChange = () => setView(viewFromHash());
@@ -150,23 +150,23 @@ function App() {
     let ignore = false;
     async function loadDashboard() {
       try {
-        const url = selectedKnowledgeBaseId
-          ? `/api/dashboard?knowledgeBaseId=${encodeURIComponent(selectedKnowledgeBaseId)}`
+        const url = selectedWorkspaceId
+          ? `/api/dashboard?workspaceId=${encodeURIComponent(selectedWorkspaceId)}`
           : '/api/dashboard';
         const response = await fetch(url);
         if (!response.ok) throw new Error('Dashboard unavailable.');
         const dashboard = await response.json();
         if (ignore) return;
-        const nextKnowledgeBases = dashboard.knowledgeBases ?? [];
+        const nextWorkspaces = dashboard.workspaces ?? [];
         const nextMaterials = dashboard.materials ?? [];
         const nextTasks = dashboard.tasks ?? [];
         setApiStatus('online');
-        setKnowledgeBases(nextKnowledgeBases);
+        setWorkspaces(nextWorkspaces);
         setMaterials(nextMaterials.map(materialFromApi));
         setTasks(nextTasks);
-        setSelectedKnowledgeBaseId((current) => {
-          if (current || nextKnowledgeBases.length === 0) return current;
-          return nextKnowledgeBases[0].id;
+        setSelectedWorkspaceId((current) => {
+          if (current || nextWorkspaces.length === 0) return current;
+          return nextWorkspaces[0].id;
         });
         if (nextTasks.length) {
           setLatestTaskId(nextTasks[0].id);
@@ -183,37 +183,37 @@ function App() {
     return () => {
       ignore = true;
     };
-  }, [selectedKnowledgeBaseId]);
+  }, [selectedWorkspaceId]);
 
   useEffect(() => {
-    if (!selectedKnowledgeBaseId) {
-      setKnowledgeBaseDetail(apiStatus === 'online' ? emptyDetail() : fallbackDetail());
-      setKnowledgeBaseAnalytics(null);
+    if (!selectedWorkspaceId) {
+      setWorkspaceDetail(apiStatus === 'online' ? emptyDetail() : fallbackDetail());
+      setWorkspaceAnalytics(null);
       setAssistantAnswer(null);
       setAssistantQuestion('');
-      setKnowledgeBaseMessages([]);
+      setWorkspaceMessages([]);
       return;
     }
 
     let ignore = false;
     async function loadDetail() {
       try {
-        const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}`);
+        const response = await fetch(`/api/workspaces/${selectedWorkspaceId}`);
         if (!response.ok) return;
         const detail = await response.json();
-        if (!ignore) setKnowledgeBaseDetail(detail);
+        if (!ignore) setWorkspaceDetail(detail);
       } catch {
-        if (!ignore) setKnowledgeBaseDetail(fallbackDetail());
+        if (!ignore) setWorkspaceDetail(fallbackDetail());
       }
     }
     async function loadMessages() {
       try {
-        const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/messages?limit=50`);
+        const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/messages?limit=50`);
         if (!response.ok) return;
         const payload = await response.json();
-        if (!ignore) setKnowledgeBaseMessages(payload.messages ?? []);
+        if (!ignore) setWorkspaceMessages(payload.messages ?? []);
       } catch {
-        if (!ignore) setKnowledgeBaseMessages([]);
+        if (!ignore) setWorkspaceMessages([]);
       }
     }
     loadDetail();
@@ -221,37 +221,37 @@ function App() {
     return () => {
       ignore = true;
     };
-  }, [apiStatus, selectedKnowledgeBaseId]);
+  }, [apiStatus, selectedWorkspaceId]);
 
   useEffect(() => {
-    if (!selectedKnowledgeBaseId || apiStatus !== 'online') {
-      setKnowledgeBaseAnalytics(null);
+    if (!selectedWorkspaceId || apiStatus !== 'online') {
+      setWorkspaceAnalytics(null);
       return;
     }
 
     let ignore = false;
     async function loadAnalytics() {
       try {
-        const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/analytics`);
+        const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/analytics`);
         if (!response.ok) return;
         const analytics = await response.json();
-        if (!ignore) setKnowledgeBaseAnalytics(analytics);
+        if (!ignore) setWorkspaceAnalytics(analytics);
       } catch {
-        if (!ignore) setKnowledgeBaseAnalytics(null);
+        if (!ignore) setWorkspaceAnalytics(null);
       }
     }
     loadAnalytics();
     return () => {
       ignore = true;
     };
-  }, [apiStatus, selectedKnowledgeBaseId, latestTask?.updatedAt]);
+  }, [apiStatus, selectedWorkspaceId, latestTask?.updatedAt]);
 
   useEffect(() => {
     setAssistantAnswer(null);
     setAssistantQuestion('');
     setSelectedArtifact(null);
     setKitRunResult(null);
-  }, [selectedKnowledgeBaseId]);
+  }, [selectedWorkspaceId]);
 
   useEffect(() => {
     if (!latestTaskId) return undefined;
@@ -290,16 +290,16 @@ function App() {
     setLatestTaskId(result.task.id);
     setLatestTask(result.task);
     setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
-    setSelectedKnowledgeBaseId(result.knowledgeBase.id);
-    setKnowledgeBases((current) => {
-      const withoutDuplicate = current.filter((base) => base.id !== result.knowledgeBase.id && base.title !== result.knowledgeBase.title);
-      return [result.knowledgeBase, ...withoutDuplicate];
+    setSelectedWorkspaceId(result.workspace.id);
+    setWorkspaces((current) => {
+      const withoutDuplicate = current.filter((base) => base.id !== result.workspace.id && base.title !== result.workspace.title);
+      return [result.workspace, ...withoutDuplicate];
     });
     if (result.material) {
       setMaterials((current) => [materialFromApi(result.material), ...current].slice(0, 6));
-      setKnowledgeBaseDetail((current) => current.id === result.knowledgeBase.id ? ({
+      setWorkspaceDetail((current) => current.id === result.workspace.id ? ({
         ...current,
-        ...result.knowledgeBase,
+        ...result.workspace,
         materials: [result.material, ...(current.materials ?? []).filter((material) => material.id !== result.material.id)],
         cards: [...(result.cards ?? []), ...(current.cards ?? []).filter((card) => !(result.cards ?? []).some((item) => item.id === card.id))],
         artifacts: result.artifact
@@ -316,13 +316,13 @@ function App() {
       setLatestTask(result.task);
       setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
     }
-    if (result.knowledgeBase) {
-      setKnowledgeBases((current) => [result.knowledgeBase, ...current.filter((base) => base.id !== result.knowledgeBase.id)]);
+    if (result.workspace) {
+      setWorkspaces((current) => [result.workspace, ...current.filter((base) => base.id !== result.workspace.id)]);
     }
     setMaterials((current) => [materialFromApi(result.material), ...current.filter((material) => material.id !== result.material.id)].slice(0, 6));
-    setKnowledgeBaseDetail((current) => {
-      const isTargetDetail = current.id === result.material.knowledgeBaseId;
-      const isPreviousDetail = current.id === result.previousKnowledgeBaseId;
+    setWorkspaceDetail((current) => {
+      const isTargetDetail = current.id === result.material.workspaceId;
+      const isPreviousDetail = current.id === result.previousWorkspaceId;
       if (!isTargetDetail && !isPreviousDetail) return current;
       if (isPreviousDetail && !isTargetDetail) {
         return {
@@ -332,7 +332,7 @@ function App() {
       }
       return {
         ...current,
-        ...(result.knowledgeBase ?? {}),
+        ...(result.workspace ?? {}),
         materials: [result.material, ...(current.materials ?? []).filter((material) => material.id !== result.material.id)],
         cards: [...(result.cards ?? []), ...(current.cards ?? []).filter((card) => !(result.cards ?? []).some((item) => item.id === card.id))],
         artifacts: result.artifact
@@ -347,24 +347,24 @@ function App() {
     go('library');
   };
 
-  async function handleSaveKnowledgeBase(id, title, summary) {
+  async function handleSaveWorkspace(id, title, summary) {
     try {
-      const response = await fetch(`/api/knowledge-bases/${id}`, {
+      const response = await fetch(`/api/workspaces/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, summary }),
       });
       if (!response.ok) throw new Error('Update failed.');
       const result = await response.json();
-      setKnowledgeBases((current) => current.map((base) => base.id === id ? result.knowledgeBase : base));
+      setWorkspaces((current) => current.map((base) => base.id === id ? result.workspace : base));
       setEditingKb(null);
     } catch (err) {
-      setEditingKb((current) => ({ ...current, error: err.message || t('knowledgeBase.edit') }));
+      setEditingKb((current) => ({ ...current, error: err.message || t('workspace.edit') }));
     }
   }
 
   async function handleCreateWorkspace({ title, summary }) {
-    const response = await fetch('/api/knowledge-bases', {
+    const response = await fetch('/api/workspaces', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, summary }),
@@ -374,27 +374,27 @@ function App() {
       throw new Error(body.error || '创建失败');
     }
     const result = await response.json();
-    if (result.knowledgeBase?.id) {
-      setKnowledgeBases((current) => [
-        result.knowledgeBase,
-        ...current.filter((base) => base.id !== result.knowledgeBase.id),
+    if (result.workspace?.id) {
+      setWorkspaces((current) => [
+        result.workspace,
+        ...current.filter((base) => base.id !== result.workspace.id),
       ]);
-      setSelectedKnowledgeBaseId(result.knowledgeBase.id);
+      setSelectedWorkspaceId(result.workspace.id);
       go('detail');
     }
   }
 
-  async function handleDeleteKnowledgeBase(id) {
+  async function handleDeleteWorkspace(id) {
     try {
-      const response = await fetch(`/api/knowledge-bases/${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/workspaces/${id}`, { method: 'DELETE' });
       if (!response.ok) throw new Error('Delete failed.');
-      setKnowledgeBases((current) => current.filter((base) => base.id !== id));
-      if (selectedKnowledgeBaseId === id) {
-        setSelectedKnowledgeBaseId(null);
+      setWorkspaces((current) => current.filter((base) => base.id !== id));
+      if (selectedWorkspaceId === id) {
+        setSelectedWorkspaceId(null);
       }
       setDeletingKb(null);
     } catch (err) {
-      setDeletingKb((current) => ({ ...current, error: err.message || t('knowledgeBase.delete') }));
+      setDeletingKb((current) => ({ ...current, error: err.message || t('workspace.delete') }));
     }
   }
 
@@ -440,22 +440,22 @@ function App() {
     }
   };
 
-  const askKnowledgeBase = async () => {
+  const askWorkspace = async () => {
     const value = assistantQuestion.trim();
-    if (!value || !selectedKnowledgeBaseId || apiStatus !== 'online' || isAsking) return;
+    if (!value || !selectedWorkspaceId || apiStatus !== 'online' || isAsking) return;
     setIsAsking(true);
     setAssistantAnswer({ question: value, loading: true });
-    setActivity(t('activity.askKnowledgeBase'));
+    setActivity(t('activity.askWorkspace'));
 
     try {
-      const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/ask`, {
+      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: value }),
       });
 
       if (!response.ok) {
-        throw new Error('Knowledge base ask failed.');
+        throw new Error('Workspace ask failed.');
       }
 
       const result = await response.json();
@@ -463,13 +463,13 @@ function App() {
       setLatestTaskId(result.task.id);
       setLatestTask(result.task);
       setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
-      setKnowledgeBases((current) => {
-        const withoutDuplicate = current.filter((base) => base.id !== result.knowledgeBase.id);
-        return [result.knowledgeBase, ...withoutDuplicate];
+      setWorkspaces((current) => {
+        const withoutDuplicate = current.filter((base) => base.id !== result.workspace.id);
+        return [result.workspace, ...withoutDuplicate];
       });
-      setKnowledgeBaseDetail((current) => ({
+      setWorkspaceDetail((current) => ({
         ...current,
-        ...result.knowledgeBase,
+        ...result.workspace,
         materials: result.material
           ? [result.material, ...(current.materials ?? []).filter((material) => material.id !== result.material.id)]
           : current.materials ?? [],
@@ -489,11 +489,11 @@ function App() {
         task: result.task,
       });
       if (result.artifact) {
-        setKnowledgeBaseMessages((current) => [
+        setWorkspaceMessages((current) => [
           ...current,
           {
             id: result.messageId ?? `msg_${Date.now()}`,
-            knowledgeBaseId: selectedKnowledgeBaseId,
+            workspaceId: selectedWorkspaceId,
             question: value,
             answer: result.artifact?.body ?? result.message,
             cardIds: (result.cards ?? []).map((card) => card.id),
@@ -526,19 +526,19 @@ function App() {
   const handleArtifactUpdate = (updatedArtifact) => {
     if (!updatedArtifact) return;
     setSelectedArtifact(updatedArtifact);
-    setKnowledgeBaseDetail((current) => (current ? {
+    setWorkspaceDetail((current) => (current ? {
       ...current,
       artifacts: (current.artifacts ?? []).map((item) => (item.id === updatedArtifact.id ? updatedArtifact : item)),
     } : current));
   };
 
   const runKnowledgeKit = async (kitId = 'learning_research') => {
-    if (!selectedKnowledgeBaseId || apiStatus !== 'online' || isRunningKit) return null;
+    if (!selectedWorkspaceId || apiStatus !== 'online' || isRunningKit) return null;
     setIsRunningKit(true);
     setActivity(t('activity.runKit'));
 
     try {
-      const response = await fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/kits/run`, {
+      const response = await fetch(`/api/workspaces/${selectedWorkspaceId}/kits/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ kitId }),
@@ -549,10 +549,10 @@ function App() {
       setLatestTaskId(result.task.id);
       setLatestTask(result.task);
       setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
-      setKnowledgeBases((current) => [result.knowledgeBase, ...current.filter((base) => base.id !== result.knowledgeBase.id)]);
-      setKnowledgeBaseDetail((current) => ({
+      setWorkspaces((current) => [result.workspace, ...current.filter((base) => base.id !== result.workspace.id)]);
+      setWorkspaceDetail((current) => ({
         ...current,
-        ...result.knowledgeBase,
+        ...result.workspace,
         artifacts: [result.artifact, ...(current.artifacts ?? []).filter((artifact) => artifact.id !== result.artifact.id)],
       }));
       setSelectedArtifact(result.artifact);
@@ -583,17 +583,17 @@ function App() {
       setLatestTaskId(result.task.id);
       setLatestTask(result.task);
       setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
-      setKnowledgeBaseDetail((current) => ({
+      setWorkspaceDetail((current) => ({
         ...current,
-        ...(result.knowledgeBase ?? {}),
+        ...(result.workspace ?? {}),
         materials: [result.material, ...(current.materials ?? []).filter((material) => material.id !== result.material.id)],
         cards: [...(result.cards ?? []), ...(current.cards ?? []).filter((card) => !(result.cards ?? []).some((item) => item.id === card.id))],
         artifacts: result.artifact
           ? [result.artifact, ...(current.artifacts ?? []).filter((artifact) => artifact.id !== result.artifact.id)]
           : current.artifacts ?? [],
       }));
-      setKnowledgeBases((current) => result.knowledgeBase
-        ? [result.knowledgeBase, ...current.filter((base) => base.id !== result.knowledgeBase.id)]
+      setWorkspaces((current) => result.workspace
+        ? [result.workspace, ...current.filter((base) => base.id !== result.workspace.id)]
         : current);
       if (result.artifact) setSelectedArtifact(result.artifact);
       return result;
@@ -607,7 +607,7 @@ function App() {
 
   const navItems = [
     { key: 'global', label: t('nav.global'), icon: Globe, group: 'core' },
-    { key: 'detail', label: t('nav.knowledgeBase'), icon: Database, group: 'core' },
+    { key: 'detail', label: t('nav.workspace'), icon: Database, group: 'core' },
     { key: 'library', label: t('nav.library'), icon: FolderOpen, group: 'core' },
     { key: 'search', label: t('nav.search'), icon: Search, group: 'core' },
     { key: 'chat', label: t('nav.chat'), icon: MessageCircle, group: 'core' },
@@ -676,15 +676,15 @@ function App() {
             >
               <Menu size={22} />
             </button>
-            <KnowledgeBaseSwitcher
-              knowledgeBases={knowledgeBases}
+            <WorkspaceSwitcher
+              workspaces={workspaces}
               onCreate={() => { setCreateKbError(null); setIsCreateKbOpen(true); }}
               onDelete={(base) => setDeletingKb({ id: base.id, title: base.title })}
               onEdit={(base) => setEditingKb({ id: base.id, title: base.title, summary: base.summary ?? '', error: null })}
               onSelect={(id) => {
-                setSelectedKnowledgeBaseId(id);
+                setSelectedWorkspaceId(id);
               }}
-              selectedKnowledgeBaseId={selectedKnowledgeBaseId}
+              selectedWorkspaceId={selectedWorkspaceId}
             />
             <nav aria-label={t('nav.workspaceNav')}>
               <button className={view === 'workspace' ? 'active' : ''} onClick={() => go('workspace')} type="button">{t('nav.workspace')}</button>
@@ -721,31 +721,31 @@ function App() {
 
         <div className="canvas">
           {apiStatus === 'offline' && <SystemNotice status="offline" />}
-          {view === 'workspace' && <WorkspaceView activity={activity} apiStatus={apiStatus} isSubmitting={isSubmitting} materials={materials} query={query} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setQuery={setQuery} setView={go} submit={submit} onViewMaterialDetail={handleViewMaterialDetail} browserAiStatus={browserAiStatus} />}
+          {view === 'workspace' && <WorkspaceView activity={activity} apiStatus={apiStatus} isSubmitting={isSubmitting} materials={materials} query={query} selectedWorkspaceId={selectedWorkspaceId} setQuery={setQuery} setView={go} submit={submit} onViewMaterialDetail={handleViewMaterialDetail} browserAiStatus={browserAiStatus} />}
           {view === 'global' && <GlobalView setView={go} />}
           {view === 'detail' && (
             <DetailView
               apiStatus={apiStatus}
-              analytics={knowledgeBaseAnalytics}
+              analytics={workspaceAnalytics}
               assistantAnswer={assistantAnswer}
               assistantQuestion={assistantQuestion}
-              detail={knowledgeBaseDetail}
+              detail={workspaceDetail}
               isAsking={isAsking}
               latestTask={latestTask}
-              messages={knowledgeBaseMessages}
-              onAsk={askKnowledgeBase}
+              messages={workspaceMessages}
+              onAsk={askWorkspace}
               onCardsAccepted={(newCards, updatedMessage) => {
-                setKnowledgeBaseDetail((current) => ({
+                setWorkspaceDetail((current) => ({
                   ...current,
                   cards: [...newCards, ...(current.cards ?? []).filter((card) => !newCards.some((item) => item.id === card.id))],
                 }));
-                setKnowledgeBaseMessages((current) => current.map((message) => message.id === updatedMessage.id ? updatedMessage : message));
+                setWorkspaceMessages((current) => current.map((message) => message.id === updatedMessage.id ? updatedMessage : message));
                 setAssistantAnswer((current) => current ? { ...current, proposedCards: [], cards: [...(current.cards ?? []), ...newCards] } : current);
               }}
               onOpenArtifact={openArtifact}
               onParseMaterial={parseMaterial}
               parsingMaterialId={parsingMaterialId}
-              selectedKnowledgeBaseId={selectedKnowledgeBaseId}
+              selectedWorkspaceId={selectedWorkspaceId}
               setAssistantQuestion={setAssistantQuestion}
               setView={go}
             />
@@ -753,19 +753,19 @@ function App() {
           {view === 'library' && (
             <LibraryView
               apiStatus={apiStatus}
-              knowledgeBases={knowledgeBases}
+              workspaces={workspaces}
               onCaptureResult={applyIntakeResult}
               onMaterialMutation={applyMaterialMutation}
               onNavigate={go}
               onParseMaterial={parseMaterial}
               parsingMaterialId={parsingMaterialId}
-              selectedKnowledgeBaseId={selectedKnowledgeBaseId}
+              selectedWorkspaceId={selectedWorkspaceId}
             />
           )}
           {view === 'search' && (
             <SearchView
               setView={go}
-              setSelectedKnowledgeBaseId={setSelectedKnowledgeBaseId}
+              setSelectedWorkspaceId={setSelectedWorkspaceId}
               onOpenArtifact={openArtifact}
             />
           )}
@@ -774,68 +774,68 @@ function App() {
               apiStatus={apiStatus}
               isRunningKit={isRunningKit}
               onRunKit={runKnowledgeKit}
-              selectedKnowledgeBaseId={selectedKnowledgeBaseId}
+              selectedWorkspaceId={selectedWorkspaceId}
               setView={go}
             />
           )}
           {view === 'workflow' && (
             <WorkflowView
-              detail={knowledgeBaseDetail}
+              detail={workspaceDetail}
               isRunningKit={isRunningKit}
               kitRunResult={kitRunResult}
               latestTask={latestTask}
               onOpenArtifact={openArtifact}
               onRunKit={runKnowledgeKit}
-              selectedKnowledgeBaseId={selectedKnowledgeBaseId}
+              selectedWorkspaceId={selectedWorkspaceId}
               setView={go}
             />
           )}
-          {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={knowledgeBaseDetail} setView={go} artifactOrigin={artifactOrigin} onClearOrigin={() => setArtifactOrigin(null)} onArtifactUpdate={handleArtifactUpdate} />}
-          {view === 'maps' && <MapsView apiStatus={apiStatus} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={go} />}
+          {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={workspaceDetail} setView={go} artifactOrigin={artifactOrigin} onClearOrigin={() => setArtifactOrigin(null)} onArtifactUpdate={handleArtifactUpdate} />}
+          {view === 'maps' && <MapsView apiStatus={apiStatus} selectedWorkspaceId={selectedWorkspaceId} setView={go} />}
           {view === 'assets' && <GlobalAssetsDashboard data={advancedOpsData} setView={go} onOpenArtifact={openArtifact} />}
           {view === 'compare' && <MultiEntityComparisonView data={advancedOpsData} setView={go} />}
           {view === 'conflicts' && <KnowledgeConflictResolverView data={advancedOpsData} setView={go} />}
           {view === 'insights' && <InsightsView setView={go} onCreateWorkspace={handleCreateWorkspace} />}
-          {view === 'path' && <PathView selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={go} />}
-          {view === 'archive' && <ArchiveView selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={go} />}
+          {view === 'path' && <PathView selectedWorkspaceId={selectedWorkspaceId} setView={go} />}
+          {view === 'archive' && <ArchiveView selectedWorkspaceId={selectedWorkspaceId} setView={go} />}
           {view === 'chat' && (
             <ChatView
               apiStatus={apiStatus}
               assistantAnswer={assistantAnswer}
               assistantQuestion={assistantQuestion}
-              detail={knowledgeBaseDetail}
+              detail={workspaceDetail}
               isAsking={isAsking}
-              knowledgeBases={knowledgeBases}
-              messages={knowledgeBaseMessages}
-              onAsk={askKnowledgeBase}
+              workspaces={workspaces}
+              messages={workspaceMessages}
+              onAsk={askWorkspace}
               onOpenArtifact={openArtifact}
-              onSelectKnowledgeBase={(id) => {
-                setSelectedKnowledgeBaseId(id);
+              onSelectWorkspace={(id) => {
+                setSelectedWorkspaceId(id);
                 go('chat');
               }}
-              selectedKnowledgeBaseId={selectedKnowledgeBaseId}
+              selectedWorkspaceId={selectedWorkspaceId}
               setAssistantQuestion={setAssistantQuestion}
               setView={go}
             />
           )}
           {view === 'recall' && (
             <RecallView
-              detail={knowledgeBaseDetail}
-              knowledgeBases={knowledgeBases}
-              onSelectKnowledgeBase={(id) => {
-                setSelectedKnowledgeBaseId(id);
+              detail={workspaceDetail}
+              workspaces={workspaces}
+              onSelectWorkspace={(id) => {
+                setSelectedWorkspaceId(id);
                 go('recall');
               }}
               setView={go}
             />
           )}
-          {view === 'export' && <ExportView detail={knowledgeBaseDetail} setView={go} />}
+          {view === 'export' && <ExportView detail={workspaceDetail} setView={go} />}
           {view === 'weread' && (
             <WeReadView
-              knowledgeBases={knowledgeBases}
-              selectedKnowledgeBaseId={selectedKnowledgeBaseId}
-              onOpenKnowledgeBase={(id) => {
-                if (id && id !== selectedKnowledgeBaseId) setSelectedKnowledgeBaseId(id);
+              workspaces={workspaces}
+              selectedWorkspaceId={selectedWorkspaceId}
+              onOpenWorkspace={(id) => {
+                if (id && id !== selectedWorkspaceId) setSelectedWorkspaceId(id);
               }}
             />
           )}
@@ -857,7 +857,7 @@ function App() {
           }}
           onCreateEmpty={async (title, summary) => {
             try {
-              const response = await fetch('/api/knowledge-bases', {
+              const response = await fetch('/api/workspaces', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title, summary }),
@@ -868,17 +868,17 @@ function App() {
               }
               const result = await response.json();
               setCreateKbError(null);
-              if (result.knowledgeBase?.id) {
-                setKnowledgeBases((current) => [
-                  result.knowledgeBase,
-                  ...current.filter((base) => base.id !== result.knowledgeBase.id),
+              if (result.workspace?.id) {
+                setWorkspaces((current) => [
+                  result.workspace,
+                  ...current.filter((base) => base.id !== result.workspace.id),
                 ]);
-                setSelectedKnowledgeBaseId(result.knowledgeBase.id);
+                setSelectedWorkspaceId(result.workspace.id);
                 go('detail');
               }
               setIsCreateKbOpen(false);
             } catch (err) {
-              setCreateKbError(err.message || t('activity.createKnowledgeBaseFailed'));
+              setCreateKbError(err.message || t('activity.createWorkspaceFailed'));
             }
           }}
         />
@@ -888,11 +888,11 @@ function App() {
         <div className="modal-overlay" role="dialog" aria-modal="true">
           <div className="modal-card">
             <div className="modal-head">
-              <h3>{t('knowledgeBase.edit')}</h3>
+              <h3>{t('workspace.edit')}</h3>
             </div>
             <div className="modal-body">
               <label className="modal-field">
-                <span>{t('knowledgeBase.editTitleLabel')}</span>
+                <span>{t('workspace.editTitleLabel')}</span>
                 <input
                   autoFocus
                   type="text"
@@ -901,7 +901,7 @@ function App() {
                 />
               </label>
               <label className="modal-field">
-                <span>{t('knowledgeBase.editSummaryLabel')}</span>
+                <span>{t('workspace.editSummaryLabel')}</span>
                 <textarea
                   rows={3}
                   value={editingKb.summary}
@@ -916,9 +916,9 @@ function App() {
                 className="btn-primary"
                 disabled={!editingKb.title.trim()}
                 type="button"
-                onClick={() => handleSaveKnowledgeBase(editingKb.id, editingKb.title, editingKb.summary)}
+                onClick={() => handleSaveWorkspace(editingKb.id, editingKb.title, editingKb.summary)}
               >
-                {t('knowledgeBase.editSave')}
+                {t('workspace.editSave')}
               </button>
             </div>
           </div>
@@ -930,12 +930,12 @@ function App() {
           <div className="modal-card">
             <div className="modal-head">
               <AlertTriangle size={24} />
-              <h3>{t('knowledgeBase.deleteConfirmTitle')}</h3>
+              <h3>{t('workspace.deleteConfirmTitle')}</h3>
             </div>
             <div className="modal-body">
-              <p>{t('knowledgeBase.deleteConfirmHint')}</p>
+              <p>{t('workspace.deleteConfirmHint')}</p>
               <p><strong>{deletingKb.title}</strong></p>
-              <p className="modal-error">{t('knowledgeBase.deleteConfirmBody')}</p>
+              <p className="modal-error">{t('workspace.deleteConfirmBody')}</p>
               {deletingKb.error && <p className="modal-error" role="alert">{deletingKb.error}</p>}
             </div>
             <div className="modal-foot">
@@ -943,7 +943,7 @@ function App() {
               <button
                 className="btn-primary danger"
                 type="button"
-                onClick={() => handleDeleteKnowledgeBase(deletingKb.id)}
+                onClick={() => handleDeleteWorkspace(deletingKb.id)}
               >
                 {t('common.confirm')}
               </button>

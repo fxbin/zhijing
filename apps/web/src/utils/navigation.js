@@ -32,6 +32,6 @@ export function classifyInput(value) {
  */
 export function workflowFromKind(kind) {
   if (kind === 'Question') return 'answer_question';
-  if (kind === 'Theme') return 'create_knowledge_base';
+  if (kind === 'Theme') return 'create_workspace';
   return 'ingest_material';
 }

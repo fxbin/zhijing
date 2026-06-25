@@ -11,18 +11,18 @@ import { buildMapLayout } from '../utils/map';
 /**
  * 知识地图预览面板，基于真实地图数据渲染缩略图，点击可跳转到完整地图视图。
  * @param {object} props - 组件属性
- * @param {string|null} props.selectedKnowledgeBaseId - 当前选中的知识库 ID
+ * @param {string|null} props.selectedWorkspaceId - 当前选中的工作区 ID
  * @param {function} props.setView - 视图切换函数
  * @returns {JSX.Element} 地图预览面板
  */
-export default function KnowledgeMapPanel({ selectedKnowledgeBaseId, setView }) {
+export default function KnowledgeMapPanel({ selectedWorkspaceId, setView }) {
   const { t } = useTranslation();
   const [mapData, setMapData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
-    if (!selectedKnowledgeBaseId) {
+    if (!selectedWorkspaceId) {
       setMapData(null);
       setLoadError(null);
       return undefined;
@@ -32,7 +32,7 @@ export default function KnowledgeMapPanel({ selectedKnowledgeBaseId, setView }) 
     setIsLoading(true);
     setLoadError(null);
 
-    fetch(`/api/knowledge-bases/${selectedKnowledgeBaseId}/map`)
+    fetch(`/api/workspaces/${selectedWorkspaceId}/map`)
       .then((response) => {
         if (!response.ok) throw new Error('Map fetch failed.');
         return response.json();
@@ -50,7 +50,7 @@ export default function KnowledgeMapPanel({ selectedKnowledgeBaseId, setView }) 
     return () => {
       cancelled = true;
     };
-  }, [selectedKnowledgeBaseId, t]);
+  }, [selectedWorkspaceId, t]);
 
   const layoutNodes = useMemo(() => {
     if (!mapData?.nodes) return [];
@@ -88,7 +88,7 @@ export default function KnowledgeMapPanel({ selectedKnowledgeBaseId, setView }) 
       );
     }
 
-    if (!selectedKnowledgeBaseId || !layoutNodes.length) {
+    if (!selectedWorkspaceId || !layoutNodes.length) {
       return (
         <div className="map-card map-card-state">
           <Network aria-hidden="true" size={32} />
@@ -123,8 +123,8 @@ export default function KnowledgeMapPanel({ selectedKnowledgeBaseId, setView }) 
             );
           })}
           {layoutNodes.map((node) => {
-            const radius = node.kind === 'knowledge_base' ? 9 : node.kind === 'material' ? 5 : 4;
-            const fill = node.kind === 'knowledge_base'
+            const radius = node.kind === 'workspace' ? 9 : node.kind === 'material' ? 5 : 4;
+            const fill = node.kind === 'workspace'
               ? '#2C5F8D'
               : node.kind === 'material'
                 ? '#6B8E7F'
@@ -153,7 +153,7 @@ export default function KnowledgeMapPanel({ selectedKnowledgeBaseId, setView }) 
         <h3>{t('workspace.knowledgeMap')}</h3>
         <button
           className="map-explore-btn"
-          disabled={!selectedKnowledgeBaseId || isLoading || !!loadError}
+          disabled={!selectedWorkspaceId || isLoading || !!loadError}
           onClick={handleOpenMap}
           type="button"
         >

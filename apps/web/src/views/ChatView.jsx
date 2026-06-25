@@ -1,5 +1,5 @@
 /**
- * 对话视图：独立的知识库对话页，展示历史消息与引用卡片。
+ * 对话视图：独立的工作区对话页，展示历史消息与引用卡片。
  * @module views/ChatView
  */
 
@@ -20,19 +20,19 @@ import EmptyState from '../components/EmptyState';
 import SourceCitation from '../components/SourceCitation';
 
 /**
- * 知识库对话视图。
+ * 工作区对话视图。
  * @param {object} props - 组件属性
  * @param {string} props.apiStatus - API 在线状态
  * @param {object} props.assistantAnswer - 助手回答对象
  * @param {string} props.assistantQuestion - 当前问题输入
- * @param {object} props.detail - 知识库详情
+ * @param {object} props.detail - 工作区详情
  * @param {boolean} props.isAsking - 是否正在提问
- * @param {object[]} [props.knowledgeBases=[]] - 全量知识库列表（用于全局入口选择）
+ * @param {object[]} [props.workspaces=[]] - 全量工作区列表（用于全局入口选择）
  * @param {object[]} [props.messages=[]] - 历史消息列表
  * @param {() => void} props.onAsk - 提问回调
  * @param {(artifact: object, meta?: object) => void} props.onOpenArtifact - 打开产物回调
- * @param {(knowledgeBaseId: string) => void} [props.onSelectKnowledgeBase] - 选择知识库回调
- * @param {string} props.selectedKnowledgeBaseId - 当前选中知识库 ID
+ * @param {(workspaceId: string) => void} [props.onSelectWorkspace] - 选择工作区回调
+ * @param {string} props.selectedWorkspaceId - 当前选中工作区 ID
  * @param {(value: string) => void} props.setAssistantQuestion - 设置问题输入
  * @param {(view: string) => void} props.setView - 切换视图
  * @returns {JSX.Element} 对话视图
@@ -43,12 +43,12 @@ export default function ChatView({
   assistantQuestion,
   detail,
   isAsking,
-  knowledgeBases = [],
+  workspaces = [],
   messages = [],
   onAsk,
   onOpenArtifact,
-  onSelectKnowledgeBase,
-  selectedKnowledgeBaseId,
+  onSelectWorkspace,
+  selectedWorkspaceId,
   setAssistantQuestion,
   setView,
 }) {
@@ -59,14 +59,14 @@ export default function ChatView({
   const materials = detail.materials ?? [];
   const latestAnswerCards = assistantAnswer?.cards?.slice(0, 3) ?? [];
   const latestCitations = assistantAnswer?.citations ?? [];
-  const canAsk = apiStatus === 'online' && Boolean(selectedKnowledgeBaseId) && !isAsking;
+  const canAsk = apiStatus === 'online' && Boolean(selectedWorkspaceId) && !isAsking;
   const starterPrompts = [
     { key: 'chat.starterPrompt.keyConcepts' },
     { key: 'chat.starterPrompt.missingSources' },
     { key: 'chat.starterPrompt.actionList' },
   ];
 
-  if (!selectedKnowledgeBaseId) {
+  if (!selectedWorkspaceId) {
     return (
       <section className="page-main full">
         <div className="recall-workbench">
@@ -76,17 +76,17 @@ export default function ChatView({
               {t('common.back')}
             </button>
             <span>{t('chat.title')}</span>
-            <h2>{t('chat.selectKnowledgeBase')}</h2>
+            <h2>{t('chat.selectWorkspace')}</h2>
           </div>
-          {knowledgeBases.length === 0 ? (
-            <EmptyState title={t('chat.noKnowledgeBases')} body={t('common.empty')} icon={Database} />
+          {workspaces.length === 0 ? (
+            <EmptyState title={t('chat.noWorkspaces')} body={t('common.empty')} icon={Database} />
           ) : (
             <div className="kb-picker-grid">
-              {knowledgeBases.map((kb) => (
+              {workspaces.map((kb) => (
                 <button
                   key={kb.id}
                   className="kb-picker-card"
-                  onClick={() => onSelectKnowledgeBase?.(kb.id)}
+                  onClick={() => onSelectWorkspace?.(kb.id)}
                   type="button"
                 >
                   <Database size={18} />
@@ -107,7 +107,7 @@ export default function ChatView({
         <aside className="chat-context-panel">
           <button className="back-button" onClick={() => setView('detail')} type="button">
             ←
-            {t('chat.backToKnowledgeBase')}
+            {t('chat.backToWorkspace')}
           </button>
           <span>{t('chat.title')}</span>
           <h2>{detail.title}</h2>

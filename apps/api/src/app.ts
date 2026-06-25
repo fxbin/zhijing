@@ -4,15 +4,15 @@ import Fastify from 'fastify';
 import {
   archiveCard,
   archiveMaterial,
-  assignMaterialToKnowledgeBase,
-  answerKnowledgeBaseQuestion,
+  assignMaterialToWorkspace,
+  answerWorkspaceQuestion,
   clearFilter,
-  createEmptyKnowledgeBase,
+  createEmptyWorkspace,
   completeMaterialReview,
   createModelProviderProfile,
   deleteMaterial,
   deleteModelProviderProfile,
-  deleteKnowledgeBase,
+  deleteWorkspace,
   describeCloudBackupStatus,
   editArtifactSection,
   editCardContent,
@@ -25,7 +25,7 @@ import {
   getGlobalInsights,
   getConstructionProgress,
   listSkeletonCards,
-  getKnowledgeBasePath,
+  getWorkspacePath,
   getModelProviderSettings,
   getModelProviderSettingsV2,
   getWeReadSettings,
@@ -39,11 +39,11 @@ import {
   previewWeReadBook,
   loadFilter,
   recordExport,
-  getKnowledgeBaseAnalytics,
-  getKnowledgeBase,
+  getWorkspaceAnalytics,
+  getWorkspace,
   getKnowledgeMap,
-  getKnowledgeBaseNodePositions,
-  saveKnowledgeBaseNodePositions,
+  getWorkspaceNodePositions,
+  saveWorkspaceNodePositions,
   addMapEdge,
   removeMapEdge,
   getTask,
@@ -76,7 +76,7 @@ import {
   inspectQuery,
   activateModelProviderProfile,
   recordCardReview,
-  listKnowledgeBases,
+  listWorkspaces,
   listMaterials,
   listAllCards,
   listAllMaterials,
@@ -96,7 +96,7 @@ import {
   testWeReadConnection,
   unarchiveCard,
   unarchiveMaterial,
-  updateKnowledgeBaseMeta,
+  updateWorkspaceMeta,
   updateModelProviderProfile,
 } from '@zhijing/core';
 import type {
@@ -173,19 +173,19 @@ export function buildApi() {
     timestamp: new Date().toISOString(),
   }));
 
-  app.get<{ Querystring: { knowledgeBaseId?: string } }>('/api/dashboard', async (request) => {
-    const kbId = typeof request.query.knowledgeBaseId === 'string' && request.query.knowledgeBaseId.trim()
-      ? request.query.knowledgeBaseId.trim()
+  app.get<{ Querystring: { workspaceId?: string } }>('/api/dashboard', async (request) => {
+    const kbId = typeof request.query.workspaceId === 'string' && request.query.workspaceId.trim()
+      ? request.query.workspaceId.trim()
       : undefined;
     return getDashboard(kbId);
   });
 
   app.get('/api/insights', async () => getGlobalInsights());
 
-  app.get<{ Params: { knowledgeBaseId: string } }>(
-    '/api/knowledge-bases/:knowledgeBaseId/construction-progress',
+  app.get<{ Params: { workspaceId: string } }>(
+    '/api/workspaces/:workspaceId/construction-progress',
     async (request, reply) => {
-      const progress = getConstructionProgress(request.params.knowledgeBaseId);
+      const progress = getConstructionProgress(request.params.workspaceId);
       if (!progress) {
         return reply.code(404).send({ error: 'Knowledge base not found or has no cards.' });
       }
@@ -193,15 +193,15 @@ export function buildApi() {
     },
   );
 
-  app.get<{ Params: { knowledgeBaseId: string } }>(
-    '/api/knowledge-bases/:knowledgeBaseId/skeleton-cards',
-    async (request) => listSkeletonCards(request.params.knowledgeBaseId),
+  app.get<{ Params: { workspaceId: string } }>(
+    '/api/workspaces/:workspaceId/skeleton-cards',
+    async (request) => listSkeletonCards(request.params.workspaceId),
   );
 
   app.post<{
-    Params: { knowledgeBaseId: string };
+    Params: { workspaceId: string };
     Body: { cardId?: string; tensionKey?: string; trigger?: string };
-  }>('/api/knowledge-bases/:knowledgeBaseId/socratic-questions', async (request, reply) => {
+  }>('/api/workspaces/:workspaceId/socratic-questions', async (request, reply) => {
     const triggerRaw = typeof request.body?.trigger === 'string' ? request.body.trigger.trim() : '';
     const trigger: SocraticTrigger | undefined = triggerRaw
       ? (SOCRATIC_TRIGGER_SET.has(triggerRaw) ? (triggerRaw as SocraticTrigger) : undefined)
@@ -210,7 +210,7 @@ export function buildApi() {
       return reply.code(400).send({ error: 'trigger 必须是 skeleton_card、semantic_tension 或 manual 之一。' });
     }
     try {
-      const result = await generateSocraticQuestions(request.params.knowledgeBaseId, {
+      const result = await generateSocraticQuestions(request.params.workspaceId, {
         cardId: typeof request.body?.cardId === 'string' ? request.body.cardId.trim() : undefined,
         tensionKey: typeof request.body?.tensionKey === 'string' ? request.body.tensionKey.trim() : undefined,
         trigger,
@@ -225,14 +225,14 @@ export function buildApi() {
     }
   });
 
-  app.get<{ Params: { knowledgeBaseId: string }; Querystring: { currentCardId?: string } }>(
-    '/api/knowledge-bases/:knowledgeBaseId/related-suggestions',
+  app.get<{ Params: { workspaceId: string }; Querystring: { currentCardId?: string } }>(
+    '/api/workspaces/:workspaceId/related-suggestions',
     async (request, reply) => {
       try {
         const currentCardId = typeof request.query.currentCardId === 'string' && request.query.currentCardId.trim()
           ? request.query.currentCardId.trim()
           : undefined;
-        return generateRelatedSuggestions(request.params.knowledgeBaseId, currentCardId);
+        return generateRelatedSuggestions(request.params.workspaceId, currentCardId);
       } catch (error) {
         if (error instanceof KnowledgeCoreError) {
           return reply.code(error.statusCode).send({ error: error.message });
@@ -243,27 +243,27 @@ export function buildApi() {
     },
   );
 
-  app.get<{ Params: { knowledgeBaseId: string }; Querystring: { limit?: string } }>(
-    '/api/knowledge-bases/:knowledgeBaseId/attention-signals',
+  app.get<{ Params: { workspaceId: string }; Querystring: { limit?: string } }>(
+    '/api/workspaces/:workspaceId/attention-signals',
     async (request) => {
       const limitRaw = typeof request.query.limit === 'string' ? request.query.limit.trim() : '';
       const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
-      return { signals: listAttentionSignals(request.params.knowledgeBaseId, limit) };
+      return { signals: listAttentionSignals(request.params.workspaceId, limit) };
     },
   );
 
-  app.get<{ Querystring: { knowledgeBaseId?: string; action?: string; limit?: string } }>(
+  app.get<{ Querystring: { workspaceId?: string; action?: string; limit?: string } }>(
     '/api/agent-action-logs',
     async (request) => {
-      const knowledgeBaseId = typeof request.query.knowledgeBaseId === 'string' && request.query.knowledgeBaseId.trim()
-        ? request.query.knowledgeBaseId.trim()
+      const workspaceId = typeof request.query.workspaceId === 'string' && request.query.workspaceId.trim()
+        ? request.query.workspaceId.trim()
         : undefined;
       const action = typeof request.query.action === 'string' && request.query.action.trim()
         ? request.query.action.trim()
         : undefined;
       const limitRaw = typeof request.query.limit === 'string' ? request.query.limit.trim() : '';
       const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
-      return listAgentActionLogs({ knowledgeBaseId, action, limit });
+      return listAgentActionLogs({ workspaceId, action, limit });
     },
   );
 
@@ -471,19 +471,19 @@ export function buildApi() {
     }
   });
 
-  app.get('/api/knowledge-bases', async () => ({
-    knowledgeBases: listKnowledgeBases(),
+  app.get('/api/workspaces', async () => ({
+    workspaces: listWorkspaces(),
   }));
 
-  app.post<{ Body: { title?: string; summary?: string } }>('/api/knowledge-bases', async (request, reply) => {
+  app.post<{ Body: { title?: string; summary?: string } }>('/api/workspaces', async (request, reply) => {
     const title = request.body?.title;
     const summary = request.body?.summary;
     if (!title || !title.trim()) {
       return reply.status(400).send({ error: 'title 为必填。' });
     }
     try {
-      const base = createEmptyKnowledgeBase(title, summary);
-      return { knowledgeBase: base };
+      const base = createEmptyWorkspace(title, summary);
+      return { workspace: base };
     } catch (error) {
       if (error instanceof KnowledgeCoreError) {
         return reply.status(error.statusCode).send({ error: error.message });
@@ -495,17 +495,17 @@ export function buildApi() {
   app.put<{
     Params: { id: string };
     Body: { title?: string; summary?: string };
-  }>('/api/knowledge-bases/:id', async (request, reply) => {
+  }>('/api/workspaces/:id', async (request, reply) => {
     const { title, summary } = request.body ?? {};
     if (title !== undefined && !title.trim()) {
       return reply.code(400).send({ error: '知识库标题不能为空。' });
     }
     try {
-      const base = updateKnowledgeBaseMeta(request.params.id, title, summary);
+      const base = updateWorkspaceMeta(request.params.id, title, summary);
       if (!base) {
         return reply.code(404).send({ error: '知识库不存在。' });
       }
-      return { knowledgeBase: base };
+      return { workspace: base };
     } catch (error) {
       if (error instanceof KnowledgeCoreError) {
         return reply.code(error.statusCode).send({ error: error.message });
@@ -515,9 +515,9 @@ export function buildApi() {
     }
   });
 
-  app.delete<{ Params: { id: string } }>('/api/knowledge-bases/:id', async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/api/workspaces/:id', async (request, reply) => {
     try {
-      const ok = deleteKnowledgeBase(request.params.id);
+      const ok = deleteWorkspace(request.params.id);
       if (!ok) {
         return reply.code(404).send({ error: '知识库不存在。' });
       }
@@ -560,22 +560,22 @@ export function buildApi() {
   app.post<{ Body: Partial<ReadingSessionRequest> }>('/api/reading-sessions', async (request, reply) => {
     const body = request.body ?? {};
     const cardId = typeof body.cardId === 'string' ? body.cardId.trim() : '';
-    const knowledgeBaseId = typeof body.knowledgeBaseId === 'string' ? body.knowledgeBaseId.trim() : undefined;
+    const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId.trim() : undefined;
     const durationMs = typeof body.durationMs === 'number' ? body.durationMs : 0;
     if (!cardId) {
       return reply.code(400).send({ error: 'cardId 为必填。' });
     }
-    return recordReadingSession({ cardId, knowledgeBaseId, durationMs });
+    return recordReadingSession({ cardId, workspaceId, durationMs });
   });
 
   app.post<{ Body: Partial<CannotAnswerFeedbackRequest> }>('/api/cannot-answer-feedback', async (request, reply) => {
     const body = request.body ?? {};
-    const knowledgeBaseId = typeof body.knowledgeBaseId === 'string' ? body.knowledgeBaseId.trim() : undefined;
+    const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId.trim() : undefined;
     const question = typeof body.question === 'string' ? body.question.trim() : '';
     if (!question) {
       return reply.code(400).send({ error: 'question 为必填。' });
     }
-    return recordCannotAnswerFeedback({ knowledgeBaseId, question });
+    return recordCannotAnswerFeedback({ workspaceId, question });
   });
 
   app.get('/api/recall-decay', async () => computeRecallDecay());
@@ -642,11 +642,11 @@ export function buildApi() {
       status?: string;
       q?: string;
       limit?: string;
-      knowledgeBaseId?: string;
+      workspaceId?: string;
     };
   }>('/api/materials', async (request) => ({
     materials: listMaterials({
-      knowledgeBaseId: request.query.knowledgeBaseId || undefined,
+      workspaceId: request.query.workspaceId || undefined,
       type: parseMaterialType(request.query.type),
       status: parseStatus(request.query.status),
       query: request.query.q,
@@ -654,37 +654,37 @@ export function buildApi() {
     }),
   }));
 
-  app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id', async (request, reply) => {
-    const base = getKnowledgeBase(request.params.id);
+  app.get<{ Params: { id: string } }>('/api/workspaces/:id', async (request, reply) => {
+    const base = getWorkspace(request.params.id);
     if (!base) {
       return reply.code(404).send({ error: 'Knowledge base not found.' });
     }
     return base;
   });
 
-  app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/analytics', async (request, reply) => {
-    const analytics = await getKnowledgeBaseAnalytics(request.params.id);
+  app.get<{ Params: { id: string } }>('/api/workspaces/:id/analytics', async (request, reply) => {
+    const analytics = await getWorkspaceAnalytics(request.params.id);
     if (!analytics) {
       return reply.code(404).send({ error: 'Knowledge base not found.' });
     }
     return analytics;
   });
 
-  app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/path', async (request, reply) => {
-    const path = getKnowledgeBasePath(request.params.id);
+  app.get<{ Params: { id: string } }>('/api/workspaces/:id/path', async (request, reply) => {
+    const path = getWorkspacePath(request.params.id);
     if (!path) {
       return reply.code(404).send({ error: 'Knowledge base not found.' });
     }
     return path;
   });
 
-  app.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/api/knowledge-bases/:id/messages', async (request, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/api/workspaces/:id/messages', async (request, reply) => {
     const limit = request.query.limit ? Number(request.query.limit) : undefined;
     const messages = await listMessages(request.params.id, limit);
     return { messages };
   });
 
-  app.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/api/knowledge-bases/:id/due-cards', async (request, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/api/workspaces/:id/due-cards', async (request, reply) => {
     const limit = request.query.limit ? Number(request.query.limit) : undefined;
     const cards = await listDueCards(request.params.id, limit);
     return { cards };
@@ -751,18 +751,18 @@ export function buildApi() {
 
   app.get<{
     Querystring: {
-      knowledgeBaseId?: string;
+      workspaceId?: string;
     };
   }>('/api/archive', async (request) => listArchivedItems({
-    knowledgeBaseId: typeof request.query.knowledgeBaseId === 'string' ? request.query.knowledgeBaseId : undefined,
+    workspaceId: typeof request.query.workspaceId === 'string' ? request.query.workspaceId : undefined,
   }));
 
-  app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/exports', async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/api/workspaces/:id/exports', async (request, reply) => {
     const exports = await listExports(request.params.id);
     return { exports };
   });
 
-  app.post<{ Params: { id: string }; Body: { format?: string; scope?: string; includeArtifacts?: boolean; filename?: string; materialCount?: number; cardCount?: number; artifactCount?: number } }>('/api/knowledge-bases/:id/exports', async (request, reply) => {
+  app.post<{ Params: { id: string }; Body: { format?: string; scope?: string; includeArtifacts?: boolean; filename?: string; materialCount?: number; cardCount?: number; artifactCount?: number } }>('/api/workspaces/:id/exports', async (request, reply) => {
     const body = request.body ?? {};
     const format = body.format;
     if (format !== 'markdown' && format !== 'json' && format !== 'pdf') {
@@ -787,11 +787,11 @@ export function buildApi() {
 
   app.get('/api/cloud-backup/status', async () => describeCloudBackupStatus());
 
-  app.post<{ Params: { id: string } }>('/api/knowledge-bases/:id/cloud-backup', async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/api/workspaces/:id/cloud-backup', async (request, reply) => {
     const stub = describeCloudBackupStatus();
     return reply.status(501).send({
       ...stub,
-      knowledgeBaseId: request.params.id,
+      workspaceId: request.params.id,
       message: '云备份功能尚未启用。请使用 ExportView 的 Backup JSON 按钮进行本地整库备份。',
     });
   });
@@ -817,12 +817,12 @@ export function buildApi() {
     return { ok: true };
   });
 
-  app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/entities', async (request) => {
+  app.get<{ Params: { id: string } }>('/api/workspaces/:id/entities', async (request) => {
     const entities = listEntities(request.params.id);
     return { entities };
   });
 
-  app.post<{ Params: { id: string } }>('/api/knowledge-bases/:id/entities/extract', async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/api/workspaces/:id/entities/extract', async (request, reply) => {
     try {
       const entities = await extractEntities(request.params.id);
       return { entities };
@@ -918,7 +918,7 @@ export function buildApi() {
     return { revisions };
   });
 
-  app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/map', async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/api/workspaces/:id/map', async (request, reply) => {
     const map = getKnowledgeMap(request.params.id);
     if (!map) {
       return reply.code(404).send({ error: 'Knowledge base not found.' });
@@ -926,17 +926,17 @@ export function buildApi() {
     return map;
   });
 
-  app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/node-positions', async (request, reply) => {
-    const positions = getKnowledgeBaseNodePositions(request.params.id);
+  app.get<{ Params: { id: string } }>('/api/workspaces/:id/node-positions', async (request, reply) => {
+    const positions = getWorkspaceNodePositions(request.params.id);
     if (positions === undefined) {
       return reply.code(404).send({ error: 'Knowledge base not found.' });
     }
     return { positions };
   });
 
-  app.put<{ Params: { id: string }; Body: SaveKnowledgeMapNodePositionsRequest }>('/api/knowledge-bases/:id/node-positions', async (request, reply) => {
+  app.put<{ Params: { id: string }; Body: SaveKnowledgeMapNodePositionsRequest }>('/api/workspaces/:id/node-positions', async (request, reply) => {
     try {
-      const positions = saveKnowledgeBaseNodePositions(request.params.id, {
+      const positions = saveWorkspaceNodePositions(request.params.id, {
         positions: Array.isArray(request.body?.positions) ? request.body.positions : [],
       });
       return { positions };
@@ -949,7 +949,7 @@ export function buildApi() {
     }
   });
 
-  app.post<{ Params: { id: string }; Body: AddMapEdgeRequest }>('/api/knowledge-bases/:id/map/edges', async (request, reply) => {
+  app.post<{ Params: { id: string }; Body: AddMapEdgeRequest }>('/api/workspaces/:id/map/edges', async (request, reply) => {
     try {
       const edge = addMapEdge(request.params.id, {
         sourceNodeId: typeof request.body?.sourceNodeId === 'string' ? request.body.sourceNodeId : '',
@@ -966,7 +966,7 @@ export function buildApi() {
     }
   });
 
-  app.delete<{ Params: { id: string; edgeId: string } }>('/api/knowledge-bases/:id/map/edges/:edgeId', async (request, reply) => {
+  app.delete<{ Params: { id: string; edgeId: string } }>('/api/workspaces/:id/map/edges/:edgeId', async (request, reply) => {
     try {
       removeMapEdge(request.params.id, request.params.edgeId);
       return reply.code(204).send();
@@ -979,7 +979,7 @@ export function buildApi() {
     }
   });
 
-  app.get<{ Params: { id: string } }>('/api/knowledge-bases/:id/evidence-audit', async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/api/workspaces/:id/evidence-audit', async (request, reply) => {
     try {
       return generateEvidenceAudit(request.params.id);
     } catch (error) {
@@ -991,7 +991,7 @@ export function buildApi() {
     }
   });
 
-  app.post<{ Params: { id: string }; Body: { hypothesis?: string } }>('/api/knowledge-bases/:id/hypothesis-test', async (request, reply) => {
+  app.post<{ Params: { id: string }; Body: { hypothesis?: string } }>('/api/workspaces/:id/hypothesis-test', async (request, reply) => {
     const hypothesis = typeof request.body?.hypothesis === 'string' ? request.body.hypothesis.trim() : '';
     if (!hypothesis) {
       return reply.code(400).send({ error: 'Hypothesis is required.' });
@@ -1007,14 +1007,14 @@ export function buildApi() {
     }
   });
 
-  app.post<{ Params: { id: string }; Body: { question?: string } }>('/api/knowledge-bases/:id/ask', async (request, reply) => {
+  app.post<{ Params: { id: string }; Body: { question?: string } }>('/api/workspaces/:id/ask', async (request, reply) => {
     const question = typeof request.body?.question === 'string' ? request.body.question.trim() : '';
     if (!question) {
       return reply.code(400).send({ error: 'Question is required.' });
     }
 
     try {
-      return await answerKnowledgeBaseQuestion(request.params.id, question);
+      return await answerWorkspaceQuestion(request.params.id, question);
     } catch (error) {
       if (error instanceof KnowledgeCoreError) {
         return reply.code(error.statusCode).send({ error: error.message });
@@ -1024,7 +1024,7 @@ export function buildApi() {
     }
   });
 
-  app.post<{ Params: { id: string }; Body: Partial<RunKnowledgeKitRequest> }>('/api/knowledge-bases/:id/kits/run', async (request, reply) => {
+  app.post<{ Params: { id: string }; Body: Partial<RunKnowledgeKitRequest> }>('/api/workspaces/:id/kits/run', async (request, reply) => {
     try {
       return await runKnowledgeKit(
         request.params.id,
@@ -1086,9 +1086,9 @@ export function buildApi() {
 
   app.post<{ Params: { id: string }; Body: Partial<AssignMaterialRequest> }>('/api/materials/:id/assign', async (request, reply) => {
     try {
-      return assignMaterialToKnowledgeBase(request.params.id, {
-        knowledgeBaseId: typeof request.body?.knowledgeBaseId === 'string' ? request.body.knowledgeBaseId.trim() : undefined,
-        newKnowledgeBaseTitle: typeof request.body?.newKnowledgeBaseTitle === 'string' ? request.body.newKnowledgeBaseTitle.trim() : undefined,
+      return assignMaterialToWorkspace(request.params.id, {
+        workspaceId: typeof request.body?.workspaceId === 'string' ? request.body.workspaceId.trim() : undefined,
+        newWorkspaceTitle: typeof request.body?.newWorkspaceTitle === 'string' ? request.body.newWorkspaceTitle.trim() : undefined,
       });
     } catch (error) {
       if (error instanceof KnowledgeCoreError) {
@@ -1189,7 +1189,7 @@ export function buildApi() {
     try {
       return await intakeKnowledge({
         input,
-        knowledgeBaseId: request.body.knowledgeBaseId,
+        workspaceId: request.body.workspaceId,
         audience,
         depth,
         scope,
@@ -1243,13 +1243,13 @@ export function buildApi() {
     }
   });
 
-  app.post<{ Body: { bookId?: string; knowledgeBaseId?: string } }>('/api/weread/import', async (request, reply) => {
+  app.post<{ Body: { bookId?: string; workspaceId?: string } }>('/api/weread/import', async (request, reply) => {
     const bookId = typeof request.body?.bookId === 'string' ? request.body.bookId.trim() : '';
     if (!bookId) {
       return reply.code(400).send({ error: 'bookId is required.' });
     }
     try {
-      return await importWeReadBook(bookId, request.body?.knowledgeBaseId);
+      return await importWeReadBook(bookId, request.body?.workspaceId);
     } catch (error) {
       if (error instanceof KnowledgeCoreError) {
         return reply.code(error.statusCode).send({ error: error.message });
@@ -1290,9 +1290,9 @@ export function buildApi() {
     }
   });
 
-  app.get<{ Querystring: { knowledgeBaseId?: string } }>('/api/weread/recommendations', async (request, reply) => {
+  app.get<{ Querystring: { workspaceId?: string } }>('/api/weread/recommendations', async (request, reply) => {
     try {
-      const kbId = typeof request.query.knowledgeBaseId === 'string' ? request.query.knowledgeBaseId : undefined;
+      const kbId = typeof request.query.workspaceId === 'string' ? request.query.workspaceId : undefined;
       return computeWeReadRecommendations(kbId);
     } catch (error) {
       request.log.error({ error }, 'compute weread recommendations failed');

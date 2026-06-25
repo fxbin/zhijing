@@ -1,5 +1,5 @@
 /**
- * 全局视图：不限定知识库，展示全库卡片、资料与产物。
+ * 全局视图：不限定工作区，展示全库卡片、资料与产物。
  * 支持按类型、状态、关键词筛选，用于跨库浏览与发现。
  * @module views/GlobalView
  */
@@ -158,7 +158,7 @@ export default function GlobalView({ setView }) {
                       key={card.id}
                       className={`global-card-item type-${card.type ?? 'general'}`}
                       onClick={() => {
-                        if (card.knowledgeBaseId) {
+                        if (card.workspaceId) {
                           sessionStorage.setItem(PATH_CARD_ID_STORAGE_KEY, card.id);
                           setView('detail');
                         }
@@ -222,7 +222,7 @@ export default function GlobalView({ setView }) {
                       key={material.id}
                       className="global-material-item"
                       onClick={() => {
-                        if (material.knowledgeBaseId) {
+                        if (material.workspaceId) {
                           setView('detail');
                         }
                       }}
@@ -268,7 +268,7 @@ export default function GlobalView({ setView }) {
                       key={artifact.id}
                       className="global-artifact-item"
                       onClick={() => {
-                        if (artifact.knowledgeBaseId) {
+                        if (artifact.workspaceId) {
                           setView('detail');
                         }
                       }}

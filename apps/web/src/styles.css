@@ -6040,7 +6040,7 @@ button { cursor: pointer; }
 
 .map-filter-dot.material { background: var(--sage-text); }
 .map-filter-dot.card { background: #5f6f9e; }
-.map-filter-dot.knowledge_base { background: var(--primary); }
+.map-filter-dot.workspace { background: var(--primary); }
 
 .map-search {
   gap: 8px;
@@ -6305,7 +6305,7 @@ button { cursor: pointer; }
   filter: drop-shadow(0 0 12px rgba(9, 20, 38, 0.28));
 }
 
-.map-svg-node.knowledge_base circle { fill: var(--primary); }
+.map-svg-node.workspace circle { fill: var(--primary); }
 .map-svg-node.material circle { fill: var(--sage-text); }
 .map-svg-node.card circle { fill: #5f6f9e; }
 
