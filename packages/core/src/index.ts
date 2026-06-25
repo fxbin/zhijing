@@ -22,6 +22,7 @@ import {
   type RecallDecayApplyResult,
   type AgentProposal,
   type AgentProposalReport,
+  type WorkspaceEmergenceCluster,
   type ProposedCard,
   type AssignMaterialRequest,
   type ArtifactRecord,
@@ -8432,9 +8433,78 @@ export function applyRecallDecay(): RecallDecayApplyResult {
 
 const PROPOSAL_MAX_PER_TYPE = 3;
 const PROPOSAL_RECALL_REVIEW_THRESHOLD = 0.2;
+const EMERGENCE_MIN_CARD_COUNT = 3;
+const EMERGENCE_MIN_KEYWORD_LENGTH = 2;
+const EMERGENCE_SAMPLE_TITLES = 3;
+const EMERGENCE_MAX_CLUSTERS = 5;
 
 /**
- * 生成 Agent 主动提议，基于盲区、重复思考、遗忘衰减、兴趣主题四个维度。
+ * 检测默认工作区中的卡片主题聚类，发现可涌现为命名工作区的主题。
+ *
+ * 聚类策略（KISS）：
+ *  - 取默认工作区（default）中的卡片
+ *  - 对每张卡片的 title + body 用 tokenizeForTfidf 分词（bigram 为主）
+ *  - 按关键词聚合卡片 ID，统计每个关键词关联的卡片数
+ *  - 过滤：关联卡片数 >= 阈值、关键词长度 >= 2、关键词非停用词
+ *  - 排除已有工作区标题包含的关键词（避免重复提议）
+ *  - 按关联卡片数降序排序，取 Top N
+ *
+ * @returns 工作区涌现聚类列表
+ * @author fxbin
+ */
+export function detectWorkspaceEmergence(): WorkspaceEmergenceCluster[] {
+  const defaultCards = repository.listCards(DEFAULT_KB_ID);
+  if (defaultCards.length < EMERGENCE_MIN_CARD_COUNT) {
+    return [];
+  }
+
+  const existingTitles = repository.listKnowledgeBases().map((base) => base.title.toLowerCase());
+
+  const keywordToCards = new Map<string, Set<string>>();
+  const cardTitleMap = new Map<string, string>();
+
+  for (const card of defaultCards) {
+    cardTitleMap.set(card.id, card.title ?? '');
+    const text = [card.title ?? '', card.body ?? ''].join(' ');
+    const tokens = tokenizeForTfidf(text);
+    const uniqueTokens = new Set(tokens);
+    for (const token of uniqueTokens) {
+      if (token.length < EMERGENCE_MIN_KEYWORD_LENGTH) continue;
+      if (isChineseStopWord(token)) continue;
+      if (!keywordToCards.has(token)) {
+        keywordToCards.set(token, new Set());
+      }
+      keywordToCards.get(token)!.add(card.id);
+    }
+  }
+
+  const clusters: WorkspaceEmergenceCluster[] = [];
+  for (const [keyword, cardIdSet] of keywordToCards) {
+    if (cardIdSet.size < EMERGENCE_MIN_CARD_COUNT) continue;
+    const keywordLower = keyword.toLowerCase();
+    const alreadyCovered = existingTitles.some((title) => title.includes(keywordLower));
+    if (alreadyCovered) continue;
+
+    const cardIds = Array.from(cardIdSet);
+    const sampleTitles = cardIds
+      .slice(0, EMERGENCE_SAMPLE_TITLES)
+      .map((id) => cardTitleMap.get(id) ?? '')
+      .filter((title) => title.length > 0);
+
+    clusters.push({
+      keyword,
+      cardIds,
+      cardCount: cardIds.length,
+      sampleTitles,
+    });
+  }
+
+  clusters.sort((a, b) => b.cardCount - a.cardCount);
+  return clusters.slice(0, EMERGENCE_MAX_CLUSTERS);
+}
+
+/**
+ * 生成 Agent 主动提议，基于盲区、重复思考、遗忘衰减、兴趣主题、工作区涌现五个维度。
  * 守提议权不写入权：本函数只生成提议数据，不执行任何写入操作。
  * @returns Agent 主动提议报告
  * @author fxbin
@@ -8483,6 +8553,23 @@ export function generateAgentProposals(): AgentProposalReport {
       description: `「${topic.term}」是你近期高关注主题（权重 ${topic.weight}，来源 ${topic.sourceCount}）。考虑深入探索或建立专题知识库？`,
       actionLabel: '探索主题',
       metadata: { term: topic.term, weight: topic.weight, sourceCount: topic.sourceCount },
+    });
+  }
+
+  const emergenceClusters = detectWorkspaceEmergence();
+  for (const cluster of emergenceClusters.slice(0, PROPOSAL_MAX_PER_TYPE)) {
+    const sampleList = cluster.sampleTitles.map((title) => `「${title}」`).join('、');
+    proposals.push({
+      type: 'workspace_emergence',
+      title: `工作区涌现：${cluster.keyword}`,
+      description: `默认工作区中有 ${cluster.cardCount} 张卡片与「${cluster.keyword}」相关${sampleList ? `（如 ${sampleList}）` : ''}。建议创建命名工作区来组织这些卡片。`,
+      actionLabel: '创建工作区',
+      metadata: {
+        keyword: cluster.keyword,
+        cardCount: cluster.cardCount,
+        cardIds: cluster.cardIds,
+        sampleTitles: cluster.sampleTitles,
+      },
     });
   }
 

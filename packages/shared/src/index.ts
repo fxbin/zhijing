@@ -1190,9 +1190,21 @@ export interface RecallDecayApplyResult {
  * - repeated_thinking 重复思考提醒（相似问题反复提问）
  * - recall_review 遗忘复习建议（recall 分数低的卡片）
  * - topic_explore 主题探索建议（高兴趣主题的延伸探索）
+ * - workspace_emergence 工作区涌现建议（默认工作区中卡片聚类达到阈值，提议创建命名工作区）
  * @author fxbin
  */
-export type AgentProposalType = 'blind_spot' | 'repeated_thinking' | 'recall_review' | 'topic_explore';
+export type AgentProposalType = 'blind_spot' | 'repeated_thinking' | 'recall_review' | 'topic_explore' | 'workspace_emergence';
+
+/**
+ * 工作区涌现聚类结果，描述从默认工作区卡片中发现的主题聚类。
+ * @author fxbin
+ */
+export interface WorkspaceEmergenceCluster {
+  keyword: string;
+  cardIds: string[];
+  cardCount: number;
+  sampleTitles: string[];
+}
 
 /**
  * Agent 主动提议条目，向用户建议下一步认知行动。

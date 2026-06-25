@@ -8853,6 +8853,123 @@ button { cursor: pointer; }
   font-weight: 800;
 }
 
+.agent-proposals-card {
+  margin-top: 20px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 20px;
+  box-shadow: 0 2px 6px rgba(9, 20, 38, 0.03);
+}
+
+.agent-proposals-card .bento-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.agent-proposals-card .bento-head h2 {
+  font-size: 16px;
+  font-weight: 760;
+  color: var(--primary);
+}
+
+.agent-proposals-card .bento-meta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.agent-proposals-skeleton {
+  height: 120px;
+  background: linear-gradient(90deg, rgba(0,0,0,0.04) 25%, rgba(0,0,0,0.08) 37%, rgba(0,0,0,0.04) 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+  border-radius: 8px;
+}
+
+.agent-proposals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agent-proposal-item {
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.5);
+  transition: border-color 0.2s ease;
+}
+
+.agent-proposal-item:hover {
+  border-color: var(--primary);
+}
+
+.agent-proposal-item.workspace-emergence {
+  border-left: 3px solid var(--sage);
+}
+
+.agent-proposal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.agent-proposal-type-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.agent-proposal-item h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+  margin: 0 0 6px 0;
+}
+
+.agent-proposal-item p {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+  margin: 0 0 10px 0;
+}
+
+.agent-proposal-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+  background: var(--primary);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.agent-proposal-action:hover {
+  opacity: 0.88;
+}
+
+.agent-proposal-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.agent-proposal-action-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 .insights-grid .growth-chart {
   display: flex;
   align-items: flex-end;

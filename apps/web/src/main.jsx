@@ -364,6 +364,27 @@ function App() {
     }
   }
 
+  async function handleCreateWorkspace({ title, summary }) {
+    const response = await fetch('/api/knowledge-bases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, summary }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || '创建失败');
+    }
+    const result = await response.json();
+    if (result.knowledgeBase?.id) {
+      setKnowledgeBases((current) => [
+        result.knowledgeBase,
+        ...current.filter((base) => base.id !== result.knowledgeBase.id),
+      ]);
+      setSelectedKnowledgeBaseId(result.knowledgeBase.id);
+      go('detail');
+    }
+  }
+
   async function handleDeleteKnowledgeBase(id) {
     try {
       const response = await fetch(`/api/knowledge-bases/${id}`, { method: 'DELETE' });
@@ -776,7 +797,7 @@ function App() {
           {view === 'synthesis' && <CrossKbSynthesisView data={advancedOpsData} setView={go} />}
           {view === 'compare' && <MultiEntityComparisonView data={advancedOpsData} setView={go} />}
           {view === 'conflicts' && <KnowledgeConflictResolverView data={advancedOpsData} setView={go} />}
-          {view === 'insights' && <InsightsView setView={go} />}
+          {view === 'insights' && <InsightsView setView={go} onCreateWorkspace={handleCreateWorkspace} />}
           {view === 'path' && <PathView selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={go} />}
           {view === 'archive' && <ArchiveView selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={go} />}
           {view === 'chat' && (

@@ -14,6 +14,7 @@ import {
   Map,
   TrendingUp,
 } from 'lucide-react';
+import AgentProposalsPanel from '../components/AgentProposalsPanel';
 import EmptyState from '../components/EmptyState';
 import { useCardTypeLabel, useClaimStatusLabel } from '../utils/i18nLabels';
 import { formatDate } from '../utils/material';
@@ -36,9 +37,10 @@ function sparseLabels(labels) {
  * 洞察仪表盘组件。
  * @param {object} props - 组件属性
  * @param {Function} props.setView - 视图切换回调
+ * @param {Function} [props.onCreateWorkspace] - 创建工作区回调，接收 { title, summary, cardIds } 参数
  * @returns {JSX.Element} 洞察视图
  */
-export default function InsightsView({ setView }) {
+export default function InsightsView({ setView, onCreateWorkspace }) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
   const claimStatusLabel = useClaimStatusLabel();
@@ -259,6 +261,8 @@ export default function InsightsView({ setView }) {
           </div>
         </section>
       </div>
+
+      <AgentProposalsPanel onCreateWorkspace={onCreateWorkspace} />
     </div>
   );
 }
