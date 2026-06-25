@@ -37,6 +37,16 @@
 
 * { box-sizing: border-box; }
 
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--scholar);
+  outline-offset: 2px;
+}
+
 html, body, #root {
   max-width: 100%;
   overflow-x: hidden;
@@ -4426,6 +4436,17 @@ button { cursor: pointer; }
 .recall-head {
   display: grid;
   gap: 10px;
+}
+
+.recall-action-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(217, 83, 79, 0.35);
+  background: rgba(217, 83, 79, 0.08);
+  color: #d9534f;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .recall-queue {

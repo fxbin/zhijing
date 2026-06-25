@@ -5,7 +5,7 @@
  * @author fxbin
  */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { CircleX, Plus, Search, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -18,6 +18,7 @@ import {
   KB_DEPTH_OPTIONS,
   KB_SCOPE_OPTIONS,
 } from '../constants/artifact';
+import useModalA11y from '../hooks/useModalA11y';
 
 /**
  * 单选 chip 标签组，用于渲染意图澄清字段。
@@ -70,6 +71,8 @@ export default function CreateKbModal({ error, onClose, onSubmit, onCreateEmpty 
   const [audience, setAudience] = useState(DEFAULT_KB_AUDIENCE);
   const [depth, setDepth] = useState(DEFAULT_KB_DEPTH);
   const [scope, setScope] = useState(DEFAULT_KB_SCOPE);
+  const modalRef = useRef(null);
+  useModalA11y(modalRef, true, onClose);
 
   const handleConfirm = () => {
     const value = theme.trim();
@@ -96,7 +99,7 @@ export default function CreateKbModal({ error, onClose, onSubmit, onCreateEmpty 
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
+    <div className="modal-backdrop" ref={modalRef} onClick={onClose} role="dialog" aria-modal="true">
       <div className="modal-card" onClick={(event) => event.stopPropagation()}>
         <header className="modal-head">
           <div className="modal-title">

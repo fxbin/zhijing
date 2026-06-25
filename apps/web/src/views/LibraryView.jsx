@@ -4,7 +4,7 @@
  * @author fxbin
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Archive,
@@ -38,6 +38,7 @@ import EmptyState from '../components/EmptyState';
 import ImportLifecyclePanel from '../components/ImportLifecyclePanel';
 import MediaPreview from '../components/MediaPreview';
 import ParseTimeline from '../components/ParseTimeline';
+import useModalA11y from '../hooks/useModalA11y';
 
 /**
  * 资料库搜索防抖时长（毫秒），避免用户每输入一个字符就触发一次请求。
@@ -80,6 +81,8 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
   const [batchAssignTarget, setBatchAssignTarget] = useState('');
   const [captureSummary, setCaptureSummary] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const deleteModalRef = useRef(null);
+  useModalA11y(deleteModalRef, Boolean(deleteConfirm), () => setDeleteConfirm(null));
   const [dedupeNotice, setDedupeNotice] = useState(null);
   useEffect(() => {
     if (!captureSummary) return undefined;
@@ -791,7 +794,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
       </div>
       )}
       {deleteConfirm && (
-        <div className="modal-overlay" onClick={(event) => { if (event.target === event.currentTarget) setDeleteConfirm(null); }} role="dialog" aria-modal="true">
+        <div className="modal-overlay" ref={deleteModalRef} onClick={(event) => { if (event.target === event.currentTarget) setDeleteConfirm(null); }} role="dialog" aria-modal="true">
           <div className="modal-card">
             <div className="modal-head">
               <AlertTriangle size={24} />

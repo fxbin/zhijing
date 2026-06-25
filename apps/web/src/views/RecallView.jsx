@@ -38,6 +38,7 @@ export default function RecallView({
   const [draftBody, setDraftBody] = useState('');
   const [draftType, setDraftType] = useState('concept');
   const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState('');
   const [revisions, setRevisions] = useState([]);
   const [loadingRevisions, setLoadingRevisions] = useState(false);
 
@@ -135,6 +136,7 @@ export default function RecallView({
   async function saveEdit() {
     if (!activeCard?.id || saving) return;
     setSaving(true);
+    setActionError('');
     try {
       const response = await fetch(`/api/cards/${activeCard.id}`, {
         method: 'PATCH',
@@ -145,13 +147,17 @@ export default function RecallView({
           type: draftType,
         }),
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        setActionError(t('recall.saveFailed'));
+        return;
+      }
       const payload = await response.json();
       const updatedCard = payload.card;
       setQueue((current) => current.map((card) => (card.id === updatedCard.id ? updatedCard : card)));
       setRevisions(payload.revision ? [...revisions, payload.revision] : revisions);
       setEditing(false);
     } catch {
+      setActionError(t('recall.saveFailed'));
       return;
     } finally {
       setSaving(false);
@@ -165,13 +171,19 @@ export default function RecallView({
 
   async function gradeCard(grade) {
     if (!activeCard?.id) return;
+    setActionError('');
     try {
-      await fetch(`/api/cards/${activeCard.id}/review`, {
+      const response = await fetch(`/api/cards/${activeCard.id}/review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ grade }),
       });
+      if (!response.ok) {
+        setActionError(t('recall.gradeFailed'));
+        return;
+      }
     } catch {
+      setActionError(t('recall.gradeFailed'));
       return;
     }
     setQueue((current) => {
@@ -191,6 +203,7 @@ export default function RecallView({
           <h2>{detail.title}</h2>
           <p>{t('recall.editDescription')}</p>
         </div>
+        {actionError && <p className="recall-action-error" role="alert">{actionError}</p>}
 
         {queue.length === 0 ? (
           <EmptyState title={t('recall.noCards')} body={t('recall.noCardsHint')} />

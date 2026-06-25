@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './i18n';
 import {
@@ -30,6 +30,7 @@ import {
   emptyDetail,
 } from './utils/knowledge';
 import { viewFromHash, classifyInput, workflowFromKind } from './utils/navigation';
+import useModalA11y from './hooks/useModalA11y';
 import SystemNotice from './components/SystemNotice';
 import NotificationDropdown from './components/NotificationDropdown';
 import CreateKbModal from './components/CreateKbModal';
@@ -85,6 +86,10 @@ function App() {
   const [createKbError, setCreateKbError] = useState(null);
   const [editingKb, setEditingKb] = useState(null);
   const [deletingKb, setDeletingKb] = useState(null);
+  const editingModalRef = useRef(null);
+  const deletingModalRef = useRef(null);
+  useModalA11y(editingModalRef, Boolean(editingKb), () => setEditingKb(null));
+  useModalA11y(deletingModalRef, Boolean(deletingKb), () => setDeletingKb(null));
   const [settingsSection, setSettingsSection] = useState(null);
   const [navOpen, setNavOpen] = useState(false);
   const [topSearchQuery, setTopSearchQuery] = useState('');
@@ -885,7 +890,7 @@ function App() {
       )}
 
       {editingKb && (
-        <div className="modal-overlay" onClick={(event) => { if (event.target === event.currentTarget) setEditingKb(null); }} role="dialog" aria-modal="true">
+        <div className="modal-overlay" ref={editingModalRef} onClick={(event) => { if (event.target === event.currentTarget) setEditingKb(null); }} role="dialog" aria-modal="true">
           <div className="modal-card">
             <div className="modal-head">
               <h3>{t('workspace.edit')}</h3>
@@ -926,7 +931,7 @@ function App() {
       )}
 
       {deletingKb && (
-        <div className="modal-overlay" onClick={(event) => { if (event.target === event.currentTarget) setDeletingKb(null); }} role="dialog" aria-modal="true">
+        <div className="modal-overlay" ref={deletingModalRef} onClick={(event) => { if (event.target === event.currentTarget) setDeletingKb(null); }} role="dialog" aria-modal="true">
           <div className="modal-card">
             <div className="modal-head">
               <AlertTriangle size={24} />
