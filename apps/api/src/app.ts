@@ -82,6 +82,7 @@ import {
   listAllCards,
   listAllMaterials,
   listAllArtifacts,
+  ensureDefaultWorkspace,
   recordMaterialParsingFailure,
   requestMaterialParsing,
   resolveConflictGroup,
@@ -158,6 +159,8 @@ export function buildApi() {
   app.register(cors, {
     origin: resolveAllowedOrigins(),
   });
+
+  ensureDefaultWorkspace();
 
   app.get('/health', async () => ({
     ok: true,
@@ -558,20 +561,20 @@ export function buildApi() {
   app.post<{ Body: Partial<ReadingSessionRequest> }>('/api/reading-sessions', async (request, reply) => {
     const body = request.body ?? {};
     const cardId = typeof body.cardId === 'string' ? body.cardId.trim() : '';
-    const knowledgeBaseId = typeof body.knowledgeBaseId === 'string' ? body.knowledgeBaseId.trim() : '';
+    const knowledgeBaseId = typeof body.knowledgeBaseId === 'string' ? body.knowledgeBaseId.trim() : undefined;
     const durationMs = typeof body.durationMs === 'number' ? body.durationMs : 0;
-    if (!cardId || !knowledgeBaseId) {
-      return reply.code(400).send({ error: 'cardId 和 knowledgeBaseId 为必填。' });
+    if (!cardId) {
+      return reply.code(400).send({ error: 'cardId 为必填。' });
     }
     return recordReadingSession({ cardId, knowledgeBaseId, durationMs });
   });
 
   app.post<{ Body: Partial<CannotAnswerFeedbackRequest> }>('/api/cannot-answer-feedback', async (request, reply) => {
     const body = request.body ?? {};
-    const knowledgeBaseId = typeof body.knowledgeBaseId === 'string' ? body.knowledgeBaseId.trim() : '';
+    const knowledgeBaseId = typeof body.knowledgeBaseId === 'string' ? body.knowledgeBaseId.trim() : undefined;
     const question = typeof body.question === 'string' ? body.question.trim() : '';
-    if (!knowledgeBaseId || !question) {
-      return reply.code(400).send({ error: 'knowledgeBaseId 和 question 为必填。' });
+    if (!question) {
+      return reply.code(400).send({ error: 'question 为必填。' });
     }
     return recordCannotAnswerFeedback({ knowledgeBaseId, question });
   });
