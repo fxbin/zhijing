@@ -17,6 +17,7 @@ import {
   Loader2,
   Send,
   Sparkles,
+  Square,
   SquareArrowOutUpRight,
   Wrench,
 } from 'lucide-react';
@@ -45,6 +46,7 @@ const DOCK_STORAGE_KEY = 'zhijing-chat-dock';
  * @param {object[]} [props.chatMessages=[]] - 流式对话消息列表（由 useAssistantState.streamAsk 维护）
  * @param {boolean} [props.isStreaming=false] - 流式对话运行态
  * @param {() => void} [props.onClearChat] - 清空流式对话回调
+ * @param {() => void} [props.onAbortStream] - 中断当前流式对话回调
  * @param {(artifact: object, meta?: object) => void} props.onOpenArtifact - 打开产物回调
  * @param {(workspaceId: string) => void} [props.onSelectWorkspace] - 选择工作区回调
  * @param {(newCards: object[], updatedMessage: object) => void} [props.onCardsAccepted] - 提议卡片采纳成功回调
@@ -65,6 +67,7 @@ export default function GlobalChatDock({
   chatMessages = [],
   isStreaming = false,
   onClearChat,
+  onAbortStream,
   onOpenArtifact,
   onSelectWorkspace,
   onCardsAccepted,
@@ -187,6 +190,12 @@ export default function GlobalChatDock({
                   <>
                     <Sparkles size={19} />
                     <div className="chat-stream-content">
+                      {message.reasoning && (
+                        <details className="chat-stream-reasoning">
+                          <summary>{t('chat.reasoning')}</summary>
+                          <pre className="chat-stream-reasoning-text">{message.reasoning}</pre>
+                        </details>
+                      )}
                       {message.toolCalls?.length > 0 && (
                         <div className="chat-stream-tools">
                           {message.toolCalls.map((tool) => (
@@ -197,12 +206,18 @@ export default function GlobalChatDock({
                               <Wrench size={13} />
                               <span>{tool.toolName}</span>
                               {tool.isStreaming && <Loader2 size={12} className="chat-stream-tool-spinner" />}
+                              {!tool.isStreaming && tool.result && (
+                                <details className="chat-stream-tool-result">
+                                  <summary>{t('chat.toolResult')}</summary>
+                                  <pre className="chat-stream-tool-result-text">{tool.result}</pre>
+                                </details>
+                              )}
                             </div>
                           ))}
                         </div>
                       )}
                       {message.text && <p className="chat-stream-text">{message.text}</p>}
-                      {message.isStreaming && !message.text && (message.toolCalls?.length ?? 0) === 0 && (
+                      {message.isStreaming && !message.text && (message.toolCalls?.length ?? 0) === 0 && !message.reasoning && (
                         <p className="chat-stream-pending">{t('chat.loadingAnswer')}</p>
                       )}
                       {message.error && <p className="chat-stream-error" role="alert">{message.error}</p>}
@@ -389,8 +404,18 @@ export default function GlobalChatDock({
               }}
               type="button"
             >
-              {isAsking || isStreaming ? <Loader2 size={18} className="chat-stream-tool-spinner" /> : <Send size={18} />}
+              {isAsking ? <Loader2 size={18} className="chat-stream-tool-spinner" /> : <Send size={18} />}
             </button>
+            {isStreaming && onAbortStream && (
+              <button
+                className="chat-stream-abort"
+                onClick={onAbortStream}
+                type="button"
+                aria-label={t('chat.stopAsk')}
+              >
+                <Square size={16} />
+              </button>
+            )}
           </div>
         </>
       )}

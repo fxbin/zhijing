@@ -221,6 +221,7 @@ function App() {
     chatMessages,
     isStreaming,
     streamAsk,
+    abortStream,
     clearChat,
   } = useAssistantState({
     selectedWorkspaceId,
@@ -754,6 +755,7 @@ function App() {
         messages={workspaceMessages}
         onAsk={askWorkspace}
         onStreamAsk={streamAsk}
+        onAbortStream={abortStream}
         chatMessages={chatMessages}
         isStreaming={isStreaming}
         onClearChat={clearChat}
