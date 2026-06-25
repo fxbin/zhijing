@@ -9818,6 +9818,21 @@ button { cursor: pointer; }
     padding-left: 0;
     padding-top: 20px;
   }
+  .archive-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .archive-toolbar,
+  .archive-toolbar select {
+    width: 100%;
+  }
+  .archive-row {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+  .archive-restore {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
 }
 
 .global-view {
@@ -10197,24 +10212,6 @@ button { cursor: pointer; }
 .archive-row.skeleton {
   background: linear-gradient(90deg, var(--surface-low), white, var(--surface-low));
   border: 0;
-}
-
-@media (max-width: 820px) {
-  .archive-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .archive-toolbar,
-  .archive-toolbar select {
-    width: 100%;
-  }
-  .archive-row {
-    grid-template-columns: 40px minmax(0, 1fr);
-  }
-  .archive-restore {
-    grid-column: 1 / -1;
-    justify-content: center;
-  }
 }
 
 .kb-picker-grid {
