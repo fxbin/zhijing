@@ -9,7 +9,6 @@ import { useTranslation } from 'react-i18next';
 const TAB_ITEMS = [
   { key: 'assets', labelKey: 'advancedOps.assets' },
   { key: 'insights', labelKey: 'insights.title' },
-  { key: 'synthesis', labelKey: 'advancedOps.synthesis' },
   { key: 'compare', labelKey: 'advancedOps.compare' },
   { key: 'conflicts', labelKey: 'advancedOps.conflicts' },
 ];

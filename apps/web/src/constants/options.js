@@ -16,7 +16,6 @@ export const knownViews = new Set([
   'recall',
   'export',
   'assets',
-  'synthesis',
   'compare',
   'conflicts',
   'insights',

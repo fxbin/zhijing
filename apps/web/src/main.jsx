@@ -44,7 +44,6 @@ import WorkflowView from './views/WorkflowView';
 import ArtifactView from './views/ArtifactView';
 import MapsView from './views/MapsView';
 import GlobalAssetsDashboard from './views/GlobalAssetsDashboard';
-import CrossKbSynthesisView from './views/CrossKbSynthesisView';
 import MultiEntityComparisonView from './views/MultiEntityComparisonView';
 import KnowledgeConflictResolverView from './views/KnowledgeConflictResolverView';
 import InsightsView from './views/InsightsView';
@@ -794,7 +793,6 @@ function App() {
           {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={knowledgeBaseDetail} setView={go} artifactOrigin={artifactOrigin} onClearOrigin={() => setArtifactOrigin(null)} onArtifactUpdate={handleArtifactUpdate} />}
           {view === 'maps' && <MapsView apiStatus={apiStatus} selectedKnowledgeBaseId={selectedKnowledgeBaseId} setView={go} />}
           {view === 'assets' && <GlobalAssetsDashboard data={advancedOpsData} setView={go} onOpenArtifact={openArtifact} />}
-          {view === 'synthesis' && <CrossKbSynthesisView data={advancedOpsData} setView={go} />}
           {view === 'compare' && <MultiEntityComparisonView data={advancedOpsData} setView={go} />}
           {view === 'conflicts' && <KnowledgeConflictResolverView data={advancedOpsData} setView={go} />}
           {view === 'insights' && <InsightsView setView={go} onCreateWorkspace={handleCreateWorkspace} />}

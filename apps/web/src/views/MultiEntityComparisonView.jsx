@@ -108,7 +108,6 @@ export default function MultiEntityComparisonView({ data, setView }) {
           <h2>{t('compare.heading')}</h2>
           <p>把知识库当作第一版可比较实体，展示资料量、卡片量、产物量和来源健康度，并支持展开查看卡片明细。</p>
         </div>
-        <button onClick={() => setView('synthesis')} type="button">{t('compare.synthesize')}</button>
       </div>
       <AdvancedOpsTabs active="compare" setView={setView} />
 
