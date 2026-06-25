@@ -259,9 +259,9 @@ export default function InsightsView({ setView, onCreateWorkspace }) {
             </div>
           </div>
         </section>
-      </div>
 
-      <AgentProposalsPanel onCreateWorkspace={onCreateWorkspace} />
+        <AgentProposalsPanel onCreateWorkspace={onCreateWorkspace} />
+      </div>
     </div>
   );
 }
