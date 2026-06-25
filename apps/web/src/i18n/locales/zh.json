@@ -1178,6 +1178,7 @@
   "insights.recentTitle": "最新卡片",
   "insights.recentMeta": "最近存入的知识卡片",
   "insights.mapTitle": "知识地图预览",
+  "insights.mapMeta": "全局节点与关系概览",
   "insights.mapBody": "当前共有 {{count}} 个活跃节点，分布在 {{kbCount}} 个工作区中。",
   "insights.mapAction": "探索地图",
   "insights.mapPreviewHint": "示意图",

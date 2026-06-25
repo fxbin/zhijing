@@ -1178,6 +1178,7 @@
   "insights.recentTitle": "Recent Cards",
   "insights.recentMeta": "Latest saved knowledge cards",
   "insights.mapTitle": "Knowledge Map Preview",
+  "insights.mapMeta": "Global nodes and relationships overview",
   "insights.mapBody": "Currently tracking {{count}} active nodes across {{kbCount}} workspaces.",
   "insights.mapAction": "Explore Map",
   "insights.mapPreviewHint": "Illustration",

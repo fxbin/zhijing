@@ -230,34 +230,32 @@ export default function InsightsView({ setView, onCreateWorkspace }) {
           )}
         </section>
 
-        <section className="bento-card map-card">
-          <div className="map-card-content">
+        <section className="bento-card insights-map-card">
+          <div className="bento-head">
             <div>
               <h2>{t('insights.mapTitle')}</h2>
-              <p>{t('insights.mapBody', { count: insights.mapPreview.nodeCount, kbCount: insights.mapPreview.workspaceCount })}</p>
-              <button className="secondary" onClick={() => setView('maps')} type="button">
-                <Map size={18} />
-                {t('insights.mapAction')}
-                <ArrowUpRight size={16} />
-              </button>
+              <span className="bento-meta">{t('insights.mapMeta')}</span>
             </div>
-            <div className="map-preview">
-              <div className="map-node-grid">
-                {Array.from({ length: Math.min(24, Math.max(12, insights.mapPreview.nodeCount)) }).map((_, i) => (
-                  <span
-                    key={i}
-                    className="map-preview-dot"
-                    style={{ opacity: 0.3 + (i % 5) * 0.15 }}
-                  />
-                ))}
-              </div>
-              <div className="map-preview-stats">
-                <span>{t('insights.mapNodes', { count: insights.mapPreview.nodeCount })}</span>
-                <span>{t('insights.mapEdges', { count: insights.mapPreview.edgeCount })}</span>
-              </div>
-              <span className="map-preview-hint">{t('insights.mapPreviewHint')}</span>
+            <Map size={20} />
+          </div>
+          <p className="insights-map-summary">
+            {t('insights.mapBody', { count: insights.mapPreview.nodeCount, kbCount: insights.mapPreview.workspaceCount })}
+          </p>
+          <div className="insights-map-stats">
+            <div className="insights-map-stat">
+              <strong>{insights.mapPreview.nodeCount}</strong>
+              <span>{t('insights.mapNodes', { count: insights.mapPreview.nodeCount })}</span>
+            </div>
+            <div className="insights-map-stat">
+              <strong>{insights.mapPreview.edgeCount}</strong>
+              <span>{t('insights.mapEdges', { count: insights.mapPreview.edgeCount })}</span>
             </div>
           </div>
+          <button className="secondary" onClick={() => setView('maps')} type="button">
+            <Map size={18} />
+            {t('insights.mapAction')}
+            <ArrowUpRight size={16} />
+          </button>
         </section>
 
         <AgentProposalsPanel onCreateWorkspace={onCreateWorkspace} />
