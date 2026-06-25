@@ -8863,6 +8863,16 @@ export async function getWorkspaceAnalytics(id: string): Promise<WorkspaceAnalyt
   }
 }
 
+/**
+ * 洞察页来源分布最多展示的平台数量。
+ */
+const INSIGHTS_SOURCE_PLATFORM_LIMIT = 6;
+
+/**
+ * 洞察页最近卡片最多展示的条数。
+ */
+const RECENT_CARDS_LIMIT = 4;
+
 export function getGlobalInsights(): GlobalInsights {
   const bases = repository.listWorkspaces();
   const materials = repository.listMaterials();
@@ -8892,7 +8902,7 @@ export function getGlobalInsights(): GlobalInsights {
   }
   const sortedPlatforms = [...platformCounts.entries()]
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 6);
+    .slice(0, INSIGHTS_SOURCE_PLATFORM_LIMIT);
   const totalMaterials = materials.length || 1;
   const sourceDistribution = sortedPlatforms.map(([name, count]) => ({
     name,
@@ -8903,7 +8913,7 @@ export function getGlobalInsights(): GlobalInsights {
   const recentCards = cards
     .slice()
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 8)
+    .slice(0, RECENT_CARDS_LIMIT)
     .map((card) => {
       const kbId = resolveWorkspaceId(card.workspaceId);
       const base = bases.find((b) => b.id === kbId);
