@@ -47,6 +47,8 @@ import {
   type ExportRecord,
   type ExportScope,
   type GlobalInsights,
+  type GlobalInsightsMapNode,
+  type GlobalInsightsMapEdge,
   type ConstructionProgress,
   type ConstructionStage,
   type RecallGrade,
@@ -8873,6 +8875,21 @@ const INSIGHTS_SOURCE_PLATFORM_LIMIT = 6;
  */
 const RECENT_CARDS_LIMIT = 4;
 
+/**
+ * 全局地图缩略图每个工作区最多展示的代表卡片数。
+ */
+const GLOBAL_MAP_CARDS_PER_WORKSPACE = 3;
+
+/**
+ * 全局地图缩略图圆形布局的半径基数（SVG viewBox 1000×800 下的外圈半径）。
+ */
+const GLOBAL_MAP_OUTER_RADIUS = 320;
+
+/**
+ * 全局地图缩略图圆形布局的内圈半径（代表卡片环绕工作区中心点的半径）。
+ */
+const GLOBAL_MAP_INNER_RADIUS = 70;
+
 export function getGlobalInsights(): GlobalInsights {
   const bases = repository.listWorkspaces();
   const materials = repository.listMaterials();
@@ -8931,6 +8948,8 @@ export function getGlobalInsights(): GlobalInsights {
   const nodeCount = bases.length + materials.length + cards.length;
   const edgeCount = materials.length + cards.filter((card) => card.materialId).length;
 
+  const mapPreview = buildGlobalMapPreview(bases, cards.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+
   return {
     generatedAt: now(),
     totals: {
@@ -8948,8 +8967,86 @@ export function getGlobalInsights(): GlobalInsights {
       nodeCount,
       edgeCount,
       workspaceCount: bases.length,
+      nodes: mapPreview.nodes,
+      edges: mapPreview.edges,
     },
   };
+}
+
+/**
+ * 构建全局地图缩略图：圆形放射布局。
+ *
+ * - 工作区中心节点排列在以画布中心为圆心的大圆上
+ * - 每个工作区的代表卡片（最多 GLOBAL_MAP_CARDS_PER_WORKSPACE 张）围绕该工作区中心点小圆排列
+ * - 边只画 workspace→card 的 contains 边，避免视觉过密
+ *
+ * 坐标系为 SVG viewBox 1000×800，原点左上；前端可直接使用。
+ *
+ * @author fxbin
+ * @param bases - 工作区列表
+ * @param allCards - 全局卡片列表（已按 createdAt 降序排序）
+ * @returns 缩略图节点与边
+ */
+function buildGlobalMapPreview(
+  bases: WorkspaceSummary[],
+  allCards: KnowledgeCard[],
+): { nodes: GlobalInsightsMapNode[]; edges: GlobalInsightsMapEdge[] } {
+  if (bases.length === 0) {
+    return { nodes: [], edges: [] };
+  }
+
+  const centerX = 500;
+  const centerY = 400;
+  const nodes: GlobalInsightsMapNode[] = [];
+  const edges: GlobalInsightsMapEdge[] = [];
+  const cardsByWorkspace = new Map<string, KnowledgeCard[]>();
+  for (const card of allCards) {
+    const wsId = card.workspaceId ?? 'default';
+    const list = cardsByWorkspace.get(wsId);
+    if (list) {
+      list.push(card);
+    } else {
+      cardsByWorkspace.set(wsId, [card]);
+    }
+  }
+
+  bases.forEach((base, index) => {
+    const angle = (index / bases.length) * Math.PI * 2;
+    const wsX = centerX + GLOBAL_MAP_OUTER_RADIUS * Math.cos(angle);
+    const wsY = centerY + GLOBAL_MAP_OUTER_RADIUS * Math.sin(angle);
+    const wsNodeId = `ws:${base.id}`;
+    nodes.push({
+      id: wsNodeId,
+      kind: 'workspace',
+      label: base.title,
+      x: wsX,
+      y: wsY,
+      workspaceId: base.id,
+    });
+
+    const wsCards = (cardsByWorkspace.get(base.id) ?? []).slice(0, GLOBAL_MAP_CARDS_PER_WORKSPACE);
+    wsCards.forEach((card, cardIndex) => {
+      const cardAngle = (cardIndex / Math.max(wsCards.length, 1)) * Math.PI * 2;
+      const cardX = wsX + GLOBAL_MAP_INNER_RADIUS * Math.cos(cardAngle);
+      const cardY = wsY + GLOBAL_MAP_INNER_RADIUS * Math.sin(cardAngle);
+      const cardNodeId = `card:${card.id}`;
+      nodes.push({
+        id: cardNodeId,
+        kind: 'card',
+        label: card.title,
+        x: cardX,
+        y: cardY,
+        workspaceId: base.id,
+      });
+      edges.push({
+        sourceId: wsNodeId,
+        targetId: cardNodeId,
+        relation: 'contains',
+      });
+    });
+  });
+
+  return { nodes, edges };
 }
 
 /**

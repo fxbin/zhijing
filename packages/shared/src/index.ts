@@ -642,7 +642,30 @@ export interface GlobalInsights {
     nodeCount: number;
     edgeCount: number;
     workspaceCount: number;
+    nodes: GlobalInsightsMapNode[];
+    edges: GlobalInsightsMapEdge[];
   };
+}
+
+/**
+ * 洞察页全局地图缩略图节点（已带预计算坐标，前端直接渲染）。
+ */
+export interface GlobalInsightsMapNode {
+  id: string;
+  kind: 'workspace' | 'card';
+  label: string;
+  x: number;
+  y: number;
+  workspaceId: string;
+}
+
+/**
+ * 洞察页全局地图缩略图边。
+ */
+export interface GlobalInsightsMapEdge {
+  sourceId: string;
+  targetId: string;
+  relation: string;
 }
 
 /**

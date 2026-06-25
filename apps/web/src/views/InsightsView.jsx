@@ -241,6 +241,36 @@ export default function InsightsView({ setView, onCreateWorkspace }) {
           <p className="insights-map-summary">
             {t('insights.mapBody', { count: insights.mapPreview.nodeCount, kbCount: insights.mapPreview.workspaceCount })}
           </p>
+          {insights.mapPreview.nodes.length > 0 && (
+            <svg className="insights-map-thumbnail" viewBox="0 0 1000 800" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+              {insights.mapPreview.edges.map((edge, idx) => {
+                const source = insights.mapPreview.nodes.find((n) => n.id === edge.sourceId);
+                const target = insights.mapPreview.nodes.find((n) => n.id === edge.targetId);
+                if (!source || !target) return null;
+                return (
+                  <line
+                    key={`edge-${idx}`}
+                    x1={source.x}
+                    y1={source.y}
+                    x2={target.x}
+                    y2={target.y}
+                    className="insights-map-edge"
+                  />
+                );
+              })}
+              {insights.mapPreview.nodes.map((node) => (
+                <circle
+                  key={node.id}
+                  cx={node.x}
+                  cy={node.y}
+                  r={node.kind === 'workspace' ? 10 : 5}
+                  className={`insights-map-node insights-map-node--${node.kind}`}
+                >
+                  <title>{node.label}</title>
+                </circle>
+              ))}
+            </svg>
+          )}
           <div className="insights-map-stats">
             <div className="insights-map-stat">
               <strong>{insights.mapPreview.nodeCount}</strong>
