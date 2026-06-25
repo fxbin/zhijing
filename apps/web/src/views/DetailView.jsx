@@ -1,5 +1,5 @@
 /**
- * 工作区详情视图：展示卡片、来源、实体、Roadmap 与 AI 助手面板。
+ * 工作区详情视图：展示卡片、来源、实体、Roadmap 与工作区分析。
  * @module views/DetailView
  */
 
@@ -11,14 +11,9 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
-  CircleX,
-  Clock3,
   Filter,
-  History,
   Search,
-  Send,
   Sparkles,
-  SquareArrowOutUpRight,
   Users,
 } from 'lucide-react';
 import { formatDate, formatTime, materialMediaUrls } from '../utils/material';
@@ -29,14 +24,12 @@ import EmptyState from '../components/EmptyState';
 import EvidenceToolsPanel from '../components/EvidenceToolsPanel';
 import MediaPreview from '../components/MediaPreview';
 import RelatedSuggestionsPanel from '../components/RelatedSuggestionsPanel';
-import SourceCitation from '../components/SourceCitation';
 import TaskStatus from '../components/TaskStatus';
-import AIChatShell from '../components/AIChatShell';
-import { useChatLayout } from '../hooks/useChatLayout';
 import { useDetailFeedState } from '../hooks/useDetailFeedState';
 import { useDetailEntitiesState } from '../hooks/useDetailEntitiesState';
 import { startReadingSession, flushReadingSession } from '../utils/readingTracker';
 import api from '../utils/api';
+import { CHAT_OPEN_EVENT } from '../constants/options';
 
 const BYTES_PER_GB = 1024 * 1024 * 1024;
 
@@ -156,36 +149,20 @@ function MaterialTranscriptPanel({ material }) {
 /**
  * 工作区详情视图。
  * @param {object} props - 组件属性
- * @param {string} props.apiStatus - API 在线状态
  * @param {object} props.analytics - 工作区分析数据
- * @param {object} props.assistantAnswer - 助手回答对象
- * @param {string} props.assistantQuestion - 当前问题输入
  * @param {object} props.detail - 工作区详情
- * @param {boolean} props.isAsking - 是否正在提问
  * @param {object} props.latestTask - 最近任务
- * @param {Array} props.messages - 历史消息列表
- * @param {() => void} props.onAsk - 提问回调
- * @param {(artifact: object, meta?: object) => void} props.onOpenArtifact - 打开产物回调
- * @param {(newCards: object[], updatedMessage: object) => void} props.onCardsAccepted - 提议卡片采纳成功回调
  * @param {(materialId: string) => void} props.onParseMaterial - 解析资料回调
  * @param {string} props.parsingMaterialId - 正在解析的资料 ID
  * @param {string} props.selectedWorkspaceId - 当前选中工作区 ID
- * @param {(value: string) => void} props.setAssistantQuestion - 设置问题输入
+ * @param {(value: string) => void} props.setAssistantQuestion - 设置助手问题输入（概念标签唤起胶囊用）
  * @param {(view: string) => void} props.setView - 切换视图
  * @returns {JSX.Element} 详情视图
  */
 export default function DetailView({
-  apiStatus,
   analytics,
-  assistantAnswer,
-  assistantQuestion,
   detail,
-  isAsking,
   latestTask,
-  messages,
-  onAsk,
-  onCardsAccepted,
-  onOpenArtifact,
   onParseMaterial,
   parsingMaterialId,
   selectedWorkspaceId,
@@ -195,13 +172,11 @@ export default function DetailView({
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
   const claimStatusLabel = useClaimStatusLabel();
-  const layout = useChatLayout();
   const parseStatusLabel = useParseStatusLabel();
   const intakeKindLabel = useIntakeKindLabel();
 
   const cards = detail.cards ?? [];
   const materials = detail.materials ?? [];
-  const artifacts = detail.artifacts ?? [];
 
   const {
     feedMode,
@@ -226,35 +201,20 @@ export default function DetailView({
     extracting,
     entityError,
     extractEntitiesAction,
-    proposedCardSelections,
-    toggleProposedCard,
-    acceptingCards,
-    acceptError,
-    acceptProposedCards,
-    dismissProposedCards,
-    cannotAnswerFeedbackSent,
-    submitCannotAnswerFeedback,
   } = useDetailEntitiesState({
     selectedWorkspaceId,
-    assistantAnswer,
-    assistantQuestion,
-    onCardsAccepted,
     t,
   });
 
   const roadmapCards = cards.slice(0, 4);
   const conceptTags = extractConceptTags(cards);
   const cardGroups = groupCardsByType(cards);
-  const canAsk = apiStatus === 'online' && Boolean(selectedWorkspaceId) && !isAsking;
-  const latestAnswerCards = assistantAnswer?.cards ?? [];
   const pendingSourceCount = cards.filter((card) => card.claimStatus !== 'sourced').length;
   const guideMessage = materials.length === 0
     ? t('detail.guideNoMaterials')
     : (pendingSourceCount > 0 && cards.length > 0 && pendingSourceCount / cards.length >= 0.5
         ? t('detail.guideLowSourcing', { pending: pendingSourceCount })
         : null);
-  const latestCitations = assistantAnswer?.citations ?? [];
-  const questionHistory = materials.filter((material) => material.type === 'question').slice(0, 3);
   const totals = analytics?.totals;
   const statusDistribution = analytics?.materialStatusDistribution?.slice(0, 4) ?? [];
   const platformDistribution = analytics?.platformDistribution?.slice(0, 4) ?? [];
@@ -283,6 +243,16 @@ export default function DetailView({
       void flushReadingSession();
     };
   }, [selectedWorkspaceId]);
+
+  /**
+   * 概念标签点击：填入助手问题输入并唤起全局 AI 助手胶囊。
+   * @param {string} tag - 概念标签文本
+   * @author fxbin
+   */
+  function handleConceptTagClick(tag) {
+    setAssistantQuestion(tag);
+    window.dispatchEvent(new CustomEvent(CHAT_OPEN_EVENT));
+  }
 
   /**
    * 渲染单张知识卡片。
@@ -322,7 +292,7 @@ export default function DetailView({
   }
 
   return (
-    <section className={`page-grid detail-page ${layout.mode === 'floating' ? 'ai-chat-floating' : ''}`}>
+    <section className="page-grid detail-page">
       <div className="page-main">
         <p className="breadcrumb">{t('detail.breadcrumb.workspace')}{t('detail.breadcrumb.separator')}{detail.title}</p>
         <div className="page-title-row">
@@ -390,6 +360,25 @@ export default function DetailView({
             </div>
           </section>
         )}
+        {analytics && (
+          <section className="source-health">
+            <div>
+              <strong>{t('detail.sourceHealth')}</strong>
+              <span>{analytics.generatedAt ? formatTime(analytics.generatedAt) : t('detail.now')}</span>
+            </div>
+            <div className="health-list">
+              {statusDistribution.map((item) => (
+                <p key={item.name}><span>{item.name}</span><strong>{item.count}</strong></p>
+              ))}
+            </div>
+            <div className="health-list muted">
+              {platformDistribution.map((item) => (
+                <p key={item.name}><span>{item.name}</span><strong>{item.count}</strong></p>
+              ))}
+            </div>
+          </section>
+        )}
+        <TaskStatus task={latestTask} />
         {selectedWorkspaceId && cards.length > 0 && (
           <EvidenceToolsPanel workspaceId={selectedWorkspaceId} />
         )}
@@ -601,7 +590,7 @@ export default function DetailView({
                 </div>
                 <div className="concept-tag-list">
                   {conceptTags.map((tag) => (
-                    <button className="concept-tag" key={tag} onClick={() => setAssistantQuestion(tag)} type="button">{tag}</button>
+                    <button className="concept-tag" key={tag} onClick={() => handleConceptTagClick(tag)} type="button">{tag}</button>
                   ))}
                 </div>
               </div>
@@ -633,155 +622,6 @@ export default function DetailView({
         </div>
         {materials.length === 0 && <EmptyState title={t('detail.noMaterials')} body={t('detail.noMaterialsHint')} />}
       </div>
-      <AIChatShell layout={layout} title={t('detail.aiAssistant')}>
-        <p>{t('detail.sourceOverview', { sources: detail.sourceCount ?? materials.length, cards: detail.cardCount ?? cards.length })}</p>
-        {analytics && (
-          <section className="source-health">
-            <div>
-              <strong>{t('detail.sourceHealth')}</strong>
-              <span>{analytics.generatedAt ? formatTime(analytics.generatedAt) : t('detail.now')}</span>
-            </div>
-            <div className="health-list">
-              {statusDistribution.map((item) => (
-                <p key={item.name}><span>{item.name}</span><strong>{item.count}</strong></p>
-              ))}
-            </div>
-            <div className="health-list muted">
-              {platformDistribution.map((item) => (
-                <p key={item.name}><span>{item.name}</span><strong>{item.count}</strong></p>
-              ))}
-            </div>
-          </section>
-        )}
-        <TaskStatus task={latestTask} />
-        <div className="assistant-thread">
-          <div className="assistant-message">
-            <Sparkles size={19} />
-            <p>{artifacts[0]?.body ?? t('detail.answerHint')}</p>
-          </div>
-          {assistantAnswer?.question && <div className="chat-user">{assistantAnswer.question}</div>}
-          {assistantAnswer?.loading && <div className="assistant-message pending"><Clock3 size={19} /><p>{t('detail.loadingAnswer')}</p></div>}
-          {assistantAnswer?.error && <div className="assistant-message failed"><CircleX size={19} /><p>{assistantAnswer.error}</p></div>}
-          {assistantAnswer?.message && (
-            <div className="assistant-message">
-              <Sparkles size={19} />
-              <div>
-                <p>{assistantAnswer.artifact?.body ?? assistantAnswer.message}</p>
-                {latestAnswerCards.length > 0 && (
-                  <div className="answer-card-list">
-                    {latestAnswerCards.map((card) => (
-                      <article key={card.id ?? card.title}>
-                        <span>{cardTypeLabel(card.type)}</span>
-                        <strong>{card.title}</strong>
-                      </article>
-                    ))}
-                  </div>
-                )}
-                {assistantAnswer?.proposedCards?.length > 0 && (
-                  <div className="proposed-cards-panel">
-                    <div className="proposed-cards-head">
-                      <strong>{t('detail.proposedCardsTitle')}</strong>
-                      <span className="proposed-cards-hint">{t('detail.proposedCardsHint')}</span>
-                    </div>
-                    <div className="proposed-cards-list">
-                      {assistantAnswer.proposedCards.map((card, index) => (
-                        <label key={index} className={`proposed-card-item ${proposedCardSelections.has(index) ? 'selected' : ''}`}>
-                          <input
-                            type="checkbox"
-                            checked={proposedCardSelections.has(index)}
-                            onChange={() => toggleProposedCard(index)}
-                          />
-                          <span className="card-type-badge">{cardTypeLabel(card.type)}</span>
-                          <div className="proposed-card-body">
-                            <strong>{card.title}</strong>
-                            <p>{card.body}</p>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                    <div className="proposed-cards-actions">
-                      <button
-                        type="button"
-                        className="proposed-cards-accept"
-                        disabled={acceptingCards || proposedCardSelections.size === 0}
-                        onClick={() => void acceptProposedCards()}
-                      >
-                        {acceptingCards ? t('detail.proposedCardsAccepting') : t('detail.proposedCardsAccept')}
-                      </button>
-                      <button
-                        type="button"
-                        className="proposed-cards-dismiss"
-                        disabled={acceptingCards}
-                        onClick={dismissProposedCards}
-                      >
-                        {t('detail.proposedCardsDismiss')}
-                      </button>
-                    </div>
-                    {acceptError && (
-                      <p className="proposed-cards-error" role="alert">{acceptError}</p>
-                    )}
-                  </div>
-                )}
-                {assistantAnswer.citations && (
-                  <div className="citation-list">
-                    <strong>{t('detail.citations')}</strong>
-                    {latestCitations.length === 0 ? (
-                      <p>{t('detail.noCitations')}</p>
-                    ) : latestCitations.slice(0, 6).map((citation) => (
-                      <SourceCitation key={citation.id} citation={citation} cards={cards} materials={materials} />
-                    ))}
-                  </div>
-                )}
-                {assistantAnswer.artifact && (
-                  <button className="assistant-link-button" onClick={() => onOpenArtifact(assistantAnswer.artifact)} type="button">
-                    {t('detail.openArtifact')}
-                    <SquareArrowOutUpRight size={15} />
-                  </button>
-                )}
-                {cannotAnswerFeedbackSent ? (
-                  <span className="cannot-answer-sent">{t('detail.cannotAnswered')}</span>
-                ) : (
-                  <button
-                    className="assistant-link-button cannot-answer-btn"
-                    onClick={() => void submitCannotAnswerFeedback()}
-                    type="button"
-                  >
-                    {t('detail.cannotAnswer')}
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-        {questionHistory.length > 0 && (
-          <section className="question-history" aria-label={t('detail.questionHistory')}>
-            <div className="question-history-head">
-              <History size={16} />
-              <strong>{t('detail.questionHistory')}</strong>
-            </div>
-            {questionHistory.map((material) => (
-              <button key={material.id ?? material.title} onClick={() => setAssistantQuestion(material.rawInput ?? material.title)} type="button">
-                {material.rawInput ?? material.title}
-              </button>
-            ))}
-          </section>
-        )}
-        <div className="assistant-input">
-          <input
-            aria-label={t('detail.askPlaceholderOnline')}
-            disabled={!canAsk}
-            onChange={(event) => setAssistantQuestion(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') onAsk();
-            }}
-            placeholder={apiStatus === 'online' && selectedWorkspaceId ? t('detail.askPlaceholderOnline') : t('detail.askPlaceholderOffline')}
-            value={assistantQuestion}
-          />
-          <button disabled={!canAsk || !assistantQuestion.trim()} onClick={onAsk} title={t('detail.askTitle')} type="button">
-            <Send size={18} />
-          </button>
-        </div>
-      </AIChatShell>
     </section>
   );
 }

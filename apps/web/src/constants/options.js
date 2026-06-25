@@ -54,3 +54,9 @@ export const PATH_CARD_ID_STORAGE_KEY = 'zhijing:pathCardId';
 export const SEARCH_HISTORY_STORAGE_KEY = 'zhijing:searchHistory';
 
 export const SEARCH_HISTORY_MAX_COUNT = 5;
+
+/**
+ * 唤起全局 AI 助手胶囊的自定义事件名。
+ * concept-tag 点击与 Cmd+J 快捷键均通过此事件唤起胶囊。
+ */
+export const CHAT_OPEN_EVENT = 'zhijing:open-chat';

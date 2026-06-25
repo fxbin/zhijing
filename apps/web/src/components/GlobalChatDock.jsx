@@ -1,9 +1,9 @@
 /**
- * 全局对话胶囊：跨视图常驻的浮动对话面板。
+ * 全局 AI 助手胶囊：跨视图常驻的浮动对话面板。
  *
  * 默认收起为右下角悬浮球，点击展开成 floating 窗口。
- * 状态（mode/minimized/position）持久化在独立 localStorage 键下，
- * 不影响工作区详情页内嵌的对话面板。
+ * 支持概念标签点击与 Cmd+J 快捷键唤起，
+ * 统一承载提问、提议卡片采纳、无法回答反馈与历史问题入口。
  *
  * @module components/GlobalChatDock
  */
@@ -13,15 +13,18 @@ import { useTranslation } from 'react-i18next';
 import {
   Clock3,
   Database,
+  History,
   Send,
   Sparkles,
   SquareArrowOutUpRight,
 } from 'lucide-react';
 import { useCardTypeLabel } from '../utils/i18nLabels';
 import { useChatLayout } from '../hooks/useChatLayout';
+import { useProposedCards } from '../hooks/useProposedCards';
 import AIChatShell from './AIChatShell';
 import EmptyState from './EmptyState';
 import SourceCitation from './SourceCitation';
+import { CHAT_OPEN_EVENT } from '../constants/options';
 
 const DOCK_STORAGE_KEY = 'zhijing-chat-dock';
 
@@ -38,6 +41,7 @@ const DOCK_STORAGE_KEY = 'zhijing-chat-dock';
  * @param {() => void} props.onAsk - 提问回调
  * @param {(artifact: object, meta?: object) => void} props.onOpenArtifact - 打开产物回调
  * @param {(workspaceId: string) => void} [props.onSelectWorkspace] - 选择工作区回调
+ * @param {(newCards: object[], updatedMessage: object) => void} [props.onCardsAccepted] - 提议卡片采纳成功回调
  * @param {string} props.selectedWorkspaceId - 当前选中工作区 ID
  * @param {(value: string) => void} props.setAssistantQuestion - 设置问题输入
  * @returns {JSX.Element} 对话胶囊
@@ -53,6 +57,7 @@ export default function GlobalChatDock({
   onAsk,
   onOpenArtifact,
   onSelectWorkspace,
+  onCardsAccepted,
   selectedWorkspaceId,
   setAssistantQuestion,
 }) {
@@ -68,6 +73,24 @@ export default function GlobalChatDock({
   const latestAnswerCards = assistantAnswer?.cards?.slice(0, 3) ?? [];
   const latestCitations = assistantAnswer?.citations ?? [];
   const canAsk = apiStatus === 'online' && Boolean(selectedWorkspaceId) && !isAsking;
+  const questionHistory = materials.filter((material) => material.type === 'question').slice(0, 3);
+
+  const {
+    proposedCardSelections,
+    toggleProposedCard,
+    acceptingCards,
+    acceptError,
+    acceptProposedCards,
+    dismissProposedCards,
+    cannotAnswerFeedbackSent,
+    submitCannotAnswerFeedback,
+  } = useProposedCards({
+    selectedWorkspaceId,
+    assistantAnswer,
+    assistantQuestion,
+    onCardsAccepted,
+    t,
+  });
 
   /**
    * 自动滚动对话线程到底部，确保最新消息可见。
@@ -90,8 +113,8 @@ export default function GlobalChatDock({
     function handleOpen() {
       layout.setMinimized(false);
     }
-    window.addEventListener('zhijing:open-chat', handleOpen);
-    return () => window.removeEventListener('zhijing:open-chat', handleOpen);
+    window.addEventListener(CHAT_OPEN_EVENT, handleOpen);
+    return () => window.removeEventListener(CHAT_OPEN_EVENT, handleOpen);
   }, [layout]);
 
   return (
@@ -215,10 +238,80 @@ export default function GlobalChatDock({
                       <SquareArrowOutUpRight size={15} />
                     </button>
                   )}
+                  {assistantAnswer?.proposedCards?.length > 0 && (
+                    <div className="proposed-cards-panel">
+                      <div className="proposed-cards-head">
+                        <strong>{t('detail.proposedCardsTitle')}</strong>
+                        <span className="proposed-cards-hint">{t('detail.proposedCardsHint')}</span>
+                      </div>
+                      <div className="proposed-cards-list">
+                        {assistantAnswer.proposedCards.map((card, index) => (
+                          <label key={index} className={`proposed-card-item ${proposedCardSelections.has(index) ? 'selected' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={proposedCardSelections.has(index)}
+                              onChange={() => toggleProposedCard(index)}
+                            />
+                            <span className="card-type-badge">{cardTypeLabel(card.type)}</span>
+                            <div className="proposed-card-body">
+                              <strong>{card.title}</strong>
+                              <p>{card.body}</p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                      <div className="proposed-cards-actions">
+                        <button
+                          type="button"
+                          className="proposed-cards-accept"
+                          disabled={acceptingCards || proposedCardSelections.size === 0}
+                          onClick={() => void acceptProposedCards()}
+                        >
+                          {acceptingCards ? t('detail.proposedCardsAccepting') : t('detail.proposedCardsAccept')}
+                        </button>
+                        <button
+                          type="button"
+                          className="proposed-cards-dismiss"
+                          disabled={acceptingCards}
+                          onClick={dismissProposedCards}
+                        >
+                          {t('detail.proposedCardsDismiss')}
+                        </button>
+                      </div>
+                      {acceptError && (
+                        <p className="proposed-cards-error" role="alert">{acceptError}</p>
+                      )}
+                    </div>
+                  )}
+                  {cannotAnswerFeedbackSent ? (
+                    <span className="cannot-answer-sent">{t('detail.cannotAnswered')}</span>
+                  ) : (
+                    <button
+                      className="assistant-link-button cannot-answer-btn"
+                      onClick={() => void submitCannotAnswerFeedback()}
+                      type="button"
+                    >
+                      {t('detail.cannotAnswer')}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
           </div>
+
+          {questionHistory.length > 0 && (
+            <section className="question-history" aria-label={t('detail.questionHistory')}>
+              <div className="question-history-head">
+                <History size={16} />
+                <strong>{t('detail.questionHistory')}</strong>
+              </div>
+              {questionHistory.map((material) => (
+                <button key={material.id ?? material.title} onClick={() => setAssistantQuestion(material.rawInput ?? material.title)} type="button">
+                  {material.rawInput ?? material.title}
+                </button>
+              ))}
+            </section>
+          )}
 
           <div className="chat-input-bar">
             <input

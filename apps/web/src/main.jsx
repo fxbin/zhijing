@@ -36,6 +36,7 @@ import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import GlobalChatDock from './components/GlobalChatDock';
 import SearchCommand from './components/SearchCommand';
 import { useHotkey } from './hooks/useHotkey';
+import { CHAT_OPEN_EVENT } from './constants/options';
 const WorkspaceView = lazy(() => import('./views/WorkspaceView'));
 const DetailView = lazy(() => import('./views/DetailView'));
 const LibraryView = lazy(() => import('./views/LibraryView'));
@@ -152,6 +153,9 @@ function App() {
     } else {
       openSearchCommand('');
     }
+  });
+  useHotkey('j', () => {
+    window.dispatchEvent(new CustomEvent(CHAT_OPEN_EVENT));
   });
 
   const editingModalRef = useRef(null);
@@ -548,24 +552,9 @@ function App() {
           {view === 'workspace' && <WorkspaceView activity={activity} apiStatus={apiStatus} isSubmitting={isSubmitting} materials={materials} query={query} selectedWorkspaceId={selectedWorkspaceId} setQuery={setQuery} setView={go} submit={submit} onViewMaterialDetail={handleViewMaterialDetail} browserAiStatus={browserAiStatus} />}
           {view === 'detail' && (
             <DetailView
-              apiStatus={apiStatus}
               analytics={workspaceAnalytics}
-              assistantAnswer={assistantAnswer}
-              assistantQuestion={assistantQuestion}
               detail={workspaceDetail}
-              isAsking={isAsking}
               latestTask={latestTask}
-              messages={workspaceMessages}
-              onAsk={askWorkspace}
-              onCardsAccepted={(newCards, updatedMessage) => {
-                setWorkspaceDetail((current) => ({
-                  ...current,
-                  cards: [...newCards, ...(current.cards ?? []).filter((card) => !newCards.some((item) => item.id === card.id))],
-                }));
-                setWorkspaceMessages((current) => current.map((message) => message.id === updatedMessage.id ? updatedMessage : message));
-                setAssistantAnswer((current) => current ? { ...current, proposedCards: [], cards: [...(current.cards ?? []), ...newCards] } : current);
-              }}
-              onOpenArtifact={openArtifact}
               onParseMaterial={parseMaterial}
               parsingMaterialId={parsingMaterialId}
               selectedWorkspaceId={selectedWorkspaceId}
@@ -765,6 +754,14 @@ function App() {
           if (id) {
             setSelectedWorkspaceId(id);
           }
+        }}
+        onCardsAccepted={(newCards, updatedMessage) => {
+          setWorkspaceDetail((current) => ({
+            ...current,
+            cards: [...newCards, ...(current.cards ?? []).filter((card) => !newCards.some((item) => item.id === card.id))],
+          }));
+          setWorkspaceMessages((current) => current.map((message) => message.id === updatedMessage.id ? updatedMessage : message));
+          setAssistantAnswer((current) => current ? { ...current, proposedCards: [], cards: [...(current.cards ?? []), ...newCards] } : current);
         }}
         selectedWorkspaceId={selectedWorkspaceId}
         setAssistantQuestion={setAssistantQuestion}
