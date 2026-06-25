@@ -36,7 +36,7 @@ export default function KnowledgeConflictResolverView({ data, setView }) {
           fetch('/api/conflicts/groups'),
           fetch('/api/conflicts/audit'),
         ]);
-        if (!groupsRes.ok || !auditRes.ok) throw new Error('加载冲突数据失败');
+        if (!groupsRes.ok || !auditRes.ok) throw new Error(t('conflicts.loadFailed'));
         const groupsData = await groupsRes.json();
         const auditData = await auditRes.json();
         if (cancelled) return;
@@ -48,7 +48,7 @@ export default function KnowledgeConflictResolverView({ data, setView }) {
         }
         setKeepMap(initialKeep);
       } catch (err) {
-        if (!cancelled) setError(err.message || '网络错误');
+        if (!cancelled) setError(err.message || t('conflicts.networkError'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -72,24 +72,24 @@ export default function KnowledgeConflictResolverView({ data, setView }) {
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        throw new Error(body.error || '合并失败');
+        throw new Error(body.error || t('conflicts.mergeFailed'));
       }
       const groupsRes = await fetch('/api/conflicts/groups');
       const auditRes = await fetch('/api/conflicts/audit');
       setGroups((await groupsRes.json()).groups ?? []);
       setAuditEntries((await auditRes.json()).entries ?? []);
     } catch (err) {
-      setError(err.message || '网络错误');
+      setError(err.message || t('conflicts.networkError'));
     } finally {
       setResolving(null);
     }
   }
 
   const typeLabelsMap = {
-    duplicate_material: '重复资料',
-    duplicate_card: '重复卡片',
-    needs_review: '待复核',
-    unsourced_card: '缺来源',
+    duplicate_material: t('conflicts.type.duplicateMaterial'),
+    duplicate_card: t('conflicts.type.duplicateCard'),
+    needs_review: t('conflicts.type.needsReview'),
+    unsourced_card: t('conflicts.type.unsourcedCard'),
   };
 
   return (
@@ -98,7 +98,7 @@ export default function KnowledgeConflictResolverView({ data, setView }) {
         <div>
           <span>{t('conflicts.title')}</span>
           <h2>{t('conflicts.heading')}</h2>
-          <p>集中展示重复卡片与资料，支持选择保留项并合并删除重复项，所有操作写入审计记录。</p>
+          <p>{t('conflicts.description')}</p>
         </div>
         <button onClick={() => setView('library')} type="button">{t('conflicts.reviewLibrary')}</button>
       </div>
@@ -117,7 +117,7 @@ export default function KnowledgeConflictResolverView({ data, setView }) {
               <div className="conflict-group-head">
                 <span className="conflict-kind-badge">{typeLabelsMap[group.kind] ?? group.kind}</span>
                 <h3>{group.title}</h3>
-                <span className="conflict-count">{group.items.length} 项</span>
+                <span className="conflict-count">{t('conflicts.itemCount', { count: group.items.length })}</span>
               </div>
               <div className="conflict-group-items">
                 {group.items.map((item) => (
@@ -141,7 +141,7 @@ export default function KnowledgeConflictResolverView({ data, setView }) {
                   disabled={resolving === group.key}
                   type="button"
                 >
-                  {resolving === group.key ? '合并中…' : '合并并删除重复项'}
+                  {resolving === group.key ? t('conflicts.merging') : t('conflicts.mergeAndDelete')}
                 </button>
               </div>
             </article>
@@ -154,24 +154,24 @@ export default function KnowledgeConflictResolverView({ data, setView }) {
           <AlertTriangle size={20} />
           <div>
             <span>{t('conflicts.auditTrail')}</span>
-            <h4>冲突解决审计</h4>
+            <h4>{t('conflicts.auditTitle')}</h4>
           </div>
         </div>
         {auditEntries.length === 0 ? (
-          <p className="conflict-audit-empty">暂无审计记录。合并操作完成后会在此显示。</p>
+          <p className="conflict-audit-empty">{t('conflicts.auditEmpty')}</p>
         ) : (
           <ul className="conflict-audit-list">
             {auditEntries.map((entry) => (
               <li className="conflict-audit-item" key={entry.id}>
                 <div className="conflict-audit-head">
                   <span className="conflict-kind-badge">{typeLabelsMap[entry.kind] ?? entry.kind}</span>
-                  <span className="conflict-audit-action">{entry.action === 'merge' ? '合并' : entry.action}</span>
+                  <span className="conflict-audit-action">{entry.action === 'merge' ? t('conflicts.actionMerge') : entry.action}</span>
                   <time>{formatDateTime(entry.createdAt)}</time>
                 </div>
                 <p>{entry.note}</p>
                 <div className="conflict-audit-ids">
-                  <span>保留 {entry.keepId.slice(0, 12)}</span>
-                  <span>删除 {entry.dropIds.length} 项</span>
+                  <span>{t('conflicts.keepLabel')} {entry.keepId.slice(0, 12)}</span>
+                  <span>{t('conflicts.deleteCount', { count: entry.dropIds.length })}</span>
                 </div>
               </li>
             ))}
@@ -180,17 +180,4 @@ export default function KnowledgeConflictResolverView({ data, setView }) {
       </section>
     </section>
   );
-}
-
-/**
- * 根据冲突信号类型生成说明文本
- * @param {Object} signal - 冲突信号对象
- * @returns {string} 冲突说明文本
- */
-function conflictBody(signal) {
-  if (signal.type === 'duplicate_material') return `${signal.count} 条资料可能来自同一链接或同一段内容，建议先核对来源再合并。`;
-  if (signal.type === 'duplicate_card') return `${signal.count} 张卡片标题相近，建议保留证据最完整的一张。`;
-  if (signal.type === 'needs_review') return '资料解析或内容补全需要人工复核，确认后再生成卡片。';
-  if (signal.type === 'unsourced_card') return '这张卡片缺少明确来源，建议补充引用或降级为草稿。';
-  return '建议先进入来源或工作区详情页人工确认。';
 }

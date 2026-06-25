@@ -163,7 +163,7 @@ export default function AIChatShell({
 
   const isFloating = mode === 'floating';
   const modeIcon = isFloating ? <PanelRight size={16} /> : <Move size={16} />;
-  const modeLabel = isFloating ? '切换为右侧边栏' : '切换为自由悬浮';
+  const modeLabel = isFloating ? t('chat.switchToSidebar') : t('chat.switchToFloating');
   const shellStyle = isFloating
     ? { left: position.x, top: position.y, width: size.width, height: size.height }
     : undefined;

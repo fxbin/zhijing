@@ -3,6 +3,7 @@
  * @module components/SystemNotice
  */
 
+import { useTranslation } from 'react-i18next';
 import { CircleX } from 'lucide-react';
 
 /**
@@ -10,12 +11,13 @@ import { CircleX } from 'lucide-react';
  * @returns {JSX.Element} 通知区块
  */
 export default function SystemNotice() {
+  const { t } = useTranslation();
   return (
     <section className="system-notice">
       <CircleX size={21} />
       <div>
-        <strong>API 未连接</strong>
-        <p>当前页面保留本地演示内容；启动 API 后会自动读取真实工作区、任务和资料。</p>
+        <strong>{t('system.apiDisconnected')}</strong>
+        <p>{t('system.apiDisconnectedHint')}</p>
       </div>
     </section>
   );

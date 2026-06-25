@@ -21,7 +21,7 @@ export function viewFromHash() {
  */
 export function classifyInput(value) {
   if (/https?:\/\//.test(value)) return 'Link';
-  if (/[?？]|怎么|如何/.test(value)) return 'Question';
+  if (/[?？]|怎么|如何|how|what|why|when|where|who/i.test(value)) return 'Question';
   return 'Theme';
 }
 

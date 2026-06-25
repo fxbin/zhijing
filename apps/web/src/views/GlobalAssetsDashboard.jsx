@@ -81,7 +81,7 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact })
           keyword: filterKeyword,
         }),
       }).catch((err) => {
-        setFilterError(err.message || '加载失败');
+        setFilterError(err.message || t('assets.loadFailed'));
       });
     }, 600);
     return () => clearTimeout(timer);

@@ -3,6 +3,8 @@
  * @module utils/map
  */
 
+import i18n from '../i18n';
+
 const MAP_LAYOUT = {
   centerX: 500,
   centerY: 400,
@@ -146,7 +148,7 @@ export function positionRing(nodes, ring) {
  * @returns {string} 截断后的标签
  */
 export function truncateNodeLabel(label) {
-  const value = label ?? 'Untitled';
+  const value = label ?? i18n.t('material.untitled');
   return value.length > 22 ? `${value.slice(0, 20)}...` : value;
 }
 

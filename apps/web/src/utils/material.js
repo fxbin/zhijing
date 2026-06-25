@@ -20,8 +20,8 @@ export function materialFromApi(item) {
     ...item,
     source: platform.toUpperCase(),
     status: status.toUpperCase(),
-    title: item.title ?? 'Untitled material',
-    summary: item.contentText || item.rawInput || 'Saved source material.',
+    title: item.title ?? i18n.t('material.untitled'),
+    summary: item.contentText || item.rawInput || i18n.t('material.savedDefault'),
     tags: [item.type ?? 'material', status],
     time: formatMaterialTime(item.createdAt),
     state: status === 'failed' ? 'failed' : status === 'parsing' ? 'processing' : 'ready',
@@ -34,7 +34,7 @@ export function materialFromApi(item) {
  * @returns {string} 预览文本
  */
 export function materialPreview(item) {
-  const text = item.contentText || item.rawInput || item.sourceUrl || 'Saved source material.';
+  const text = item.contentText || item.rawInput || item.sourceUrl || i18n.t('material.savedDefault');
   const cleaned = text.replace(/\s+/g, ' ').trim();
   return cleaned.length > 180 ? `${cleaned.slice(0, 180)}...` : cleaned;
 }
