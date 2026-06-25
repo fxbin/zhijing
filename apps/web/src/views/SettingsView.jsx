@@ -53,7 +53,7 @@ const INITIAL_ACTIVE_SECTION = 'profiles';
  * @returns {JSX.Element} 设置视图
  * @author fxbin
  */
-export default function SettingsView({ initialSection = null, onSectionConsumed, browserAiStatus = 'checking' }) {
+export default function SettingsView({ initialSection = null, onSectionConsumed, browserAiStatus = 'checking', setView }) {
   const { t } = useTranslation();
   const taskStatusLabel = useTaskStatusLabel();
   const taskWorkflowLabel = useTaskWorkflowLabel();
@@ -663,8 +663,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
             </div>
             <div className="settings-actions settings-actions-primary">
               <button
-                disabled={!setView}
-                onClick={() => setView && setView('kits')}
+                onClick={() => setView('kits')}
                 type="button"
               >
                 <Sparkles size={16} />

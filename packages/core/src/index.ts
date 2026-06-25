@@ -2154,10 +2154,18 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   }
 
   private ensureWorkspaceRename() {
-    const oldTable = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_bases'").get() as { name: string } | undefined;
-    if (oldTable) {
-      this.db.exec('ALTER TABLE knowledge_bases RENAME TO workspaces');
-    }
+    const renameOrMerge = (source: string, target: string) => {
+      const sourceExists = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(source) as { name: string } | undefined;
+      if (!sourceExists) return;
+      const targetExists = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(target) as { name: string } | undefined;
+      if (targetExists) {
+        this.db.exec(`INSERT OR IGNORE INTO ${target} SELECT * FROM ${source}`);
+        this.db.exec(`DROP TABLE ${source}`);
+      } else {
+        this.db.exec(`ALTER TABLE ${source} RENAME TO ${target}`);
+      }
+    };
+    renameOrMerge('knowledge_bases', 'workspaces');
     const columnRenameTargets = ['cards', 'materials', 'artifacts', 'messages', 'attention_log', 'map_custom_edges', 'exports', 'entities', 'conflict_audit', 'agent_action_log'];
     for (const table of columnRenameTargets) {
       const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
@@ -2165,10 +2173,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         this.db.exec(`ALTER TABLE ${table} RENAME COLUMN knowledge_base_id TO workspace_id`);
       }
     }
-    const oldNodePositionsTable = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_base_node_positions'").get() as { name: string } | undefined;
-    if (oldNodePositionsTable) {
-      this.db.exec('ALTER TABLE knowledge_base_node_positions RENAME TO workspace_node_positions');
-    }
+    renameOrMerge('knowledge_base_node_positions', 'workspace_node_positions');
     const nodePositionsColumns = this.db.prepare('PRAGMA table_info(workspace_node_positions)').all() as Array<{ name: string }>;
     if (nodePositionsColumns.some((column) => column.name === 'knowledge_base_id')) {
       this.db.exec('ALTER TABLE workspace_node_positions RENAME COLUMN knowledge_base_id TO workspace_id');

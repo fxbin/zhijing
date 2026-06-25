@@ -597,18 +597,6 @@ export function buildApi() {
   });
 
   app.get<{
-    Querystring: { type?: string; status?: string; query?: string; limit?: string };
-  }>('/api/materials', async (request) => {
-    const { type, status, query, limit } = request.query;
-    return listAllMaterials({
-      type: type as MaterialRecord['type'] | undefined,
-      status: status as MaterialRecord['parseStatus'] | undefined,
-      query: query ?? undefined,
-      limit: limit ? Number(limit) : undefined,
-    });
-  });
-
-  app.get<{
     Querystring: { query?: string; limit?: string };
   }>('/api/artifacts', async (request) => {
     const { query, limit } = request.query;

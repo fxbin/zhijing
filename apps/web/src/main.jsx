@@ -4,7 +4,6 @@ import './i18n';
 import {
   AlertTriangle,
   Archive,
-  BookOpen,
   Database,
   FolderOpen,
   Layers,
@@ -166,6 +165,7 @@ function App() {
     workspaceDetail,
     setWorkspaceDetail,
     workspaceAnalytics,
+    setWorkspaceAnalytics,
     latestTaskId,
     setLatestTaskId,
     latestTask,
@@ -425,7 +425,6 @@ function App() {
     { key: 'assets', label: t('nav.assets'), icon: Layers, group: 'insight' },
     { key: 'path', label: t('nav.path'), icon: Map, group: 'insight' },
     { key: 'archive', label: t('nav.archive'), icon: Archive, group: 'tools' },
-    { key: 'weread', label: t('nav.weread'), icon: BookOpen, group: 'tools' },
     { key: 'settings', label: t('nav.settings'), icon: Settings, group: 'tools' },
   ];
 
