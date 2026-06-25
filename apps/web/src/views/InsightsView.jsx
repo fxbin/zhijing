@@ -39,9 +39,10 @@ function sparseLabels(labels) {
  * @param {object} props - 组件属性
  * @param {Function} props.setView - 视图切换回调
  * @param {Function} [props.onCreateWorkspace] - 创建工作区回调，接收 { title, summary, cardIds } 参数
+ * @param {Function} [props.onSelectWorkspace] - 选中工作区回调，接收 workspaceId 参数后跳转到工作区详情
  * @returns {JSX.Element} 洞察视图
  */
-export default function InsightsView({ setView, onCreateWorkspace }) {
+export default function InsightsView({ setView, onCreateWorkspace, onSelectWorkspace }) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
   const claimStatusLabel = useClaimStatusLabel();
@@ -239,37 +240,49 @@ export default function InsightsView({ setView, onCreateWorkspace }) {
             <Map size={20} />
           </div>
           <p className="insights-map-summary">
-            {t('insights.mapBody', { count: insights.mapPreview.nodeCount, kbCount: insights.mapPreview.workspaceCount })}
+            {t('insights.mapBody', { kbCount: insights.mapPreview.workspaceCount })}
           </p>
-          {insights.mapPreview.nodes.length > 0 && (
-            <svg className="insights-map-thumbnail" viewBox="0 0 1000 800" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-              {insights.mapPreview.edges.map((edge, idx) => {
-                const source = insights.mapPreview.nodes.find((n) => n.id === edge.sourceId);
-                const target = insights.mapPreview.nodes.find((n) => n.id === edge.targetId);
-                if (!source || !target) return null;
-                return (
-                  <line
-                    key={`edge-${idx}`}
-                    x1={source.x}
-                    y1={source.y}
-                    x2={target.x}
-                    y2={target.y}
-                    className="insights-map-edge"
-                  />
-                );
-              })}
-              {insights.mapPreview.nodes.map((node) => (
-                <circle
-                  key={node.id}
-                  cx={node.x}
-                  cy={node.y}
-                  r={node.kind === 'workspace' ? 10 : 5}
-                  className={`insights-map-node insights-map-node--${node.kind}`}
+          {insights.mapPreview.workspaces.length === 0 ? (
+            <EmptyState
+              icon={Map}
+              title={t('insights.noWorkspaces')}
+              body={t('insights.noWorkspacesHint')}
+              compact
+            />
+          ) : (
+            <div className="workspace-preview-grid">
+              {insights.mapPreview.workspaces.map((ws) => (
+                <button
+                  key={ws.id}
+                  type="button"
+                  className="workspace-preview-card"
+                  onClick={() => onSelectWorkspace?.(ws.id)}
                 >
-                  <title>{node.label}</title>
-                </circle>
+                  <header className="workspace-preview-head">
+                    <h3>{ws.title}</h3>
+                    <span className={`workspace-stage-badge stage-${ws.stage}`}>
+                      {t(`insights.workspaceStage.${ws.stage}`)}
+                    </span>
+                  </header>
+                  <div className="workspace-preview-stats">
+                    <div className="workspace-preview-stat">
+                      <strong>{ws.cardCount}</strong>
+                      <span>{t('insights.workspaceCards', { count: ws.cardCount })}</span>
+                    </div>
+                    <div className="workspace-preview-stat">
+                      <strong>{Math.round(ws.sourcedRatio * 100)}%</strong>
+                      <span>{t('insights.workspaceSourced')}</span>
+                    </div>
+                  </div>
+                  <div className="workspace-preview-ratio" aria-hidden="true">
+                    <div
+                      className="workspace-preview-ratio-fill"
+                      style={{ width: `${Math.round(ws.sourcedRatio * 100)}%` }}
+                    />
+                  </div>
+                </button>
               ))}
-            </svg>
+            </div>
           )}
           <div className="insights-map-stats">
             <div className="insights-map-stat">

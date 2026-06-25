@@ -642,30 +642,22 @@ export interface GlobalInsights {
     nodeCount: number;
     edgeCount: number;
     workspaceCount: number;
-    nodes: GlobalInsightsMapNode[];
-    edges: GlobalInsightsMapEdge[];
+    workspaces: GlobalInsightsWorkspacePreview[];
   };
 }
 
 /**
- * 洞察页全局地图缩略图节点（已带预计算坐标，前端直接渲染）。
+ * 洞察页单个工作区预览项，用于在「知识地图预览」卡片内
+ * 以可点击网格的形式展示，用户点击后进入对应工作区详情。
+ *
+ * @author fxbin
  */
-export interface GlobalInsightsMapNode {
+export interface GlobalInsightsWorkspacePreview {
   id: string;
-  kind: 'workspace' | 'card';
-  label: string;
-  x: number;
-  y: number;
-  workspaceId: string;
-}
-
-/**
- * 洞察页全局地图缩略图边。
- */
-export interface GlobalInsightsMapEdge {
-  sourceId: string;
-  targetId: string;
-  relation: string;
+  title: string;
+  cardCount: number;
+  sourcedRatio: number;
+  stage: WorkspaceStage;
 }
 
 /**

@@ -606,7 +606,16 @@ function App() {
           {view === 'assets' && <GlobalAssetsDashboard data={advancedOpsData} setView={go} onOpenArtifact={openArtifact} />}
           {view === 'compare' && <MultiEntityComparisonView data={advancedOpsData} setView={go} />}
           {view === 'conflicts' && <KnowledgeConflictResolverView data={advancedOpsData} setView={go} />}
-          {view === 'insights' && <InsightsView setView={go} onCreateWorkspace={handleCreateWorkspace} />}
+          {view === 'insights' && (
+            <InsightsView
+              setView={go}
+              onCreateWorkspace={handleCreateWorkspace}
+              onSelectWorkspace={(id) => {
+                setSelectedWorkspaceId(id);
+                go('workspace');
+              }}
+            />
+          )}
           {view === 'path' && <PathView selectedWorkspaceId={selectedWorkspaceId} setView={go} />}
           {view === 'archive' && <ArchiveView selectedWorkspaceId={selectedWorkspaceId} setView={go} />}
           {view === 'chat' && (
