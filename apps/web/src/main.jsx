@@ -20,18 +20,17 @@ import {
 } from 'lucide-react';
 import './styles.css';
 
-import { seedWorkspaces, seedMaterials } from './constants/seedData';
 import { TOP_SEARCH_EVENT, TOP_SEARCH_STORAGE_KEY } from './constants/options';
-import { materialFromApi } from './utils/material';
-import {
-  formatBaseMeta,
-  buildAdvancedOpsData,
-  fallbackDetail,
-  emptyDetail,
-} from './utils/knowledge';
+import { buildAdvancedOpsData } from './utils/knowledge';
 import { viewFromHash, classifyInput, workflowFromKind } from './utils/navigation';
-import api, { ApiError } from './utils/api';
+import api from './utils/api';
 import useModalA11y from './hooks/useModalA11y';
+import { useUiState, API_STATUS_OFFLINE, BROWSER_AI_STATUS_NO_API } from './hooks/useUiState';
+import { useWorkspaceState, TASKS_MAX_COUNT } from './hooks/useWorkspaceState';
+import { useAssistantState } from './hooks/useAssistantState';
+import { useKitState } from './hooks/useKitState';
+import { useMaterialParseState } from './hooks/useMaterialParseState';
+import { useModalState } from './hooks/useModalState';
 import SystemNotice from './components/SystemNotice';
 import NotificationDropdown from './components/NotificationDropdown';
 import CreateKbModal from './components/CreateKbModal';
@@ -58,43 +57,194 @@ const WeReadView = lazy(() => import('./views/WeReadView'));
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from './components/LanguageSwitcher';
 
+/**
+ * 归集接口路径。
+ */
+const INTAKE_PATH = '/api/intake';
+
+/**
+ * 工作区接口路径前缀（用于 CreateKbModal 的 onCreateEmpty 直接调用）。
+ */
+const WORKSPACES_PATH = '/api/workspaces';
+
+/**
+ * 失败任务客户端兜底 ID 前缀。
+ */
+const FAILED_TASK_ID_PREFIX = 'local_failed_';
+
+/**
+ * 任务状态：失败。
+ */
+const TASK_STATUS_FAILED = 'failed';
+
+/**
+ * 任务轮询间隔（毫秒）。
+ */
+const TASK_POLL_INTERVAL_MS = 2000;
+
+/**
+ * 查询输入未填写时显示的默认类型标签。
+ */
+const DEFAULT_KIND_LABEL = 'Theme, Link, or Question';
+
+/**
+ * 工作区视图标识。
+ */
+const VIEW_WORKSPACE = 'workspace';
+
+/**
+ * 详情视图标识。
+ */
+const VIEW_DETAIL = 'detail';
+
+/**
+ * 设置视图标识。
+ */
+const VIEW_SETTINGS = 'settings';
+
 function App() {
-  const { t, i18n } = useTranslation();
-  const [view, setView] = useState(viewFromHash);
-  const [query, setQuery] = useState('');
-  const [activity, setActivity] = useState(t('activity.ready'));
-  const [apiStatus, setApiStatus] = useState('checking');
-  const [browserAiStatus, setBrowserAiStatus] = useState('checking');
-  const [workspaces, setWorkspaces] = useState(seedWorkspaces);
-  const [materials, setMaterials] = useState(seedMaterials);
-  const [tasks, setTasks] = useState([]);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(null);
-  const [workspaceDetail, setWorkspaceDetail] = useState(fallbackDetail);
-  const [workspaceAnalytics, setWorkspaceAnalytics] = useState(null);
-  const [latestTaskId, setLatestTaskId] = useState(null);
-  const [latestTask, setLatestTask] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [assistantQuestion, setAssistantQuestion] = useState('');
-  const [assistantAnswer, setAssistantAnswer] = useState(null);
-  const [workspaceMessages, setWorkspaceMessages] = useState([]);
-  const [isAsking, setIsAsking] = useState(false);
+  const { t } = useTranslation();
+
+  const {
+    view,
+    setView,
+    query,
+    setQuery,
+    activity,
+    setActivity,
+    navOpen,
+    setNavOpen,
+    topSearchQuery,
+    setTopSearchQuery,
+    settingsSection,
+    setSettingsSection,
+    apiStatus,
+    setApiStatus,
+    browserAiStatus,
+    setBrowserAiStatus,
+    isSubmitting,
+    setIsSubmitting,
+  } = useUiState(t);
+
+  const {
+    isCreateKbOpen,
+    setIsCreateKbOpen,
+    createKbError,
+    setCreateKbError,
+    editingKb,
+    setEditingKb,
+    deletingKb,
+    setDeletingKb,
+  } = useModalState();
+
   const [selectedArtifact, setSelectedArtifact] = useState(null);
   const [artifactOrigin, setArtifactOrigin] = useState(null);
-  const [parsingMaterialId, setParsingMaterialId] = useState(null);
-  const [isRunningKit, setIsRunningKit] = useState(false);
-  const [kitRunResult, setKitRunResult] = useState(null);
-  const [isCreateKbOpen, setIsCreateKbOpen] = useState(false);
-  const [createKbError, setCreateKbError] = useState(null);
-  const [editingKb, setEditingKb] = useState(null);
-  const [deletingKb, setDeletingKb] = useState(null);
+
   const editingModalRef = useRef(null);
   const deletingModalRef = useRef(null);
   useModalA11y(editingModalRef, Boolean(editingKb), () => setEditingKb(null));
   useModalA11y(deletingModalRef, Boolean(deletingKb), () => setDeletingKb(null));
-  const [settingsSection, setSettingsSection] = useState(null);
-  const [navOpen, setNavOpen] = useState(false);
-  const [topSearchQuery, setTopSearchQuery] = useState('');
-  const kind = useMemo(() => (query.trim() ? classifyInput(query.trim()) : 'Theme, Link, or Question'), [query]);
+
+  const go = (nextView) => {
+    setView(nextView);
+    setNavOpen(false);
+    if (nextView === VIEW_WORKSPACE) {
+      window.history.replaceState(null, '', window.location.pathname);
+      return;
+    }
+    window.location.hash = nextView;
+  };
+
+  const {
+    workspaces,
+    setWorkspaces,
+    materials,
+    tasks,
+    setTasks,
+    selectedWorkspaceId,
+    setSelectedWorkspaceId,
+    workspaceDetail,
+    setWorkspaceDetail,
+    workspaceAnalytics,
+    latestTaskId,
+    setLatestTaskId,
+    latestTask,
+    setLatestTask,
+    loadDashboard,
+    loadDetail,
+    loadAnalytics,
+    loadTask,
+    applyIntakeResult,
+    applyMaterialMutation,
+    handleSaveWorkspace,
+    handleCreateWorkspace,
+    handleDeleteWorkspace,
+    resetDetailForEmptySelection,
+  } = useWorkspaceState({
+    apiStatus,
+    setApiStatus,
+    setEditingKb,
+    setDeletingKb,
+    go,
+    t,
+  });
+
+  const {
+    assistantQuestion,
+    setAssistantQuestion,
+    assistantAnswer,
+    setAssistantAnswer,
+    isAsking,
+    workspaceMessages,
+    setWorkspaceMessages,
+    loadMessages,
+    askWorkspace,
+  } = useAssistantState({
+    selectedWorkspaceId,
+    apiStatus,
+    setActivity,
+    setWorkspaces,
+    setWorkspaceDetail,
+    setTasks,
+    setLatestTaskId,
+    setLatestTask,
+    setSelectedArtifact,
+    t,
+  });
+
+  const {
+    isRunningKit,
+    kitRunResult,
+    setKitRunResult,
+    runKnowledgeKit,
+  } = useKitState({
+    selectedWorkspaceId,
+    apiStatus,
+    setActivity,
+    setWorkspaces,
+    setWorkspaceDetail,
+    setTasks,
+    setLatestTaskId,
+    setLatestTask,
+    setSelectedArtifact,
+    t,
+  });
+
+  const {
+    parsingMaterialId,
+    parseMaterial,
+  } = useMaterialParseState({
+    setActivity,
+    setTasks,
+    setLatestTaskId,
+    setLatestTask,
+    setWorkspaceDetail,
+    setWorkspaces,
+    setSelectedArtifact,
+    t,
+  });
+
+  const kind = useMemo(() => (query.trim() ? classifyInput(query.trim()) : DEFAULT_KIND_LABEL), [query]);
   const advancedOpsData = useMemo(() => buildAdvancedOpsData({
     workspaces,
     materials,
@@ -122,10 +272,10 @@ function App() {
       const detail = event.detail ?? {};
       if (detail.view) {
         setView(detail.view);
-        if (detail.view === 'settings' && detail.section) {
+        if (detail.view === VIEW_SETTINGS && detail.section) {
           setSettingsSection(detail.section);
-          window.location.hash = 'settings';
-        } else if (detail.view === 'workspace') {
+          window.location.hash = VIEW_SETTINGS;
+        } else if (detail.view === VIEW_WORKSPACE) {
           window.history.replaceState(null, '', window.location.pathname);
         } else {
           window.location.hash = detail.view;
@@ -144,7 +294,7 @@ function App() {
         const result = await detectBrowserAi();
         if (!ignore) setBrowserAiStatus(result.status);
       } catch {
-        if (!ignore) setBrowserAiStatus('no_api');
+        if (!ignore) setBrowserAiStatus(BROWSER_AI_STATUS_NO_API);
       }
     }
     detectBrowserAiStatus();
@@ -152,46 +302,16 @@ function App() {
   }, []);
 
   useEffect(() => {
-    let ignore = false;
-    async function loadDashboard() {
-      try {
-        const url = selectedWorkspaceId
-          ? `/api/dashboard?workspaceId=${encodeURIComponent(selectedWorkspaceId)}`
-          : '/api/dashboard';
-        const dashboard = await api.get(url);
-        if (ignore) return;
-        const nextWorkspaces = dashboard.workspaces ?? [];
-        const nextMaterials = dashboard.materials ?? [];
-        const nextTasks = dashboard.tasks ?? [];
-        setApiStatus('online');
-        setWorkspaces(nextWorkspaces);
-        setMaterials(nextMaterials.map(materialFromApi));
-        setTasks(nextTasks);
-        setSelectedWorkspaceId((current) => {
-          if (current || nextWorkspaces.length === 0) return current;
-          return nextWorkspaces[0].id;
-        });
-        if (nextTasks.length) {
-          setLatestTaskId(nextTasks[0].id);
-          setLatestTask(nextTasks[0]);
-        } else {
-          setLatestTaskId(null);
-          setLatestTask(null);
-        }
-      } catch {
-        if (!ignore) setApiStatus('offline');
-      }
-    }
-    loadDashboard();
+    let cancelled = false;
+    loadDashboard(selectedWorkspaceId, () => cancelled);
     return () => {
-      ignore = true;
+      cancelled = true;
     };
   }, [selectedWorkspaceId]);
 
   useEffect(() => {
     if (!selectedWorkspaceId) {
-      setWorkspaceDetail(apiStatus === 'online' ? emptyDetail() : fallbackDetail());
-      setWorkspaceAnalytics(null);
+      resetDetailForEmptySelection();
       setAssistantAnswer(null);
       setAssistantQuestion('');
       setWorkspaceMessages([]);
@@ -199,24 +319,8 @@ function App() {
     }
 
     let ignore = false;
-    async function loadDetail() {
-      try {
-        const detail = await api.get(`/api/workspaces/${selectedWorkspaceId}`);
-        if (!ignore) setWorkspaceDetail(detail);
-      } catch {
-        if (!ignore) setWorkspaceDetail(fallbackDetail());
-      }
-    }
-    async function loadMessages() {
-      try {
-        const payload = await api.get(`/api/workspaces/${selectedWorkspaceId}/messages?limit=50`);
-        if (!ignore) setWorkspaceMessages(payload.messages ?? []);
-      } catch {
-        if (!ignore) setWorkspaceMessages([]);
-      }
-    }
-    loadDetail();
-    loadMessages();
+    loadDetail(selectedWorkspaceId, () => ignore);
+    loadMessages(selectedWorkspaceId, () => ignore);
     return () => {
       ignore = true;
     };
@@ -229,15 +333,7 @@ function App() {
     }
 
     let ignore = false;
-    async function loadAnalytics() {
-      try {
-        const analytics = await api.get(`/api/workspaces/${selectedWorkspaceId}/analytics`);
-        if (!ignore) setWorkspaceAnalytics(analytics);
-      } catch {
-        if (!ignore) setWorkspaceAnalytics(null);
-      }
-    }
-    loadAnalytics();
+    loadAnalytics(selectedWorkspaceId, () => ignore);
     return () => {
       ignore = true;
     };
@@ -254,229 +350,16 @@ function App() {
     if (!latestTaskId) return undefined;
     let cancelled = false;
 
-    async function loadTask() {
-      try {
-        const task = await api.get(`/api/tasks/${latestTaskId}`);
-        if (!cancelled) setLatestTask(task);
-      } catch {
-        // Keep the last task status when the API is not available.
-      }
-    }
-
-    loadTask();
-    const timer = window.setInterval(loadTask, 2000);
+    loadTask(latestTaskId, () => cancelled);
+    const timer = window.setInterval(() => loadTask(latestTaskId, () => cancelled), TASK_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
   }, [latestTaskId]);
 
-  const go = (nextView) => {
-    setView(nextView);
-    setNavOpen(false);
-    if (nextView === 'workspace') {
-      window.history.replaceState(null, '', window.location.pathname);
-      return;
-    }
-    window.location.hash = nextView;
-  };
-
-  const applyIntakeResult = (result) => {
-    setLatestTaskId(result.task.id);
-    setLatestTask(result.task);
-    setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
-    setSelectedWorkspaceId(result.workspace.id);
-    setWorkspaces((current) => {
-      const withoutDuplicate = current.filter((base) => base.id !== result.workspace.id && base.title !== result.workspace.title);
-      return [result.workspace, ...withoutDuplicate];
-    });
-    if (result.material) {
-      setMaterials((current) => [materialFromApi(result.material), ...current].slice(0, 6));
-      setWorkspaceDetail((current) => current.id === result.workspace.id ? ({
-        ...current,
-        ...result.workspace,
-        materials: [result.material, ...(current.materials ?? []).filter((material) => material.id !== result.material.id)],
-        cards: [...(result.cards ?? []), ...(current.cards ?? []).filter((card) => !(result.cards ?? []).some((item) => item.id === card.id))],
-        artifacts: result.artifact
-          ? [result.artifact, ...(current.artifacts ?? []).filter((artifact) => artifact.id !== result.artifact.id)]
-          : current.artifacts ?? [],
-      }) : current);
-    }
-  };
-
-  const applyMaterialMutation = (result) => {
-    if (!result?.material) return;
-    if (result.task) {
-      setLatestTaskId(result.task.id);
-      setLatestTask(result.task);
-      setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
-    }
-    if (result.workspace) {
-      setWorkspaces((current) => [result.workspace, ...current.filter((base) => base.id !== result.workspace.id)]);
-    }
-    setMaterials((current) => [materialFromApi(result.material), ...current.filter((material) => material.id !== result.material.id)].slice(0, 6));
-    setWorkspaceDetail((current) => {
-      const isTargetDetail = current.id === result.material.workspaceId;
-      const isPreviousDetail = current.id === result.previousWorkspaceId;
-      if (!isTargetDetail && !isPreviousDetail) return current;
-      if (isPreviousDetail && !isTargetDetail) {
-        return {
-          ...current,
-          materials: (current.materials ?? []).filter((material) => material.id !== result.material.id),
-        };
-      }
-      return {
-        ...current,
-        ...(result.workspace ?? {}),
-        materials: [result.material, ...(current.materials ?? []).filter((material) => material.id !== result.material.id)],
-        cards: [...(result.cards ?? []), ...(current.cards ?? []).filter((card) => !(result.cards ?? []).some((item) => item.id === card.id))],
-        artifacts: result.artifact
-          ? [result.artifact, ...(current.artifacts ?? []).filter((artifact) => artifact.id !== result.artifact.id)]
-          : current.artifacts ?? [],
-      };
-    });
-    if (result.artifact) setSelectedArtifact(result.artifact);
-  };
-
-  const handleViewMaterialDetail = (material) => {
-    go('library');
-  };
-
-  async function handleSaveWorkspace(id, title, summary) {
-    try {
-      const result = await api.put(`/api/workspaces/${id}`, { title, summary });
-      setWorkspaces((current) => current.map((base) => base.id === id ? result.workspace : base));
-      setEditingKb(null);
-    } catch (err) {
-      setEditingKb((current) => ({ ...current, error: err.serverMessage || err.message || t('workspace.edit') }));
-    }
-  }
-
-  async function handleCreateWorkspace({ title, summary }) {
-    let result;
-    try {
-      result = await api.post('/api/workspaces', { title, summary });
-    } catch (err) {
-      throw new Error(err.serverMessage || err.message || t('common.createFailed'));
-    }
-    if (result.workspace?.id) {
-      setWorkspaces((current) => [
-        result.workspace,
-        ...current.filter((base) => base.id !== result.workspace.id),
-      ]);
-      setSelectedWorkspaceId(result.workspace.id);
-      go('detail');
-    }
-  }
-
-  async function handleDeleteWorkspace(id) {
-    try {
-      await api.del(`/api/workspaces/${id}`);
-      setWorkspaces((current) => current.filter((base) => base.id !== id));
-      if (selectedWorkspaceId === id) {
-        setSelectedWorkspaceId(null);
-      }
-      setDeletingKb(null);
-    } catch (err) {
-      setDeletingKb((current) => ({ ...current, error: err.serverMessage || err.message || t('workspace.delete') }));
-    }
-  }
-
-  const submit = async (overrideValue, options) => {
-    const value = (overrideValue ?? query).trim();
-    if (!value || isSubmitting) return;
-    setIsSubmitting(true);
-    setActivity(t('activity.captured'));
-
-    try {
-      const result = await api.post('/api/intake', { input: value, ...options });
-      setActivity(`${result.message} ${t('activity.completed')} ${result.task.id}`);
-      applyIntakeResult(result);
-      setQuery('');
-    } catch {
-      const timestamp = new Date().toISOString();
-      const failedTask = {
-        id: `local_failed_${Date.now()}`,
-        workflow: workflowFromKind(kind),
-        status: 'failed',
-        input: { input: value },
-        error: t('activity.apiUnavailable'),
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      setApiStatus('offline');
-      setLatestTaskId(null);
-      setLatestTask(failedTask);
-      setTasks((current) => [failedTask, ...current].slice(0, 8));
-      setActivity(t('activity.apiUnavailable'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const askWorkspace = async () => {
-    const value = assistantQuestion.trim();
-    if (!value || !selectedWorkspaceId || apiStatus !== 'online' || isAsking) return;
-    setIsAsking(true);
-    setAssistantAnswer({ question: value, loading: true });
-    setActivity(t('activity.askWorkspace'));
-
-    try {
-      const result = await api.post(`/api/workspaces/${selectedWorkspaceId}/ask`, { question: value });
-      setActivity(`${result.message} ${t('activity.completed')} ${result.task.id}`);
-      setLatestTaskId(result.task.id);
-      setLatestTask(result.task);
-      setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
-      setWorkspaces((current) => {
-        const withoutDuplicate = current.filter((base) => base.id !== result.workspace.id);
-        return [result.workspace, ...withoutDuplicate];
-      });
-      setWorkspaceDetail((current) => ({
-        ...current,
-        ...result.workspace,
-        materials: result.material
-          ? [result.material, ...(current.materials ?? []).filter((material) => material.id !== result.material.id)]
-          : current.materials ?? [],
-        cards: [...(result.cards ?? []), ...(current.cards ?? []).filter((card) => !(result.cards ?? []).some((item) => item.id === card.id))],
-        artifacts: result.artifact
-          ? [result.artifact, ...(current.artifacts ?? []).filter((artifact) => artifact.id !== result.artifact.id)]
-          : current.artifacts ?? [],
-      }));
-      setAssistantAnswer({
-        question: value,
-        message: result.message,
-        cards: result.cards ?? [],
-        proposedCards: result.proposedCards ?? [],
-        messageId: result.messageId,
-        artifact: result.artifact,
-        citations: result.citations ?? [],
-        task: result.task,
-      });
-      if (result.artifact) {
-        setWorkspaceMessages((current) => [
-          ...current,
-          {
-            id: result.messageId ?? `msg_${Date.now()}`,
-            workspaceId: selectedWorkspaceId,
-            question: value,
-            answer: result.artifact?.body ?? result.message,
-            cardIds: (result.cards ?? []).map((card) => card.id),
-            artifactId: result.artifact?.id,
-            createdAt: new Date().toISOString(),
-            proposedCards: result.proposedCards,
-          },
-        ]);
-      }
-      if (result.artifact) setSelectedArtifact(result.artifact);
-      setAssistantQuestion('');
-    } catch {
-      setAssistantAnswer({
-        question: value,
-        error: t('activity.askFailed'),
-      });
-    } finally {
-      setIsAsking(false);
-    }
+  const applyMaterialMutationWithArtifact = (result) => {
+    applyMaterialMutation(result, setSelectedArtifact);
   };
 
   const openArtifact = (artifact, origin) => {
@@ -496,64 +379,39 @@ function App() {
     } : current));
   };
 
-  const runKnowledgeKit = async (kitId = 'learning_research') => {
-    if (!selectedWorkspaceId || apiStatus !== 'online' || isRunningKit) return null;
-    setIsRunningKit(true);
-    setActivity(t('activity.runKit'));
-
-    try {
-      const result = await api.post(`/api/workspaces/${selectedWorkspaceId}/kits/run`, { kitId });
-      setActivity(`${result.message} ${t('activity.completed')} ${result.task.id}`);
-      setLatestTaskId(result.task.id);
-      setLatestTask(result.task);
-      setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
-      setWorkspaces((current) => [result.workspace, ...current.filter((base) => base.id !== result.workspace.id)]);
-      setWorkspaceDetail((current) => ({
-        ...current,
-        ...result.workspace,
-        artifacts: [result.artifact, ...(current.artifacts ?? []).filter((artifact) => artifact.id !== result.artifact.id)],
-      }));
-      setSelectedArtifact(result.artifact);
-      setKitRunResult(result);
-      return result;
-    } catch {
-      setActivity(t('activity.kitFailed'));
-      return null;
-    } finally {
-      setIsRunningKit(false);
-    }
+  const handleViewMaterialDetail = (material) => {
+    go('library');
   };
 
-  const parseMaterial = async (materialId) => {
-    if (!materialId || parsingMaterialId) return;
-    setParsingMaterialId(materialId);
-    setActivity(t('activity.parseMaterial'));
+  const submit = async (overrideValue, options) => {
+    const value = (overrideValue ?? query).trim();
+    if (!value || isSubmitting) return;
+    setIsSubmitting(true);
+    setActivity(t('activity.captured'));
 
     try {
-      const result = await api.post(`/api/materials/${materialId}/parse`);
-      setActivity(result.message);
-      setLatestTaskId(result.task.id);
-      setLatestTask(result.task);
-      setTasks((current) => [result.task, ...current.filter((task) => task.id !== result.task.id)].slice(0, 8));
-      setWorkspaceDetail((current) => ({
-        ...current,
-        ...(result.workspace ?? {}),
-        materials: [result.material, ...(current.materials ?? []).filter((material) => material.id !== result.material.id)],
-        cards: [...(result.cards ?? []), ...(current.cards ?? []).filter((card) => !(result.cards ?? []).some((item) => item.id === card.id))],
-        artifacts: result.artifact
-          ? [result.artifact, ...(current.artifacts ?? []).filter((artifact) => artifact.id !== result.artifact.id)]
-          : current.artifacts ?? [],
-      }));
-      setWorkspaces((current) => result.workspace
-        ? [result.workspace, ...current.filter((base) => base.id !== result.workspace.id)]
-        : current);
-      if (result.artifact) setSelectedArtifact(result.artifact);
-      return result;
+      const result = await api.post(INTAKE_PATH, { input: value, ...options });
+      setActivity(`${result.message} ${t('activity.completed')} ${result.task.id}`);
+      applyIntakeResult(result);
+      setQuery('');
     } catch {
-      setActivity(t('activity.parseFailed'));
-      return null;
+      const timestamp = new Date().toISOString();
+      const failedTask = {
+        id: `${FAILED_TASK_ID_PREFIX}${Date.now()}`,
+        workflow: workflowFromKind(kind),
+        status: TASK_STATUS_FAILED,
+        input: { input: value },
+        error: t('activity.apiUnavailable'),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      setApiStatus(API_STATUS_OFFLINE);
+      setLatestTaskId(null);
+      setLatestTask(failedTask);
+      setTasks((current) => [failedTask, ...current].slice(0, TASKS_MAX_COUNT));
+      setActivity(t('activity.apiUnavailable'));
     } finally {
-      setParsingMaterialId(null);
+      setIsSubmitting(false);
     }
   };
 
@@ -709,7 +567,7 @@ function App() {
               apiStatus={apiStatus}
               workspaces={workspaces}
               onCaptureResult={applyIntakeResult}
-              onMaterialMutation={applyMaterialMutation}
+              onMaterialMutation={applyMaterialMutationWithArtifact}
               onNavigate={go}
               onParseMaterial={parseMaterial}
               parsingMaterialId={parsingMaterialId}
@@ -813,7 +671,7 @@ function App() {
           onCreateEmpty={async (title, summary) => {
             let result;
             try {
-              result = await api.post('/api/workspaces', { title, summary });
+              result = await api.post(WORKSPACES_PATH, { title, summary });
             } catch (err) {
               setCreateKbError(err.serverMessage || err.message || t('common.createFailed'));
               return;
@@ -891,7 +749,7 @@ function App() {
               <button
                 className="btn-primary danger"
                 type="button"
-                onClick={() => handleDeleteWorkspace(deletingKb.id)}
+                onClick={() => handleDeleteWorkspace(deletingKb.id, selectedWorkspaceId)}
               >
                 {t('common.confirm')}
               </button>
