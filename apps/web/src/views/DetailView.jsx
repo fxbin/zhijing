@@ -3,7 +3,7 @@
  * @module views/DetailView
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   BarChart3,
@@ -33,13 +33,35 @@ import SourceCitation from '../components/SourceCitation';
 import TaskStatus from '../components/TaskStatus';
 import AIChatShell from '../components/AIChatShell';
 import { useChatLayout } from '../hooks/useChatLayout';
-import { PATH_CARD_ID_STORAGE_KEY } from '../constants/options';
+import { useDetailFeedState } from '../hooks/useDetailFeedState';
+import { useDetailEntitiesState } from '../hooks/useDetailEntitiesState';
 import { startReadingSession, flushReadingSession } from '../utils/readingTracker';
-import api, { ApiError } from '../utils/api';
+import api from '../utils/api';
 
 const BYTES_PER_GB = 1024 * 1024 * 1024;
 
-const HIGHLIGHT_TIMEOUT_MS = 2000;
+/**
+ * 知识卡片类型在 Feed 中的展示顺序。
+ */
+const CARD_TYPE_ORDER = ['concept', 'method', 'case', 'step', 'viewpoint', 'fact', 'question', 'general'];
+
+/**
+ * 主张状态在筛选器中的展示顺序。
+ */
+const CLAIM_STATUS_ORDER = ['ai_skeleton', 'sourced', 'verified', 'disputed'];
+
+/**
+ * 实体类型到 i18n key 的映射。
+ */
+const ENTITY_TYPE_LABELS = {
+  person: 'detail.entityType.person',
+  organization: 'detail.entityType.organization',
+  concept: 'detail.entityType.concept',
+  tool: 'detail.entityType.tool',
+  place: 'detail.entityType.location',
+  event: 'detail.entityType.event',
+  other: 'detail.entityType.other',
+};
 
 /**
  * 资料视频字幕面板：展示转写状态，并在跳过时提供机器能力检测报告。
@@ -176,15 +198,50 @@ export default function DetailView({
   const layout = useChatLayout();
   const parseStatusLabel = useParseStatusLabel();
   const intakeKindLabel = useIntakeKindLabel();
-  const [feedMode, setFeedMode] = useState('feed');
-  const [feedViewMode, setFeedViewMode] = useState('board');
-  const [collapsedGroups, setCollapsedGroups] = useState(new Set());
-  const [feedSearch, setFeedSearch] = useState('');
-  const [feedTypeFilter, setFeedTypeFilter] = useState('all');
-  const [feedStatusFilter, setFeedStatusFilter] = useState('all');
+
   const cards = detail.cards ?? [];
   const materials = detail.materials ?? [];
   const artifacts = detail.artifacts ?? [];
+
+  const {
+    feedMode,
+    setFeedMode,
+    feedViewMode,
+    setFeedViewMode,
+    collapsedGroups,
+    feedSearch,
+    setFeedSearch,
+    feedTypeFilter,
+    setFeedTypeFilter,
+    feedStatusFilter,
+    setFeedStatusFilter,
+    highlightedCardId,
+    toggleGroup,
+    handleRoadmapNodeClick,
+  } = useDetailFeedState({ cards });
+
+  const {
+    entities,
+    loadingEntities,
+    extracting,
+    entityError,
+    extractEntitiesAction,
+    proposedCardSelections,
+    toggleProposedCard,
+    acceptingCards,
+    acceptError,
+    acceptProposedCards,
+    dismissProposedCards,
+    cannotAnswerFeedbackSent,
+    submitCannotAnswerFeedback,
+  } = useDetailEntitiesState({
+    selectedWorkspaceId,
+    assistantAnswer,
+    assistantQuestion,
+    onCardsAccepted,
+    t,
+  });
+
   const roadmapCards = cards.slice(0, 4);
   const conceptTags = extractConceptTags(cards);
   const cardGroups = groupCardsByType(cards);
@@ -201,8 +258,6 @@ export default function DetailView({
   const totals = analytics?.totals;
   const statusDistribution = analytics?.materialStatusDistribution?.slice(0, 4) ?? [];
   const platformDistribution = analytics?.platformDistribution?.slice(0, 4) ?? [];
-  const CARD_TYPE_ORDER = ['concept', 'method', 'case', 'step', 'viewpoint', 'fact', 'question', 'general'];
-  const CLAIM_STATUS_ORDER = ['ai_skeleton', 'sourced', 'verified', 'disputed'];
   const sortedGroupEntries = CARD_TYPE_ORDER
     .filter((type) => (cardGroups[type]?.length ?? 0) > 0)
     .map((type) => [type, cardGroups[type]]);
@@ -221,17 +276,6 @@ export default function DetailView({
     .filter((type) => (filteredCardGroups[type]?.length ?? 0) > 0)
     .map((type) => [type, filteredCardGroups[type]]);
 
-  const [entities, setEntities] = useState([]);
-  const [loadingEntities, setLoadingEntities] = useState(false);
-  const [extracting, setExtracting] = useState(false);
-  const [entityError, setEntityError] = useState('');
-  const [highlightedCardId, setHighlightedCardId] = useState(null);
-  const highlightTimerRef = useRef(null);
-  const [cannotAnswerFeedbackSent, setCannotAnswerFeedbackSent] = useState(false);
-  const [proposedCardSelections, setProposedCardSelections] = useState(new Set());
-  const [acceptingCards, setAcceptingCards] = useState(false);
-  const [acceptError, setAcceptError] = useState('');
-
   useEffect(() => {
     if (!selectedWorkspaceId) return;
     startReadingSession(selectedWorkspaceId);
@@ -239,120 +283,6 @@ export default function DetailView({
       void flushReadingSession();
     };
   }, [selectedWorkspaceId]);
-
-  useEffect(() => {
-    setCannotAnswerFeedbackSent(false);
-  }, [assistantAnswer?.question]);
-
-  useEffect(() => {
-    const proposedCards = assistantAnswer?.proposedCards ?? [];
-    setProposedCardSelections(new Set(proposedCards.map((_, index) => index)));
-  }, [assistantAnswer?.proposedCards]);
-
-  useEffect(() => {
-    if (!selectedWorkspaceId) return;
-    let ignore = false;
-    setLoadingEntities(true);
-    setEntityError('');
-    async function loadEntities() {
-      try {
-        const payload = await api.get(`/api/workspaces/${selectedWorkspaceId}/entities`);
-        if (!ignore) setEntities(payload.entities ?? []);
-      } catch {
-        if (!ignore) setEntities([]);
-      } finally {
-        if (!ignore) setLoadingEntities(false);
-      }
-    }
-    loadEntities();
-    return () => { ignore = true; };
-  }, [selectedWorkspaceId]);
-
-  /**
-   * 挂载时读取路径视图传递的卡片 ID，滚动并高亮对应卡片。
-   * 依赖 cards：当卡片列表加载完成后触发，触发后清除存储键避免重复高亮。
-   */
-  useEffect(() => {
-    const cardId = sessionStorage.getItem(PATH_CARD_ID_STORAGE_KEY);
-    if (!cardId) return;
-    if (cards.length === 0) return;
-    sessionStorage.removeItem(PATH_CARD_ID_STORAGE_KEY);
-    setHighlightedCardId(cardId);
-    const element = document.getElementById(`card-${cardId}`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-    highlightTimerRef.current = setTimeout(() => setHighlightedCardId(null), HIGHLIGHT_TIMEOUT_MS);
-  }, [cards]);
-
-  /**
-   * 点击 Roadmap 节点后滚动并高亮对应卡片。
-   * @param {string} cardId - 卡片 ID
-   */
-  function handleRoadmapNodeClick(cardId) {
-    setHighlightedCardId(cardId);
-    const element = document.getElementById(`card-${cardId}`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-    highlightTimerRef.current = setTimeout(() => setHighlightedCardId(null), HIGHLIGHT_TIMEOUT_MS);
-  }
-
-  /**
-   * 切换 Feed 分组的折叠状态。
-   * @param {string} type - 卡片类型
-   */
-  function toggleGroup(type) {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(type)) next.delete(type);
-      else next.add(type);
-      return next;
-    });
-  }
-
-  /**
-   * 切换单张提议卡片的选中状态。
-   * @param {number} index - 提议卡片索引
-   */
-  function toggleProposedCard(index) {
-    setProposedCardSelections((prev) => {
-      const next = new Set(prev);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return next;
-    });
-  }
-
-  /**
-   * 采纳选中的提议卡片，调用后端 API 正式落库。
-   */
-  async function acceptProposedCards() {
-    const messageId = assistantAnswer?.messageId;
-    if (!messageId || acceptingCards) return;
-    const selectedIndices = Array.from(proposedCardSelections).sort((a, b) => a - b);
-    if (selectedIndices.length === 0) return;
-    setAcceptingCards(true);
-    setAcceptError('');
-    try {
-      const result = await api.post(`/api/messages/${messageId}/accept-cards`, { selectedIndices });
-      if (onCardsAccepted) onCardsAccepted(result.cards ?? [], result.message);
-    } catch {
-      setAcceptError(t('detail.proposedCardsAcceptFailed'));
-    } finally {
-      setAcceptingCards(false);
-    }
-  }
-
-  /**
-   * 忽略全部提议卡片，清除本地选中状态。
-   */
-  function dismissProposedCards() {
-    setProposedCardSelections(new Set());
-    if (onCardsAccepted) onCardsAccepted([], { id: assistantAnswer?.messageId });
-  }
 
   /**
    * 渲染单张知识卡片。
@@ -390,34 +320,6 @@ export default function DetailView({
       </article>
     );
   }
-
-  async function extractEntitiesAction() {
-    if (!selectedWorkspaceId || extracting) return;
-    setExtracting(true);
-    setEntityError('');
-    try {
-      const payload = await api.post(`/api/workspaces/${selectedWorkspaceId}/entities/extract`);
-      setEntities(payload.entities ?? []);
-    } catch (err) {
-      if (err instanceof ApiError && err.status > 0) {
-        setEntityError(err.serverMessage ?? t('detail.entityExtractFailed'));
-      } else {
-        setEntityError(t('detail.entityNetworkError'));
-      }
-    } finally {
-      setExtracting(false);
-    }
-  }
-
-  const ENTITY_TYPE_LABELS = {
-    person: 'detail.entityType.person',
-    organization: 'detail.entityType.organization',
-    concept: 'detail.entityType.concept',
-    tool: 'detail.entityType.tool',
-    place: 'detail.entityType.location',
-    event: 'detail.entityType.event',
-    other: 'detail.entityType.other',
-  };
 
   return (
     <section className={`page-grid detail-page ${layout.mode === 'floating' ? 'ai-chat-floating' : ''}`}>
@@ -841,16 +743,7 @@ export default function DetailView({
                 ) : (
                   <button
                     className="assistant-link-button cannot-answer-btn"
-                    onClick={() => {
-                      api.post('/api/cannot-answer-feedback', {
-                        workspaceId: selectedWorkspaceId,
-                        question: assistantAnswer.question ?? assistantQuestion,
-                      })
-                        .then(() => setCannotAnswerFeedbackSent(true))
-                        .catch(() => {
-                          // 反馈上报失败不影响核心功能，静默处理
-                        });
-                    }}
+                    onClick={() => void submitCannotAnswerFeedback()}
                     type="button"
                   >
                     {t('detail.cannotAnswer')}
