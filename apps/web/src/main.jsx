@@ -2,14 +2,11 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './i18n';
 import {
-  AlertCircle,
   AlertTriangle,
   Archive,
   BookOpen,
   Database,
   FolderOpen,
-  GitCompare,
-  Globe,
   Layers,
   Lightbulb,
   Map,
@@ -41,7 +38,6 @@ import WorkspaceView from './views/WorkspaceView';
 import DetailView from './views/DetailView';
 import LibraryView from './views/LibraryView';
 import SearchView from './views/SearchView';
-import GlobalView from './views/GlobalView';
 import KitView from './views/KitView';
 import WorkflowView from './views/WorkflowView';
 import ArtifactView from './views/ArtifactView';
@@ -609,7 +605,6 @@ function App() {
   };
 
   const navItems = [
-    { key: 'global', label: t('nav.global'), icon: Globe, group: 'core' },
     { key: 'workspace', label: t('nav.workspace'), icon: Database, group: 'core' },
     { key: 'detail', label: t('nav.detail'), icon: Layers, group: 'core' },
     { key: 'library', label: t('nav.library'), icon: FolderOpen, group: 'core' },
@@ -617,10 +612,8 @@ function App() {
     { key: 'chat', label: t('nav.chat'), icon: MessageCircle, group: 'core' },
     { key: 'insights', label: t('nav.insights'), icon: Lightbulb, group: 'insight' },
     { key: 'assets', label: t('nav.assets'), icon: Layers, group: 'insight' },
-    { key: 'compare', label: t('nav.compare'), icon: GitCompare, group: 'insight' },
     { key: 'path', label: t('nav.path'), icon: Map, group: 'insight' },
     { key: 'archive', label: t('nav.archive'), icon: Archive, group: 'tools' },
-    { key: 'conflicts', label: t('nav.conflicts'), icon: AlertCircle, group: 'tools' },
     { key: 'weread', label: t('nav.weread'), icon: BookOpen, group: 'tools' },
     { key: 'settings', label: t('nav.settings'), icon: Settings, group: 'tools' },
   ];
@@ -730,7 +723,6 @@ function App() {
         <div className="canvas">
           {apiStatus === 'offline' && <SystemNotice status="offline" />}
           {view === 'workspace' && <WorkspaceView activity={activity} apiStatus={apiStatus} isSubmitting={isSubmitting} materials={materials} query={query} selectedWorkspaceId={selectedWorkspaceId} setQuery={setQuery} setView={go} submit={submit} onViewMaterialDetail={handleViewMaterialDetail} browserAiStatus={browserAiStatus} />}
-          {view === 'global' && <GlobalView setView={go} />}
           {view === 'detail' && (
             <DetailView
               apiStatus={apiStatus}
