@@ -802,6 +802,7 @@ export interface RelatedSuggestionsResult {
  *  - material_parse 资料解析
  *  - card_edit 卡片编辑
  *  - conflict_resolve 冲突解决
+ *  - active_suggestion_sent 主动提议下发（P0.3 约束引擎追踪用）
  * @author fxbin
  */
 export type AgentAction =
@@ -812,7 +813,8 @@ export type AgentAction =
   | 'knowledge_intake'
   | 'material_parse'
   | 'card_edit'
-  | 'conflict_resolve';
+  | 'conflict_resolve'
+  | 'active_suggestion_sent';
 
 /**
  * Agent 行为日志记录（P10-5）。
@@ -1345,6 +1347,15 @@ export interface OrchestratorDecision {
   constraintsReason: string;
   /** 建议的后续行动（催化剂/导航员模式下有值） */
   suggestedAction: string;
+  /**
+   * 当前模式下应注入到 systemPrompt 的活跃提议列表。
+   *
+   * P0.2 引入：让 catalyst/navigator 模式拿到具体证据（盲区术语、
+   * 复习卡片 id、主题权重等），从而生成有据可依的追问和建议。
+   * mirror 模式恒为空数组。
+   * @author fxbin
+   */
+  activeProposals: AgentProposal[];
   /** 决策时间戳 */
   decidedAt: string;
 }

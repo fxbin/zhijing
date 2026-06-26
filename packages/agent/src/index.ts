@@ -34,3 +34,13 @@ export {
   NAVIGATOR_BEHAVIOR_PROMPT,
 } from './orchestrator-integration.js';
 export type { OrchestratedAgentOptions } from './orchestrator-integration.js';
+
+export {
+  AGENT_ROLE_CONFIGS,
+  selectAgentRole,
+  createRoleBasedAgent,
+  STRUCTURED_AGENT_PROMPT,
+  CONVERSATION_AGENT_PROMPT,
+  PROBE_AGENT_PROMPT,
+} from './multi-agent-orchestrator.js';
+export type { AgentRole, AgentRoleConfig, MultiAgentOptions } from './multi-agent-orchestrator.js';

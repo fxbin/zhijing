@@ -165,6 +165,8 @@
   "chat.noWorkspaces": "还没有工作区，请先创建一个",
   "chat.openArtifact": "打开产物",
   "chat.selectWorkspace": "选择工作区开始对话",
+  "chat.skepticChallenge": "质疑追问方向",
+  "chat.skepticChallengeMessage": "我质疑你的追问方向。请重新评估：你的追问是否基于我当前的真实认知缺口？还是有更值得追问的盲区？",
   "chat.starterPrompt.actionList": "帮我把这些资料整理成一个行动清单。",
   "chat.starterPrompt.keyConcepts": "这个工作区最重要的三个概念是什么？",
   "chat.starterPrompt.missingSources": "有哪些内容还缺少可靠来源？",

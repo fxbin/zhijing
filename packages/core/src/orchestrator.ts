@@ -49,6 +49,9 @@ const AGGREGATE_SIGNAL_LIMIT = 20;
 
 /**
  * 默认体验约束配置，对应「对用户注意力的尊重」这一最高约束。
+ *
+ * P0.3 升级：这组常量即为 v1.1 §2.4 设计的 agent-constraints 配置入口，
+ * 不引入 YAML 解析依赖（符合 KISS 原则）。调整约束只需修改此常量。
  */
 export const DEFAULT_EXPERIENCE_CONSTRAINTS: ExperienceConstraints = {
   maxDailyActiveSuggestions: 3,
@@ -57,6 +60,23 @@ export const DEFAULT_EXPERIENCE_CONSTRAINTS: ExperienceConstraints = {
   neverClaimKnowledgeWithoutSource: true,
   alwaysOfferSkepticMode: true,
 };
+
+/**
+ * 主动提议历史摘要，供约束引擎评估频率与间隔。
+ *
+ * P0.3 引入：从 agent_action_log 查询当日已下发的 active_suggestion_sent 记录，
+ * 配合前端传递的 isWriting 标志，让 evaluateConstraints 能完整评估 5 条体验约束。
+ *
+ * @author fxbin
+ */
+export interface SuggestionHistory {
+  /** 今日已下发的主动提议次数（基于本地时区当日 00:00 起算） */
+  todayCount: number;
+  /** 上次主动提议下发时间戳（ISO 字符串）；无记录时为 null */
+  lastSuggestionAt: string | null;
+  /** 用户当前是否正在编辑（前端基于输入框焦点/未发送文本判定） */
+  isWriting: boolean;
+}
 
 /**
  * 将信号强度字符串转为数字评分。
@@ -169,14 +189,19 @@ export function selectMode(aggregate: AttentionAggregate): { mode: OrchestratorM
 /**
  * 评估体验约束是否允许当前模式下的主动行为。
  *
- * P0.1 阶段仅做基础检查：
- * - mirror 模式始终通过（不主动提议）
- * - catalyst/navigator 模式检查提议类型是否为空
- * - 完整的时间间隔和频率追踪留到 P0.3 实现
+ * P0.3 升级：从基础检查升级为完整 5 约束评估——
+ * 1. neverInterruptDuringWriting：用户正在编辑时永远不下发主动提议
+ * 2. maxDailyActiveSuggestions：今日已下发次数不得超过上限
+ * 3. minIntervalBetweenSuggestionsMs：距上次下发间隔不得小于最小间隔
+ * 4. neverClaimKnowledgeWithoutSource：无来源支撑的提议类型不得下发
+ * 5. alwaysOfferSkepticMode：catalyst 模式必须可提供质疑入口（前端 UI 保证，此处只记日志不阻塞）
+ *
+ * mirror 模式始终通过（不主动提议，无需评估约束）。
  *
  * @param mode - 当前选中的模式
  * @param aggregate - 信号聚合摘要
  * @param constraints - 体验约束配置
+ * @param history - 主动提议历史摘要（P0.3 新增）
  * @returns 约束评估结果（通过/未通过 + 原因）
  * @author fxbin
  */
@@ -184,6 +209,7 @@ export function evaluateConstraints(
   mode: OrchestratorMode,
   aggregate: AttentionAggregate,
   constraints: ExperienceConstraints,
+  history: SuggestionHistory = { todayCount: 0, lastSuggestionAt: null, isWriting: false },
 ): { passed: boolean; reason: string } {
   if (mode === 'mirror') {
     return { passed: true, reason: '' };
@@ -194,6 +220,34 @@ export function evaluateConstraints(
       passed: false,
       reason: '当前无可用提议，主动行为无内容可展示',
     };
+  }
+
+  if (constraints.neverInterruptDuringWriting && history.isWriting) {
+    return {
+      passed: false,
+      reason: '用户正在编辑，约束禁止打断',
+    };
+  }
+
+  if (history.todayCount >= constraints.maxDailyActiveSuggestions) {
+    return {
+      passed: false,
+      reason: `今日已下发 ${history.todayCount} 次主动提议，达到每日上限 ${constraints.maxDailyActiveSuggestions}`,
+    };
+  }
+
+  if (history.lastSuggestionAt) {
+    const lastTime = new Date(history.lastSuggestionAt).getTime();
+    const now = Date.now();
+    const elapsed = now - lastTime;
+    if (elapsed < constraints.minIntervalBetweenSuggestionsMs) {
+      const remainMs = constraints.minIntervalBetweenSuggestionsMs - elapsed;
+      const remainMin = Math.ceil(remainMs / (60 * 1000));
+      return {
+        passed: false,
+        reason: `距上次主动提议仅 ${Math.floor(elapsed / (60 * 1000))} 分钟，需间隔 ${Math.floor(constraints.minIntervalBetweenSuggestionsMs / (60 * 1000))} 分钟（剩余 ${remainMin} 分钟）`,
+      };
+    }
   }
 
   if (constraints.neverClaimKnowledgeWithoutSource && !aggregate.hasBlindSpot && !aggregate.hasRecallReview) {
@@ -233,14 +287,63 @@ function buildSuggestedAction(mode: OrchestratorMode, aggregate: AttentionAggreg
 }
 
 /**
+ * 催化剂模式应注入的提议类型；用于从全量 proposals 中筛选当前模式的活跃提议。
+ *
+ * 催化剂聚焦认知引导：盲区补充用于追问「为何忽略这片」，
+ * 重复思考用于追问「是否需要换角度」。
+ */
+const CATALYST_PROPOSAL_TYPES: ReadonlySet<AgentProposal['type']> = new Set([
+  'blind_spot',
+  'repeated_thinking',
+]);
+
+/**
+ * 导航员模式应注入的提议类型；用于从全量 proposals 中筛选当前模式的活跃提议。
+ *
+ * 导航员聚焦行动建议：复习卡片、主题探索、工作区涌现都是
+ * 用户可立即执行的下一步行动。
+ */
+const NAVIGATOR_PROPOSAL_TYPES: ReadonlySet<AgentProposal['type']> = new Set([
+  'recall_review',
+  'topic_explore',
+  'workspace_emergence',
+]);
+
+/**
+ * 根据模式从全量提议中筛选当前模式的活跃提议。
+ *
+ * - mirror：恒为空数组（镜子模式不主动提议，无需注入证据）
+ * - catalyst：盲区补充 + 重复思考（用于苏格拉底追问）
+ * - navigator：复习建议 + 主题探索 + 工作区涌现（用于行动建议）
+ *
+ * @param mode - 当前编排模式
+ * @param proposals - 全量提议列表
+ * @returns 当前模式下应注入到 systemPrompt 的活跃提议
+ * @author fxbin
+ */
+export function filterActiveProposals(
+  mode: OrchestratorMode,
+  proposals: AgentProposal[],
+): AgentProposal[] {
+  if (mode === 'mirror') return [];
+  const allowed = mode === 'catalyst' ? CATALYST_PROPOSAL_TYPES : NAVIGATOR_PROPOSAL_TYPES;
+  return proposals.filter((proposal) => allowed.has(proposal.type));
+}
+
+/**
  * 构建完整的编排决策（纯逻辑入口，不访问 repository）。
  *
  * 调用方负责传入注意力信号和 Agent 提议数据，
- * 本函数完成聚合 → 模式选择 → 约束评估 → 决策构建的完整链路。
+ * 本函数完成聚合 → 模式选择 → 约束评估 → 活跃提议筛选 → 决策构建的完整链路。
+ *
+ * P0.3 升级：新增 history 参数，让约束引擎能评估频率/间隔/编辑态。
+ * 约束未通过时，activeProposals 强制为空数组，mode 仍保留以供日志诊断，
+ * 调用方应基于 constraintsPassed 决定是否真正下发主动提议。
  *
  * @param signals - 注意力信号列表
  * @param proposals - Agent 主动提议列表
  * @param constraints - 体验约束配置（可选，默认使用 DEFAULT_EXPERIENCE_CONSTRAINTS）
+ * @param history - 主动提议历史摘要（可选，默认空历史即无限制）
  * @returns 完整的编排决策
  * @author fxbin
  */
@@ -248,10 +351,12 @@ export function buildOrchestratorDecisionFromData(
   signals: AttentionSignal[],
   proposals: AgentProposal[],
   constraints: ExperienceConstraints = DEFAULT_EXPERIENCE_CONSTRAINTS,
+  history: SuggestionHistory = { todayCount: 0, lastSuggestionAt: null, isWriting: false },
 ): OrchestratorDecision {
   const aggregate = aggregateAttentionSignals(signals, proposals);
   const { mode, reason } = selectMode(aggregate);
-  const constraintResult = evaluateConstraints(mode, aggregate, constraints);
+  const constraintResult = evaluateConstraints(mode, aggregate, constraints, history);
+  const activeProposals = constraintResult.passed ? filterActiveProposals(mode, proposals) : [];
   const suggestedAction = constraintResult.passed ? buildSuggestedAction(mode, aggregate) : '';
 
   return {
@@ -261,6 +366,269 @@ export function buildOrchestratorDecisionFromData(
     constraintsPassed: constraintResult.passed,
     constraintsReason: constraintResult.reason,
     suggestedAction,
+    activeProposals,
+    decidedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * 用户意图分类标签。
+ *
+ * P0.4 前置拦截器使用：基于用户消息文本做规则意图识别，
+ * 识别结果用于动态调整编排模式，而非依赖流开始前的静态 decision。
+ *
+ * - skeptic：用户在质疑 Agent 的追问方向，应回到被动响应
+ * - request_advice：用户主动请求建议或下一步行动
+ * - request_probe：用户主动请求追问或盲区识别
+ * - neutral：无明确意图信号，沿用 baseDecision
+ *
+ * @author fxbin
+ */
+export type UserIntent = 'skeptic' | 'request_advice' | 'request_probe' | 'neutral';
+
+/**
+ * 质疑/拒绝信号关键词。
+ *
+ * 命中时强制切换到 mirror 模式：
+ * 用户在质疑 Agent 的追问方向是否合理，应立即回到被动响应，不再追问。
+ */
+const SKEPTIC_KEYWORDS: readonly string[] = [
+  '质疑', '方向不对', '追问方向', '为什么这么问', '别追问', '不要追问',
+  '你问的不对', '问错了', '换个方向', '回到正题', '直接回答',
+];
+
+/**
+ * 请求建议关键词。
+ *
+ * 命中时倾向切换到 navigator 模式：
+ * 用户主动请求建议、下一步行动、复习推荐等。
+ */
+const REQUEST_ADVICE_KEYWORDS: readonly string[] = [
+  '建议', '下一步', '怎么复习', '还有什么', '推荐', '该怎么', '应该做什么',
+  '接下来', '行动', '怎么做', '如何安排',
+];
+
+/**
+ * 请求追问关键词。
+ *
+ * 命中时倾向切换到 catalyst 模式：
+ * 用户主动请求盲区识别、追问引导、自我反思。
+ */
+const REQUEST_PROBE_KEYWORDS: readonly string[] = [
+  '我哪里没想到', '盲区', '思考盲点', '帮我追问', '引导我', '我漏了什么',
+  '认知缺口', '反思', '元认知', '我没考虑到',
+];
+
+/**
+ * 对用户消息做规则意图识别。
+ *
+ * P0.4 前置拦截器的核心：基于关键词匹配识别用户意图，
+ * 不引入 LLM（KISS 原则，避免成本与延迟）。
+ *
+ * 识别优先级：skeptic > request_probe > request_advice > neutral
+ * （质疑信号优先级最高，确保用户拒绝时立即回到被动响应）。
+ *
+ * @param message - 用户当前消息文本
+ * @returns 意图分类标签
+ * @author fxbin
+ */
+export function classifyUserIntent(message: string): UserIntent {
+  const text = message.trim();
+  if (text.length === 0) return 'neutral';
+
+  for (const keyword of SKEPTIC_KEYWORDS) {
+    if (text.includes(keyword)) return 'skeptic';
+  }
+  for (const keyword of REQUEST_PROBE_KEYWORDS) {
+    if (text.includes(keyword)) return 'request_probe';
+  }
+  for (const keyword of REQUEST_ADVICE_KEYWORDS) {
+    if (text.includes(keyword)) return 'request_advice';
+  }
+  return 'neutral';
+}
+
+/**
+ * 前置拦截器：根据用户消息意图动态调整编排决策。
+ *
+ * P0.4 核心入口：在 Agent 处理用户消息之前调用，
+ * 基于规则意图识别调整 baseDecision.mode，让编排模式能随对话上下文实时变化，
+ * 而非流开始前一次性决定。
+ *
+ * 拦截规则：
+ * 1. skeptic → 强制 mirror，清空 activeProposals（用户拒绝追问，立即回到被动响应）
+ * 2. request_advice → 切换到 navigator（若 baseDecision 非 navigator 且有可用提议）
+ * 3. request_probe → 切换到 catalyst（若 baseDecision 非 catalyst 且有可用提议）
+ * 4. neutral → 沿用 baseDecision，不调整
+ *
+ * 拦截后的 decision.reason 会附加「由前置拦截器从 X 调整为 Y」的说明，
+ * 便于日志审计与前端 mode_update 事件展示。
+ *
+ * 注意：拦截器不重新评估约束引擎，约束未通过时即使意图命中也不切换到主动模式，
+ * 避免绕过体验约束。mirror 是被动模式，无约束限制，skeptic 意图始终生效。
+ *
+ * @param message - 用户当前消息文本
+ * @param baseDecision - 流开始前由 buildOrchestratorDecision 产出的基础决策
+ * @param allProposals - 当前可用的全量 Agent 提议列表（用于切换主动模式时重新过滤）
+ * @returns 拦截后的最终决策（可能是 baseDecision 原样，也可能是调整后的新决策）
+ * @author fxbin
+ */
+export function preInterceptUserMessage(
+  message: string,
+  baseDecision: OrchestratorDecision,
+  allProposals: AgentProposal[],
+): OrchestratorDecision {
+  const intent = classifyUserIntent(message);
+
+  if (intent === 'neutral') {
+    return baseDecision;
+  }
+
+  if (intent === 'skeptic') {
+    if (baseDecision.mode === 'mirror') {
+      return baseDecision;
+    }
+    return {
+      ...baseDecision,
+      mode: 'mirror',
+      reason: `用户消息触发质疑信号，由前置拦截器从 ${baseDecision.mode} 调整为 mirror`,
+      activeProposals: [],
+      suggestedAction: '',
+      decidedAt: new Date().toISOString(),
+    };
+  }
+
+  if (!baseDecision.constraintsPassed) {
+    return baseDecision;
+  }
+
+  const targetMode: OrchestratorMode = intent === 'request_advice' ? 'navigator' : 'catalyst';
+  if (baseDecision.mode === targetMode) {
+    return baseDecision;
+  }
+
+  const proposalsForMode = filterActiveProposals(targetMode, allProposals);
+  if (proposalsForMode.length === 0) {
+    return baseDecision;
+  }
+
+  return {
+    ...baseDecision,
+    mode: targetMode,
+    reason: `用户消息触发 ${intent === 'request_advice' ? '请求建议' : '请求追问'} 信号，由前置拦截器从 ${baseDecision.mode} 调整为 ${targetMode}`,
+    activeProposals: proposalsForMode,
+    suggestedAction: buildSuggestedAction(targetMode, baseDecision.aggregate),
+    decidedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * 流中工具调用结果摘要。
+ *
+ * P0.5 流中实时模式切换使用：Agent 每轮工具调用完成后，
+ * 基于工具名称和结果文本做规则意图识别，动态调整编排模式。
+ *
+ * @author fxbin
+ */
+export interface ToolCallSummary {
+  /** 工具名称（search_cards / search_materials / get_workspace_summary） */
+  toolName: string;
+  /** 工具是否返回错误 */
+  isError: boolean;
+  /** 工具结果文本摘要（已截断） */
+  resultText: string;
+}
+
+/**
+ * 空结果标识关键词，用于判断检索工具是否返回了有效内容。
+ *
+ * 当工具结果文本包含这些关键词时，判定为空结果（认知缺口信号）。
+ */
+const EMPTY_RESULT_INDICATORS: readonly string[] = [
+  '没有找到', '无结果', '未找到', 'no results', '[]', '暂无',
+];
+
+/**
+ * 基于工具调用结果做流中意图识别。
+ *
+ * P0.5 核心逻辑：在 Agent 多轮工具调用过程中（turn_end 后），
+ * 基于工具结果识别认知缺口，动态调整编排模式。
+ *
+ * 识别规则：
+ * - search_cards / search_materials 返回空 → request_probe（有盲区，适合催化剂追问）
+ * - get_workspace_summary 返回卡片数 > 阈值 → request_advice（可建议复习，适合导航员）
+ * - 默认 → neutral（不调整）
+ *
+ * @param toolCalls - 本轮所有工具调用结果摘要
+ * @returns 意图分类标签
+ * @author fxbin
+ */
+export function classifyToolResultIntent(toolCalls: ToolCallSummary[]): UserIntent {
+  if (toolCalls.length === 0) return 'neutral';
+
+  for (const call of toolCalls) {
+    if (call.isError) continue;
+    const lowerText = call.resultText.toLowerCase();
+    const isEmpty = EMPTY_RESULT_INDICATORS.some((indicator) => lowerText.includes(indicator.toLowerCase()))
+      || call.resultText.trim().length === 0;
+
+    if ((call.toolName === 'search_cards' || call.toolName === 'search_materials') && isEmpty) {
+      return 'request_probe';
+    }
+  }
+
+  return 'neutral';
+}
+
+/**
+ * 流中拦截器：基于工具调用结果动态调整编排决策。
+ *
+ * P0.5 入口：在 Agent 每轮 turn_end 后调用，
+ * 基于本轮工具结果做意图识别，若模式变化则发送 mode_update 通知前端。
+ *
+ * 与 preInterceptUserMessage 的差异：
+ * - preInterceptUserMessage 在 Agent 处理消息前执行（基于用户消息文本）
+ * - preInterceptInStream 在 Agent 工具调用后执行（基于工具结果）
+ * - 流中拦截产出的决策是「建议」，当前轮 Agent 已按原 systemPrompt 运行，
+ *   mode_update 通知前端展示新模式，下一轮对话时前置拦截器会使用更新后的上下文
+ *
+ * @param toolCalls - 本轮所有工具调用结果摘要
+ * @param currentDecision - 当前生效的编排决策
+ * @param allProposals - 当前可用的全量 Agent 提议列表
+ * @returns 拦截后的决策（可能是原决策，也可能是调整后的新决策）
+ * @author fxbin
+ */
+export function preInterceptInStream(
+  toolCalls: ToolCallSummary[],
+  currentDecision: OrchestratorDecision,
+  allProposals: AgentProposal[],
+): OrchestratorDecision {
+  const intent = classifyToolResultIntent(toolCalls);
+
+  if (intent === 'neutral') {
+    return currentDecision;
+  }
+
+  if (!currentDecision.constraintsPassed) {
+    return currentDecision;
+  }
+
+  const targetMode: OrchestratorMode = intent === 'request_advice' ? 'navigator' : 'catalyst';
+  if (currentDecision.mode === targetMode) {
+    return currentDecision;
+  }
+
+  const proposalsForMode = filterActiveProposals(targetMode, allProposals);
+  if (proposalsForMode.length === 0) {
+    return currentDecision;
+  }
+
+  return {
+    ...currentDecision,
+    mode: targetMode,
+    reason: `流中工具结果触发 ${intent === 'request_advice' ? '请求建议' : '认知缺口'} 信号，由流中拦截器从 ${currentDecision.mode} 调整为 ${targetMode}`,
+    activeProposals: proposalsForMode,
+    suggestedAction: buildSuggestedAction(targetMode, currentDecision.aggregate),
     decidedAt: new Date().toISOString(),
   };
 }

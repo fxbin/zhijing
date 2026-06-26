@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Database,
+  HelpCircle,
   History,
   Loader2,
   Send,
@@ -47,6 +48,7 @@ const DOCK_STORAGE_KEY = 'zhijing-chat-dock';
  * @param {boolean} [props.isStreaming=false] - 流式对话运行态
  * @param {() => void} [props.onClearChat] - 清空流式对话回调
  * @param {() => void} [props.onAbortStream] - 中断当前流式对话回调
+ * @param {string} [props.orchestratorMode=''] - 当前编排模式英文标识（mirror/catalyst/navigator）
  * @param {(artifact: object, meta?: object) => void} props.onOpenArtifact - 打开产物回调
  * @param {(workspaceId: string) => void} [props.onSelectWorkspace] - 选择工作区回调
  * @param {(newCards: object[], updatedMessage: object) => void} [props.onCardsAccepted] - 提议卡片采纳成功回调
@@ -66,6 +68,9 @@ export default function GlobalChatDock({
   onStreamAsk,
   chatMessages = [],
   isStreaming = false,
+  orchestratorModeLabel = '',
+  orchestratorMode = '',
+  orchestratorReason = '',
   onClearChat,
   onAbortStream,
   onOpenArtifact,
@@ -184,6 +189,14 @@ export default function GlobalChatDock({
               <span>{detail.title}</span>
             </button>
             <span className="global-chat-dock-stats">
+              {orchestratorModeLabel && (
+                <span
+                  className={`chat-mode-badge chat-mode-${orchestratorModeLabel}`}
+                  title={orchestratorReason}
+                >
+                  {orchestratorModeLabel}
+                </span>
+              )}
               {t('chat.metric.sources')} {materials.length} · {t('chat.metric.cards')} {cards.length}
             </span>
           </div>
@@ -203,6 +216,17 @@ export default function GlobalChatDock({
                 onOpenArtifact={onOpenArtifact}
               />
             ))}
+            {orchestratorMode === 'catalyst' && hasStreamPath && threadItems.length > 0 && canAsk && (
+              <button
+                className="chat-message-skeptic"
+                type="button"
+                onClick={() => onStreamAsk(t('chat.skepticChallengeMessage'))}
+                title={t('chat.skepticChallenge')}
+              >
+                <HelpCircle size={14} />
+                {t('chat.skepticChallenge')}
+              </button>
+            )}
             {threadItems.length > 0 && !isStreaming && !isAsking && onClearChat && (
               <button className="chat-message-clear" type="button" onClick={onClearChat}>
                 {t('chat.clearHistory')}

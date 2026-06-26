@@ -71,6 +71,10 @@ import {
   applyRecallDecay,
   generateAgentProposals,
   buildOrchestratorDecision,
+  buildInterceptedDecision,
+  interceptInStream,
+  classifyUserIntent,
+  recordSuggestionSent,
   acceptProposedCards,
   listAgentActionLogs,
   listInspectTables,
@@ -102,7 +106,7 @@ import {
   updateModelProviderProfile,
   getActiveAgentCredentials,
 } from '@zhijing/core';
-import { createWorkspaceAgent } from '@zhijing/agent';
+import { createWorkspaceAgent, createOrchestratedWorkspaceAgent, selectAgentRole } from '@zhijing/agent';
 import type { Agent } from '@earendil-works/pi-agent-core';
 import { serializeAgentEvent, type AgentStreamEvent } from './agent-stream.js';
 import type {
@@ -1046,7 +1050,7 @@ export function buildApi() {
     }
   });
 
-  app.post<{ Params: { id: string }; Body: { message?: string; sessionId?: string } }>(
+  app.post<{ Params: { id: string }; Body: { message?: string; sessionId?: string; isWriting?: boolean } }>(
     '/api/workspaces/:id/agent/stream',
     async (request, reply) => {
       const message = typeof request.body?.message === 'string' ? request.body.message.trim() : '';
@@ -1056,6 +1060,7 @@ export function buildApi() {
       const sessionId = typeof request.body?.sessionId === 'string' && request.body.sessionId.length > 0
         ? request.body.sessionId
         : `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const isWriting = Boolean(request.body?.isWriting);
 
       reply.hijack();
       reply.raw.writeHead(200, {
@@ -1074,24 +1079,126 @@ export function buildApi() {
       };
 
       let agent: ReturnType<typeof createWorkspaceAgent>;
+      let orchestratorMode: string | null = null;
+      let orchestratorReason = '';
+      let orchestratorSuggestedAction = '';
+      let decisionPassed = true;
+      let activeProposals: import('@zhijing/shared').AgentProposal[] = [];
+      let decision: import('@zhijing/shared').OrchestratorDecision | null = null;
       try {
         const credentials = getActiveAgentCredentials();
-        agent = createWorkspaceAgent(request.params.id, {
+
+        try {
+          decision = buildInterceptedDecision(request.params.id, message, { isWriting });
+          orchestratorMode = decision.mode;
+          orchestratorReason = decision.reason;
+          orchestratorSuggestedAction = decision.suggestedAction;
+          decisionPassed = decision.constraintsPassed;
+          activeProposals = decision.activeProposals;
+          if (!decisionPassed) {
+            request.log.info(
+              { mode: decision.mode, reason: decision.constraintsReason },
+              'orchestrator constraints blocked active suggestion',
+            );
+          }
+          if (decision.reason.includes('前置拦截器')) {
+            request.log.info(
+              { mode: decision.mode, reason: decision.reason },
+              'orchestrator pre-interceptor adjusted mode',
+            );
+          }
+        } catch (decisionError) {
+          request.log.warn({ decisionError }, 'orchestrator decision failed, fallback to mirror');
+        }
+
+        const agentOptions: import('@zhijing/agent').WorkspaceAgentOptions = {
           provider: credentials.provider,
           modelId: credentials.model,
           apiKey: credentials.apiKey,
-        });
+        };
+
+        const intent = classifyUserIntent(message);
+        const selectedRole = selectAgentRole(intent);
+        if (intent !== 'neutral') {
+          request.log.info({ intent, role: selectedRole }, 'orchestrator role selected by user intent');
+        }
+
+        const supportsRoleOverride = credentials.provider === 'deepseek';
+        const role = supportsRoleOverride ? selectedRole : undefined;
+        if (selectedRole && !supportsRoleOverride) {
+          request.log.info(
+            { provider: credentials.provider },
+            'role model override skipped: provider mismatch, fallback to user-configured model',
+          );
+        }
+
+        agent = decision
+          ? createOrchestratedWorkspaceAgent(request.params.id, { ...agentOptions, decision, role })
+          : createWorkspaceAgent(request.params.id, agentOptions);
       } catch (error) {
         send({ type: 'error', message: error instanceof Error ? error.message : 'Agent init failed.' });
         reply.raw.end();
         return;
       }
 
+      if (orchestratorMode) {
+        send({
+          type: 'mode_update',
+          mode: orchestratorMode,
+          reason: orchestratorReason,
+          suggestedAction: orchestratorSuggestedAction,
+        });
+      }
+
+      if (decisionPassed && orchestratorMode && orchestratorMode !== 'mirror' && activeProposals.length > 0) {
+        try {
+          recordSuggestionSent(request.params.id, orchestratorMode, activeProposals);
+        } catch (recordError) {
+          request.log.warn({ recordError }, 'record suggestion sent failed');
+        }
+      }
+
       activeAgents.set(sessionId, agent);
 
+      let currentDecision: import('@zhijing/shared').OrchestratorDecision | null = decision;
+      let turnToolCalls: import('@zhijing/core').ToolCallSummary[] = [];
+
       const unsubscribe = agent.subscribe((event) => {
-        for (const wire of serializeAgentEvent(event)) {
+        const wireEvents = serializeAgentEvent(event);
+
+        for (const wire of wireEvents) {
           send(wire);
+
+          if (wire.type === 'tool_end') {
+            turnToolCalls.push({
+              toolName: wire.toolName,
+              isError: wire.isError,
+              resultText: wire.result,
+            });
+          }
+
+          if (wire.type === 'turn_end' && currentDecision && turnToolCalls.length > 0) {
+            try {
+              const intercepted = interceptInStream(request.params.id, turnToolCalls, currentDecision);
+              if (intercepted.mode !== currentDecision.mode) {
+                currentDecision = intercepted;
+                orchestratorMode = intercepted.mode;
+                send({
+                  type: 'mode_update',
+                  mode: intercepted.mode,
+                  reason: intercepted.reason,
+                  suggestedAction: intercepted.suggestedAction,
+                });
+                request.log.info(
+                  { mode: intercepted.mode, reason: intercepted.reason },
+                  'stream interceptor adjusted mode mid-stream',
+                );
+              }
+            } catch (streamInterceptError) {
+              request.log.warn({ streamInterceptError }, 'stream interceptor failed');
+            }
+            turnToolCalls = [];
+          }
         }
       });
 

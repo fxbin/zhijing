@@ -9026,12 +9026,42 @@ button { cursor: pointer; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .global-chat-dock-stats {
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
   color: var(--muted);
-  flex-shrink: 0;
+}
+
+.chat-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: help;
+  user-select: none;
+}
+
+.chat-mode-镜子 {
+  background: rgba(107, 142, 127, 0.16);
+  color: var(--sage);
+}
+
+.chat-mode-催化剂 {
+  background: rgba(212, 148, 74, 0.16);
+  color: #D4944A;
+}
+
+.chat-mode-导航员 {
+  background: rgba(44, 95, 141, 0.16);
+  color: var(--primary);
 }
 
 .global-chat-dock .chat-conversation {
@@ -9274,6 +9304,27 @@ button { cursor: pointer; }
 .chat-stream-clear:hover,
 .chat-message-clear:hover {
   background: var(--color-bg-soft, rgba(0, 0, 0, 0.04));
+}
+
+.chat-message-skeptic {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #D4944A;
+  background: rgba(212, 148, 74, 0.08);
+  border: 1px solid rgba(212, 148, 74, 0.32);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.chat-message-skeptic:hover {
+  background: rgba(212, 148, 74, 0.16);
+  border-color: rgba(212, 148, 74, 0.48);
 }
 
 .chat-stream-reasoning,

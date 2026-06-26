@@ -220,6 +220,9 @@ function App() {
     askWorkspace,
     chatMessages,
     isStreaming,
+    orchestratorModeLabel,
+    orchestratorMode,
+    orchestratorReason,
     streamAsk,
     abortStream,
     clearChat,
@@ -758,6 +761,9 @@ function App() {
         onAbortStream={abortStream}
         chatMessages={chatMessages}
         isStreaming={isStreaming}
+        orchestratorModeLabel={orchestratorModeLabel}
+        orchestratorMode={orchestratorMode}
+        orchestratorReason={orchestratorReason}
         onClearChat={clearChat}
         onOpenArtifact={openArtifact}
         onSelectWorkspace={(id) => {

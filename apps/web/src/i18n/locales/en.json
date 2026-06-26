@@ -165,6 +165,8 @@
   "chat.noWorkspaces": "No workspace yet, create one first",
   "chat.openArtifact": "Open Artifact",
   "chat.selectWorkspace": "Select a workspace to start chatting",
+  "chat.skepticChallenge": "Challenge direction",
+  "chat.skepticChallengeMessage": "I challenge your questioning direction. Please re-evaluate: is your question based on my actual cognitive gap, or is there a more worthwhile blind spot to pursue?",
   "chat.starterPrompt.actionList": "Help me organize these materials into an action list.",
   "chat.starterPrompt.keyConcepts": "What are the three most important concepts in this workspace?",
   "chat.starterPrompt.missingSources": "Which contents still lack reliable sources?",

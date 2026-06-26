@@ -71,8 +71,23 @@ const STREAM_EVENT = Object.freeze({
   MESSAGE_END: 'message_end',
   TOOL_START: 'tool_start',
   TOOL_END: 'tool_end',
+  MODE_UPDATE: 'mode_update',
   ERROR: 'error',
 });
+
+/**
+ * 编排模式中文标签映射，供 ChatDock 头部展示。
+ */
+const ORCHESTRATOR_MODE_LABELS = Object.freeze({
+  mirror: '镜子',
+  catalyst: '催化剂',
+  navigator: '导航员',
+});
+
+/**
+ * 默认编排模式（无 mode_update 事件时使用）。
+ */
+const DEFAULT_ORCHESTRATOR_MODE = 'mirror';
 
 /**
  * 流式对话消息角色常量。
@@ -169,6 +184,8 @@ function removeChatFromStorage(workspaceId) {
 export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }) {
   const [chatMessages, setChatMessages] = useState(INITIAL_CHAT_MESSAGES);
   const [isStreaming, setIsStreaming] = useState(INITIAL_IS_STREAMING);
+  const [orchestratorMode, setOrchestratorMode] = useState(DEFAULT_ORCHESTRATOR_MODE);
+  const [orchestratorReason, setOrchestratorReason] = useState('');
   const currentSessionId = useRef(null);
   const streamWorkspaceId = useRef(null);
   const abortControllerRef = useRef(null);
@@ -254,6 +271,9 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     streamWorkspaceId.current = selectedWorkspaceId;
     abortControllerRef.current = controller;
 
+    setOrchestratorMode(DEFAULT_ORCHESTRATOR_MODE);
+    setOrchestratorReason('');
+
     const userTimestamp = Date.now();
     const assistantTimestamp = userTimestamp + 1;
     const userMessage = {
@@ -279,7 +299,7 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     try {
       response = await api.raw(`${WORKSPACES_PATH}/${selectedWorkspaceId}/agent/stream`, {
         method: 'POST',
-        body: { message: trimmed, sessionId },
+        body: { message: trimmed, sessionId, isWriting: false },
         timeout: STREAM_TIMEOUT_DISABLED,
         signal: controller.signal,
       });
@@ -373,6 +393,12 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
           }
 
           switch (event.type) {
+            case STREAM_EVENT.MODE_UPDATE:
+              if (typeof event.mode === 'string' && event.mode.length > 0) {
+                setOrchestratorMode(event.mode);
+                setOrchestratorReason(typeof event.reason === 'string' ? event.reason : '');
+              }
+              break;
             case STREAM_EVENT.REASONING_DELTA:
               if (typeof event.delta === 'string' && event.delta.length > 0) {
                 assistantReasoning += event.delta;
@@ -470,6 +496,8 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     abortCurrentStream();
     setChatMessages(INITIAL_CHAT_MESSAGES);
     setIsStreaming(INITIAL_IS_STREAMING);
+    setOrchestratorMode(DEFAULT_ORCHESTRATOR_MODE);
+    setOrchestratorReason('');
     const targetWorkspaceId = streamWorkspaceId.current ?? selectedWorkspaceId;
     removeChatFromStorage(targetWorkspaceId);
   }, [selectedWorkspaceId]);
@@ -477,6 +505,9 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
   return {
     chatMessages,
     isStreaming,
+    orchestratorMode,
+    orchestratorReason,
+    orchestratorModeLabel: ORCHESTRATOR_MODE_LABELS[orchestratorMode] ?? ORCHESTRATOR_MODE_LABELS.mirror,
     streamAsk,
     abortStream,
     clearChat,

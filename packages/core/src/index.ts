@@ -10369,10 +10369,99 @@ export {
   selectMode,
   evaluateConstraints,
   buildOrchestratorDecisionFromData,
+  preInterceptUserMessage,
+  preInterceptInStream,
+  classifyUserIntent,
+  classifyToolResultIntent,
   DEFAULT_EXPERIENCE_CONSTRAINTS,
 } from './orchestrator.js';
+export type { SuggestionHistory, UserIntent, ToolCallSummary } from './orchestrator.js';
 
 import { buildOrchestratorDecisionFromData as buildDecisionFromData } from './orchestrator.js';
+import { preInterceptUserMessage as preIntercept } from './orchestrator.js';
+import { preInterceptInStream as preInterceptStream } from './orchestrator.js';
+import type { SuggestionHistory } from './orchestrator.js';
+
+/**
+ * 主动提议下发行为的 action 标识，用于 agent_action_log 追踪。
+ */
+const ACTIVE_SUGGESTION_SENT_ACTION = 'active_suggestion_sent';
+
+/**
+ * 查询主动提议历史的最大条数（覆盖每日上限 ×7 天足够）。
+ */
+const SUGGESTION_HISTORY_QUERY_LIMIT = 50;
+
+/**
+ * 编排 Agent 决策入口的选项。
+ */
+interface BuildOrchestratorDecisionOptions {
+  /** 用户当前是否正在编辑（前端基于输入框焦点/未发送文本判定） */
+  isWriting?: boolean;
+}
+
+/**
+ * 从 agent_action_log 查询指定工作区的主动提议历史摘要。
+ *
+ * 查询最近 N 条 active_suggestion_sent 记录，在 JS 层过滤今日计数
+ * 并取最近一条时间戳，避免扩展 Repository 接口（KISS 原则）。
+ *
+ * @param workspaceId - 工作区 ID
+ * @param isWriting - 用户当前是否正在编辑
+ * @returns 主动提议历史摘要
+ * @author fxbin
+ */
+function getSuggestionHistory(workspaceId: string, isWriting: boolean): SuggestionHistory {
+  const result = listAgentActionLogs({
+    workspaceId,
+    action: ACTIVE_SUGGESTION_SENT_ACTION,
+    limit: SUGGESTION_HISTORY_QUERY_LIMIT,
+  });
+  const logs = result.logs;
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayStartMs = todayStart.getTime();
+
+  let todayCount = 0;
+  for (const entry of logs) {
+    const entryMs = new Date(entry.createdAt).getTime();
+    if (Number.isFinite(entryMs) && entryMs >= todayStartMs) {
+      todayCount += 1;
+    }
+  }
+
+  const lastSuggestionAt = logs.length > 0 ? logs[0].createdAt : null;
+
+  return { todayCount, lastSuggestionAt, isWriting };
+}
+
+/**
+ * 记录一次主动提议下发到 agent_action_log。
+ *
+ * 在 catalyst/navigator 模式实际下发主动提议后调用，
+ * 供后续约束引擎评估频率/间隔。
+ *
+ * @param workspaceId - 工作区 ID
+ * @param mode - 当前编排模式
+ * @param proposals - 本次下发的活跃提议列表
+ * @author fxbin
+ */
+export function recordSuggestionSent(
+  workspaceId: string,
+  mode: string,
+  proposals: import('@zhijing/shared').AgentProposal[],
+): void {
+  logAgentAction(ACTIVE_SUGGESTION_SENT_ACTION, {
+    workspaceId,
+    input: {
+      mode,
+      proposalCount: proposals.length,
+      proposalTypes: proposals.map((item) => item.type),
+    },
+    durationMs: 0,
+  });
+}
 
 /**
  * 编排 Agent 决策入口（薄包装）。
@@ -10380,12 +10469,69 @@ import { buildOrchestratorDecisionFromData as buildDecisionFromData } from './or
  * 从 repository 获取注意力信号和 Agent 提议，
  * 委托 orchestrator.ts 纯逻辑层完成聚合 → 模式选择 → 约束评估的完整链路。
  *
+ * P0.3 升级：接收 isWriting 选项，并查询主动提议历史传入约束引擎，
+ * 让 evaluateConstraints 能完整评估 5 条体验约束。
+ *
  * @param workspaceId - 工作区 ID
+ * @param options - 决策选项（isWriting 控制编辑态约束）
  * @returns 编排决策结果
  * @author fxbin
  */
-export function buildOrchestratorDecision(workspaceId: string): import('@zhijing/shared').OrchestratorDecision {
+export function buildOrchestratorDecision(
+  workspaceId: string,
+  options: BuildOrchestratorDecisionOptions = {},
+): import('@zhijing/shared').OrchestratorDecision {
   const signals = repository.listAttentionSignals(workspaceId, 20);
   const proposalReport = generateAgentProposals();
-  return buildDecisionFromData(signals, proposalReport.proposals);
+  const history = getSuggestionHistory(workspaceId, Boolean(options.isWriting));
+  return buildDecisionFromData(signals, proposalReport.proposals, undefined, history);
+}
+
+/**
+ * 编排 Agent 决策 + 前置拦截器一体化入口（P0.4）。
+ *
+ * 调用链路：
+ * 1. buildOrchestratorDecision 产出基础决策（信号聚合 + 约束评估）
+ * 2. preInterceptUserMessage 根据用户消息意图动态调整模式
+ *
+ * 调用方（api/agent/stream 路由）只需调用本函数即可拿到最终生效的决策，
+ * 无需分别调用 buildOrchestratorDecision 和 preInterceptUserMessage。
+ *
+ * @param workspaceId - 工作区 ID
+ * @param message - 用户当前消息文本（用于意图识别）
+ * @param options - 决策选项（isWriting 控制编辑态约束）
+ * @returns 拦截后的最终编排决策
+ * @author fxbin
+ */
+export function buildInterceptedDecision(
+  workspaceId: string,
+  message: string,
+  options: BuildOrchestratorDecisionOptions = {},
+): import('@zhijing/shared').OrchestratorDecision {
+  const signals = repository.listAttentionSignals(workspaceId, 20);
+  const proposalReport = generateAgentProposals();
+  const history = getSuggestionHistory(workspaceId, Boolean(options.isWriting));
+  const baseDecision = buildDecisionFromData(signals, proposalReport.proposals, undefined, history);
+  return preIntercept(message, baseDecision, proposalReport.proposals);
+}
+
+/**
+ * 流中拦截器入口（P0.5）。
+ *
+ * 在 Agent 每轮 turn_end 后调用，基于本轮工具结果动态调整编排模式。
+ * 若模式变化，调用方应发送 mode_update 事件通知前端。
+ *
+ * @param workspaceId - 工作区 ID
+ * @param toolCalls - 本轮所有工具调用结果摘要
+ * @param currentDecision - 当前生效的编排决策
+ * @returns 拦截后的决策（可能是原决策，也可能是调整后的新决策）
+ * @author fxbin
+ */
+export function interceptInStream(
+  workspaceId: string,
+  toolCalls: import('./orchestrator.js').ToolCallSummary[],
+  currentDecision: import('@zhijing/shared').OrchestratorDecision,
+): import('@zhijing/shared').OrchestratorDecision {
+  const proposalReport = generateAgentProposals();
+  return preInterceptStream(toolCalls, currentDecision, proposalReport.proposals);
 }
