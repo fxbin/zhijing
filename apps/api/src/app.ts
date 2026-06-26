@@ -701,10 +701,11 @@ export function buildApi() {
   app.get('/api/agent-proposals', async () => generateAgentProposals());
 
   app.get<{
-    Querystring: { type?: string; claimStatus?: string; query?: string; limit?: string };
+    Querystring: { workspaceId?: string; type?: string; claimStatus?: string; query?: string; limit?: string };
   }>('/api/cards', async (request) => {
-    const { type, claimStatus, query, limit } = request.query;
+    const { workspaceId, type, claimStatus, query, limit } = request.query;
     return listAllCards({
+      workspaceId: workspaceId || undefined,
       type: type as KnowledgeCard['type'] | undefined,
       claimStatus: claimStatus as KnowledgeCard['claimStatus'] | undefined,
       query: query ?? undefined,

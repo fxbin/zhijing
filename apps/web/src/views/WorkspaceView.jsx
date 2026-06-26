@@ -4,7 +4,7 @@
  */
 
 import { Sparkles, SquareArrowOutUpRight } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import EmptyState from '../components/EmptyState';
 import RecentImports from '../components/RecentImports';
@@ -25,10 +25,11 @@ import api from '../utils/api';
  * @param {(view: string) => void} props.setView - 切换视图
  * @param {() => void} props.submit - 提交回调
  * @param {(material: object) => void} props.onViewMaterialDetail - 查看材料详情回调
+ * @param {string} props.currentWorkspaceTitle - 当前选中工作区标题（用于卡片抽屉显示）
  * @param {string} props.browserAiStatus - 浏览器内置 AI 模型状态
  * @returns {JSX.Element} 工作区视图
  */
-export default function WorkspaceView({ activity, apiStatus, isSubmitting, materials, query, selectedWorkspaceId, setQuery, setView, submit, onViewMaterialDetail, onOpenCardDetail, browserAiStatus = 'checking' }) {
+export default function WorkspaceView({ activity, apiStatus, isSubmitting, materials, query, selectedWorkspaceId, setQuery, setView, submit, onViewMaterialDetail, onOpenCardDetail, currentWorkspaceTitle = '', browserAiStatus = 'checking' }) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
   const hasContent = materials.length > 0;
@@ -36,37 +37,28 @@ export default function WorkspaceView({ activity, apiStatus, isSubmitting, mater
   const [recentCards, setRecentCards] = useState([]);
 
   useEffect(() => {
-    if (offline) return undefined;
+    if (offline || !selectedWorkspaceId) {
+      setRecentCards([]);
+      return undefined;
+    }
     let ignore = false;
     const loadRecentCards = async () => {
       try {
-        const payload = await api.get('/api/insights');
-        if (!ignore && payload?.recentCards?.length) {
-          setRecentCards(payload.recentCards);
+        const payload = await api.get(`/api/cards?workspaceId=${encodeURIComponent(selectedWorkspaceId)}&limit=8`);
+        if (!ignore && Array.isArray(payload)) {
+          const sorted = payload
+            .slice()
+            .sort((a, b) => (b.updatedAt ?? b.createdAt ?? '').localeCompare(a.updatedAt ?? a.createdAt ?? ''))
+            .slice(0, 8);
+          setRecentCards(sorted);
         }
       } catch {
-        ;
+        if (!ignore) setRecentCards([]);
       }
     };
     loadRecentCards();
     return () => { ignore = true; };
-  }, [offline]);
-
-  const recentCardsByWorkspace = useMemo(() => {
-    const groups = new Map();
-    for (const card of recentCards) {
-      const key = card.workspaceId || 'default';
-      if (!groups.has(key)) {
-        groups.set(key, {
-          workspaceId: key,
-          workspaceTitle: card.workspaceTitle || key,
-          cards: [],
-        });
-      }
-      groups.get(key).cards.push(card);
-    }
-    return Array.from(groups.values());
-  }, [recentCards]);
+  }, [offline, selectedWorkspaceId]);
 
   return (
     <>
@@ -105,30 +97,25 @@ export default function WorkspaceView({ activity, apiStatus, isSubmitting, mater
         {!isSubmitting && activity && <p className="activity">{activity}</p>}
       </section>
 
-      {recentCardsByWorkspace.length > 0 && (
+      {recentCards.length > 0 && (
         <section className="workspace-recent-cards">
           <div className="workspace-recent-cards-head">
             <h3>{t('cardDetail.recentCardsTitle')}</h3>
-            <small>{t('cardDetail.recentCardsHint')}</small>
+            <small>{currentWorkspaceTitle ? `${currentWorkspaceTitle} · ${recentCards.length}` : t('cardDetail.recentCardsHint')}</small>
           </div>
-          {recentCardsByWorkspace.map((group) => (
-            <div key={group.workspaceId} className="workspace-recent-cards-group">
-              <h4 className="workspace-recent-cards-group-title">{group.workspaceTitle}</h4>
-              <div className="workspace-recent-cards-list">
-                {group.cards.map((card) => (
-                  <button
-                    key={card.id}
-                    type="button"
-                    className={`workspace-recent-card-item type-${card.type ?? 'general'}`}
-                    onClick={() => onOpenCardDetail?.(card, group.workspaceTitle)}
-                  >
-                    <span className="workspace-recent-card-type">{cardTypeLabel(card.type)}</span>
-                    <span className="workspace-recent-card-title">{card.title}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
+          <div className="workspace-recent-cards-list">
+            {recentCards.map((card) => (
+              <button
+                key={card.id}
+                type="button"
+                className={`workspace-recent-card-item type-${card.type ?? 'general'}`}
+                onClick={() => onOpenCardDetail?.(card, currentWorkspaceTitle)}
+              >
+                <span className="workspace-recent-card-type">{cardTypeLabel(card.type)}</span>
+                <span className="workspace-recent-card-title">{card.title}</span>
+              </button>
+            ))}
+          </div>
         </section>
       )}
 

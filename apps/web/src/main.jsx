@@ -583,7 +583,7 @@ function App() {
         <div className="canvas">
           {apiStatus === 'offline' && <SystemNotice status="offline" />}
           <Suspense fallback={<div className="view-loading">{t('common.loading')}</div>}>
-          {view === 'workspace' && <WorkspaceView activity={activity} apiStatus={apiStatus} isSubmitting={isSubmitting} materials={materials} query={query} selectedWorkspaceId={selectedWorkspaceId} setQuery={setQuery} setView={go} submit={submit} onViewMaterialDetail={handleViewMaterialDetail} onOpenCardDetail={openCardDrawer} browserAiStatus={browserAiStatus} />}
+          {view === 'workspace' && <WorkspaceView activity={activity} apiStatus={apiStatus} isSubmitting={isSubmitting} materials={materials} query={query} selectedWorkspaceId={selectedWorkspaceId} setQuery={setQuery} setView={go} submit={submit} onViewMaterialDetail={handleViewMaterialDetail} onOpenCardDetail={openCardDrawer} currentWorkspaceTitle={workspaceDetail?.title || ''} browserAiStatus={browserAiStatus} />}
           {view === 'detail' && (
             <DetailView
               analytics={workspaceAnalytics}

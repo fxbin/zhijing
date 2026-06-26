@@ -7393,20 +7393,21 @@ export function listMaterials(options: ListMaterialsOptions = {}) {
 }
 
 /**
- * 全局卡片查询：不限定知识库，返回全库卡片。
- * 支持按类型、溯源状态、关键词筛选，用于全局视图。
+ * 全局卡片查询：可限定知识库，返回全库或指定工作区卡片。
+ * 支持按类型、溯源状态、关键词筛选，用于全局视图或单工作区视图。
  * @param options 筛选条件
  * @returns 卡片列表
  * @author fxbin
  */
 export function listAllCards(options: {
+  workspaceId?: string;
   type?: KnowledgeCard['type'];
   claimStatus?: KnowledgeCard['claimStatus'];
   query?: string;
   limit?: number;
 } = {}) {
   const query = options.query?.trim().toLowerCase();
-  const cards = repository.listCards(undefined);
+  const cards = repository.listCards(options.workspaceId);
   const filtered = cards.filter((card) => {
     if (options.type && card.type !== options.type) return false;
     if (options.claimStatus && card.claimStatus !== options.claimStatus) return false;
