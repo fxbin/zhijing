@@ -113,7 +113,7 @@ function formatTime(isoString) {
  */
 export default function AgentUsageDashboard({ workspaceId } = {}) {
   const { t } = useTranslation();
-  const { summary, records, routes, comparison, loading, error, refresh } = useAgentUsage({ workspaceId });
+  const { summary, records, routes, comparison, advisor, loading, error, refresh } = useAgentUsage({ workspaceId });
 
   const maxTaskCost = useMemo(() => {
     if (!summary?.byTaskType?.length) return 0;
@@ -315,6 +315,58 @@ export default function AgentUsageDashboard({ workspaceId } = {}) {
                 </span>
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {advisor && advisor.advisor && advisor.advisor.items && advisor.advisor.items.length > 0 && (
+        <section className="agent-usage-card">
+          <div className="agent-usage-card-head">
+            <h3>{t('agentUsage.advisorTitle')}</h3>
+            <p className="agent-usage-card-desc">{t('agentUsage.advisorDesc')}</p>
+            {advisor.advisor.changedCount > 0 && (
+              <span className="agent-usage-badge advisor-changed">
+                {t('agentUsage.advisorChanged', { count: advisor.advisor.changedCount })}
+              </span>
+            )}
+          </div>
+          <p className="agent-usage-advisor-meta">
+            {t('agentUsage.advisorMeta', {
+              samples: advisor.advisor.totalSamples,
+              minSamples: advisor.advisor.minSamples,
+              success: advisor.advisor.weights.success,
+              speed: advisor.advisor.weights.speed,
+              cost: advisor.advisor.weights.cost,
+            })}
+          </p>
+          <div className="agent-usage-records-table">
+            <div className="agent-usage-records-row agent-usage-records-header agent-usage-advisor-header">
+              <span>{t('agentUsage.colAdvisorTaskType')}</span>
+              <span>{t('agentUsage.colAdvisorCurrent')}</span>
+              <span>{t('agentUsage.colAdvisorSuggested')}</span>
+              <span>{t('agentUsage.colAdvisorScore')}</span>
+              <span>{t('agentUsage.colAdvisorReason')}</span>
+            </div>
+            {advisor.advisor.items.map((item) => {
+              const bestScore = item.scores.find((s) => s.provider === item.suggestedProvider && s.score !== null);
+              return (
+                <div
+                  key={item.taskType}
+                  className={`agent-usage-records-row agent-usage-advisor-row ${item.changed ? 'advisor-row-changed' : ''}`}
+                >
+                  <span className="cell-task">{TASK_TYPE_LABELS[item.taskType] ?? item.taskType}</span>
+                  <span className="cell-provider">{item.currentProvider || '-'}</span>
+                  <span className={`cell-provider ${item.changed ? 'advisor-suggest-change' : ''}`}>
+                    {item.suggestedProvider ?? '-'}
+                    {item.suggestedModel ? ` / ${item.suggestedModel}` : ''}
+                  </span>
+                  <span className="cell-cost">
+                    {bestScore && bestScore.score !== null ? bestScore.score.toFixed(4) : '-'}
+                  </span>
+                  <span className="cell-reason">{item.reason}</span>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}

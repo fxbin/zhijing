@@ -1671,6 +1671,79 @@ export interface AgentUsageComparison {
 }
 
 /**
+ * 路由建议单项评分。
+ *
+ * 对单个 (taskType, provider) 组合的综合评分，基于 agent_usage 历史数据计算。
+ * 评分公式：综合评分 = 成功率 × W_SUCCESS + 速度分 × W_SPEED - 成本分 × W_COST
+ * 各权重常量定义在 pi-runtime/advisor.ts 中，默认成功率优先。
+ *
+ * - samples 不足 MIN_SAMPLES 时返回 score=null，调用方应跳过该候选
+ * - 速度分 = avgDurationMs > 0 ? 1 / avgDurationMs : 0（归一化到 0~1）
+ * - 成本分 = avgCostUsd（直接相减，成本越低评分越高）
+ *
+ * @author fxbin
+ */
+export interface RouteAdvisorScore {
+  taskType: AgentTaskType;
+  provider: string;
+  model: string;
+  totalCalls: number;
+  successRate: number;
+  avgDurationMs: number;
+  avgCostUsd: number;
+  /** 综合评分；样本不足时为 null */
+  score: number | null;
+  /** 评分计算使用的权重快照，供透明化展示 */
+  weights: { success: number; speed: number; cost: number };
+}
+
+/**
+ * 路由建议单项结果。
+ *
+ * 对单个 taskType 给出评分对比 + 建议的 primary provider。
+ * 建议仅当存在 score 非 null 的候选时才有效；否则保留 DEFAULT_ROUTES。
+ *
+ * @author fxbin
+ */
+export interface RouteAdvisorItem {
+  taskType: AgentTaskType;
+  /** 所有候选的评分明细（含当前路由 provider 与其他可用 provider） */
+  scores: RouteAdvisorScore[];
+  /** 建议的 primary provider；无有效候选时为 null */
+  suggestedProvider: string | null;
+  /** 建议的 model；与 suggestedProvider 配对 */
+  suggestedModel: string | null;
+  /** 建议理由，供透明化展示与 decision_log 记录 */
+  reason: string;
+  /** 当前 DEFAULT_ROUTES 中该 taskType 的 primary provider，用于对比 */
+  currentProvider: string;
+  /** 建议是否与当前路由不同 */
+  changed: boolean;
+}
+
+/**
+ * 路由建议聚合结果。
+ *
+ * 由 buildRouteAdvisor 对所有 taskType 评分后聚合返回，
+ * 供 API 层透明化展示与运维决策参考。
+ * 本结果仅作为建议，不会自动覆盖 ACTIVE_ROUTES。
+ *
+ * @author fxbin
+ */
+export interface RouteAdvisorResult {
+  /** 评分权重快照 */
+  weights: { success: number; speed: number; cost: number };
+  /** 最小样本数阈值，低于此值的候选不参与建议 */
+  minSamples: number;
+  /** 各 taskType 的建议明细 */
+  items: RouteAdvisorItem[];
+  /** 建议发生变更的 taskType 数量（changed=true 的项数） */
+  changedCount: number;
+  /** 参与评分的 agent_usage 样本总数 */
+  totalSamples: number;
+}
+
+/**
  * 用户记忆作用域。
  *
  * user_memory 表用于存储跨工作区的用户偏好与画像，

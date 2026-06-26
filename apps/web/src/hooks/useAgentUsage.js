@@ -35,6 +35,11 @@ const USAGE_ROUTES_PATH = '/api/analytics/agent-usage/routes';
 const USAGE_COMPARE_PATH = '/api/analytics/agent-usage/compare';
 
 /**
+ * 路由建议（Route Advisor）接口路径。
+ */
+const USAGE_ADVISOR_PATH = '/api/analytics/agent-usage/advisor';
+
+/**
  * 默认拉取的记录条数。
  */
 const DEFAULT_RECORD_LIMIT = 50;
@@ -42,11 +47,12 @@ const DEFAULT_RECORD_LIMIT = 50;
 /**
  * 使用 Agent 调用成本追踪状态。
  *
- * 并行拉取四份数据：
+ * 并行拉取五份数据：
  * 1. summary：聚合摘要（总成本、按 taskType/provider 拆分）
  * 2. records：最近成本记录
  * 3. routes：当前生效的路由表（P2.3 透明化）
  * 4. comparison：Provider 成本对比（P2.3 策略优化）
+ * 5. advisor：路由建议（P2.3 阶段执行，基于历史数据的 provider 选择建议）
  *
  * @param {object} [options] - 可选配置
  * @param {string} [options.workspaceId] - 按工作区过滤；省略时查询全部工作区
@@ -55,6 +61,7 @@ const DEFAULT_RECORD_LIMIT = 50;
  *   - records: 最近成本记录数组
  *   - routes: 当前生效路由表 { routes, overriddenByEnv }
  *   - comparison: Provider 成本对比 { items }
+ *   - advisor: 路由建议 { advisor, currentRoutes, overriddenByEnv }
  *   - loading: 是否正在加载
  *   - error: 错误信息
  *   - refresh: 手动刷新函数
@@ -66,6 +73,7 @@ export function useAgentUsage(options = {}) {
   const [records, setRecords] = useState([]);
   const [routes, setRoutes] = useState(null);
   const [comparison, setComparison] = useState(null);
+  const [advisor, setAdvisor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -81,16 +89,18 @@ export function useAgentUsage(options = {}) {
         recordsParams.set('workspaceId', workspaceId);
       }
       const compareParams = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
-      const [summaryResult, recordsResult, routesResult, compareResult] = await Promise.all([
+      const [summaryResult, recordsResult, routesResult, compareResult, advisorResult] = await Promise.all([
         api.get(`${USAGE_SUMMARY_PATH}${summaryParams}`),
         api.get(`${USAGE_RECORDS_PATH}?${recordsParams.toString()}`),
         api.get(USAGE_ROUTES_PATH),
         api.get(`${USAGE_COMPARE_PATH}${compareParams}`),
+        api.get(`${USAGE_ADVISOR_PATH}${compareParams}`),
       ]);
       setSummary(summaryResult.summary ?? null);
       setRecords(recordsResult.records ?? []);
       setRoutes(routesResult ?? null);
       setComparison(compareResult.comparison ?? null);
+      setAdvisor(advisorResult ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载 Agent 成本数据失败');
     } finally {
@@ -107,6 +117,7 @@ export function useAgentUsage(options = {}) {
     records,
     routes,
     comparison,
+    advisor,
     loading,
     error,
     refresh: loadUsage,

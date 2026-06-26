@@ -13180,3 +13180,39 @@ button { cursor: pointer; }
   grid-template-columns: 120px 90px 100px 100px 100px;
 }
 
+.agent-usage-advisor-meta {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background: rgba(44, 95, 141, 0.06);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.agent-usage-advisor-header,
+.agent-usage-advisor-row {
+  grid-template-columns: 120px 130px 160px 90px 1fr;
+}
+
+.agent-usage-advisor-row.advisor-row-changed {
+  background: rgba(212, 148, 74, 0.08);
+}
+
+.agent-usage-advisor-row .advisor-suggest-change {
+  color: var(--question);
+  font-weight: 700;
+}
+
+.agent-usage-badge.advisor-changed {
+  background: rgba(212, 148, 74, 0.18);
+  color: var(--question);
+  border: 1px solid var(--question);
+}
+
+.agent-usage-advisor-row .cell-reason {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+

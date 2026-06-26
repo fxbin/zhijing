@@ -127,7 +127,7 @@ import {
   decideWorkspaceProposal,
 } from '@zhijing/core';
 import { startOrchestratorSession, type OrchestratorSession } from '@zhijing/agent';
-import { getActiveRoutes, isRoutesOverriddenByEnv } from '@zhijing/pi-runtime';
+import { getActiveRoutes, isRoutesOverriddenByEnv, buildRouteAdvisor } from '@zhijing/pi-runtime';
 import type {
   AddMapEdgeRequest,
   AssignMaterialRequest,
@@ -164,6 +164,7 @@ import type {
   CreateDecisionLogRequest,
   EvidenceFeedback,
   RejectedCardFeature,
+  RouteAdvisorResult,
 } from '@zhijing/shared';
 import {
   INTAKE_AUDIENCE_VALUES,
@@ -835,6 +836,41 @@ export function buildApi() {
       until: query.until,
     };
     return { comparison: compareAgentUsageRecords(usageQuery) };
+  });
+
+  /**
+   * 路由建议（Route Advisor）查询。
+   *
+   * 基于 agent_usage 历史数据计算各 taskType 的 provider 综合评分，
+   * 给出 primary provider 的建议（仅建议，不自动生效）。
+   * 运维通过 ZHIJING_PI_ROUTES_JSON 环境变量手动采纳建议。
+   */
+  app.get<{
+    Querystring: {
+      taskType?: string;
+      provider?: string;
+      since?: string;
+      until?: string;
+    };
+  }>('/api/analytics/agent-usage/advisor', async (request, reply) => {
+    const query = request.query;
+    if (query.taskType !== undefined && !AGENT_TASK_TYPE_SET.has(query.taskType)) {
+      return reply.code(400).send({ error: `Invalid taskType. Allowed: ${AGENT_TASK_TYPE_VALUES.join(', ')}` });
+    }
+    const usageQuery: AgentUsageQuery = {
+      taskType: query.taskType as AgentTaskType | undefined,
+      provider: query.provider,
+      since: query.since,
+      until: query.until,
+    };
+    const comparison = compareAgentUsageRecords(usageQuery);
+    const currentRoutes = getActiveRoutes();
+    const advisor: RouteAdvisorResult = buildRouteAdvisor(comparison.items, currentRoutes);
+    return {
+      advisor,
+      currentRoutes,
+      overriddenByEnv: isRoutesOverriddenByEnv(),
+    };
   });
 
   /**

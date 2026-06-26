@@ -427,6 +427,18 @@ export {
   isRoutesOverriddenByEnv,
   DEFAULT_ROUTES,
 } from './router.js';
+export {
+  buildRouteAdvisor,
+  scoreRouteCandidate,
+  buildAdvisorItem,
+  collectCandidates,
+  findCurrentPrimaryRoute,
+  ADVISOR_WEIGHT_SUCCESS,
+  ADVISOR_WEIGHT_SPEED,
+  ADVISOR_WEIGHT_COST,
+  ADVISOR_MIN_SAMPLES,
+  ADVISOR_WEIGHTS,
+} from './advisor.js';
 export type { ProviderRoute, RouteResolution, AgentTaskType, ProviderRole } from '@zhijing/shared';
 
 export {
