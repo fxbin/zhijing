@@ -177,6 +177,7 @@ export default function DetailView({
 
   const cards = detail.cards ?? [];
   const materials = detail.materials ?? [];
+  const [expandedCardId, setExpandedCardId] = useState(null);
 
   const {
     feedMode,
@@ -261,21 +262,38 @@ export default function DetailView({
    * @returns {JSX.Element}
    */
   function renderCard(card, extraClass = '') {
+    const cardKey = card.id ?? card.title;
+    const isExpanded = expandedCardId === cardKey;
+    const handleToggle = () => setExpandedCardId(isExpanded ? null : cardKey);
     return (
       <article
         id={`card-${card.id}`}
-        className={`knowledge-card type-${card.type ?? 'general'} ${highlightedCardId === card.id ? 'highlighted' : ''} ${extraClass}`}
-        key={card.id ?? card.title}
+        className={`knowledge-card type-${card.type ?? 'general'} ${highlightedCardId === card.id ? 'highlighted' : ''} ${extraClass} is-expandable${isExpanded ? ' is-expanded' : ''}`}
+        key={cardKey}
+        onClick={handleToggle}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleToggle();
+          }
+        }}
       >
         <div className="card-head">
           <span className="card-type-badge">{cardTypeLabel(card.type)}</span>
           {card.claimStatus === 'sourced' && (
             <span className="card-source-badge"><CheckCircle2 size={14} />{claimStatusLabel(card.claimStatus)}</span>
           )}
+          {isExpanded ? <ChevronUp size={16} className="card-chevron" /> : <ChevronDown size={16} className="card-chevron" />}
         </div>
         <h3>{card.title}</h3>
-        <p>{card.body}</p>
-        <footer>
+        {isExpanded ? (
+          <p className="card-body-full">{card.body}</p>
+        ) : (
+          <p>{card.body}</p>
+        )}
+        <footer onClick={(e) => e.stopPropagation()}>
           <span>{claimStatusLabel(card.claimStatus)} · {card.updatedAt ? formatDate(card.updatedAt) : t('detail.today')}</span>
           {card.claimStatus !== 'sourced' && (
             <button

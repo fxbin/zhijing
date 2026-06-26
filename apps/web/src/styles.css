@@ -2924,6 +2924,44 @@ button { cursor: pointer; }
   display: none;
 }
 
+.knowledge-card.is-expandable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.knowledge-card.is-expandable:hover {
+  border-color: var(--scholar);
+  box-shadow: 0 2px 8px rgba(44, 95, 141, 0.12);
+}
+
+.knowledge-card.is-expanded {
+  border-color: var(--scholar);
+  box-shadow: 0 2px 8px rgba(44, 95, 141, 0.1);
+}
+
+.knowledge-card .card-chevron {
+  margin-left: auto;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.knowledge-card .card-body-full {
+  color: var(--primary);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.knowledge-card.compact.is-expanded p,
+.knowledge-card.compact.is-expanded .card-body-full {
+  display: block;
+}
+
+.knowledge-card.compact.is-expanded footer {
+  display: flex;
+}
+
 .tabs {
   display: flex;
   flex-wrap: wrap;
