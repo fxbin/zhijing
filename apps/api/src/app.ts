@@ -106,9 +106,7 @@ import {
   updateModelProviderProfile,
   getActiveAgentCredentials,
 } from '@zhijing/core';
-import { createWorkspaceAgent, createOrchestratedWorkspaceAgent, createRoleBasedAgent, selectAgentRole, buildAuxiliaryProbePrompt, AUXILIARY_PROBE_MIN_TOOL_CALLS, AUXILIARY_PROBE_MAX_OUTPUT_LENGTH } from '@zhijing/agent';
-import type { Agent } from '@earendil-works/pi-agent-core';
-import { serializeAgentEvent, type AgentStreamEvent } from './agent-stream.js';
+import { startOrchestratorSession, type OrchestratorSession } from '@zhijing/agent';
 import type {
   AddMapEdgeRequest,
   AssignMaterialRequest,
@@ -132,6 +130,8 @@ import type {
   UpdateModelProviderProfileRequest,
   KnowledgeCard,
   MaterialRecord,
+  AgentStreamEvent,
+  OrchestratorDecision,
 } from '@zhijing/shared';
 import {
   INTAKE_AUDIENCE_VALUES,
@@ -172,15 +172,15 @@ export function buildApi() {
   ensureDefaultWorkspace();
 
   /**
-   * 运行中的 Agent 实例映射，key 为 sessionId。
+   * 运行中的编排会话映射，key 为 sessionId。
    *
    * 生命周期：
-   * - /agent/stream 创建 agent 后写入
-   * - /agent/abort 通过 sessionId 查找并调 agent.abort()
+   * - /agent/stream 创建 session 后写入
+   * - /agent/abort 通过 sessionId 查找并调 session.abort()
    * - stream 正常/异常结束后 finally 中删除
-   * - 客户端断开时 request.raw close 也会触发 abort，最终走 finally 清理
+   * - 客户端断开时 reply.raw close 触发 session.abort()，最终走 finally 清理
    */
-  const activeAgents = new Map<string, Agent>();
+  const activeAgents = new Map<string, OrchestratorSession>();
 
   app.get('/health', async () => ({
     ok: true,
@@ -1078,26 +1078,14 @@ export function buildApi() {
         }
       };
 
-      let agent: ReturnType<typeof createWorkspaceAgent>;
-      let orchestratorMode: string | null = null;
-      let orchestratorReason = '';
-      let orchestratorSuggestedAction = '';
-      let decisionPassed = true;
-      let activeProposals: import('@zhijing/shared').AgentProposal[] = [];
-      let decision: import('@zhijing/shared').OrchestratorDecision | null = null;
       let credentials: ReturnType<typeof getActiveAgentCredentials> | null = null;
-      let intent: string = 'neutral';
+      let decision: OrchestratorDecision | null = null;
       try {
         credentials = getActiveAgentCredentials();
 
         try {
           decision = buildInterceptedDecision(request.params.id, message, { isWriting });
-          orchestratorMode = decision.mode;
-          orchestratorReason = decision.reason;
-          orchestratorSuggestedAction = decision.suggestedAction;
-          decisionPassed = decision.constraintsPassed;
-          activeProposals = decision.activeProposals;
-          if (!decisionPassed) {
+          if (!decision.constraintsPassed) {
             request.log.info(
               { mode: decision.mode, reason: decision.constraintsReason },
               'orchestrator constraints blocked active suggestion',
@@ -1112,184 +1100,77 @@ export function buildApi() {
         } catch (decisionError) {
           request.log.warn({ decisionError }, 'orchestrator decision failed, fallback to mirror');
         }
-
-        const agentOptions: import('@zhijing/agent').WorkspaceAgentOptions = {
-          provider: credentials.provider,
-          modelId: credentials.model,
-          apiKey: credentials.apiKey,
-        };
-
-        intent = classifyUserIntent(message);
-        const selectedRole = selectAgentRole(intent);
-        if (intent !== 'neutral') {
-          request.log.info({ intent, role: selectedRole }, 'orchestrator role selected by user intent');
-        }
-
-        const supportsRoleOverride = credentials.provider === 'deepseek';
-        const role = supportsRoleOverride ? selectedRole : undefined;
-        if (selectedRole && !supportsRoleOverride) {
-          request.log.info(
-            { provider: credentials.provider },
-            'role model override skipped: provider mismatch, fallback to user-configured model',
-          );
-        }
-
-        agent = decision
-          ? createOrchestratedWorkspaceAgent(request.params.id, { ...agentOptions, decision, role })
-          : createWorkspaceAgent(request.params.id, agentOptions);
       } catch (error) {
         send({ type: 'error', message: error instanceof Error ? error.message : 'Agent init failed.' });
         reply.raw.end();
         return;
       }
 
-      if (orchestratorMode) {
+      if (!credentials) {
+        reply.raw.end();
+        return;
+      }
+
+      if (decision) {
         send({
           type: 'mode_update',
-          mode: orchestratorMode,
-          reason: orchestratorReason,
-          suggestedAction: orchestratorSuggestedAction,
+          mode: decision.mode,
+          reason: decision.reason,
+          suggestedAction: decision.suggestedAction,
         });
-      }
 
-      if (decisionPassed && orchestratorMode && orchestratorMode !== 'mirror' && activeProposals.length > 0) {
-        try {
-          recordSuggestionSent(request.params.id, orchestratorMode, activeProposals);
-        } catch (recordError) {
-          request.log.warn({ recordError }, 'record suggestion sent failed');
-        }
-      }
-
-      activeAgents.set(sessionId, agent);
-
-      let currentDecision: import('@zhijing/shared').OrchestratorDecision | null = decision;
-      let turnToolCalls: import('@zhijing/core').ToolCallSummary[] = [];
-      let mainAssistantText = '';
-      let mainToolCallCount = 0;
-
-      const unsubscribe = agent.subscribe((event) => {
-        const wireEvents = serializeAgentEvent(event);
-
-        for (const wire of wireEvents) {
-          send(wire);
-
-          if (wire.type === 'tool_end') {
-            turnToolCalls.push({
-              toolName: wire.toolName,
-              isError: wire.isError,
-              resultText: wire.result,
-            });
-            mainToolCallCount += 1;
-          }
-
-          if (wire.type === 'message_end' && typeof wire.text === 'string') {
-            mainAssistantText = wire.text;
-          }
-
-          if (wire.type === 'turn_end' && currentDecision && turnToolCalls.length > 0) {
-            try {
-              const intercepted = interceptInStream(request.params.id, turnToolCalls, currentDecision);
-              if (intercepted.mode !== currentDecision.mode) {
-                currentDecision = intercepted;
-                orchestratorMode = intercepted.mode;
-                send({
-                  type: 'mode_update',
-                  mode: intercepted.mode,
-                  reason: intercepted.reason,
-                  suggestedAction: intercepted.suggestedAction,
-                });
-                request.log.info(
-                  { mode: intercepted.mode, reason: intercepted.reason },
-                  'stream interceptor adjusted mode mid-stream',
-                );
-              }
-            } catch (streamInterceptError) {
-              request.log.warn({ streamInterceptError }, 'stream interceptor failed');
-            }
-            turnToolCalls = [];
+        if (decision.constraintsPassed && decision.mode !== 'mirror' && decision.activeProposals.length > 0) {
+          try {
+            recordSuggestionSent(request.params.id, decision.mode, decision.activeProposals);
+          } catch (recordError) {
+            request.log.warn({ recordError }, 'record suggestion sent failed');
           }
         }
-      });
+      }
+
+      const intent = classifyUserIntent(message);
+      if (intent !== 'neutral') {
+        request.log.info({ intent }, 'orchestrator intent classified');
+      }
+
+      const session = startOrchestratorSession(
+        {
+          workspaceId: request.params.id,
+          message,
+          intent,
+          decision,
+          credentials: {
+            provider: credentials.provider,
+            model: credentials.model,
+            apiKey: credentials.apiKey,
+          },
+          isWriting,
+        },
+        {
+          onEvent: send,
+          isWritable: () => !reply.raw.writableEnded,
+          onStreamIntercept: ({ mode, reason }) => {
+            request.log.info({ mode, reason }, 'stream interceptor adjusted mode mid-stream');
+          },
+          onWarn: (info, warnMessage) => {
+            request.log.warn(info, warnMessage);
+          },
+        },
+      );
+
+      activeAgents.set(sessionId, session);
 
       reply.raw.on('close', () => {
         if (!reply.raw.writableEnded) {
-          agent.abort();
+          session.abort();
         }
       });
 
       try {
-        await agent.prompt(message);
-        await agent.waitForIdle();
-        await runAuxiliaryProbeIfNeeded();
-      } catch (error) {
-        send({ type: 'error', message: error instanceof Error ? error.message : 'Agent run failed.' });
+        await session.done;
       } finally {
-        unsubscribe();
         activeAgents.delete(sessionId);
         reply.raw.end();
-      }
-
-      /**
-       * 主 Agent 完成后，按条件异步启动辅 probe Agent 做盲区检测。
-       *
-       * 触发条件（全部满足）：
-       * 1. 主 Agent 调过检索工具（mainToolCallCount >= AUXILIARY_PROBE_MIN_TOOL_CALLS）
-       * 2. 主 Agent 回答非空（mainAssistantText 有内容）
-       * 3. 用户意图不是 request_probe（用户已主动请求追问时，主 Agent 已是 probe 角色，无需辅 Agent）
-       * 4. 客户端未断开（reply.raw.writableEnded 为 false）
-       *
-       * 辅 Agent 输出通过 aux_start / aux_delta / aux_end 事件发送，
-       * 前端渲染为「可能还想知道」折叠区。
-       *
-       * 辅 Agent 失败不影响主流程，仅 log warn。
-       */
-      async function runAuxiliaryProbeIfNeeded() {
-        const shouldRunProbe = credentials !== null
-          && mainToolCallCount >= AUXILIARY_PROBE_MIN_TOOL_CALLS
-          && mainAssistantText.length > 0
-          && intent !== 'request_probe'
-          && !reply.raw.writableEnded;
-        if (!shouldRunProbe || !credentials) return;
-
-        try {
-          const probeAgent = createRoleBasedAgent(request.params.id, {
-            role: 'probe',
-            provider: credentials.provider,
-            modelId: credentials.model,
-            apiKey: credentials.apiKey,
-          });
-          const probePrompt = buildAuxiliaryProbePrompt(message, mainAssistantText);
-          let probeText = '';
-
-          send({ type: 'aux_start' });
-
-          const probeUnsubscribe = probeAgent.subscribe((probeEvent) => {
-            const probeWires = serializeAgentEvent(probeEvent);
-            for (const wire of probeWires) {
-              if (wire.type === 'message_delta' && typeof wire.delta === 'string') {
-                probeText += wire.delta;
-                send({ type: 'aux_delta', delta: wire.delta });
-              }
-              if (wire.type === 'message_end' && typeof wire.text === 'string') {
-                probeText = wire.text;
-              }
-            }
-          });
-
-          try {
-            await probeAgent.prompt(probePrompt);
-            await probeAgent.waitForIdle();
-            const finalText = probeText.length > AUXILIARY_PROBE_MAX_OUTPUT_LENGTH
-              ? `${probeText.slice(0, AUXILIARY_PROBE_MAX_OUTPUT_LENGTH)}…`
-              : probeText;
-            send({ type: 'aux_end', text: finalText });
-          } finally {
-            probeUnsubscribe();
-          }
-        } catch (probeError) {
-          request.log.warn({ probeError }, 'auxiliary probe agent failed');
-          send({ type: 'aux_end', text: '' });
-        }
       }
     },
   );
@@ -1301,12 +1182,12 @@ export function buildApi() {
       if (!sessionId) {
         return reply.code(400).send({ error: 'sessionId is required.' });
       }
-      const agent = activeAgents.get(sessionId);
-      if (!agent) {
+      const session = activeAgents.get(sessionId);
+      if (!session) {
         return reply.code(404).send({ error: 'Session not found or already ended.' });
       }
       try {
-        agent.abort();
+        session.abort();
       } catch (error) {
         request.log.warn({ error, sessionId }, 'agent abort failed');
       }

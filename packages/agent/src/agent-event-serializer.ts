@@ -1,14 +1,18 @@
 /**
  * Agent 事件流序列化模块。
  *
- * 将 pi-agent-core 的 AgentEvent 转换为前端可消费的紧凑 wire 事件，
- * 与 app.ts 路由层解耦，便于独立维护事件协议。
+ * 将 pi-agent-core 的 AgentEvent 转换为前端可消费的紧凑 wire 事件
+ * （AgentStreamEvent，类型契约定义在 @zhijing/shared）。
  *
- * @module agent-stream
+ * 从 apps/api/src/agent-stream.ts 迁入 agent 包（P1.3）：
+ * agent 编排层需要直接序列化事件，避免 api 层反向依赖。
+ *
+ * @module agent-event-serializer
  * @author fxbin
  */
 
 import type { AgentEvent, AgentMessage } from '@earendil-works/pi-agent-core';
+import type { AgentStreamEvent } from '@zhijing/shared';
 
 /**
  * 工具结果文本摘要的最大字符数，超过截断以控制 wire 体积。
@@ -50,34 +54,6 @@ function extractToolResultText(result: unknown): string {
     ? `${text.slice(0, TOOL_RESULT_PREVIEW_MAX_LENGTH)}…`
     : text;
 }
-
-/**
- * Agent 事件流前端 wire 格式（紧凑版）。
- *
- * 设计原则：
- * - 仅保留前端渲染所需字段，剔除 partial / history 等大体积数据
- * - 文本以 delta 增量传输（message_delta），message_end 携带最终完整文本
- * - reasoning 以 delta 增量传输（reasoning_delta），前端折叠展示
- * - tool 保留 id/name/args/isError + result 文本摘要，前端可展开查看
- * - mode_update 在 agent_start 后立即下发，前端显示当前编排模式与理由
- * - aux_* 系列承载辅 Agent（probe）输出，前端渲染为「可能还想知道」折叠区
- */
-export type AgentStreamEvent =
-  | { type: 'agent_start' }
-  | { type: 'agent_end' }
-  | { type: 'turn_start' }
-  | { type: 'turn_end' }
-  | { type: 'message_start' }
-  | { type: 'message_delta'; delta: string }
-  | { type: 'reasoning_delta'; delta: string }
-  | { type: 'message_end'; text: string }
-  | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
-  | { type: 'tool_end'; toolCallId: string; toolName: string; isError: boolean; result: string }
-  | { type: 'mode_update'; mode: string; reason: string; suggestedAction: string }
-  | { type: 'aux_start' }
-  | { type: 'aux_delta'; delta: string }
-  | { type: 'aux_end'; text: string }
-  | { type: 'error'; message: string };
 
 /**
  * 将 pi-agent-core 的 AgentEvent 转换为前端可消费的 wire 事件。

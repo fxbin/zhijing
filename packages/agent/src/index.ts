@@ -11,6 +11,8 @@
 export { createWorkspaceAgent, ZHIJING_AGENT_SYSTEM_PROMPT } from './agent-factory.js';
 export type { WorkspaceAgentOptions } from './agent-factory.js';
 
+export { serializeAgentEvent } from './agent-event-serializer.js';
+
 export {
   createWorkspaceTools,
   createSearchCardsTool,
@@ -47,3 +49,13 @@ export {
   buildAuxiliaryProbePrompt,
 } from './multi-agent-orchestrator.js';
 export type { AgentRole, AgentRoleConfig, MultiAgentOptions } from './multi-agent-orchestrator.js';
+
+export {
+  startOrchestratorSession,
+} from './orchestrator-session.js';
+export type {
+  OrchestratorCredentials,
+  OrchestratorRunContext,
+  OrchestratorRunCallbacks,
+  OrchestratorSession,
+} from './orchestrator-session.js';
