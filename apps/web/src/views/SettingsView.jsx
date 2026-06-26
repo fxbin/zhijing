@@ -27,6 +27,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useTaskStatusLabel, useTaskWorkflowLabel } from '../utils/i18nLabels';
 import { formatDateTime } from '../utils/material';
+import AgentUsageDashboard from '../components/AgentUsageDashboard';
 import {
   useSettingsProfile,
   KEY_SOURCE_KEYS,
@@ -137,6 +138,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     { key: 'profiles', label: t('settings.profiles'), icon: PlugZap },
     { key: 'weread', label: t('settings.weread.title'), icon: BookOpen },
     { key: 'transparency', label: t('settings.systemTransparency'), icon: BarChart3 },
+    { key: 'agentUsage', label: t('agentUsage.title'), icon: Cpu },
     { key: 'dataControls', label: t('settings.dataControls'), icon: Database },
     { key: 'kits', label: t('kit.title'), icon: Sparkles },
   ];
@@ -610,6 +612,19 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
             ) : (
               <p className="settings-note">{t('settings.loadingSystem')}</p>
             )}
+          </section>
+        )}
+
+        {activeSection === 'agentUsage' && (
+          <section className="settings-panel">
+            <div className="settings-panel-head">
+              <Cpu size={24} />
+              <div>
+                <h3>{t('agentUsage.title')}</h3>
+                <p>{t('agentUsage.subtitle')}</p>
+              </div>
+            </div>
+            <AgentUsageDashboard />
           </section>
         )}
 

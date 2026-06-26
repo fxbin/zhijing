@@ -12837,3 +12837,272 @@ button { cursor: pointer; }
   color: var(--muted);
   font-size: 14px;
 }
+
+.agent-usage-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.agent-usage-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.agent-usage-desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.agent-usage-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.agent-usage-refresh:hover {
+  border-color: var(--scholar);
+  color: var(--scholar);
+}
+
+.agent-usage-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 48px;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.agent-usage-loading .spin {
+  animation: spin 1.2s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.agent-usage-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.agent-usage-metric {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.agent-usage-metric svg {
+  color: var(--scholar);
+  flex-shrink: 0;
+}
+
+.agent-usage-metric.metric-cost svg {
+  color: var(--sage);
+}
+
+.agent-usage-metric strong {
+  display: block;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.agent-usage-metric span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.agent-usage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.agent-usage-card {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.agent-usage-card-head {
+  margin-bottom: 12px;
+}
+
+.agent-usage-card-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.agent-usage-bar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agent-usage-bar-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-usage-bar-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.agent-usage-bar-label {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.agent-usage-bar-value {
+  color: var(--muted);
+}
+
+.agent-usage-bar-track {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.agent-usage-bar-fill {
+  height: 100%;
+  background: var(--scholar);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.agent-usage-bar-fill-alt {
+  background: var(--sage);
+}
+
+.agent-usage-records-card {
+  width: 100%;
+}
+
+.agent-usage-records-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.agent-usage-records-table {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-x: auto;
+}
+
+.agent-usage-records-row {
+  display: grid;
+  grid-template-columns: 90px 110px 90px 60px 120px 80px 80px 70px;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  align-items: center;
+  border-radius: 6px;
+}
+
+.agent-usage-records-header {
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--border);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.agent-usage-records-row:not(.agent-usage-records-header):hover {
+  background: var(--border);
+}
+
+.agent-usage-records-row .cell-time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-usage-records-row .cell-task {
+  color: var(--text-secondary);
+}
+
+.agent-usage-records-row .cell-provider {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+}
+
+.agent-usage-records-row .cell-role {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.agent-usage-records-row .cell-role.role-primary {
+  background: var(--scholar-soft);
+  color: var(--scholar);
+}
+
+.agent-usage-records-row .cell-role.role-complementary {
+  background: rgba(107, 142, 127, 0.18);
+  color: var(--sage-text);
+}
+
+.agent-usage-records-row .cell-tokens {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-usage-records-row .cell-cost {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.agent-usage-records-row .cell-duration {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.agent-usage-records-row .cell-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.agent-usage-records-row .cell-status.status-ok {
+  color: var(--sage-text);
+}
+
+.agent-usage-records-row .cell-status.status-fail {
+  color: var(--danger);
+}
+
