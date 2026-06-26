@@ -111,6 +111,50 @@ export interface FolderIntakeResult {
   items: FolderIntakeItem[];
 }
 
+/**
+ * 批量文件导入单条项（前端 webkitdirectory 读取后上传）。
+ * @author fxbin
+ */
+export interface FileBatchIntakeItem {
+  /** 文件相对路径（含子目录），如 "notes/ch1.md" */
+  relativePath: string;
+  /** 文件名 */
+  fileName: string;
+  /** 文件文本内容（前端已读取） */
+  content: string;
+}
+
+/**
+ * 批量文件导入请求：前端通过 webkitdirectory 选择文件夹后，
+ * 读取所有 .md/.txt 文件内容批量上传。
+ * @author fxbin
+ */
+export interface FileBatchIntakeRequest {
+  /** 文件列表 */
+  items: FileBatchIntakeItem[];
+  /** 目标工作区 ID，缺省时使用 default */
+  workspaceId?: string;
+}
+
+/**
+ * 批量文件导入结果（与 FolderIntakeResult 字段对齐，scannedPath 留空）。
+ * @author fxbin
+ */
+export interface FileBatchIntakeResult {
+  /** 目标工作区 ID */
+  workspaceId: string;
+  /** 目标工作区标题 */
+  workspaceTitle: string;
+  /** 成功入库条数 */
+  imported: number;
+  /** 跳过条数 */
+  skipped: number;
+  /** 失败条数 */
+  failed: number;
+  /** 逐条结果 */
+  items: FolderIntakeItem[];
+}
+
 export interface ModelProviderModel {
   id: string;
 }

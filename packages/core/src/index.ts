@@ -131,6 +131,8 @@ import {
   type FolderIntakeRequest,
   type FolderIntakeResult,
   type FolderIntakeItem,
+  type FileBatchIntakeRequest,
+  type FileBatchIntakeResult,
 } from '@zhijing/shared';
 import { fetchUrlAsMarkdown } from './web-fetch.js';
 import {
@@ -5177,6 +5179,108 @@ export async function intakeFolderFromPath(
 
   return {
     scannedPath: absolutePath,
+    workspaceId,
+    workspaceTitle: base.title,
+    imported,
+    skipped,
+    failed,
+    items,
+  };
+}
+
+/** 批量文件导入单条内容大小上限：2MB。 */
+const FILE_BATCH_MAX_CONTENT_SIZE = 2 * 1024 * 1024;
+
+/** 批量文件导入条数上限。 */
+const FILE_BATCH_MAX_ITEMS = 200;
+
+/**
+ * 批量文件导入：接收前端通过 webkitdirectory 读取后的文件内容数组，批量入库。
+ *
+ * 与 intakeFolderFromPath 的区别：
+ *  - 不扫描本地文件系统，依赖前端上传的 content
+ *  - 适用于浏览器直接选择文件夹的场景（无需手动输入路径）
+ *  - 单条 content ≤ 2MB，单批 ≤ 200 条
+ *
+ * @param request 批量文件导入请求
+ * @returns 导入汇总结果
+ * @author fxbin
+ */
+export function intakeFilesFromBatch(
+  request: FileBatchIntakeRequest,
+): FileBatchIntakeResult {
+  if (!Array.isArray(request.items)) {
+    throw new Error('items is required and must be an array.');
+  }
+  if (request.items.length === 0) {
+    throw new Error('items is empty.');
+  }
+  if (request.items.length > FILE_BATCH_MAX_ITEMS) {
+    throw new Error(`Too many files: ${request.items.length} (max ${FILE_BATCH_MAX_ITEMS}).`);
+  }
+
+  const workspaceId = resolveWorkspaceId(request.workspaceId);
+  const base = repository.findWorkspace(workspaceId);
+  if (!base) {
+    throw new Error(`Workspace not found: ${workspaceId}`);
+  }
+
+  const items: FolderIntakeItem[] = [];
+  let imported = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const file of request.items) {
+    const relativePath = file.relativePath || file.fileName;
+    const fileName = file.fileName || file.relativePath;
+    const item: FolderIntakeItem = { relativePath, fileName, ok: false };
+
+    try {
+      const content = typeof file.content === 'string' ? file.content : '';
+      const trimmed = content.trim();
+      if (!trimmed) {
+        item.error = 'Empty file';
+        skipped += 1;
+        items.push(item);
+        continue;
+      }
+      if (trimmed.length > FILE_BATCH_MAX_CONTENT_SIZE) {
+        item.error = `Content too large: ${trimmed.length} chars (max ${FILE_BATCH_MAX_CONTENT_SIZE})`;
+        skipped += 1;
+        items.push(item);
+        continue;
+      }
+
+      const title = extractMaterialTitle(trimmed) || fileName;
+      const timestamp = now();
+      const material: MaterialRecord = {
+        id: id('mat'),
+        workspaceId: base.id,
+        type: 'text',
+        rawInput: trimmed,
+        title,
+        contentText: trimmed,
+        mediaUrls: [],
+        parseStatus: 'saved',
+        createdAt: timestamp,
+        statusTimeline: { capturedAt: timestamp },
+      };
+      repository.insertMaterial(material);
+      base.sourceCount += 1;
+      base.updatedAt = timestamp;
+      repository.updateWorkspace(base);
+
+      item.ok = true;
+      item.materialId = material.id;
+      imported += 1;
+    } catch (err) {
+      item.error = err instanceof Error ? err.message : String(err);
+      failed += 1;
+    }
+    items.push(item);
+  }
+
+  return {
     workspaceId,
     workspaceTitle: base.title,
     imported,

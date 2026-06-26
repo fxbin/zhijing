@@ -50,6 +50,7 @@ import {
   initializeArtifactSections,
   intakeKnowledge,
   intakeFolderFromPath,
+  intakeFilesFromBatch,
   KnowledgeCoreError,
   listArchivedItems,
   listArtifactRevisions,
@@ -139,6 +140,7 @@ import type {
   IntakeRequest,
   IntakeScope,
   FolderIntakeRequest,
+  FileBatchIntakeRequest,
   KnowledgeKitId,
   MaterialType,
   ParseStatus,
@@ -210,6 +212,7 @@ export function buildApi() {
     logger: {
       level: process.env.LOG_LEVEL ?? 'info',
     },
+    bodyLimit: 16 * 1024 * 1024,
   });
 
   app.register(cors, {
@@ -1763,6 +1766,26 @@ export function buildApi() {
       }
       request.log.error({ error }, 'folder intake failed');
       return reply.code(500).send({ error: 'Folder intake failed.' });
+    }
+  });
+
+  app.post<{ Body: Partial<FileBatchIntakeRequest> }>('/api/intake/files', async (request, reply) => {
+    const items = Array.isArray(request.body?.items) ? request.body.items : null;
+    if (!items || items.length === 0) {
+      return reply.code(400).send({ error: 'items is required and must be a non-empty array.' });
+    }
+    try {
+      return await intakeFilesFromBatch({
+        items,
+        workspaceId: request.body.workspaceId,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'File batch intake failed.';
+      if (/items|Workspace not found|Too many files/.test(message)) {
+        return reply.code(400).send({ error: message });
+      }
+      request.log.error({ error }, 'file batch intake failed');
+      return reply.code(500).send({ error: 'File batch intake failed.' });
     }
   });
 
