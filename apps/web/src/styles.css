@@ -13222,6 +13222,8 @@ button { cursor: pointer; }
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 10px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .workspace-recent-card-item {
@@ -13235,6 +13237,8 @@ button { cursor: pointer; }
   background: var(--surface);
   text-align: left;
   cursor: pointer;
+  min-width: 0;
+  overflow: hidden;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
@@ -13269,6 +13273,9 @@ button { cursor: pointer; }
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  max-width: 100%;
 }
 
 .weread-preview-head {
