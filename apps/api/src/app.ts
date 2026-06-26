@@ -80,6 +80,10 @@ import {
   listAgentUsageRecords,
   summarizeAgentUsageRecords,
   compareAgentUsageRecords,
+  computeEvidenceFeedback,
+  extractRejectedFeatures,
+  EVIDENCE_ACTION_ACCEPT_PROPOSED_CARDS,
+  DEFAULT_REJECTED_FEATURES_LIMIT,
   createUserMemoryRecord,
   updateUserMemoryRecord,
   deleteUserMemoryRecord,
@@ -158,6 +162,8 @@ import type {
   CreateUserMemoryRequest,
   UpdateUserMemoryRequest,
   CreateDecisionLogRequest,
+  EvidenceFeedback,
+  RejectedCardFeature,
 } from '@zhijing/shared';
 import {
   INTAKE_AUDIENCE_VALUES,
@@ -829,6 +835,32 @@ export function buildApi() {
       until: query.until,
     };
     return { comparison: compareAgentUsageRecords(usageQuery) };
+  });
+
+  /**
+   * Evidence 飞轮反馈查询。
+   *
+   * 返回 accept_rate 聚合与被拒绝提议卡片特征（negative example），
+   * 供前端洞察视图展示"镜子不保姆"可测量指标。
+   */
+  app.get<{
+    Querystring: {
+      workspaceId?: string;
+      limit?: string;
+    };
+  }>('/api/analytics/evidence', async (request) => {
+    const workspaceId = typeof request.query.workspaceId === 'string' && request.query.workspaceId.trim()
+      ? request.query.workspaceId.trim()
+      : undefined;
+    const limitRaw = typeof request.query.limit === 'string' ? request.query.limit.trim() : '';
+    const featuresLimit = limitRaw ? Number.parseInt(limitRaw, 10) : DEFAULT_REJECTED_FEATURES_LIMIT;
+    const logsResult = listAgentActionLogs({
+      workspaceId,
+      action: EVIDENCE_ACTION_ACCEPT_PROPOSED_CARDS,
+    });
+    const evidence: EvidenceFeedback = computeEvidenceFeedback(logsResult.logs);
+    const rejectedFeatures: RejectedCardFeature[] = extractRejectedFeatures(logsResult.logs, featuresLimit);
+    return { evidence, rejectedFeatures };
   });
 
   app.get<{

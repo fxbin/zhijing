@@ -126,6 +126,8 @@ import {
   type DecisionLog,
   type DecisionLogKind,
   type CreateDecisionLogRequest,
+  type EvidenceFeedback,
+  type RejectedCardFeature,
 } from '@zhijing/shared';
 import { fetchUrlAsMarkdown } from './web-fetch.js';
 import {
@@ -157,6 +159,13 @@ import {
   type DecisionLogRepository,
   type DecisionLogQuery,
 } from './decision-log.js';
+import {
+  computeEvidenceFeedback,
+  extractRejectedFeatures,
+  buildNegativeExampleSection,
+  EVIDENCE_ACTION_ACCEPT_PROPOSED_CARDS,
+  DEFAULT_REJECTED_FEATURES_LIMIT,
+} from './evidence-feedback.js';
 import {
   createPiAiRuntime,
   createInstrumentedPiRuntime,
@@ -5328,6 +5337,25 @@ export function acceptProposedCards(messageId: string, selectedIndices?: number[
   const updatedCardIds = [...message.cardIds, ...cards.map((card) => card.id)];
   repository.updateMessageAcceptedCards(message.id, updatedCardIds);
 
+  const proposedSnapshot = message.proposedCards ?? [];
+  const acceptedEntries = selectedProposals.map((card) => ({ type: card.type, title: card.title }));
+  const rejectedEntries = proposedSnapshot
+    .map((card, index) => ({ card, index }))
+    .filter((entry) => !indices.includes(entry.index))
+    .map((entry) => ({ type: entry.card.type, title: entry.card.title }));
+  logAgentAction(EVIDENCE_ACTION_ACCEPT_PROPOSED_CARDS, {
+    workspaceId: base.id,
+    input: {
+      messageId: message.id,
+      totalProposed: proposedSnapshot.length,
+      selectedCount: indices.length,
+    },
+    output: {
+      acceptedCards: acceptedEntries,
+      rejectedCards: rejectedEntries,
+    },
+  });
+
   const updatedMessage = repository.findMessage(messageId);
   if (!updatedMessage) {
     throw new KnowledgeCoreError('Message update failed.', 500);
@@ -9639,6 +9667,12 @@ export function getGlobalInsights(): GlobalInsights {
 
   const workspacePreviews = buildWorkspacePreviews(bases);
 
+  const evidenceLogs = repository.listAgentActionLogs({
+    action: EVIDENCE_ACTION_ACCEPT_PROPOSED_CARDS,
+    limit: AGENT_ACTION_LOG_MAX_LIMIT,
+  });
+  const evidence = computeEvidenceFeedback(evidenceLogs);
+
   return {
     generatedAt: now(),
     totals: {
@@ -9658,6 +9692,7 @@ export function getGlobalInsights(): GlobalInsights {
       workspaceCount: bases.length,
       workspaces: workspacePreviews,
     },
+    evidence,
   };
 }
 
@@ -9811,7 +9846,21 @@ export async function generateSocraticQuestions(
     throw new KnowledgeCoreError('知识库没有卡片，无法生成苏格拉底追问。', 400);
   }
 
-  const prompt = buildSocraticPrompt(base.title, cards, trigger, cardId, tensionKey);
+  const evidenceLogs = repository.listAgentActionLogs({
+    workspaceId,
+    action: EVIDENCE_ACTION_ACCEPT_PROPOSED_CARDS,
+    limit: AGENT_ACTION_LOG_MAX_LIMIT,
+  });
+  const rejectedFeatures = extractRejectedFeatures(evidenceLogs, DEFAULT_REJECTED_FEATURES_LIMIT);
+  const negativeExamples = buildNegativeExampleSection(rejectedFeatures);
+  const prompt = buildSocraticPrompt(
+    base.title,
+    cards,
+    trigger,
+    cardId,
+    tensionKey,
+    negativeExamples.length > 0 ? negativeExamples : undefined,
+  );
   const runtime = options?.piRuntime ?? createInstrumentedPiRuntime(
     createRoutedPiRuntime('socratic_questioning'),
     { taskType: 'socratic_questioning', workspaceId, recorder: recordAgentUsage },
@@ -9873,12 +9922,16 @@ export async function generateSocraticQuestions(
  * 根据触发来源选择不同的 prompt 模板，并注入卡片摘要作为上下文。
  * prompt 中明确指示"只提问，不提供答案"，遵循不代写铁律。
  *
+ * 可选 negativeExamples 用于注入历史被拒绝提议的特征（evidence 飞轮），
+ * 让 Agent 不再产生类似 rejected 的提问。
+ *
  * @author fxbin
  * @param {string} kbTitle - 知识库标题
  * @param {KnowledgeCard[]} cards - 知识库卡片
  * @param {SocraticTrigger} trigger - 触发来源
  * @param {string} [cardId] - 目标卡片 ID
  * @param {string} [tensionKey] - 张力组 key
+ * @param {string} [negativeExamples] - 历史被拒绝提议特征文本段
  * @returns {string} 完整 prompt
  */
 function buildSocraticPrompt(
@@ -9887,6 +9940,7 @@ function buildSocraticPrompt(
   trigger: SocraticTrigger,
   cardId?: string,
   tensionKey?: string,
+  negativeExamples?: string,
 ): string {
   let triggerSection: string;
   if (trigger === SOCRATIC_TRIGGER_SKELETON) {
@@ -9903,12 +9957,16 @@ function buildSocraticPrompt(
     triggerSection = SOCRATIC_PROMPT_MANUAL_TEMPLATE.replace('{title}', kbTitle) + `\n\n核心卡片摘要：\n${digest}`;
   }
 
-  return [
+  const sections = [
     SOCRATIC_PROMPT_HEADER,
     SOCRATIC_PROMPT_RULES,
     '',
     triggerSection,
-  ].join('\n');
+  ];
+  if (negativeExamples && negativeExamples.length > 0) {
+    sections.push('', negativeExamples);
+  }
+  return sections.join('\n');
 }
 
 /**
@@ -11170,6 +11228,13 @@ export function compareAgentUsageRecords(query: AgentUsageQuery): AgentUsageComp
 export { type AgentUsageRepository } from './agent-usage.js';
 export { type UserMemoryRepository, type UserMemoryQuery } from './user-memory.js';
 export { type DecisionLogRepository, type DecisionLogQuery } from './decision-log.js';
+export {
+  computeEvidenceFeedback,
+  extractRejectedFeatures,
+  buildNegativeExampleSection,
+  EVIDENCE_ACTION_ACCEPT_PROPOSED_CARDS,
+  DEFAULT_REJECTED_FEATURES_LIMIT,
+};
 
 /**
  * 创建用户记忆记录。

@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import {
   ArrowUpRight,
   BookOpen,
+  CheckCircle,
   FileText,
   Layers,
   Lightbulb,
@@ -112,6 +113,11 @@ export default function InsightsView({ setView, onCreateWorkspace, onSelectWorks
   }
 
   const totals = insights.totals;
+  const evidence = insights.evidence;
+  const acceptRateLabel = evidence && evidence.acceptRate != null
+    ? `${Math.round(evidence.acceptRate * 100)}%`
+    : '—';
+  const hasEvidence = Boolean(evidence && evidence.totalProposed > 0);
 
   return (
     <div className="page-main full insights-page">
@@ -147,6 +153,13 @@ export default function InsightsView({ setView, onCreateWorkspace, onSelectWorks
           <div>
             <strong>{totals.artifacts}</strong>
             <span>{t('insights.metric.artifacts')}</span>
+          </div>
+        </article>
+        <article className="insights-metric-card metric-card--evidence">
+          <CheckCircle size={22} />
+          <div>
+            <strong>{acceptRateLabel}</strong>
+            <span>{t('insights.metric.acceptRate')}</span>
           </div>
         </article>
       </section>
@@ -299,6 +312,34 @@ export default function InsightsView({ setView, onCreateWorkspace, onSelectWorks
             {t('insights.mapAction')}
             <ArrowUpRight size={16} />
           </button>
+        </section>
+
+        <section className="bento-card evidence-card">
+          <div className="bento-head">
+            <div>
+              <h2>{t('insights.evidenceTitle')}</h2>
+              <span className="bento-meta">{t('insights.evidenceMeta')}</span>
+            </div>
+            <CheckCircle size={20} />
+          </div>
+          {!hasEvidence ? (
+            <EmptyState
+              icon={CheckCircle}
+              title={t('insights.evidenceNoData')}
+              body={t('insights.evidenceNoDataHint')}
+              compact
+            />
+          ) : (
+            <div className="evidence-body">
+              <p className="evidence-totals">
+                {t('insights.evidenceTotals', {
+                  proposed: evidence.totalProposed,
+                  accepted: evidence.totalAccepted,
+                  rejected: evidence.totalRejected,
+                })}
+              </p>
+            </div>
+          )}
         </section>
 
         <AgentProposalsPanel onCreateWorkspace={onCreateWorkspace} />

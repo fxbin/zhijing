@@ -644,6 +644,11 @@ export interface GlobalInsights {
     workspaceCount: number;
     workspaces: GlobalInsightsWorkspacePreview[];
   };
+  /**
+   * Evidence 飞轮反馈聚合（accept_rate 作为"镜子不保姆"可测量指标）。
+   * 基于 agent_action_log 中 accept_proposed_cards 动作聚合。
+   */
+  evidence: EvidenceFeedback;
 }
 
 /**
@@ -803,6 +808,7 @@ export interface RelatedSuggestionsResult {
  *  - card_edit 卡片编辑
  *  - conflict_resolve 冲突解决
  *  - active_suggestion_sent 主动提议下发（P0.3 约束引擎追踪用）
+ *  - accept_proposed_cards 用户裁决提议卡片（evidence 飞轮数据源）
  * @author fxbin
  */
 export type AgentAction =
@@ -814,7 +820,8 @@ export type AgentAction =
   | 'material_parse'
   | 'card_edit'
   | 'conflict_resolve'
-  | 'active_suggestion_sent';
+  | 'active_suggestion_sent'
+  | 'accept_proposed_cards';
 
 /**
  * Agent 行为日志记录（P10-5）。
@@ -844,6 +851,43 @@ export interface AgentActionLog {
 export interface AgentActionLogResult {
   logs: AgentActionLog[];
   total: number;
+}
+
+/**
+ * Evidence 飞轮反馈聚合结果。
+ *
+ * 基于 agent_action_log 中 accept_proposed_cards 动作记录聚合，
+ * 作为"镜子不保姆"的可测量指标（accept_rate）。
+ * accept_rate = totalAccepted / totalProposed，无数据时为 null。
+ *
+ * @author fxbin
+ */
+export interface EvidenceFeedback {
+  /** 总提议卡片数 */
+  totalProposed: number;
+  /** 被接受卡片数 */
+  totalAccepted: number;
+  /** 被拒绝卡片数（提议但未采纳） */
+  totalRejected: number;
+  /** 接受率：accepted / totalProposed；无数据时为 null */
+  acceptRate: number | null;
+}
+
+/**
+ * 被拒绝提议卡片的特征偏移。
+ *
+ * 用于下一轮 socraticQuestioning 注入 negative example，
+ * 让 Agent 不再产生类似 rejected 的提问。
+ *
+ * @author fxbin
+ */
+export interface RejectedCardFeature {
+  /** 卡片类型偏移 */
+  type: string;
+  /** 标题前缀（前 20 字符，作为聚合维度） */
+  titlePrefix: string;
+  /** 出现次数 */
+  count: number;
 }
 
 export interface PathStep {
