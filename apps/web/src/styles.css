@@ -4162,8 +4162,10 @@ button { cursor: pointer; }
 .question-history {
   display: grid;
   gap: 8px;
+  flex: none;
   border-top: 1px solid var(--line-soft);
-  padding-top: 14px;
+  padding: 14px;
+  background: var(--surface-low);
 }
 
 .question-history-head {
@@ -4404,8 +4406,9 @@ button { cursor: pointer; }
   display: grid;
   grid-template-columns: minmax(0, 1fr) 48px;
   gap: 10px;
+  flex: none;
   border-top: 1px solid var(--line-soft);
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.92);
   padding: 14px;
 }
 
@@ -8763,7 +8766,7 @@ button { cursor: pointer; }
 }
 
 .ai-chat-shell-floating .ai-chat-shell-body {
-  overflow-y: auto;
+  overflow: hidden;
   min-height: 0;
 }
 
@@ -8831,11 +8834,11 @@ button { cursor: pointer; }
 .ai-chat-shell-body {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 0;
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   min-height: 0;
-  padding: 16px;
+  padding: 0;
 }
 
 .ai-chat-shell-body .chat-thread-head {
@@ -8846,6 +8849,7 @@ button { cursor: pointer; }
 .ai-chat-shell-body .assistant-thread {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
 }
 
 .ai-chat-shell-body .assistant-thread {
@@ -8939,6 +8943,9 @@ button { cursor: pointer; }
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding: 16px;
 }
 
@@ -8987,6 +8994,7 @@ button { cursor: pointer; }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex: none;
   padding: 8px 14px;
   border-bottom: 1px solid var(--line-soft);
   background: var(--surface-low);
