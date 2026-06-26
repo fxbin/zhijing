@@ -496,7 +496,7 @@ function App() {
           </div>
         </div>
 
-        <button className="primary-create" onClick={() => go('workspace')} type="button">
+        <button className="primary-create" onClick={() => { setCreateKbError(null); setIsCreateKbOpen(true); }} type="button">
           <Plus size={23} />
           {t('common.create')}
         </button>

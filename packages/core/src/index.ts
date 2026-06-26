@@ -3021,24 +3021,76 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
   /**
    * 为 workspaces.title 建立唯一索引（兜底防重名）。
-   * 迁移前先检测重名：无重名则建索引升级为双重保护；有重名则跳过并告警，退化为应用层检查，不阻断启动。
+   * 迁移前先检测重名：无重名则建索引升级为双重保护；
+   * 有重名则自动合并（保留最早创建的工作区，迁移关联数据后删除重复记录），再建索引。
    * @author fxbin
    */
   private ensureWorkspaceTitleUnique() {
     const duplicates = this.db.prepare(
-      'SELECT title, COUNT(*) AS cnt FROM workspaces GROUP BY title HAVING cnt > 1'
-    ).all() as Array<{ title: string; cnt: number }>;
+      'SELECT title FROM workspaces GROUP BY title HAVING COUNT(*) > 1'
+    ).all() as Array<{ title: string }>;
 
     if (duplicates.length > 0) {
-      console.warn(
-        `[migrate] 检测到 ${duplicates.length} 个重名知识库标题，跳过 UNIQUE 索引创建。请手动清理后重启以启用唯一约束。`
-      );
-      return;
+      this.mergeDuplicateWorkspaces(duplicates);
     }
 
     this.db.exec(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_title ON workspaces(title)'
     );
+  }
+
+  /**
+   * 合并重名工作区：保留最早创建的，将其余工作区的关联数据迁移至保留工作区后删除重复记录。
+   * 迁移使用 UPDATE OR IGNORE 策略，遇到唯一约束冲突时跳过冲突行，保证不丢失保留工作区已有数据。
+   * FTS 虚拟表不支持 UPDATE，直接删除重复工作区的索引数据（保留工作区的 FTS 数据不受影响）。
+   * @param duplicates - 重名标题列表
+   * @author fxbin
+   */
+  private mergeDuplicateWorkspaces(duplicates: Array<{ title: string }>) {
+    const allTables = this.db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts'"
+    ).all() as Array<{ name: string }>;
+
+    const relatedTables = allTables
+      .filter(({ name }) => {
+        const columns = this.db.prepare(`PRAGMA table_info("${name}")`).all() as Array<{ name: string }>;
+        return columns.some((col) => col.name === 'workspace_id');
+      })
+      .map(({ name }) => name);
+
+    for (const { title } of duplicates) {
+      const rows = this.db.prepare(
+        'SELECT id FROM workspaces WHERE title = ? ORDER BY created_at ASC, rowid ASC'
+      ).all(title) as Array<{ id: string }>;
+
+      const keepId = rows[0].id;
+      const removeIds = rows.slice(1).map((row) => row.id);
+
+      this.db.exec('BEGIN');
+      try {
+        for (const table of relatedTables) {
+          for (const removeId of removeIds) {
+            this.db.prepare(
+              `UPDATE OR IGNORE "${table}" SET workspace_id = ? WHERE workspace_id = ?`
+            ).run(keepId, removeId);
+          }
+        }
+
+        for (const removeId of removeIds) {
+          this.db.prepare('DELETE FROM cards_fts WHERE workspace_id = ?').run(removeId);
+          this.db.prepare('DELETE FROM materials_fts WHERE workspace_id = ?').run(removeId);
+        }
+
+        for (const removeId of removeIds) {
+          this.db.prepare('DELETE FROM workspaces WHERE id = ?').run(removeId);
+        }
+
+        this.db.exec('COMMIT');
+      } catch (error) {
+        this.db.exec('ROLLBACK');
+        throw error;
+      }
+    }
   }
 
   /**
@@ -3674,7 +3726,12 @@ function extractSearchTerms(query: string): string[] {
   if (words.length === 0) return [];
   if (words.length === 1 && CJK_CHARACTER_PATTERN.test(words[0])) {
     const chars = words[0].split('').filter((char) => CJK_CHARACTER_PATTERN.test(char));
-    return Array.from(new Set(chars));
+    if (chars.length <= 1) return chars;
+    const bigrams: string[] = [];
+    for (let i = 0; i < chars.length - 1; i++) {
+      bigrams.push(chars[i] + chars[i + 1]);
+    }
+    return Array.from(new Set(bigrams));
   }
   return Array.from(new Set(words));
 }
@@ -7607,11 +7664,9 @@ function tokenizeForTfidf(text: string): string[] {
   tokens.push(...englishWords);
   const cjkChars = normalized.match(/[\u4e00-\u9fff]/g) ?? [];
   for (let i = 0; i < cjkChars.length - 1; i++) {
-    tokens.push(cjkChars[i] + cjkChars[i + 1]);
-  }
-  for (const char of cjkChars) {
-    if (!isChineseStopWord(char)) {
-      tokens.push(char);
+    const bigram = cjkChars[i] + cjkChars[i + 1];
+    if (!isChineseStopWord(bigram)) {
+      tokens.push(bigram);
     }
   }
   return tokens;

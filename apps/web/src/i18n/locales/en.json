@@ -770,6 +770,7 @@
   "maps.relationType.derivedFrom": "derived from",
   "maps.relationType.relatedTo": "related to",
   "maps.relationType.supports": "supports",
+  "maps.relationType.contains": "contains",
   "maps.relations": "Relations",
   "maps.searchNodes": "Search map nodes",
   "maps.searchPlaceholder": "Search nodes...",

@@ -145,6 +145,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
     derived_from: t('maps.relationType.derivedFrom'),
     supports: t('maps.relationType.supports'),
     contradicts: t('maps.relationType.contradicts'),
+    contains: t('maps.relationType.contains'),
   };
 
   /**
@@ -593,6 +594,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                         <option value="derived_from">{t('maps.relationType.derivedFrom')}</option>
                         <option value="supports">{t('maps.relationType.supports')}</option>
                         <option value="contradicts">{t('maps.relationType.contradicts')}</option>
+                        <option value="contains">{t('maps.relationType.contains')}</option>
                       </select>
                     </label>
                     <div className="map-relation-editor-actions">

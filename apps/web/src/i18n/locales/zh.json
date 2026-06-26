@@ -771,6 +771,7 @@
   "maps.relationType.derivedFrom": "派生自",
   "maps.relationType.relatedTo": "相关",
   "maps.relationType.supports": "支持",
+  "maps.relationType.contains": "包含",
   "maps.relations": "关联关系",
   "maps.searchNodes": "搜索地图节点",
   "maps.searchPlaceholder": "搜索节点...",
