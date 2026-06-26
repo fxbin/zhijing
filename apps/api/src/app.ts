@@ -106,7 +106,7 @@ import {
   updateModelProviderProfile,
   getActiveAgentCredentials,
 } from '@zhijing/core';
-import { createWorkspaceAgent, createOrchestratedWorkspaceAgent, selectAgentRole } from '@zhijing/agent';
+import { createWorkspaceAgent, createOrchestratedWorkspaceAgent, createRoleBasedAgent, selectAgentRole, buildAuxiliaryProbePrompt, AUXILIARY_PROBE_MIN_TOOL_CALLS, AUXILIARY_PROBE_MAX_OUTPUT_LENGTH } from '@zhijing/agent';
 import type { Agent } from '@earendil-works/pi-agent-core';
 import { serializeAgentEvent, type AgentStreamEvent } from './agent-stream.js';
 import type {
@@ -1085,8 +1085,10 @@ export function buildApi() {
       let decisionPassed = true;
       let activeProposals: import('@zhijing/shared').AgentProposal[] = [];
       let decision: import('@zhijing/shared').OrchestratorDecision | null = null;
+      let credentials: ReturnType<typeof getActiveAgentCredentials> | null = null;
+      let intent: string = 'neutral';
       try {
-        const credentials = getActiveAgentCredentials();
+        credentials = getActiveAgentCredentials();
 
         try {
           decision = buildInterceptedDecision(request.params.id, message, { isWriting });
@@ -1117,7 +1119,7 @@ export function buildApi() {
           apiKey: credentials.apiKey,
         };
 
-        const intent = classifyUserIntent(message);
+        intent = classifyUserIntent(message);
         const selectedRole = selectAgentRole(intent);
         if (intent !== 'neutral') {
           request.log.info({ intent, role: selectedRole }, 'orchestrator role selected by user intent');
@@ -1162,6 +1164,8 @@ export function buildApi() {
 
       let currentDecision: import('@zhijing/shared').OrchestratorDecision | null = decision;
       let turnToolCalls: import('@zhijing/core').ToolCallSummary[] = [];
+      let mainAssistantText = '';
+      let mainToolCallCount = 0;
 
       const unsubscribe = agent.subscribe((event) => {
         const wireEvents = serializeAgentEvent(event);
@@ -1175,6 +1179,11 @@ export function buildApi() {
               isError: wire.isError,
               resultText: wire.result,
             });
+            mainToolCallCount += 1;
+          }
+
+          if (wire.type === 'message_end' && typeof wire.text === 'string') {
+            mainAssistantText = wire.text;
           }
 
           if (wire.type === 'turn_end' && currentDecision && turnToolCalls.length > 0) {
@@ -1211,12 +1220,76 @@ export function buildApi() {
       try {
         await agent.prompt(message);
         await agent.waitForIdle();
+        await runAuxiliaryProbeIfNeeded();
       } catch (error) {
         send({ type: 'error', message: error instanceof Error ? error.message : 'Agent run failed.' });
       } finally {
         unsubscribe();
         activeAgents.delete(sessionId);
         reply.raw.end();
+      }
+
+      /**
+       * 主 Agent 完成后，按条件异步启动辅 probe Agent 做盲区检测。
+       *
+       * 触发条件（全部满足）：
+       * 1. 主 Agent 调过检索工具（mainToolCallCount >= AUXILIARY_PROBE_MIN_TOOL_CALLS）
+       * 2. 主 Agent 回答非空（mainAssistantText 有内容）
+       * 3. 用户意图不是 request_probe（用户已主动请求追问时，主 Agent 已是 probe 角色，无需辅 Agent）
+       * 4. 客户端未断开（reply.raw.writableEnded 为 false）
+       *
+       * 辅 Agent 输出通过 aux_start / aux_delta / aux_end 事件发送，
+       * 前端渲染为「可能还想知道」折叠区。
+       *
+       * 辅 Agent 失败不影响主流程，仅 log warn。
+       */
+      async function runAuxiliaryProbeIfNeeded() {
+        const shouldRunProbe = credentials !== null
+          && mainToolCallCount >= AUXILIARY_PROBE_MIN_TOOL_CALLS
+          && mainAssistantText.length > 0
+          && intent !== 'request_probe'
+          && !reply.raw.writableEnded;
+        if (!shouldRunProbe || !credentials) return;
+
+        try {
+          const probeAgent = createRoleBasedAgent(request.params.id, {
+            role: 'probe',
+            provider: credentials.provider,
+            modelId: credentials.model,
+            apiKey: credentials.apiKey,
+          });
+          const probePrompt = buildAuxiliaryProbePrompt(message, mainAssistantText);
+          let probeText = '';
+
+          send({ type: 'aux_start' });
+
+          const probeUnsubscribe = probeAgent.subscribe((probeEvent) => {
+            const probeWires = serializeAgentEvent(probeEvent);
+            for (const wire of probeWires) {
+              if (wire.type === 'message_delta' && typeof wire.delta === 'string') {
+                probeText += wire.delta;
+                send({ type: 'aux_delta', delta: wire.delta });
+              }
+              if (wire.type === 'message_end' && typeof wire.text === 'string') {
+                probeText = wire.text;
+              }
+            }
+          });
+
+          try {
+            await probeAgent.prompt(probePrompt);
+            await probeAgent.waitForIdle();
+            const finalText = probeText.length > AUXILIARY_PROBE_MAX_OUTPUT_LENGTH
+              ? `${probeText.slice(0, AUXILIARY_PROBE_MAX_OUTPUT_LENGTH)}…`
+              : probeText;
+            send({ type: 'aux_end', text: finalText });
+          } finally {
+            probeUnsubscribe();
+          }
+        } catch (probeError) {
+          request.log.warn({ probeError }, 'auxiliary probe agent failed');
+          send({ type: 'aux_end', text: '' });
+        }
       }
     },
   );

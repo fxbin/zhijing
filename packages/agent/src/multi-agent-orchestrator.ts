@@ -222,3 +222,43 @@ export {
   CONVERSATION_AGENT_PROMPT,
   PROBE_AGENT_PROMPT,
 };
+
+/**
+ * 触发辅 probe Agent 的最少主 Agent 检索工具调用次数。
+ *
+ * 主 Agent 未调检索工具时，说明是闲聊或非知识库场景，无需盲区检测。
+ * 设为 1 次：只要主 Agent 调过 search_cards / search_materials / get_workspace_summary，
+ * 即认为是在知识库语境下作答，可能有盲区可追问。
+ */
+export const AUXILIARY_PROBE_MIN_TOOL_CALLS = 1;
+
+/**
+ * 辅 probe Agent 单轮输出的最大字符数，超过时前端截断展示。
+ *
+ * 控制 probe 输出体量，避免辅追问喧宾夺主。
+ */
+export const AUXILIARY_PROBE_MAX_OUTPUT_LENGTH = 500;
+
+/**
+ * 构造辅 probe Agent 的用户 prompt。
+ *
+ * 辅 probe Agent 的职责：基于主 Agent 的回答检测盲区，提出 1-2 个聚焦追问。
+ * 不重新检索（复用主 Agent 已检索到的上下文），仅基于回答本身做盲区推断。
+ *
+ * @param userMessage - 用户原始问题
+ * @param mainAnswer - 主 Agent 的完整回答
+ * @returns probe Agent 的用户 prompt
+ * @author fxbin
+ */
+export function buildAuxiliaryProbePrompt(userMessage: string, mainAnswer: string): string {
+  return [
+    '基于以下对话，检测用户可能存在的知识盲区，提出 1-2 个聚焦追问。',
+    '追问必须聚焦回答中未覆盖的盲区，不发散到无关话题。',
+    '不要直接给答案，用问题引导用户自己思考。',
+    '若主回答已充分覆盖用户问题，无明确盲区，则输出「主回答已覆盖问题，无需追问」。',
+    '',
+    `用户问题：${userMessage}`,
+    '',
+    `助理回答：${mainAnswer}`,
+  ].join('\n');
+}

@@ -60,6 +60,7 @@ function extractToolResultText(result: unknown): string {
  * - reasoning 以 delta 增量传输（reasoning_delta），前端折叠展示
  * - tool 保留 id/name/args/isError + result 文本摘要，前端可展开查看
  * - mode_update 在 agent_start 后立即下发，前端显示当前编排模式与理由
+ * - aux_* 系列承载辅 Agent（probe）输出，前端渲染为「可能还想知道」折叠区
  */
 export type AgentStreamEvent =
   | { type: 'agent_start' }
@@ -73,6 +74,9 @@ export type AgentStreamEvent =
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_end'; toolCallId: string; toolName: string; isError: boolean; result: string }
   | { type: 'mode_update'; mode: string; reason: string; suggestedAction: string }
+  | { type: 'aux_start' }
+  | { type: 'aux_delta'; delta: string }
+  | { type: 'aux_end'; text: string }
   | { type: 'error'; message: string };
 
 /**

@@ -42,5 +42,8 @@ export {
   STRUCTURED_AGENT_PROMPT,
   CONVERSATION_AGENT_PROMPT,
   PROBE_AGENT_PROMPT,
+  AUXILIARY_PROBE_MIN_TOOL_CALLS,
+  AUXILIARY_PROBE_MAX_OUTPUT_LENGTH,
+  buildAuxiliaryProbePrompt,
 } from './multi-agent-orchestrator.js';
 export type { AgentRole, AgentRoleConfig, MultiAgentOptions } from './multi-agent-orchestrator.js';

@@ -72,6 +72,9 @@ const STREAM_EVENT = Object.freeze({
   TOOL_START: 'tool_start',
   TOOL_END: 'tool_end',
   MODE_UPDATE: 'mode_update',
+  AUX_START: 'aux_start',
+  AUX_DELTA: 'aux_delta',
+  AUX_END: 'aux_end',
   ERROR: 'error',
 });
 
@@ -288,6 +291,7 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
       text: '',
       reasoning: '',
       toolCalls: [],
+      auxContent: '',
       isStreaming: true,
     };
 
@@ -336,6 +340,7 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     let buffer = '';
     let assistantText = '';
     let assistantReasoning = '';
+    let auxText = '';
     const toolCallsByKey = new Map();
 
     /**
@@ -366,6 +371,17 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
       if (!isStreamActive()) return;
       setChatMessages((prev) => prev.map((message) => (message.id === assistantId
         ? { ...message, text: nextText, reasoning: nextReasoning ?? assistantReasoning }
+        : message)));
+    }
+
+    /**
+     * 把辅 Agent 累积文本写回 assistant 占位消息的 auxContent 字段。
+     * @param {string} nextAuxText - 最新辅 Agent 文本快照
+     */
+    function syncAuxContent(nextAuxText) {
+      if (!isStreamActive()) return;
+      setChatMessages((prev) => prev.map((message) => (message.id === assistantId
+        ? { ...message, auxContent: nextAuxText }
         : message)));
     }
 
@@ -441,6 +457,18 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
               syncToolCallsToMessage();
               break;
             }
+            case STREAM_EVENT.AUX_DELTA:
+              if (typeof event.delta === 'string' && event.delta.length > 0) {
+                auxText += event.delta;
+                syncAuxContent(auxText);
+              }
+              break;
+            case STREAM_EVENT.AUX_END:
+              if (typeof event.text === 'string' && event.text.length > 0) {
+                auxText = event.text;
+                syncAuxContent(auxText);
+              }
+              break;
             case STREAM_EVENT.ERROR:
               if (isStreamActive()) {
                 setChatMessages((prev) => prev.map((message) => (message.id === assistantId

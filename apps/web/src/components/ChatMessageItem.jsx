@@ -56,6 +56,7 @@ export default function ChatMessageItem({
   const hasProposedCards = item.proposedCards.length > 0 && proposedCardsState;
   const hasArtifact = Boolean(item.artifact);
   const hasError = Boolean(item.error);
+  const hasAuxContent = Boolean(item.auxContent);
   const isWaiting = item.isStreaming && !hasText && !hasToolCalls && !hasReasoning;
 
   return (
@@ -135,6 +136,16 @@ export default function ChatMessageItem({
             cardTypeLabel={cardTypeLabel}
             t={t}
           />
+        )}
+
+        {hasAuxContent && (
+          <details className="chat-message-aux">
+            <summary>{t('chat.auxProbeTitle')}</summary>
+            <div
+              className="chat-message-aux-text"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(item.auxContent) }}
+            />
+          </details>
         )}
 
         {hasError && <p className="chat-message-error" role="alert">{item.error}</p>}

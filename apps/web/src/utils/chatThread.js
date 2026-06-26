@@ -63,6 +63,7 @@ export const EMPTY_PROPOSED_CARDS = [];
  * @param {string} [fields.reasoning=''] - 推理过程（流式独有）
  * @param {Array} [fields.toolCalls=EMPTY_TOOL_CALLS] - 工具调用列表（流式独有）
  * @param {boolean} [fields.isStreaming=false] - 是否仍在流式输出
+ * @param {string} [fields.auxContent=''] - 辅 Agent（probe）追问内容（流式独有）
  * @param {string} [fields.error=''] - 错误文案
  * @param {Array} [fields.citations=EMPTY_CITATIONS] - 引用列表
  * @param {Array} [fields.proposedCards=EMPTY_PROPOSED_CARDS] - 提议卡片列表
@@ -83,6 +84,7 @@ export function createChatThreadItem(fields) {
     reasoning = '',
     toolCalls = EMPTY_TOOL_CALLS,
     isStreaming = false,
+    auxContent = '',
     error = '',
     citations = EMPTY_CITATIONS,
     proposedCards = EMPTY_PROPOSED_CARDS,
@@ -105,6 +107,7 @@ export function createChatThreadItem(fields) {
     reasoning,
     toolCalls,
     isStreaming,
+    auxContent,
     error,
     citations,
     proposedCards,
@@ -145,6 +148,7 @@ export function fromStreamMessage(message) {
     reasoning: message.reasoning ?? '',
     toolCalls: message.toolCalls ?? EMPTY_TOOL_CALLS,
     isStreaming: Boolean(message.isStreaming),
+    auxContent: message.auxContent ?? '',
     error: message.error ?? '',
     timestamp: extractTimestampFromId(message.id),
   });
