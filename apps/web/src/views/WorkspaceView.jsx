@@ -4,7 +4,7 @@
  */
 
 import { Sparkles, SquareArrowOutUpRight } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import EmptyState from '../components/EmptyState';
 import RecentImports from '../components/RecentImports';
@@ -42,7 +42,7 @@ export default function WorkspaceView({ activity, apiStatus, isSubmitting, mater
       try {
         const payload = await api.get('/api/insights');
         if (!ignore && payload?.recentCards?.length) {
-          setRecentCards(payload.recentCards.slice(0, 5));
+          setRecentCards(payload.recentCards);
         }
       } catch {
         ;
@@ -51,6 +51,23 @@ export default function WorkspaceView({ activity, apiStatus, isSubmitting, mater
     loadRecentCards();
     return () => { ignore = true; };
   }, [offline]);
+
+  const recentCardsByWorkspace = useMemo(() => {
+    const groups = new Map();
+    for (const card of recentCards) {
+      const key = card.workspaceId || 'default';
+      if (!groups.has(key)) {
+        groups.set(key, {
+          workspaceId: key,
+          workspaceTitle: card.workspaceTitle || key,
+          cards: [],
+        });
+      }
+      groups.get(key).cards.push(card);
+    }
+    return Array.from(groups.values());
+  }, [recentCards]);
+
   return (
     <>
       <section className="hero">
@@ -88,6 +105,33 @@ export default function WorkspaceView({ activity, apiStatus, isSubmitting, mater
         {!isSubmitting && activity && <p className="activity">{activity}</p>}
       </section>
 
+      {recentCardsByWorkspace.length > 0 && (
+        <section className="workspace-recent-cards">
+          <div className="workspace-recent-cards-head">
+            <h3>{t('cardDetail.recentCardsTitle')}</h3>
+            <small>{t('cardDetail.recentCardsHint')}</small>
+          </div>
+          {recentCardsByWorkspace.map((group) => (
+            <div key={group.workspaceId} className="workspace-recent-cards-group">
+              <h4 className="workspace-recent-cards-group-title">{group.workspaceTitle}</h4>
+              <div className="workspace-recent-cards-list">
+                {group.cards.map((card) => (
+                  <button
+                    key={card.id}
+                    type="button"
+                    className={`workspace-recent-card-item type-${card.type ?? 'general'}`}
+                    onClick={() => onOpenCardDetail?.(card, group.workspaceTitle)}
+                  >
+                    <span className="workspace-recent-card-type">{cardTypeLabel(card.type)}</span>
+                    <span className="workspace-recent-card-title">{card.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
       {(hasContent || isSubmitting) && (
         <section className="lower-grid">
           {isSubmitting && !hasContent ? (
@@ -119,29 +163,6 @@ export default function WorkspaceView({ activity, apiStatus, isSubmitting, mater
       {!isSubmitting && !hasContent && (
         <section className="workspace-empty-guide">
           <EmptyState title={t('workspace.empty.title')} body={t('workspace.empty.body')} />
-        </section>
-      )}
-
-      {recentCards.length > 0 && (
-        <section className="workspace-recent-cards">
-          <div className="workspace-recent-cards-head">
-            <h3>{t('cardDetail.recentCardsTitle')}</h3>
-            <small>{t('cardDetail.recentCardsHint')}</small>
-          </div>
-          <div className="workspace-recent-cards-list">
-            {recentCards.map((card) => (
-              <button
-                key={card.id}
-                type="button"
-                className={`workspace-recent-card-item type-${card.type ?? 'general'}`}
-                onClick={() => onOpenCardDetail?.(card, card.workspaceTitle)}
-              >
-                <span className="workspace-recent-card-type">{cardTypeLabel(card.type)}</span>
-                <span className="workspace-recent-card-title">{card.title}</span>
-                {card.workspaceTitle && <span className="workspace-recent-card-workspace">{card.workspaceTitle}</span>}
-              </button>
-            ))}
-          </div>
         </section>
       )}
     </>
