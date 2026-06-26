@@ -9832,7 +9832,17 @@ export function getGlobalInsights(workspaceId?: string): GlobalInsights {
   const nodeCount = bases.length + materials.length + cards.length;
   const edgeCount = materials.length + cards.filter((card) => card.materialId).length;
 
-  const workspacePreviews = buildWorkspacePreviews(bases);
+  const allWorkspacePreviews = buildWorkspacePreviews(bases);
+  const workspacePreviews = scopedWorkspaceId
+    ? allWorkspacePreviews.filter((ws) => ws.id === scopedWorkspaceId)
+    : allWorkspacePreviews;
+  const workspaceCount = scopedWorkspaceId ? workspacePreviews.length : bases.length;
+  const scopedNodeCount = scopedWorkspaceId
+    ? workspacePreviews.length + materials.length + cards.length
+    : nodeCount;
+  const scopedEdgeCount = scopedWorkspaceId
+    ? materials.length + cards.filter((card) => card.materialId).length
+    : edgeCount;
 
   const evidenceLogs = repository.listAgentActionLogs({
     action: EVIDENCE_ACTION_ACCEPT_PROPOSED_CARDS,
@@ -9854,9 +9864,9 @@ export function getGlobalInsights(workspaceId?: string): GlobalInsights {
     sourceDistribution,
     recentCards,
     mapPreview: {
-      nodeCount,
-      edgeCount,
-      workspaceCount: bases.length,
+      nodeCount: scopedNodeCount,
+      edgeCount: scopedEdgeCount,
+      workspaceCount,
       workspaces: workspacePreviews,
     },
     evidence,
