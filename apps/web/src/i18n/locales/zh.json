@@ -162,7 +162,7 @@
   "folderImport.pickedFiles": "已选 {{count}} 个文件",
   "folderImport.moreFiles": "还有 {{count}} 个文件未显示",
   "folderImport.noSupportedFiles": "所选文件夹中没有支持的文件（仅支持 .md/.markdown/.txt）",
-  "folderImport.tooManyFiles": "文件数 {{count}} 超过上限 {{max}}，请减少文件或改用路径扫描模式",
+  "folderImport.bodyTooLarge": "文件内容总量过大，浏览器上传失败。请改用「路径扫描」模式导入。",
   "folderImport.oversizedFile": "{{name}} 超过 2MB 大小限制",
   "folderImport.pathLabel": "本地文件夹路径",
   "folderImport.pathPlaceholder": "/Users/yourname/Documents/my-knowledge-base",

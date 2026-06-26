@@ -5191,8 +5191,8 @@ export async function intakeFolderFromPath(
 /** 批量文件导入单条内容大小上限：2MB。 */
 const FILE_BATCH_MAX_CONTENT_SIZE = 2 * 1024 * 1024;
 
-/** 批量文件导入条数上限。 */
-const FILE_BATCH_MAX_ITEMS = 200;
+/** 批量文件导入条数上限（防极端误操作，实质不限制日常使用）。 */
+const FILE_BATCH_MAX_ITEMS = 10000;
 
 /**
  * 批量文件导入：接收前端通过 webkitdirectory 读取后的文件内容数组，批量入库。

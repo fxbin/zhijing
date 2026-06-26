@@ -162,7 +162,7 @@
   "folderImport.pickedFiles": "{{count}} files selected",
   "folderImport.moreFiles": "{{count}} more files not shown",
   "folderImport.noSupportedFiles": "No supported files in the selected folder (only .md/.markdown/.txt)",
-  "folderImport.tooManyFiles": "File count {{count}} exceeds max {{max}}. Reduce files or switch to path scan mode.",
+  "folderImport.bodyTooLarge": "Total payload too large for browser upload. Please switch to \"Path Scan\" mode.",
   "folderImport.oversizedFile": "{{name}} exceeds 2MB size limit",
   "folderImport.pathLabel": "Local folder path",
   "folderImport.pathPlaceholder": "/Users/yourname/Documents/my-knowledge-base",

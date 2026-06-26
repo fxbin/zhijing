@@ -20,9 +20,6 @@ const SUPPORTED_EXTENSIONS = ['.md', '.markdown', '.txt'];
 /** 单文件大小上限：2MB。 */
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 
-/** 单批文件数上限。 */
-const MAX_BATCH_FILES = 200;
-
 /**
  * 从 File 对象获取相对路径（webkitRelativePath 第一段为根目录名，去除之）。
  * @param {File} file - 文件对象
@@ -78,11 +75,6 @@ export default function FolderImportDialog({ open, onClose, workspaceId, workspa
       setPickedFiles([]);
       return;
     }
-    if (supported.length > MAX_BATCH_FILES) {
-      setError(t('folderImport.tooManyFiles', { count: supported.length, max: MAX_BATCH_FILES }));
-      setPickedFiles([]);
-      return;
-    }
     const oversized = supported.find((file) => file.size > MAX_FILE_SIZE);
     if (oversized) {
       setError(t('folderImport.oversizedFile', { name: oversized.name }));
@@ -116,7 +108,13 @@ export default function FolderImportDialog({ open, onClose, workspaceId, workspa
       setResult(payload);
       onImported?.(payload);
     } catch (err) {
-      setError(err.message || t('folderImport.defaultError'));
+      const status = err?.status;
+      const msg = (err?.message || '').toLowerCase();
+      if (status === 413 || msg.includes('body') || msg.includes('large') || status === 0) {
+        setError(t('folderImport.bodyTooLarge'));
+      } else {
+        setError(err.message || t('folderImport.defaultError'));
+      }
     } finally {
       setLoading(false);
     }
