@@ -126,6 +126,7 @@ import {
 import {
   createPiAiRuntime,
   createMockPiRuntime,
+  createRoutedPiRuntime,
   entityExtractionSchema,
   getDefaultPiModel,
   getDefaultPiProvider,
@@ -7479,7 +7480,7 @@ export async function extractEntities(workspaceId: string, piRuntime?: PiRuntime
   }
   const cardDigest = cards.slice(0, 40).map((card) => `- ${card.title}: ${card.body.slice(0, 120)}`).join('\n');
   const prompt = `请从以下知识库卡片中提取关键实体（人物、组织、概念、工具、地点、事件等）。\n知识库主题：${base.title}\n卡片摘要：\n${cardDigest}`;
-  const runtime = piRuntime ?? createMockPiRuntime();
+  const runtime = piRuntime ?? createRoutedPiRuntime('entity_extraction');
   const result = await runtime.completeStructured<{ entities: Array<{ name: string; type: string; description: string }> }>({
     task: 'entity_extraction',
     prompt,
@@ -9319,7 +9320,7 @@ export function listSkeletonCards(workspaceId: string): KnowledgeCard[] {
  */
 export async function generateSocraticQuestions(
   workspaceId: string,
-  options?: { cardId?: string; tensionKey?: string; trigger?: SocraticTrigger },
+  options?: { cardId?: string; tensionKey?: string; trigger?: SocraticTrigger; piRuntime?: PiRuntime },
 ): Promise<SocraticQuestioningResult> {
   const startTime = Date.now();
   const base = repository.findWorkspace(workspaceId);
@@ -9337,7 +9338,7 @@ export async function generateSocraticQuestions(
   }
 
   const prompt = buildSocraticPrompt(base.title, cards, trigger, cardId, tensionKey);
-  const runtime = createMockPiRuntime();
+  const runtime = options?.piRuntime ?? createRoutedPiRuntime('socratic_questioning');
   const result = await runtime.completeStructured<{ questions: SocraticQuestion[] }>({
     task: 'socratic_questioning',
     prompt,

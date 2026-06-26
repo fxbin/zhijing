@@ -420,6 +420,13 @@ export function createConfiguredPiRuntime(): PiRuntime {
   });
 }
 
+export {
+  routeProvider,
+  createRoutedPiRuntime,
+  DEFAULT_ROUTES,
+} from './router.js';
+export type { ProviderRoute, RouteResolution, AgentTaskType, ProviderRole } from '@zhijing/shared';
+
 function getConfiguredModel(provider: KnownProvider, modelId: string): Model<Api> {
   return getModel(provider, modelId as never) as Model<Api>;
 }

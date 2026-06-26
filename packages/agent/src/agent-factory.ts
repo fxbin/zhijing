@@ -8,6 +8,7 @@ import {
   type Model,
 } from '@earendil-works/pi-ai';
 import { Agent, type AgentMessage, type AgentOptions, type ThinkingLevel } from '@earendil-works/pi-agent-core';
+import { routeProvider, type AgentTaskType } from '@zhijing/pi-runtime';
 import { createWorkspaceTools, getToolCapabilityDeclaration } from './tools/index.js';
 import {
   assertToolCapabilityAllowed,
@@ -15,16 +16,6 @@ import {
   defaultConsoleAuditSink,
   type ToolCallAuditSink,
 } from './capability-guard.js';
-
-/**
- * 默认 LLM provider；与 pi-runtime 保持一致以便复用同一份环境变量配置。
- */
-const DEFAULT_PROVIDER: KnownProvider = 'deepseek';
-
-/**
- * 默认模型 id；与 pi-runtime 保持一致，控制成本与响应延迟。
- */
-const DEFAULT_MODEL_ID = 'deepseek-v4-flash';
 
 /**
  * 默认推理强度；off 表示不在请求中附加 thinking/reasoning 参数，
@@ -89,13 +80,14 @@ function defaultConvertToLlm(messages: AgentMessage[]): Message[] {
 /**
  * Agent 工厂配置项。
  *
- * - provider：LLM provider，省略时读 ZHIJING_PI_PROVIDER，再退化为 'deepseek'
- * - modelId：模型 id，省略时读 ZHIJING_PI_MODEL，再退化为 'deepseek-v4-flash'
+ * - provider：LLM provider，省略时走路由引擎解析（尊重 ZHIJING_PI_PROVIDER）
+ * - modelId：模型 id，省略时走路由引擎解析（尊重 ZHIJING_PI_MODEL）
  * - apiKey：API key，省略时读 ZHIJING_PI_API_KEY 再退化为 provider 默认环境变量
  * - thinkingLevel：推理强度，省略时使用 medium
  * - toolExecution：工具执行模式，省略时使用 parallel
  * - systemPromptOverride：覆盖默认系统提示词
  * - auditSink：工具调用审计日志接收器，省略时使用 defaultConsoleAuditSink
+ * - taskType：任务类型，省略时使用 'conversation'；驱动路由引擎选择 Provider/Model
  */
 export interface WorkspaceAgentOptions {
   provider?: KnownProvider;
@@ -105,31 +97,7 @@ export interface WorkspaceAgentOptions {
   toolExecution?: AgentOptions['toolExecution'];
   systemPromptOverride?: string;
   auditSink?: ToolCallAuditSink;
-}
-
-/**
- * 解析 provider：参数 > 环境变量 > 默认值。
- *
- * @param explicit - 调用方显式传入的 provider
- * @returns 最终生效的 provider
- * @author fxbin
- */
-function resolveProvider(explicit?: KnownProvider): KnownProvider {
-  if (explicit) return explicit;
-  const envProvider = process.env.ZHIJING_PI_PROVIDER;
-  return envProvider && envProvider.length > 0 ? (envProvider as KnownProvider) : DEFAULT_PROVIDER;
-}
-
-/**
- * 解析 modelId：参数 > 环境变量 > 默认值。
- *
- * @param explicit - 调用方显式传入的 modelId
- * @returns 最终生效的 modelId
- * @author fxbin
- */
-function resolveModelId(explicit?: string): string {
-  if (explicit) return explicit;
-  return process.env.ZHIJING_PI_MODEL ?? DEFAULT_MODEL_ID;
+  taskType?: AgentTaskType;
 }
 
 /**
@@ -195,8 +163,10 @@ export function createWorkspaceAgent(workspaceId: string, options: WorkspaceAgen
     throw new Error('createWorkspaceAgent: workspaceId is required.');
   }
 
-  const provider = resolveProvider(options.provider);
-  const modelId = resolveModelId(options.modelId);
+  const taskType = options.taskType ?? 'conversation';
+  const resolution = routeProvider(taskType);
+  const provider = (options.provider ?? resolution.resolvedProvider) as KnownProvider;
+  const modelId = options.modelId ?? resolution.resolvedModel;
   const apiKey = resolveApiKey(provider, options.apiKey);
 
   if (!apiKey) {

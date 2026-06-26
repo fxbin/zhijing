@@ -1436,3 +1436,76 @@ export type AgentStreamEvent =
   | { type: 'aux_delta'; delta: string }
   | { type: 'aux_end'; text: string }
   | { type: 'error'; message: string };
+
+/**
+ * Agent LLM 调用的任务类型分类。
+ *
+ * 用于 Provider 路由引擎按任务类型选择最优 Provider/Model 组合。
+ * 前六项与 pi-runtime 的 StructuredGenerationRequest.task 对齐，
+ * 后三项覆盖对话路径与辅助探查路径。
+ *
+ * @author fxbin
+ */
+export type AgentTaskType =
+  | 'workspace_skeleton'
+  | 'material_summary'
+  | 'knowledge_cards'
+  | 'question_answer'
+  | 'entity_extraction'
+  | 'socratic_questioning'
+  | 'deep_research'
+  | 'conversation'
+  | 'auxiliary_probe';
+
+/**
+ * Provider 路由角色。
+ *
+ * - primary：主力 Provider，承载大部分任务（知径当前为 DeepSeek）
+ * - complementary：互补 Provider，仅在 primary 存在短板的特定场景启用
+ *
+ * @author fxbin
+ */
+export type ProviderRole = 'primary' | 'complementary';
+
+/**
+ * Provider 路由配置项。
+ *
+ * 描述某个 Provider/Model 组合承担哪些任务类型、承担角色、选择理由，
+ * 以及该 Provider 不可用时的 fallback。
+ *
+ * - provider / model：LLM Provider 与模型 id（string，避免 shared 包依赖 pi-ai）
+ * - role：主力或互补
+ * - taskTypes：该路由承担的任务类型列表
+ * - reason：选择理由，用于审计与 dashboard 展示
+ * - fallbackProvider / fallbackModel：该 Provider 不可用时的回退
+ *
+ * @author fxbin
+ */
+export interface ProviderRoute {
+  provider: string;
+  model: string;
+  role: ProviderRole;
+  taskTypes: AgentTaskType[];
+  reason: string;
+  fallbackProvider?: string;
+  fallbackModel?: string;
+}
+
+/**
+ * 路由解析结果。
+ *
+ * routeProvider(taskType) 返回此结构，包含命中的路由与最终生效的 Provider/Model。
+ * 当命中 complementary 路由但其 Provider 不可用时，resolved 会回退到 fallback。
+ *
+ * - route：命中的原始路由配置
+ * - resolvedProvider / resolvedModel：最终生效的 Provider/Model（可能为 fallback）
+ * - fellBack：是否发生了 fallback
+ *
+ * @author fxbin
+ */
+export interface RouteResolution {
+  route: ProviderRoute;
+  resolvedProvider: string;
+  resolvedModel: string;
+  fellBack: boolean;
+}
