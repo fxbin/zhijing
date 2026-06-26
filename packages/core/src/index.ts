@@ -118,6 +118,14 @@ import {
   type AgentUsageQuery,
   type AgentUsageSummary,
   type AgentUsageComparison,
+  type UserMemory,
+  type UserMemoryScope,
+  type UserMemorySource,
+  type CreateUserMemoryRequest,
+  type UpdateUserMemoryRequest,
+  type DecisionLog,
+  type DecisionLogKind,
+  type CreateDecisionLogRequest,
 } from '@zhijing/shared';
 import { fetchUrlAsMarkdown } from './web-fetch.js';
 import {
@@ -135,6 +143,20 @@ import {
   DEFAULT_QUERY_LIMIT,
   type AgentUsageRepository,
 } from './agent-usage.js';
+import {
+  buildUserMemoryFilter,
+  applyUserMemoryLimit,
+  validateCreateUserMemoryRequest,
+  type UserMemoryRepository,
+  type UserMemoryQuery,
+} from './user-memory.js';
+import {
+  buildDecisionLogFilter,
+  applyDecisionLogLimit,
+  validateCreateDecisionLogRequest,
+  type DecisionLogRepository,
+  type DecisionLogQuery,
+} from './decision-log.js';
 import {
   createPiAiRuntime,
   createInstrumentedPiRuntime,
@@ -399,6 +421,8 @@ type StoreState = {
   agentActionLogs: AgentActionLog[];
   proposals: PersistedProposal[];
   agentUsage: AgentUsageRecord[];
+  userMemory: UserMemory[];
+  decisionLog: DecisionLog[];
 };
 
 type KnowledgeRepository = {
@@ -487,6 +511,15 @@ type KnowledgeRepository = {
   listAgentUsage(query: AgentUsageQuery): AgentUsageRecord[];
   summarizeAgentUsage(query: AgentUsageQuery): AgentUsageSummary;
   compareAgentUsage(query: AgentUsageQuery): AgentUsageComparison;
+  insertUserMemory(record: UserMemory): void;
+  updateUserMemory(id: string, patch: UpdateUserMemoryRequest): UserMemory | undefined;
+  deleteUserMemory(id: string): boolean;
+  findUserMemory(id: string): UserMemory | undefined;
+  listUserMemory(query: UserMemoryQuery): UserMemory[];
+  insertDecisionLog(record: DecisionLog): void;
+  findDecisionLog(id: string): DecisionLog | undefined;
+  listDecisionLog(query: DecisionLogQuery): DecisionLog[];
+  deleteDecisionLog(id: string): boolean;
   insertAgentActionLog(log: AgentActionLog): void;
   listAgentActionLogs(options?: { workspaceId?: string; action?: string; limit?: number }): AgentActionLog[];
   countAgentActionLogs(options?: { workspaceId?: string; action?: string }): number;
@@ -551,6 +584,8 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     agentActionLogs: [],
     proposals: [],
     agentUsage: [],
+    userMemory: [],
+    decisionLog: [],
   };
 
   private wereadApiKey: string | null = null;
@@ -1166,6 +1201,57 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     const filter = buildUsageFilter(query);
     const filtered = this.state.agentUsage.filter(filter);
     return buildUsageComparison(filtered);
+  }
+
+  insertUserMemory(record: UserMemory): void {
+    this.state.userMemory.push(record);
+  }
+
+  updateUserMemory(id: string, patch: UpdateUserMemoryRequest): UserMemory | undefined {
+    const record = this.state.userMemory.find((item) => item.id === id);
+    if (!record) return undefined;
+    if (patch.value !== undefined) record.value = patch.value;
+    if (patch.scope !== undefined) record.scope = patch.scope;
+    record.updatedAt = now();
+    return record;
+  }
+
+  deleteUserMemory(id: string): boolean {
+    const index = this.state.userMemory.findIndex((item) => item.id === id);
+    if (index === -1) return false;
+    this.state.userMemory.splice(index, 1);
+    return true;
+  }
+
+  findUserMemory(id: string): UserMemory | undefined {
+    return this.state.userMemory.find((item) => item.id === id);
+  }
+
+  listUserMemory(query: UserMemoryQuery): UserMemory[] {
+    const filter = buildUserMemoryFilter(query);
+    const filtered = this.state.userMemory.filter(filter);
+    return applyUserMemoryLimit(filtered, query);
+  }
+
+  insertDecisionLog(record: DecisionLog): void {
+    this.state.decisionLog.push(record);
+  }
+
+  findDecisionLog(id: string): DecisionLog | undefined {
+    return this.state.decisionLog.find((item) => item.id === id);
+  }
+
+  listDecisionLog(query: DecisionLogQuery): DecisionLog[] {
+    const filter = buildDecisionLogFilter(query);
+    const filtered = this.state.decisionLog.filter(filter);
+    return applyDecisionLogLimit(filtered, query);
+  }
+
+  deleteDecisionLog(id: string): boolean {
+    const index = this.state.decisionLog.findIndex((item) => item.id === id);
+    if (index === -1) return false;
+    this.state.decisionLog.splice(index, 1);
+    return true;
   }
 
   /**
@@ -2346,6 +2432,149 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     return buildUsageComparison(records);
   }
 
+  insertUserMemory(record: UserMemory): void {
+    this.db.prepare(`
+      INSERT INTO user_memory (id, scope, key, value, source, workspace_id, created_at, updated_at)
+      VALUES (@id, @scope, @key, @value, @source, @workspace_id, @created_at, @updated_at)
+      ON CONFLICT(id) DO UPDATE SET
+        scope = excluded.scope,
+        key = excluded.key,
+        value = excluded.value,
+        source = excluded.source,
+        workspace_id = excluded.workspace_id,
+        updated_at = excluded.updated_at
+    `).run({
+      id: record.id,
+      scope: record.scope,
+      key: record.key,
+      value: record.value,
+      source: record.source,
+      workspace_id: record.workspaceId ?? null,
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+    });
+  }
+
+  updateUserMemory(id: string, patch: UpdateUserMemoryRequest): UserMemory | undefined {
+    const existing = this.findUserMemory(id);
+    if (!existing) return undefined;
+    const next: UserMemory = {
+      ...existing,
+      value: patch.value ?? existing.value,
+      scope: patch.scope ?? existing.scope,
+      updatedAt: now(),
+    };
+    this.db.prepare(`
+      UPDATE user_memory SET value = ?, scope = ?, updated_at = ? WHERE id = ?
+    `).run(next.value, next.scope, next.updatedAt, id);
+    return next;
+  }
+
+  deleteUserMemory(id: string): boolean {
+    const result = this.db.prepare('DELETE FROM user_memory WHERE id = ?').run(id);
+    return result.changes > 0;
+  }
+
+  findUserMemory(id: string): UserMemory | undefined {
+    const row = this.db.prepare('SELECT * FROM user_memory WHERE id = ?').get(id) as UserMemoryRow | undefined;
+    return row ? mapUserMemory(row) : undefined;
+  }
+
+  listUserMemory(query: UserMemoryQuery): UserMemory[] {
+    const conditions: string[] = [];
+    const params: Record<string, string> = {};
+    if (query.scope !== undefined) {
+      conditions.push('scope = @scope');
+      params.scope = query.scope;
+    }
+    if (query.source !== undefined) {
+      conditions.push('source = @source');
+      params.source = query.source;
+    }
+    if (query.key !== undefined) {
+      conditions.push('key = @key');
+      params.key = query.key;
+    }
+    if (query.workspaceId !== undefined) {
+      if (query.workspaceId === 'global') {
+        conditions.push('workspace_id IS NULL');
+      } else {
+        conditions.push('workspace_id = @workspaceId');
+        params.workspaceId = query.workspaceId;
+      }
+    }
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const limit = query.limit ?? DEFAULT_USER_MEMORY_QUERY_LIMIT;
+    const rows = this.db.prepare(`SELECT * FROM user_memory ${whereClause} ORDER BY updated_at DESC LIMIT ${limit}`).all(params) as UserMemoryRow[];
+    return rows.map(mapUserMemory);
+  }
+
+  insertDecisionLog(record: DecisionLog): void {
+    this.db.prepare(`
+      INSERT INTO decision_log (id, kind, workspace_id, summary, reasoning, evidence_card_ids_json, agent_task_type, metadata_json, created_at)
+      VALUES (@id, @kind, @workspace_id, @summary, @reasoning, @evidence_card_ids_json, @agent_task_type, @metadata_json, @created_at)
+      ON CONFLICT(id) DO UPDATE SET
+        kind = excluded.kind,
+        summary = excluded.summary,
+        reasoning = excluded.reasoning,
+        evidence_card_ids_json = excluded.evidence_card_ids_json,
+        metadata_json = excluded.metadata_json
+    `).run({
+      id: record.id,
+      kind: record.kind,
+      workspace_id: record.workspaceId ?? null,
+      summary: record.summary,
+      reasoning: record.reasoning,
+      evidence_card_ids_json: JSON.stringify(record.evidenceCardIds),
+      agent_task_type: record.agentTaskType ?? null,
+      metadata_json: record.metadata ? JSON.stringify(record.metadata) : null,
+      created_at: record.createdAt,
+    });
+  }
+
+  findDecisionLog(id: string): DecisionLog | undefined {
+    const row = this.db.prepare('SELECT * FROM decision_log WHERE id = ?').get(id) as DecisionLogRow | undefined;
+    return row ? mapDecisionLog(row) : undefined;
+  }
+
+  listDecisionLog(query: DecisionLogQuery): DecisionLog[] {
+    const conditions: string[] = [];
+    const params: Record<string, string> = {};
+    if (query.kind !== undefined) {
+      conditions.push('kind = @kind');
+      params.kind = query.kind;
+    }
+    if (query.agentTaskType !== undefined) {
+      conditions.push('agent_task_type = @agentTaskType');
+      params.agentTaskType = query.agentTaskType;
+    }
+    if (query.workspaceId !== undefined) {
+      if (query.workspaceId === 'global') {
+        conditions.push('workspace_id IS NULL');
+      } else {
+        conditions.push('workspace_id = @workspaceId');
+        params.workspaceId = query.workspaceId;
+      }
+    }
+    if (query.since !== undefined) {
+      conditions.push('created_at >= @since');
+      params.since = query.since;
+    }
+    if (query.until !== undefined) {
+      conditions.push('created_at <= @until');
+      params.until = query.until;
+    }
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const limit = query.limit ?? DEFAULT_DECISION_LOG_QUERY_LIMIT;
+    const rows = this.db.prepare(`SELECT * FROM decision_log ${whereClause} ORDER BY created_at DESC LIMIT ${limit}`).all(params) as DecisionLogRow[];
+    return rows.map(mapDecisionLog);
+  }
+
+  deleteDecisionLog(id: string): boolean {
+    const result = this.db.prepare('DELETE FROM decision_log WHERE id = ?').run(id);
+    return result.changes > 0;
+  }
+
   private ensureWorkspaceRename() {
     const renameOrMerge = (source: string, target: string) => {
       const sourceExists = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(source) as { name: string } | undefined;
@@ -3043,6 +3272,39 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       CREATE INDEX IF NOT EXISTS idx_agent_usage_task ON agent_usage(task_type);
       CREATE INDEX IF NOT EXISTS idx_agent_usage_started ON agent_usage(started_at);
     `);
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS user_memory (
+        id TEXT PRIMARY KEY,
+        scope TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        source TEXT NOT NULL,
+        workspace_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_memory_scope ON user_memory(scope);
+      CREATE INDEX IF NOT EXISTS idx_user_memory_workspace ON user_memory(workspace_id);
+      CREATE INDEX IF NOT EXISTS idx_user_memory_key ON user_memory(key);
+    `);
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS decision_log (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        workspace_id TEXT,
+        summary TEXT NOT NULL,
+        reasoning TEXT NOT NULL,
+        evidence_card_ids_json TEXT NOT NULL,
+        agent_task_type TEXT,
+        metadata_json TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_decision_log_kind ON decision_log(kind);
+      CREATE INDEX IF NOT EXISTS idx_decision_log_workspace ON decision_log(workspace_id);
+      CREATE INDEX IF NOT EXISTS idx_decision_log_created ON decision_log(created_at);
+    `);
   }
 
   /**
@@ -3581,6 +3843,56 @@ function mapAgentUsage(row: AgentUsageRow): AgentUsageRecord {
     errorMessage: row.error_message,
     startedAt: row.started_at,
     durationMs: row.duration_ms,
+  };
+}
+
+type UserMemoryRow = {
+  id: string;
+  scope: string;
+  key: string;
+  value: string;
+  source: string;
+  workspace_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+function mapUserMemory(row: UserMemoryRow): UserMemory {
+  return {
+    id: row.id,
+    scope: row.scope as UserMemoryScope,
+    key: row.key,
+    value: row.value,
+    source: row.source as UserMemorySource,
+    workspaceId: row.workspace_id ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+type DecisionLogRow = {
+  id: string;
+  kind: string;
+  workspace_id: string | null;
+  summary: string;
+  reasoning: string;
+  evidence_card_ids_json: string;
+  agent_task_type: string | null;
+  metadata_json: string | null;
+  created_at: string;
+};
+
+function mapDecisionLog(row: DecisionLogRow): DecisionLog {
+  return {
+    id: row.id,
+    kind: row.kind as DecisionLogKind,
+    workspaceId: row.workspace_id ?? undefined,
+    summary: row.summary,
+    reasoning: row.reasoning,
+    evidenceCardIds: JSON.parse(row.evidence_card_ids_json) as string[],
+    agentTaskType: row.agent_task_type as DecisionLog['agentTaskType'] ?? undefined,
+    metadata: row.metadata_json ? JSON.parse(row.metadata_json) as Record<string, unknown> : undefined,
+    createdAt: row.created_at,
   };
 }
 
@@ -9254,6 +9566,8 @@ export async function getWorkspaceAnalytics(id: string): Promise<WorkspaceAnalyt
  * 洞察页来源分布最多展示的平台数量。
  */
 const INSIGHTS_SOURCE_PLATFORM_LIMIT = 6;
+const DEFAULT_USER_MEMORY_QUERY_LIMIT = 200;
+const DEFAULT_DECISION_LOG_QUERY_LIMIT = 200;
 
 /**
  * 洞察页最近卡片最多展示的条数。
@@ -10854,6 +11168,140 @@ export function compareAgentUsageRecords(query: AgentUsageQuery): AgentUsageComp
 }
 
 export { type AgentUsageRepository } from './agent-usage.js';
+export { type UserMemoryRepository, type UserMemoryQuery } from './user-memory.js';
+export { type DecisionLogRepository, type DecisionLogQuery } from './decision-log.js';
+
+/**
+ * 创建用户记忆记录。
+ *
+ * @param request - 创建请求
+ * @returns 新建的用户记忆记录
+ * @author fxbin
+ */
+export function createUserMemoryRecord(request: CreateUserMemoryRequest): UserMemory {
+  const error = validateCreateUserMemoryRequest(request);
+  if (error) {
+    throw new KnowledgeCoreError(`Invalid user memory: ${error}`, 400);
+  }
+  const timestamp = now();
+  const record: UserMemory = {
+    id: id('umem'),
+    scope: request.scope,
+    key: request.key,
+    value: request.value,
+    source: request.source ?? 'user_input',
+    workspaceId: request.workspaceId,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  repository.insertUserMemory(record);
+  return record;
+}
+
+/**
+ * 更新用户记忆记录。
+ *
+ * @param memoryId - 记忆 id
+ * @param patch - 更新请求
+ * @returns 更新后的记录；不存在返回 undefined
+ * @author fxbin
+ */
+export function updateUserMemoryRecord(memoryId: string, patch: UpdateUserMemoryRequest): UserMemory | undefined {
+  return repository.updateUserMemory(memoryId, patch);
+}
+
+/**
+ * 删除用户记忆记录。
+ *
+ * @param memoryId - 记忆 id
+ * @returns 是否删除成功
+ * @author fxbin
+ */
+export function deleteUserMemoryRecord(memoryId: string): boolean {
+  return repository.deleteUserMemory(memoryId);
+}
+
+/**
+ * 查询单条用户记忆。
+ *
+ * @param memoryId - 记忆 id
+ * @returns 记忆记录；不存在返回 undefined
+ * @author fxbin
+ */
+export function findUserMemoryRecord(memoryId: string): UserMemory | undefined {
+  return repository.findUserMemory(memoryId);
+}
+
+/**
+ * 列出用户记忆记录。
+ *
+ * @param query - 查询条件
+ * @returns 用户记忆数组
+ * @author fxbin
+ */
+export function listUserMemoryRecords(query: UserMemoryQuery = {}): UserMemory[] {
+  return repository.listUserMemory(query);
+}
+
+/**
+ * 创建决策日志记录。
+ *
+ * @param request - 创建请求
+ * @returns 新建的决策日志记录
+ * @author fxbin
+ */
+export function createDecisionLogRecord(request: CreateDecisionLogRequest): DecisionLog {
+  const error = validateCreateDecisionLogRequest(request);
+  if (error) {
+    throw new KnowledgeCoreError(`Invalid decision log: ${error}`, 400);
+  }
+  const record: DecisionLog = {
+    id: id('dlog'),
+    kind: request.kind,
+    workspaceId: request.workspaceId,
+    summary: request.summary,
+    reasoning: request.reasoning,
+    evidenceCardIds: request.evidenceCardIds ?? [],
+    agentTaskType: request.agentTaskType,
+    metadata: request.metadata,
+    createdAt: now(),
+  };
+  repository.insertDecisionLog(record);
+  return record;
+}
+
+/**
+ * 查询单条决策日志。
+ *
+ * @param logId - 日志 id
+ * @returns 决策日志记录；不存在返回 undefined
+ * @author fxbin
+ */
+export function findDecisionLogRecord(logId: string): DecisionLog | undefined {
+  return repository.findDecisionLog(logId);
+}
+
+/**
+ * 列出决策日志记录。
+ *
+ * @param query - 查询条件
+ * @returns 决策日志数组
+ * @author fxbin
+ */
+export function listDecisionLogRecords(query: DecisionLogQuery = {}): DecisionLog[] {
+  return repository.listDecisionLog(query);
+}
+
+/**
+ * 删除决策日志记录。
+ *
+ * @param logId - 日志 id
+ * @returns 是否删除成功
+ * @author fxbin
+ */
+export function deleteDecisionLogRecord(logId: string): boolean {
+  return repository.deleteDecisionLog(logId);
+}
 
 export { canTransitionProposalStatus } from './memory.js';
 
