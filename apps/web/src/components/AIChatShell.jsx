@@ -70,7 +70,7 @@ export default function AIChatShell({
       setPosition({
         x: event.clientX - dragOffsetRef.current.x,
         y: event.clientY - dragOffsetRef.current.y,
-      });
+      }, size);
     }
 
     /**
@@ -100,6 +100,28 @@ export default function AIChatShell({
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isDragging, setPosition, toggleMinimized]);
+
+  /**
+   * 监听浮动模式下的尺寸变化，实时将面板限制在可视区域内。
+   * 防止用户 resize 拉大后底部被裁切。
+   */
+  useEffect(() => {
+    if (mode !== 'floating' || minimized) {
+      return undefined;
+    }
+    const section = document.querySelector('.ai-chat-shell-floating');
+    if (!section) {
+      return undefined;
+    }
+    const ro = new ResizeObserver(() => {
+      const rect = section.getBoundingClientRect();
+      if (rect.bottom > window.innerHeight || rect.right > window.innerWidth) {
+        setPosition(position, { width: rect.width, height: rect.height });
+      }
+    });
+    ro.observe(section);
+    return () => ro.disconnect();
+  }, [mode, minimized, setPosition, position]);
 
   /**
    * 开始拖拽面板头部或悬浮球。

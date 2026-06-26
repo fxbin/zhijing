@@ -16,6 +16,7 @@
 import { Loader2, Sparkles, SquareArrowOutUpRight, Wrench } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCardTypeLabel } from '../utils/i18nLabels';
+import { renderMarkdown } from '../utils/markdown';
 import SourceCitation from './SourceCitation';
 
 /**
@@ -89,7 +90,12 @@ export default function ChatMessageItem({
           </div>
         )}
 
-        {hasText && <p className="chat-message-text">{item.text}</p>}
+        {hasText && (
+          <div
+            className="chat-message-text"
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(item.text) }}
+          />
+        )}
 
         {isWaiting && <p className="chat-message-pending">{t('chat.loadingAnswer')}</p>}
 

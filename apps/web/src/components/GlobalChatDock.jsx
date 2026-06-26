@@ -11,7 +11,7 @@
  * @module components/GlobalChatDock
  */
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Database,
@@ -79,6 +79,7 @@ export default function GlobalChatDock({
     initialMinimized: true,
     initialMode: 'floating',
   });
+  const textareaRef = useRef(null);
 
   const cards = detail.cards ?? [];
   const materials = detail.materials ?? [];
@@ -115,6 +116,19 @@ export default function GlobalChatDock({
       thread.scrollTop = thread.scrollHeight;
     }
   }, [threadItems, isStreaming, layout.minimized]);
+
+  /**
+   * 输入框自动调整高度，限制在 2-6 行之间。
+   */
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    const lineHeight = 24;
+    const minHeight = lineHeight * 2;
+    const maxHeight = lineHeight * 6;
+    ta.style.height = `${Math.min(maxHeight, Math.max(minHeight, ta.scrollHeight))}px`;
+  }, [assistantQuestion]);
 
   /**
    * 监听「请打开对话胶囊」全局事件：产物页等外部入口可 dispatch
@@ -215,21 +229,24 @@ export default function GlobalChatDock({
           )}
 
           <div className="chat-input-bar">
-            <input
+            <textarea
+              ref={textareaRef}
               aria-label={t('chat.askAria')}
               disabled={!canAsk}
               onChange={(event) => setAssistantQuestion(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  if (hasStreamPath) {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  if (hasStreamPath && assistantQuestion.trim()) {
                     onStreamAsk(assistantQuestion);
-                  } else {
+                  } else if (!hasStreamPath && assistantQuestion.trim()) {
                     onAsk();
                   }
                 }
               }}
               placeholder={canAsk ? t('chat.askPlaceholderOnline') : t('chat.askPlaceholderOffline')}
               value={assistantQuestion}
+              rows={2}
             />
             <button
               disabled={!canAsk || !assistantQuestion.trim()}

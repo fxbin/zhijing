@@ -47,7 +47,7 @@ function getDefaultFloatingPosition() {
 }
 
 /**
- * 将悬浮球位置限制在可视区域内。
+ * 将悬浮球位置限制在可视区域内（使用球体尺寸）。
  * @param {{ x: number; y: number }} position - 目标位置
  * @returns {{ x: number; y: number }} 限制后的位置
  */
@@ -57,6 +57,24 @@ function clampMarkerPosition(position) {
   }
   const maxX = window.innerWidth - MARKER_SIZE_PX - VIEWPORT_MARGIN_PX;
   const maxY = window.innerHeight - MARKER_SIZE_PX - VIEWPORT_MARGIN_PX;
+  return {
+    x: Math.max(SIDEBAR_WIDTH_PX, Math.min(maxX, position.x)),
+    y: Math.max(VIEWPORT_MARGIN_PX, Math.min(maxY, position.y)),
+  };
+}
+
+/**
+ * 将浮动面板位置限制在可视区域内（使用面板尺寸）。
+ * @param {{ x: number; y: number }} position - 目标位置
+ * @param {{ width: number; height: number }} size - 面板尺寸
+ * @returns {{ x: number; y: number }} 限制后的位置
+ */
+function clampFloatingPosition(position, size) {
+  if (typeof window === 'undefined') {
+    return position;
+  }
+  const maxX = window.innerWidth - size.width - VIEWPORT_MARGIN_PX;
+  const maxY = window.innerHeight - size.height - VIEWPORT_MARGIN_PX;
   return {
     x: Math.max(SIDEBAR_WIDTH_PX, Math.min(maxX, position.x)),
     y: Math.max(VIEWPORT_MARGIN_PX, Math.min(maxY, position.y)),
@@ -170,9 +188,13 @@ export function useChatLayout(storageKey = DEFAULT_STORAGE_KEY, options = {}) {
     setLayout((prev) => ({ ...prev, minimized: !prev.minimized }));
   }, []);
 
-  const setPosition = useCallback((position) => {
-    setLayout((prev) => ({ ...prev, position: clampMarkerPosition(position) }));
-  }, []);
+  const setPosition = useCallback((position, sizeHint) => {
+    const size = sizeHint ?? (layout.mode === 'floating' ? layout.size : { width: MARKER_SIZE_PX, height: MARKER_SIZE_PX });
+    const clamped = layout.mode === 'floating'
+      ? clampFloatingPosition(position, size)
+      : clampMarkerPosition(position);
+    setLayout((prev) => ({ ...prev, position: clamped }));
+  }, [layout.mode, layout.size]);
 
   const setSize = useCallback((size) => {
     setLayout((prev) => ({ ...prev, size }));
