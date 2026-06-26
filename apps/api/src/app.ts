@@ -105,6 +105,8 @@ import {
   updateWorkspaceMeta,
   updateModelProviderProfile,
   getActiveAgentCredentials,
+  listWorkspaceProposals,
+  decideWorkspaceProposal,
 } from '@zhijing/core';
 import { startOrchestratorSession, type OrchestratorSession } from '@zhijing/agent';
 import type {
@@ -132,6 +134,7 @@ import type {
   MaterialRecord,
   AgentStreamEvent,
   OrchestratorDecision,
+  ProposalStatus,
 } from '@zhijing/shared';
 import {
   INTAKE_AUDIENCE_VALUES,
@@ -278,6 +281,48 @@ export function buildApi() {
       const limitRaw = typeof request.query.limit === 'string' ? request.query.limit.trim() : '';
       const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
       return { signals: listAttentionSignals(request.params.workspaceId, limit) };
+    },
+  );
+
+  app.get<{ Params: { workspaceId: string }; Querystring: { status?: string; limit?: string } }>(
+    '/api/workspaces/:workspaceId/agent-proposals',
+    async (request, reply) => {
+      const validStatuses = new Set<string>(['pending', 'accepted', 'rejected', 'dismissed']);
+      const statusRaw = typeof request.query.status === 'string' ? request.query.status.trim() : '';
+      const status: ProposalStatus | undefined = statusRaw && validStatuses.has(statusRaw)
+        ? (statusRaw as ProposalStatus)
+        : undefined;
+      if (statusRaw && !status) {
+        return reply.code(400).send({ error: 'status 必须是 pending / accepted / rejected / dismissed 之一。' });
+      }
+      const limitRaw = typeof request.query.limit === 'string' ? request.query.limit.trim() : '';
+      const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
+      return { proposals: listWorkspaceProposals(request.params.workspaceId, status, limit) };
+    },
+  );
+
+  app.post<{ Params: { workspaceId: string; proposalId: string }; Body: { decision?: string } }>(
+    '/api/workspaces/:workspaceId/agent-proposals/:proposalId/decide',
+    async (request, reply) => {
+      const decisionRaw = typeof request.body?.decision === 'string' ? request.body.decision.trim() : '';
+      const validDecisions: ProposalStatus[] = ['accepted', 'rejected', 'dismissed'];
+      if (!validDecisions.includes(decisionRaw as ProposalStatus)) {
+        return reply.code(400).send({ error: 'decision 必须是 accepted / rejected / dismissed 之一。' });
+      }
+      try {
+        const updated = decideWorkspaceProposal(
+          request.params.workspaceId,
+          request.params.proposalId,
+          decisionRaw as ProposalStatus,
+        );
+        return { proposal: updated };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Proposal decide failed.';
+        const isNotFound = message.includes('not found');
+        const isInvalidTransition = message.includes('Cannot transition');
+        const code = isNotFound ? 404 : isInvalidTransition ? 409 : 500;
+        return reply.code(code).send({ error: message });
+      }
     },
   );
 

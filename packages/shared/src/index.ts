@@ -1246,6 +1246,51 @@ export interface AgentProposalReport {
 }
 
 /**
+ * 持久化 Proposal 状态。
+ *
+ * 状态机流转：
+ * - pending → accepted：用户采纳建议（如复习了卡片、补充了盲区）
+ * - pending → rejected：用户明确拒绝
+ * - pending → dismissed：用户忽略（超时自动 dismiss 或主动关闭）
+ * - accepted/rejected/dismissed 为终态，不再流转
+ *
+ * @author fxbin
+ */
+export type ProposalStatus = 'pending' | 'accepted' | 'rejected' | 'dismissed';
+
+/**
+ * 持久化的 AgentProposal 记录，带 id / 状态 / 时间戳。
+ *
+ * 与 AgentProposal 的差异：AgentProposal 是临时生成的一次性对象，
+ * PersistedProposal 是持久化到 agent_proposals 表的记录，
+ * 支持状态机流转与反馈闭环追踪。
+ *
+ * @author fxbin
+ */
+export interface PersistedProposal {
+  /** 记录主键 */
+  id: string;
+  /** 工作区 id */
+  workspaceId: string;
+  /** 提议类型 */
+  type: AgentProposalType;
+  /** 提议标题 */
+  title: string;
+  /** 提议描述 */
+  description: string;
+  /** 行动标签 */
+  actionLabel: string;
+  /** 元数据（cardId / recallScore / term 等） */
+  metadata: Record<string, unknown>;
+  /** 当前状态 */
+  status: ProposalStatus;
+  /** 生成时间 ISO */
+  generatedAt: string;
+  /** 状态变更时间 ISO；未变更时为 null */
+  decidedAt: string | null;
+}
+
+/**
  * 回忆工具名称，标识 Recall Agent 使用的四种检索策略。
  * - direct_fetch 精确命中，零成本内存匹配
  * - shallow_recall 浅层回忆，基于 FTS5 + BM25 排序

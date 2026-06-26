@@ -112,8 +112,17 @@ import {
   type TaskStatus,
   type TestModelProviderSettingsRequest,
   detectPlatform,
+  type PersistedProposal,
+  type ProposalStatus,
 } from '@zhijing/shared';
 import { fetchUrlAsMarkdown } from './web-fetch.js';
+import {
+  persistGeneratedProposals,
+  getActiveProposals,
+  toAgentProposals,
+  decideProposal,
+  type ProposalRepository,
+} from './memory.js';
 import {
   createPiAiRuntime,
   createMockPiRuntime,
@@ -374,6 +383,7 @@ type StoreState = {
   mapCustomEdges: KnowledgeMapCustomEdge[];
   attentionSignals: AttentionSignal[];
   agentActionLogs: AgentActionLog[];
+  proposals: PersistedProposal[];
 };
 
 type KnowledgeRepository = {
@@ -454,6 +464,10 @@ type KnowledgeRepository = {
   listAttentionSignals(workspaceId?: string, limit?: number): AttentionSignal[];
   markAttentionConsumed(signalId: string): void;
   deleteAttentionSignals(workspaceId: string): void;
+  insertProposal(proposal: PersistedProposal): void;
+  listProposals(workspaceId: string, status?: ProposalStatus, limit?: number): PersistedProposal[];
+  updateProposalStatus(proposalId: string, status: ProposalStatus, decidedAt: string): void;
+  findRecentProposals(workspaceId: string, type: string, title: string, sinceIso: string): PersistedProposal[];
   insertAgentActionLog(log: AgentActionLog): void;
   listAgentActionLogs(options?: { workspaceId?: string; action?: string; limit?: number }): AgentActionLog[];
   countAgentActionLogs(options?: { workspaceId?: string; action?: string }): number;
@@ -516,6 +530,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     mapCustomEdges: [],
     attentionSignals: [],
     agentActionLogs: [],
+    proposals: [],
   };
 
   private wereadApiKey: string | null = null;
@@ -1080,6 +1095,34 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
   deleteAttentionSignals(workspaceId: string): void {
     this.state.attentionSignals = this.state.attentionSignals.filter(
       (item) => item.workspaceId !== workspaceId,
+    );
+  }
+
+  insertProposal(proposal: PersistedProposal): void {
+    this.state.proposals.unshift(proposal);
+  }
+
+  listProposals(workspaceId: string, status?: ProposalStatus, limit?: number): PersistedProposal[] {
+    let items = this.state.proposals.filter((p) => p.workspaceId === workspaceId);
+    if (status) items = items.filter((p) => p.status === status);
+    items.sort((a, b) => b.generatedAt.localeCompare(a.generatedAt));
+    return typeof limit === 'number' ? items.slice(0, limit) : items;
+  }
+
+  updateProposalStatus(proposalId: string, status: ProposalStatus, decidedAt: string): void {
+    const proposal = this.state.proposals.find((p) => p.id === proposalId);
+    if (proposal) {
+      proposal.status = status;
+      proposal.decidedAt = decidedAt;
+    }
+  }
+
+  findRecentProposals(workspaceId: string, type: string, title: string, sinceIso: string): PersistedProposal[] {
+    return this.state.proposals.filter(
+      (p) => p.workspaceId === workspaceId
+        && p.type === type
+        && p.title === title
+        && p.generatedAt >= sinceIso,
     );
   }
 
@@ -2155,6 +2198,51 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.db.prepare('DELETE FROM attention_log WHERE workspace_id = ?').run(workspaceId);
   }
 
+  insertProposal(proposal: PersistedProposal): void {
+    this.db.prepare(`
+      INSERT INTO agent_proposals (
+        id, workspace_id, type, title, description, action_label,
+        metadata_json, status, generated_at, decided_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      proposal.id,
+      proposal.workspaceId,
+      proposal.type,
+      proposal.title,
+      proposal.description,
+      proposal.actionLabel,
+      JSON.stringify(proposal.metadata),
+      proposal.status,
+      proposal.generatedAt,
+      proposal.decidedAt,
+    );
+  }
+
+  listProposals(workspaceId: string, status?: ProposalStatus, limit?: number): PersistedProposal[] {
+    const params: Array<string | number> = [workspaceId];
+    let sql = 'SELECT * FROM agent_proposals WHERE workspace_id = ?';
+    if (status) {
+      sql += ' AND status = ?';
+      params.push(status);
+    }
+    sql += ' ORDER BY generated_at DESC';
+    if (typeof limit === 'number') {
+      sql += ' LIMIT ?';
+      params.push(limit);
+    }
+    return (this.db.prepare(sql).all(...params) as ProposalRow[]).map(mapProposal);
+  }
+
+  updateProposalStatus(proposalId: string, status: ProposalStatus, decidedAt: string): void {
+    this.db.prepare('UPDATE agent_proposals SET status = ?, decided_at = ? WHERE id = ?').run(status, decidedAt, proposalId);
+  }
+
+  findRecentProposals(workspaceId: string, type: string, title: string, sinceIso: string): PersistedProposal[] {
+    return (this.db.prepare(
+      'SELECT * FROM agent_proposals WHERE workspace_id = ? AND type = ? AND title = ? AND generated_at >= ? ORDER BY generated_at DESC',
+    ).all(workspaceId, type, title, sinceIso) as ProposalRow[]).map(mapProposal);
+  }
+
   private ensureWorkspaceRename() {
     const renameOrMerge = (source: string, target: string) => {
       const sourceExists = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(source) as { name: string } | undefined;
@@ -2814,6 +2902,22 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       );
       CREATE INDEX IF NOT EXISTS idx_attention_log_kb ON attention_log(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_attention_log_created ON attention_log(created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS agent_proposals (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        action_label TEXT NOT NULL,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL DEFAULT 'pending',
+        generated_at TEXT NOT NULL,
+        decided_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_agent_proposals_kb ON agent_proposals(workspace_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_proposals_status ON agent_proposals(workspace_id, status);
+      CREATE INDEX IF NOT EXISTS idx_agent_proposals_dedup ON agent_proposals(workspace_id, type, title, generated_at);
     `);
   }
 
@@ -3291,6 +3395,34 @@ function mapAttentionSignal(row: AttentionLogRow): AttentionSignal {
     contextData: JSON.parse(row.context_data_json) as Record<string, unknown>,
     consumed: row.consumed === 1,
     createdAt: row.created_at,
+  };
+}
+
+type ProposalRow = {
+  id: string;
+  workspace_id: string;
+  type: string;
+  title: string;
+  description: string;
+  action_label: string;
+  metadata_json: string;
+  status: string;
+  generated_at: string;
+  decided_at: string | null;
+};
+
+function mapProposal(row: ProposalRow): PersistedProposal {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    type: row.type as PersistedProposal['type'],
+    title: row.title,
+    description: row.description,
+    actionLabel: row.action_label,
+    metadata: JSON.parse(row.metadata_json) as Record<string, unknown>,
+    status: row.status as ProposalStatus,
+    generatedAt: row.generated_at,
+    decidedAt: row.decided_at,
   };
 }
 
@@ -10478,10 +10610,33 @@ export function buildInterceptedDecision(
 ): import('@zhijing/shared').OrchestratorDecision {
   const signals = repository.listAttentionSignals(workspaceId, 20);
   const proposalReport = generateAgentProposals();
+  persistGeneratedProposals(repository, workspaceId, proposalReport.proposals);
+  const activePersisted = getActiveProposals(repository, workspaceId);
+  const proposalsForDecision = activePersisted.length > 0
+    ? toAgentProposals(activePersisted)
+    : proposalReport.proposals;
   const history = getSuggestionHistory(workspaceId, Boolean(options.isWriting));
-  const baseDecision = buildDecisionFromData(signals, proposalReport.proposals, undefined, history);
-  return preIntercept(message, baseDecision, proposalReport.proposals);
+  const baseDecision = buildDecisionFromData(signals, proposalsForDecision, undefined, history);
+  return preIntercept(message, baseDecision, proposalsForDecision);
 }
+
+export function listWorkspaceProposals(
+  workspaceId: string,
+  status?: ProposalStatus,
+  limit?: number,
+): PersistedProposal[] {
+  return repository.listProposals(workspaceId, status, limit);
+}
+
+export function decideWorkspaceProposal(
+  workspaceId: string,
+  proposalId: string,
+  decision: ProposalStatus,
+): PersistedProposal {
+  return decideProposal(repository, workspaceId, proposalId, decision);
+}
+
+export { canTransitionProposalStatus } from './memory.js';
 
 /**
  * 流中拦截器入口（P0.5）。
