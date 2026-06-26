@@ -5910,6 +5910,37 @@ button { cursor: pointer; }
   box-shadow: 0 0 0 2px var(--scholar-soft), 0 2px 6px rgba(9, 20, 38, 0.03);
 }
 
+.library-card.is-expandable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.library-card.is-expandable:hover {
+  border-color: var(--scholar);
+  box-shadow: 0 2px 8px rgba(44, 95, 141, 0.12);
+}
+
+.library-card.is-expanded {
+  border-color: var(--scholar);
+  box-shadow: 0 2px 8px rgba(44, 95, 141, 0.1);
+}
+
+.library-card-chevron {
+  margin-left: auto;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.library-card-body-full {
+  color: var(--primary);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
 .library-card-select {
   display: inline-flex;
   align-items: center;

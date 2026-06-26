@@ -9,6 +9,8 @@
 import {
   AlertTriangle,
   BookOpen,
+  ChevronDown,
+  ChevronUp,
   Clock3,
   FileText,
   RefreshCw,
@@ -18,6 +20,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { captureModeOptions, materialFilterOptions } from '../constants/options';
 import { getIntakeKindLabel, getParseStatusLabel } from '../utils/i18nLabels';
@@ -59,6 +62,7 @@ import {
  */
 export default function LibraryView({ apiStatus, workspaces, onCaptureResult, onMaterialMutation, onNavigate, onParseMaterial, parsingMaterialId, selectedWorkspaceId }) {
   const { t } = useTranslation();
+  const [expandedMaterialId, setExpandedMaterialId] = useState(null);
 
   const {
     items,
@@ -300,10 +304,24 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
       <div className="library-grid">
         {filteredItems.map((item) => {
           const Icon = materialIcon(item.type);
+          const isExpanded = expandedMaterialId === item.id;
+          const handleToggle = () => setExpandedMaterialId(isExpanded ? null : item.id);
           return (
-          <article className={`library-card ${materialState(item.parseStatus)} ${selectedIds.has(item.id) ? 'selected' : ''}`} key={item.id}>
+          <article
+            className={`library-card ${materialState(item.parseStatus)} ${selectedIds.has(item.id) ? 'selected' : ''} is-expandable${isExpanded ? ' is-expanded' : ''}`}
+            key={item.id}
+            onClick={handleToggle}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleToggle();
+              }
+            }}
+          >
             <div className="library-card-head">
-              <label className="library-card-select">
+              <label className="library-card-select" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="checkbox"
                   aria-label={t('library.selectMaterialWithTitle', { title: item.title })}
@@ -316,9 +334,14 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
                 <span>{getIntakeKindLabel(t, item.type)}</span>
                 <span>{getParseStatusLabel(t, item.parseStatus)}</span>
               </div>
+              {isExpanded ? <ChevronUp size={16} className="library-card-chevron" /> : <ChevronDown size={16} className="library-card-chevron" />}
             </div>
             <h3>{item.title}</h3>
-            <p>{materialPreview(item)}</p>
+            {isExpanded ? (
+              <p className="library-card-body-full">{item.contentText || item.rawInput || materialPreview(item)}</p>
+            ) : (
+              <p>{materialPreview(item)}</p>
+            )}
             <ParseTimeline item={item} />
             {item.parseError && <p className="library-error">{item.parseError}</p>}
             <div className="tag-row">
@@ -328,7 +351,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
               {materialMediaUrls(item).length > 0 && <span>{t('library.mediaCount', { count: materialMediaUrls(item).length })}</span>}
             </div>
             <MediaPreview urls={materialMediaUrls(item)} compact />
-            <div className="assignment-row">
+            <div className="assignment-row" onClick={(e) => e.stopPropagation()}>
               <select
                 aria-label={t('library.selectKb')}
                 value={assignDrafts[item.id] ?? item.workspaceId ?? ''}
@@ -355,7 +378,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
             </div>
             {assignmentHints[item.id] && <p className="assignment-hint">{assignmentHints[item.id]}</p>}
             {reviewingId === item.id && (
-              <div className="review-box">
+              <div className="review-box" onClick={(e) => e.stopPropagation()}>
                 <input
                   aria-label={t('library.materialTitle')}
                   value={reviewDraft.title}
@@ -380,7 +403,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
                 </div>
               </div>
             )}
-            <div className="library-card-actions">
+            <div className="library-card-actions" onClick={(e) => e.stopPropagation()}>
               {materialSourceUrl(item) && (
                 <a href={materialSourceUrl(item)} target="_blank" rel="noreferrer">
                   {t('library.open')}
