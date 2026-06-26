@@ -77,7 +77,10 @@ export default function MediaPreview({ urls, compact = false }) {
             <button
               className={`media-preview-item ${type === 'video' ? 'media-preview-video' : 'media-preview-image'}`}
               key={url}
-              onClick={() => openPreview(url, type)}
+              onClick={(event) => {
+                event.stopPropagation();
+                openPreview(url, type);
+              }}
               title={`${title} ${index + 1}`}
               type="button"
             >
