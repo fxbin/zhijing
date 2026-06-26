@@ -153,7 +153,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
       return (
         <>
           <div className="status-card">
-            <ShieldCheck size={25} />
+            <ShieldCheck size={22} />
             <div>
               <span>{t('settings.currentRuntime')}</span>
               <strong>{formatDisplayName(provider) || t('settings.provider')} / {formatDisplayName(model) || t('settings.model')}</strong>
@@ -166,7 +166,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
             </div>
           </div>
           <div className="status-card">
-            <Settings size={25} />
+            <Settings size={22} />
             <div>
               <span>{t('settings.policy')}</span>
               <strong>{enabled ? t('settings.realModelFirst') : t('settings.mockOnly')}</strong>
@@ -182,7 +182,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
             </div>
           )}
           <div className={`status-card browser-ai-card browser-ai-card--${browserAiStatus}`}>
-            <Cpu size={25} />
+            <Cpu size={22} />
             <div>
               <span>{t('settings.browserAi.title')}</span>
               <strong>
@@ -207,7 +207,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
       return (
         <>
           <div className="status-card">
-            <BookOpen size={25} />
+            <BookOpen size={22} />
             <div>
               <span>{t('settings.weread.title')}</span>
               <strong>{wereadConfigured ? t('settings.weread.configured') : t('settings.weread.notConfigured')}</strong>
@@ -229,7 +229,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
       return (
         <>
           <div className="status-card">
-            <BarChart3 size={25} />
+            <BarChart3 size={22} />
             <div>
               <span>{t('settings.systemTransparency')}</span>
               <strong>{systemStats?.apiOnline ? t('settings.online') : t('settings.offline')}</strong>
@@ -255,7 +255,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
       return (
         <>
           <div className="status-card">
-            <Sparkles size={25} />
+            <Sparkles size={22} />
             <div>
               <span>{t('kit.title')}</span>
               <strong>{t('kit.subtitle')}</strong>
@@ -270,7 +270,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     return (
       <>
         <div className="status-card">
-          <Database size={25} />
+          <Database size={22} />
           <div>
             <span>{t('settings.dataSafety')}</span>
             <strong>{t('settings.dataControls')}</strong>
@@ -391,7 +391,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                             onClick={() => selectProfile(profile.id)}
                             type="button"
                           >
-                            <Star size={20} fill={profile.isDefault ? 'currentColor' : 'none'} />
+                            <Star size={18} fill={profile.isDefault ? 'currentColor' : 'none'} />
                             <div>
                               <strong>
                                 {profile.name}
@@ -582,7 +582,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
             {systemStats ? (
               <div className="settings-transparency">
                 <div className="status-card">
-                  <Database size={22} />
+                  <Database size={20} />
                   <div>
                     <span>{t('settings.apiStatus')}</span>
                     <strong>{systemStats.apiOnline ? t('settings.online') : t('settings.offline')}</strong>
@@ -590,7 +590,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                   </div>
                 </div>
                 <div className="status-card">
-                  <ShieldCheck size={22} />
+                  <ShieldCheck size={20} />
                   <div>
                     <span>{t('settings.dataScale')}</span>
                     <strong>{t('settings.dataScaleCount', { kb: systemStats.workspaces, materials: systemStats.materials })}</strong>
