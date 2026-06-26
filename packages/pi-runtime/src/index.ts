@@ -223,8 +223,8 @@ export interface PiAiRuntimeConfig {
   maxTokens?: number;
 }
 
-const defaultProvider: KnownProvider = 'openai';
-const defaultModel = 'gpt-4o-mini';
+const defaultProvider: KnownProvider = 'deepseek';
+const defaultModel = 'deepseek-v4-flash';
 
 export function getDefaultPiProvider() {
   return defaultProvider;

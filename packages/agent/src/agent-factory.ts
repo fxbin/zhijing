@@ -13,17 +13,23 @@ import { createWorkspaceTools } from './tools/index.js';
 /**
  * 默认 LLM provider；与 pi-runtime 保持一致以便复用同一份环境变量配置。
  */
-const DEFAULT_PROVIDER: KnownProvider = 'openai';
+const DEFAULT_PROVIDER: KnownProvider = 'deepseek';
 
 /**
  * 默认模型 id；与 pi-runtime 保持一致，控制成本与响应延迟。
  */
-const DEFAULT_MODEL_ID = 'gpt-4o-mini';
+const DEFAULT_MODEL_ID = 'deepseek-v4-flash';
 
 /**
- * 默认推理强度；medium 在知径知识管理场景下兼顾质量与成本。
+ * 默认推理强度；off 表示不在请求中附加 thinking/reasoning 参数，
+ * 由模型自身的 reasoning 能力决定是否产出推理内容。
+ *
+ * 知径默认使用 deepseek-v4-flash 等 reasoning 模型，模型本身会输出
+ * reasoning_content；若再叠加 thinkingLevel=medium，pi-ai 会同时发送
+ * thinking 与 reasoning_effort 字段，部分 provider 组合下会导致空响应。
+ * @author fxbin
  */
-const DEFAULT_THINKING_LEVEL: ThinkingLevel = 'medium';
+const DEFAULT_THINKING_LEVEL: ThinkingLevel = 'off';
 
 /**
  * 默认工具执行模式；parallel 允许多个无依赖工具调用并行执行，
@@ -77,8 +83,8 @@ function defaultConvertToLlm(messages: AgentMessage[]): Message[] {
 /**
  * Agent 工厂配置项。
  *
- * - provider：LLM provider，省略时读 ZHIJING_PI_PROVIDER，再退化为 'openai'
- * - modelId：模型 id，省略时读 ZHIJING_PI_MODEL，再退化为 'gpt-4o-mini'
+ * - provider：LLM provider，省略时读 ZHIJING_PI_PROVIDER，再退化为 'deepseek'
+ * - modelId：模型 id，省略时读 ZHIJING_PI_MODEL，再退化为 'deepseek-v4-flash'
  * - apiKey：API key，省略时读 ZHIJING_PI_API_KEY 再退化为 provider 默认环境变量
  * - thinkingLevel：推理强度，省略时使用 medium
  * - toolExecution：工具执行模式，省略时使用 parallel
