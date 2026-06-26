@@ -4,12 +4,33 @@
  * @author fxbin
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { CheckCircle2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCardTypeLabel, useClaimStatusLabel } from '../utils/i18nLabels';
 import { formatDate } from '../utils/material';
+import { renderMarkdown } from '../utils/markdown';
 import useModalA11y from '../hooks/useModalA11y';
+
+/**
+ * 判断文本是否包含 Markdown 语法特征。
+ * @param {string} text - 原始文本
+ * @returns {boolean} 是否包含 Markdown 语法
+ */
+function looksLikeMarkdown(text) {
+  if (!text) return false;
+  const patterns = [
+    /^#{1,6}\s/m,
+    /\*\*[^*]+\*\*/,
+    /`[^`]+`/,
+    /^\s*[-*+]\s/m,
+    /^\s*\d+\.\s/m,
+    /\[.+]\(.+\)/,
+    /^\|.*\|/m,
+    /^\s*>/m,
+  ];
+  return patterns.some((pattern) => pattern.test(text));
+}
 
 /**
  * 知识卡片详情抽屉组件。
@@ -38,6 +59,14 @@ export default function CardDetailDrawer({ card, onClose, workspaceTitle }) {
     document.addEventListener('wheel', handleBodyScroll, { passive: false });
     return () => document.removeEventListener('wheel', handleBodyScroll);
   }, [isOpen]);
+
+  const contentHtml = useMemo(() => {
+    if (!card?.body) return '';
+    if (looksLikeMarkdown(card.body)) {
+      return renderMarkdown(card.body);
+    }
+    return '';
+  }, [card]);
 
   if (!card) return null;
 
@@ -78,7 +107,12 @@ export default function CardDetailDrawer({ card, onClose, workspaceTitle }) {
         <div className="card-detail-body">
           <h2 className="card-detail-title">{card.title}</h2>
 
-          {card.body ? (
+          {contentHtml ? (
+            <div
+              className="card-detail-markdown"
+              dangerouslySetInnerHTML={{ __html: contentHtml }}
+            />
+          ) : card.body ? (
             <pre className="card-detail-text">{card.body}</pre>
           ) : (
             <p className="card-detail-empty">{t('cardDetail.bodyEmpty')}</p>

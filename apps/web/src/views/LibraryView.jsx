@@ -9,8 +9,7 @@
 import {
   AlertTriangle,
   BookOpen,
-  ChevronDown,
-  ChevronUp,
+  ChevronRight,
   Clock3,
   FileText,
   FolderOpen,
@@ -39,6 +38,7 @@ import CaptureSuccessBanner from '../components/CaptureSuccessBanner';
 import EmptyState from '../components/EmptyState';
 import FolderImportDialog from '../components/FolderImportDialog';
 import ImportLifecyclePanel from '../components/ImportLifecyclePanel';
+import MaterialDetailDrawer from '../components/MaterialDetailDrawer';
 import MediaPreview from '../components/MediaPreview';
 import ParseTimeline from '../components/ParseTimeline';
 import { useLibraryDataState } from '../hooks/useLibraryDataState';
@@ -64,7 +64,7 @@ import {
  */
 export default function LibraryView({ apiStatus, workspaces, onCaptureResult, onMaterialMutation, onNavigate, onParseMaterial, parsingMaterialId, selectedWorkspaceId }) {
   const { t } = useTranslation();
-  const [expandedMaterialId, setExpandedMaterialId] = useState(null);
+  const [drawerMaterial, setDrawerMaterial] = useState(null);
   const [folderImportOpen, setFolderImportOpen] = useState(false);
 
   const {
@@ -317,19 +317,18 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
       <div className="library-grid">
         {filteredItems.map((item) => {
           const Icon = materialIcon(item.type);
-          const isExpanded = expandedMaterialId === item.id;
-          const handleToggle = () => setExpandedMaterialId(isExpanded ? null : item.id);
+          const handleOpenDrawer = () => setDrawerMaterial(item);
           return (
           <article
-            className={`library-card ${materialState(item.parseStatus)} ${selectedIds.has(item.id) ? 'selected' : ''} is-expandable${isExpanded ? ' is-expanded' : ''}`}
+            className={`library-card ${materialState(item.parseStatus)} ${selectedIds.has(item.id) ? 'selected' : ''} is-clickable`}
             key={item.id}
-            onClick={handleToggle}
+            onClick={handleOpenDrawer}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                handleToggle();
+                handleOpenDrawer();
               }
             }}
           >
@@ -347,14 +346,10 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
                 <span>{getIntakeKindLabel(t, item.type)}</span>
                 <span>{getParseStatusLabel(t, item.parseStatus)}</span>
               </div>
-              {isExpanded ? <ChevronUp size={16} className="library-card-chevron" /> : <ChevronDown size={16} className="library-card-chevron" />}
+              <ChevronRight size={16} className="library-card-chevron" />
             </div>
             <h3>{item.title}</h3>
-            {isExpanded ? (
-              <p className="library-card-body-full">{item.contentText || item.rawInput || materialPreview(item)}</p>
-            ) : (
-              <p>{materialPreview(item)}</p>
-            )}
+            <p>{materialPreview(item)}</p>
             <ParseTimeline item={item} />
             {item.parseError && <p className="library-error">{item.parseError}</p>}
             <div className="tag-row">
@@ -467,6 +462,11 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
         loadMaterials();
         onMaterialMutation?.();
       }}
+    />
+    <MaterialDetailDrawer
+      material={drawerMaterial}
+      onClose={() => setDrawerMaterial(null)}
+      workspaces={workspaces}
     />
     </>
   );

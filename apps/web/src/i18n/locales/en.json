@@ -10,6 +10,7 @@
   "activity.parseFailed": "Parse failed. Original link is kept. Please retry later or add the content manually.",
   "activity.parseMaterial": "Parsing saved source material...",
   "activity.ready": "Ready to organize a theme, link, or question.",
+  "activity.requestTimeout": "Request timed out, refreshing status...",
   "activity.runKit": "Running knowledge kit...",
   "advancedOps.assets": "Assets",
   "advancedOps.compare": "Compare",
