@@ -1095,8 +1095,10 @@ export function buildApi() {
         }
       });
 
-      request.raw.on('close', () => {
-        agent.abort();
+      reply.raw.on('close', () => {
+        if (!reply.raw.writableEnded) {
+          agent.abort();
+        }
       });
 
       try {
