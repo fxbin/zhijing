@@ -170,20 +170,53 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
   const [chatMessages, setChatMessages] = useState(INITIAL_CHAT_MESSAGES);
   const [isStreaming, setIsStreaming] = useState(INITIAL_IS_STREAMING);
   const currentSessionId = useRef(null);
+  const streamWorkspaceId = useRef(null);
+  const abortControllerRef = useRef(null);
 
   /**
-   * 切换工作区时从 localStorage 恢复对话历史。
+   * 中断当前正在进行的流式对话（如果有）。
+   * 同时中断 fetch 请求并通知后端停止 Agent。
+   */
+  function abortCurrentStream() {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    const sessionId = currentSessionId.current;
+    const workspaceId = streamWorkspaceId.current;
+    if (sessionId && workspaceId) {
+      api.post(`${WORKSPACES_PATH}/${workspaceId}/agent/abort`, { sessionId })
+        .catch(() => {});
+    }
+  }
+
+  /**
+   * 切换工作区时从 localStorage 恢复对话历史，
+   * 并中断旧工作区正在进行的流式对话，避免状态污染与资源泄漏。
    */
   useEffect(() => {
+    abortCurrentStream();
     setChatMessages(loadChatFromStorage(selectedWorkspaceId));
+    setIsStreaming(INITIAL_IS_STREAMING);
   }, [selectedWorkspaceId]);
 
   /**
-   * chatMessages 变化时持久化到 localStorage（流式进行中也写入，刷新可恢复最近状态）。
+   * 组件卸载时清理正在进行的流。
    */
   useEffect(() => {
-    if (chatMessages.length > 0) {
-      saveChatToStorage(selectedWorkspaceId, chatMessages);
+    return () => {
+      abortCurrentStream();
+    };
+  }, []);
+
+  /**
+   * chatMessages 变化时持久化到 localStorage（流式进行中也写入，刷新可恢复最近状态）。
+   * 持久化时以流所属工作区为准，避免工作区切换时消息写错位置。
+   */
+  useEffect(() => {
+    const targetWorkspaceId = streamWorkspaceId.current ?? selectedWorkspaceId;
+    if (chatMessages.length > 0 && targetWorkspaceId) {
+      saveChatToStorage(targetWorkspaceId, chatMessages);
     }
   }, [chatMessages, selectedWorkspaceId]);
 
@@ -207,8 +240,13 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     const trimmed = (text ?? '').trim();
     if (!trimmed || !selectedWorkspaceId || apiStatus !== API_STATUS_ONLINE || isStreaming) return;
 
+    abortCurrentStream();
+
     const sessionId = createSessionId();
+    const controller = new AbortController();
     currentSessionId.current = sessionId;
+    streamWorkspaceId.current = selectedWorkspaceId;
+    abortControllerRef.current = controller;
 
     const userTimestamp = Date.now();
     const assistantTimestamp = userTimestamp + 1;
@@ -237,13 +275,22 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
         method: 'POST',
         body: { message: trimmed, sessionId },
         timeout: STREAM_TIMEOUT_DISABLED,
+        signal: controller.signal,
       });
     } catch (error) {
+      if (controller.signal.aborted) {
+        currentSessionId.current = null;
+        streamWorkspaceId.current = null;
+        abortControllerRef.current = null;
+        return;
+      }
       setChatMessages((prev) => prev.map((message) => (message.id === assistantId
         ? { ...message, isStreaming: false, error: error?.serverMessage ?? error?.message ?? t('activity.askFailed') }
         : message)));
       setIsStreaming(false);
       currentSessionId.current = null;
+      streamWorkspaceId.current = null;
+      abortControllerRef.current = null;
       return;
     }
 
@@ -253,6 +300,8 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
         : message)));
       setIsStreaming(false);
       currentSessionId.current = null;
+      streamWorkspaceId.current = null;
+      abortControllerRef.current = null;
       return;
     }
 
@@ -264,9 +313,18 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     const toolCallsByKey = new Map();
 
     /**
+     * 检查当前流是否仍然有效（工作区未切换、未被 abort）。
+     * @returns {boolean} 流是否有效
+     */
+    function isStreamActive() {
+      return streamWorkspaceId.current === selectedWorkspaceId && !controller.signal.aborted;
+    }
+
+    /**
      * 把当前累积的工具调用列表写回 assistant 占位消息。
      */
     function syncToolCallsToMessage() {
+      if (!isStreamActive()) return;
       const toolCallsList = Array.from(toolCallsByKey.values());
       setChatMessages((prev) => prev.map((message) => (message.id === assistantId
         ? { ...message, toolCalls: toolCallsList }
@@ -279,6 +337,7 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
      * @param {string} [nextReasoning] - 最新推理快照
      */
     function syncAssistantContent(nextText, nextReasoning) {
+      if (!isStreamActive()) return;
       setChatMessages((prev) => prev.map((message) => (message.id === assistantId
         ? { ...message, text: nextText, reasoning: nextReasoning ?? assistantReasoning }
         : message)));
@@ -294,6 +353,7 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
         buffer = parts.pop() ?? '';
 
         for (const part of parts) {
+          if (!isStreamActive()) break;
           const dataLine = part.split('\n').find((line) => line.startsWith(SSE_DATA_PREFIX));
           if (!dataLine) continue;
           const json = dataLine.slice(SSE_DATA_PREFIX.length).trim();
@@ -350,9 +410,11 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
               break;
             }
             case STREAM_EVENT.ERROR:
-              setChatMessages((prev) => prev.map((message) => (message.id === assistantId
-                ? { ...message, error: event.message ?? t('activity.askFailed') }
-                : message)));
+              if (isStreamActive()) {
+                setChatMessages((prev) => prev.map((message) => (message.id === assistantId
+                  ? { ...message, error: event.message ?? t('activity.askFailed') }
+                  : message)));
+              }
               break;
             default:
               break;
@@ -360,35 +422,38 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
         }
       }
     } catch (error) {
-      setChatMessages((prev) => prev.map((message) => (message.id === assistantId
-        ? { ...message, error: error?.message ?? t('activity.askFailed') }
-        : message)));
+      if (controller.signal.aborted) {
+        return;
+      }
+      if (isStreamActive()) {
+        setChatMessages((prev) => prev.map((message) => (message.id === assistantId
+          ? { ...message, error: error?.message ?? t('activity.askFailed') }
+          : message)));
+      }
     } finally {
-      setChatMessages((prev) => prev.map((message) => (message.id === assistantId
-        ? { ...message, isStreaming: false }
-        : message)));
-      setIsStreaming(false);
+      if (isStreamActive()) {
+        setChatMessages((prev) => prev.map((message) => (message.id === assistantId
+          ? { ...message, isStreaming: false }
+          : message)));
+        setIsStreaming(false);
+      }
       currentSessionId.current = null;
+      streamWorkspaceId.current = null;
+      abortControllerRef.current = null;
       reader.releaseLock?.();
     }
   }, [selectedWorkspaceId, apiStatus, isStreaming, setActivity, t]);
 
   /**
    * 主动中断当前流式对话。
-   * 通过 sessionId 调用后端 abort 端点，Agent 实例收到 abort 信号后优雅停止。
+   * 通过 AbortController 中断前端请求，同时调用后端 abort 端点通知 Agent 停止。
    *
    * @returns {Promise<void>}
    * @author fxbin
    */
   const abortStream = useCallback(async () => {
-    const sessionId = currentSessionId.current;
-    if (!sessionId || !selectedWorkspaceId) return;
-    try {
-      await api.post(`${WORKSPACES_PATH}/${selectedWorkspaceId}/agent/abort`, { sessionId });
-    } catch {
-      // abort 失败不影响前端状态，SSE 流会在服务端关闭后自然结束
-    }
-  }, [selectedWorkspaceId]);
+    abortCurrentStream();
+  }, []);
 
   /**
    * 清空当前流式对话历史并删除 localStorage 持久化记录。
@@ -396,7 +461,8 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
    */
   const clearChat = useCallback(() => {
     setChatMessages(INITIAL_CHAT_MESSAGES);
-    removeChatFromStorage(selectedWorkspaceId);
+    const targetWorkspaceId = streamWorkspaceId.current ?? selectedWorkspaceId;
+    removeChatFromStorage(targetWorkspaceId);
   }, [selectedWorkspaceId]);
 
   return {
