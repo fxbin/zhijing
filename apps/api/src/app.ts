@@ -100,6 +100,7 @@ import {
   unarchiveMaterial,
   updateWorkspaceMeta,
   updateModelProviderProfile,
+  getActiveAgentCredentials,
 } from '@zhijing/core';
 import { createWorkspaceAgent } from '@zhijing/agent';
 import type { Agent } from '@earendil-works/pi-agent-core';
@@ -1074,7 +1075,12 @@ export function buildApi() {
 
       let agent: ReturnType<typeof createWorkspaceAgent>;
       try {
-        agent = createWorkspaceAgent(request.params.id);
+        const credentials = getActiveAgentCredentials();
+        agent = createWorkspaceAgent(request.params.id, {
+          provider: credentials.provider,
+          modelId: credentials.model,
+          apiKey: credentials.apiKey,
+        });
       } catch (error) {
         send({ type: 'error', message: error instanceof Error ? error.message : 'Agent init failed.' });
         reply.raw.end();

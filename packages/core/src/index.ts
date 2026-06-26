@@ -3703,6 +3703,26 @@ function currentApiKey() {
   return modelProviderConfig.apiKey ?? getPiEnvApiKey(modelProviderConfig.provider);
 }
 
+/**
+ * 读取当前激活 profile 的 Agent 装配凭据（明文 apiKey）。
+ *
+ * 供后端在装配工作区 Agent 时传入，避免 agent-factory 仅依赖环境变量而
+ * 忽略数据库中持久化的 model provider profile。
+ *
+ * 回退链路：激活 profile 的 apiKey > 该 provider 的环境变量。
+ * 两者皆空时返回 undefined，由调用方决定如何处理。
+ *
+ * @returns {provider, model, apiKey?} 装配凭据；apiKey 可能为 undefined
+ * @author fxbin
+ */
+export function getActiveAgentCredentials(): { provider: KnownProvider; model: string; apiKey?: string } {
+  return {
+    provider: modelProviderConfig.provider,
+    model: modelProviderConfig.model,
+    apiKey: currentApiKey() || undefined,
+  };
+}
+
 function createRuntimeFromModelProviderConfig(config: RuntimeModelProviderConfig) {
   return createPiAiRuntime({
     provider: config.provider,
