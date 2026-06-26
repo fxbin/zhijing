@@ -677,6 +677,7 @@
   "library.newWorkspace": "New workspace",
   "library.noMatch": "No matching materials",
   "library.noMatchHint": "Try another filter, or capture a link/text above first.",
+  "library.noContent": "No content",
   "library.open": "Open",
   "library.parse": "Parse",
   "library.quickCapture": "Quick Capture",

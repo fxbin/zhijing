@@ -665,6 +665,7 @@
   "library.itemsCount": "{{count}} 项",
   "library.localPlatform": "本地",
   "library.materialBody": "手动补充正文",
+  "library.materialDetail": "资料详情",
   "library.materialTitle": "资料标题",
   "library.materialTitlePlaceholder": "标题",
   "library.mediaCount": "{{count}} 个媒体",

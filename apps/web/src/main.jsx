@@ -443,26 +443,32 @@ function App() {
     setActivity(t('activity.captured'));
 
     try {
-      const result = await api.post(INTAKE_PATH, { input: value, ...options });
+      const result = await api.post(INTAKE_PATH, { input: value, ...options }, { timeout: 120000 });
       setActivity(`${result.message} ${t('activity.completed')} ${result.task.id}`);
       applyIntakeResult(result);
       setQuery('');
-    } catch {
-      const timestamp = new Date().toISOString();
-      const failedTask = {
-        id: `${FAILED_TASK_ID_PREFIX}${Date.now()}`,
-        workflow: workflowFromKind(kind),
-        status: TASK_STATUS_FAILED,
-        input: { input: value },
-        error: t('activity.apiUnavailable'),
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      setApiStatus(API_STATUS_OFFLINE);
-      setLatestTaskId(null);
-      setLatestTask(failedTask);
-      setTasks((current) => [failedTask, ...current].slice(0, TASKS_MAX_COUNT));
-      setActivity(t('activity.apiUnavailable'));
+    } catch (err) {
+      const isNetworkError = err?.status === 0;
+      if (isNetworkError) {
+        setActivity(t('activity.requestTimeout'));
+        loadDashboard(selectedWorkspaceId, () => {});
+      } else {
+        const timestamp = new Date().toISOString();
+        const failedTask = {
+          id: `${FAILED_TASK_ID_PREFIX}${Date.now()}`,
+          workflow: workflowFromKind(kind),
+          status: TASK_STATUS_FAILED,
+          input: { input: value },
+          error: t('activity.apiUnavailable'),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        setApiStatus(API_STATUS_OFFLINE);
+        setLatestTaskId(null);
+        setLatestTask(failedTask);
+        setTasks((current) => [failedTask, ...current].slice(0, TASKS_MAX_COUNT));
+        setActivity(t('activity.apiUnavailable'));
+      }
     } finally {
       setIsSubmitting(false);
     }

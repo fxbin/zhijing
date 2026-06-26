@@ -74,7 +74,7 @@ export function useMaterialParseState({
     setActivity(t('activity.parseMaterial'));
 
     try {
-      const result = await api.post(`${MATERIALS_PATH}/${materialId}${PARSE_PATH_SUFFIX}`);
+      const result = await api.post(`${MATERIALS_PATH}/${materialId}${PARSE_PATH_SUFFIX}`, null, { timeout: 120000 });
       setActivity(result.message);
       setLatestTaskId(result.task.id);
       setLatestTask(result.task);
