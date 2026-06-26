@@ -846,6 +846,12 @@ button { cursor: pointer; }
   padding: 20px 24px;
 }
 
+.modal-body p {
+  margin: 0 0 16px;
+  line-height: 1.6;
+  color: var(--primary);
+}
+
 .modal-mode-tabs {
   display: flex;
   gap: 8px;

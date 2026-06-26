@@ -438,16 +438,20 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
         <div className="modal-overlay" ref={deleteModalRef} onClick={(event) => { if (event.target === event.currentTarget) setDeleteConfirm(null); }} role="dialog" aria-modal="true">
           <div className="modal-card">
             <div className="modal-head">
-              <AlertTriangle size={24} />
-              <h3>{t('library.deleteConfirm.title')}</h3>
+              <div className="modal-title">
+                <AlertTriangle size={24} />
+                <h3>{t('library.deleteConfirm.title')}</h3>
+              </div>
             </div>
-            <p>{t('library.deleteConfirm.body')} <strong>{deleteConfirm.ids.length}</strong> {t('library.deleteConfirm.materials')}</p>
-            <div className="modal-actions">
-              <button type="button" onClick={() => setDeleteConfirm(null)}>{t('common.cancel')}</button>
-              <button type="button" className="danger" onClick={confirmDelete}>
-                <Trash2 size={16} />
-                {t('library.deleteConfirm.confirm')}
-              </button>
+            <div className="modal-body">
+              <p>{t('library.deleteConfirm.body')} <strong>{deleteConfirm.ids.length}</strong> {t('library.deleteConfirm.materials')}</p>
+              <div className="modal-actions">
+                <button type="button" onClick={() => setDeleteConfirm(null)}>{t('common.cancel')}</button>
+                <button type="button" className="danger" onClick={confirmDelete}>
+                  <Trash2 size={16} />
+                  {t('library.deleteConfirm.confirm')}
+                </button>
+              </div>
             </div>
           </div>
         </div>
