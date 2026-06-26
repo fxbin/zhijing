@@ -36,7 +36,7 @@ import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import GlobalChatDock from './components/GlobalChatDock';
 import SearchCommand from './components/SearchCommand';
 import { useHotkey } from './hooks/useHotkey';
-import { CHAT_OPEN_EVENT } from './constants/options';
+import { CHAT_OPEN_EVENT, PATH_CARD_ID_STORAGE_KEY } from './constants/options';
 const WorkspaceView = lazy(() => import('./views/WorkspaceView'));
 const DetailView = lazy(() => import('./views/DetailView'));
 const LibraryView = lazy(() => import('./views/LibraryView'));
@@ -410,6 +410,19 @@ function App() {
     go('library');
   };
 
+  /**
+   * 选中知识卡片并跳转到工作区详情页高亮该卡片。
+   * 复用 SearchCommand / PathView 的 sessionStorage 机制，
+   * useDetailFeedState 会在 DetailView 挂载时读取并滚动高亮。
+   * @param {string} cardId - 卡片 ID
+   * @param {string} workspaceId - 卡片所属工作区 ID
+   */
+  const handleSelectCard = (cardId, workspaceId) => {
+    if (workspaceId) setSelectedWorkspaceId(workspaceId);
+    sessionStorage.setItem(PATH_CARD_ID_STORAGE_KEY, cardId);
+    go('detail');
+  };
+
   const submit = async (overrideValue, options) => {
     const value = (overrideValue ?? query).trim();
     if (!value || isSubmitting) return;
@@ -605,7 +618,7 @@ function App() {
           )}
           {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={workspaceDetail} setView={go} artifactOrigin={artifactOrigin} onClearOrigin={() => setArtifactOrigin(null)} onArtifactUpdate={handleArtifactUpdate} />}
           {view === 'maps' && <MapsView apiStatus={apiStatus} selectedWorkspaceId={selectedWorkspaceId} setView={go} />}
-          {view === 'assets' && <GlobalAssetsDashboard data={advancedOpsData} setView={go} onOpenArtifact={openArtifact} />}
+          {view === 'assets' && <GlobalAssetsDashboard data={advancedOpsData} setView={go} onOpenArtifact={openArtifact} onSelectCard={handleSelectCard} />}
           {view === 'compare' && <MultiEntityComparisonView data={advancedOpsData} setView={go} />}
           {view === 'conflicts' && <KnowledgeConflictResolverView data={advancedOpsData} setView={go} />}
           {view === 'insights' && (
@@ -616,6 +629,7 @@ function App() {
                 setSelectedWorkspaceId(id);
                 go('workspace');
               }}
+              onSelectCard={handleSelectCard}
             />
           )}
           {view === 'path' && <PathView selectedWorkspaceId={selectedWorkspaceId} setView={go} />}

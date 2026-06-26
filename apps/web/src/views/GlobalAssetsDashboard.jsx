@@ -28,9 +28,10 @@ const PREVIEW_LIMIT_ARTIFACTS = 4;
  * @param {object} props.data - 高级运维聚合数据
  * @param {function} props.setView - 视图切换函数
  * @param {(artifact: object) => void} props.onOpenArtifact - 打开指定产物的回调，传入当前点击的产物对象
+ * @param {(cardId: string, workspaceId: string) => void} [props.onSelectCard] - 选中知识卡片的回调，跳转到工作区详情页高亮该卡片
  * @returns {JSX.Element} 资产仪表盘
  */
-export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact }) {
+export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact, onSelectCard }) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
   const claimStatusLabel = useClaimStatusLabel();
@@ -255,7 +256,19 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact })
             <>
               <div className="asset-list">
                 {displayedCards.map((card, index) => (
-                  <article key={card.id ?? `${card.title}-${index}`}>
+                  <article
+                    key={card.id ?? `${card.title}-${index}`}
+                    className={onSelectCard && card.id ? 'is-clickable' : ''}
+                    onClick={onSelectCard && card.id ? () => onSelectCard(card.id, card.workspaceId) : undefined}
+                    role={onSelectCard && card.id ? 'button' : undefined}
+                    tabIndex={onSelectCard && card.id ? 0 : undefined}
+                    onKeyDown={onSelectCard && card.id ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onSelectCard(card.id, card.workspaceId);
+                      }
+                    } : undefined}
+                  >
                     <span>{cardTypeLabel(card.type)}</span>
                     <strong>{card.title}</strong>
                     <small>{claimStatusLabel(card.claimStatus)}</small>

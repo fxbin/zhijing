@@ -8303,6 +8303,16 @@ button { cursor: pointer; }
   padding: 14px;
 }
 
+.asset-list article.is-clickable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.asset-list article.is-clickable:hover {
+  border-color: var(--scholar);
+  box-shadow: 0 2px 8px rgba(44, 95, 141, 0.12);
+}
+
 .asset-list strong,
 .asset-list small,
 .artifact-strip-list strong,
@@ -9873,6 +9883,16 @@ button { cursor: pointer; }
 .insights-grid .recent-card-item {
   padding: 12px 14px;
   background: transparent;
+}
+
+.insights-grid .recent-card-item.is-clickable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  border-radius: 6px;
+}
+
+.insights-grid .recent-card-item.is-clickable:hover {
+  box-shadow: 0 2px 8px rgba(44, 95, 141, 0.12);
 }
 
 .insights-grid .recent-card-item.type-concept { border-left: 3px solid var(--scholar); }

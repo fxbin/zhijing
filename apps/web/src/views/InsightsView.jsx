@@ -41,9 +41,10 @@ function sparseLabels(labels) {
  * @param {Function} props.setView - 视图切换回调
  * @param {Function} [props.onCreateWorkspace] - 创建工作区回调，接收 { title, summary, cardIds } 参数
  * @param {Function} [props.onSelectWorkspace] - 选中工作区回调，接收 workspaceId 参数后跳转到工作区详情
+ * @param {(cardId: string, workspaceId: string) => void} [props.onSelectCard] - 选中知识卡片回调，跳转到工作区详情页高亮该卡片
  * @returns {JSX.Element} 洞察视图
  */
-export default function InsightsView({ setView, onCreateWorkspace, onSelectWorkspace }) {
+export default function InsightsView({ setView, onCreateWorkspace, onSelectWorkspace, onSelectCard }) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
   const claimStatusLabel = useClaimStatusLabel();
@@ -228,7 +229,19 @@ export default function InsightsView({ setView, onCreateWorkspace, onSelectWorks
           ) : (
             <div className="recent-card-list">
               {insights.recentCards.map((card) => (
-                <article key={card.id} className={`recent-card-item type-${card.type}`}>
+                <article
+                  key={card.id}
+                  className={`recent-card-item type-${card.type}${onSelectCard ? ' is-clickable' : ''}`}
+                  onClick={onSelectCard ? () => onSelectCard(card.id, card.workspaceId) : undefined}
+                  role={onSelectCard ? 'button' : undefined}
+                  tabIndex={onSelectCard ? 0 : undefined}
+                  onKeyDown={onSelectCard ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelectCard(card.id, card.workspaceId);
+                    }
+                  } : undefined}
+                >
                   <div className="recent-card-head">
                     <span className="recent-card-type">{cardTypeLabel(card.type)}</span>
                     <span className="recent-card-status">{claimStatusLabel(card.claimStatus)}</span>
