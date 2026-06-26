@@ -634,6 +634,7 @@ export interface GlobalInsights {
     workspaceId: string;
     workspaceTitle: string;
     title: string;
+    body: string;
     type: CardType;
     claimStatus: ClaimStatus;
     createdAt: string;

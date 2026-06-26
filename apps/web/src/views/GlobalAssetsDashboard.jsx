@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Database, FileText, Layers } from 'lucide-react';
+import { ChevronDown, ChevronUp, Database, FileText, Layers } from 'lucide-react';
 
 import AdvancedOpsTabs from '../components/AdvancedOpsTabs';
 import EmptyState from '../components/EmptyState';
@@ -42,6 +42,7 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact, o
   const [filterKeyword, setFilterKeyword] = useState('');
   const [filterLoaded, setFilterLoaded] = useState(false);
   const [filterError, setFilterError] = useState('');
+  const [expandedCardId, setExpandedCardId] = useState(null);
   const [expandedMaterials, setExpandedMaterials] = useState(false);
   const [expandedCards, setExpandedCards] = useState(false);
   const [expandedArtifacts, setExpandedArtifacts] = useState(false);
@@ -255,25 +256,46 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact, o
           ) : (
             <>
               <div className="asset-list">
-                {displayedCards.map((card, index) => (
-                  <article
-                    key={card.id ?? `${card.title}-${index}`}
-                    className={onSelectCard && card.id ? 'is-clickable' : ''}
-                    onClick={onSelectCard && card.id ? () => onSelectCard(card.id, card.workspaceId) : undefined}
-                    role={onSelectCard && card.id ? 'button' : undefined}
-                    tabIndex={onSelectCard && card.id ? 0 : undefined}
-                    onKeyDown={onSelectCard && card.id ? (e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onSelectCard(card.id, card.workspaceId);
-                      }
-                    } : undefined}
-                  >
-                    <span>{cardTypeLabel(card.type)}</span>
-                    <strong>{card.title}</strong>
-                    <small>{claimStatusLabel(card.claimStatus)}</small>
-                  </article>
-                ))}
+                {displayedCards.map((card, index) => {
+                  const cardKey = card.id ?? `${card.title}-${index}`;
+                  const isExpanded = expandedCardId === cardKey;
+                  const handleToggle = () => setExpandedCardId(isExpanded ? null : cardKey);
+                  return (
+                    <article
+                      key={cardKey}
+                      className={`is-expandable${isExpanded ? ' is-expanded' : ''}`}
+                      onClick={handleToggle}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleToggle();
+                        }
+                      }}
+                    >
+                      <div className="asset-card-head">
+                        <span className="asset-card-type">{cardTypeLabel(card.type)}</span>
+                        <strong className="asset-card-title">{card.title}</strong>
+                        <small className="asset-card-status">{claimStatusLabel(card.claimStatus)}</small>
+                        {isExpanded ? <ChevronUp size={16} className="asset-card-chevron" /> : <ChevronDown size={16} className="asset-card-chevron" />}
+                      </div>
+                      {isExpanded && (
+                        <div className="asset-card-body">
+                          {card.body ? (
+                            <pre className="asset-card-body-text">{card.body}</pre>
+                          ) : (
+                            <span className="asset-card-body-empty">{t('assets.cardBodyEmpty')}</span>
+                          )}
+                          <div className="asset-card-meta">
+                            {card.workspaceId && <span className="asset-card-workspace">{card.workspaceId}</span>}
+                            <span className="asset-card-updated">{formatMaterialTime(card.updatedAt)}</span>
+                          </div>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
               </div>
               {filteredCards.length > PREVIEW_LIMIT_CARDS && (
                 <button

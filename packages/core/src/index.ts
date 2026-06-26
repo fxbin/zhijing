@@ -9656,6 +9656,7 @@ export function getGlobalInsights(): GlobalInsights {
         workspaceId: kbId,
         workspaceTitle: base?.title ?? kbId,
         title: card.title,
+        body: card.body,
         type: card.type,
         claimStatus: card.claimStatus,
         createdAt: card.createdAt,

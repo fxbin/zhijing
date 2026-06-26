@@ -9,6 +9,8 @@ import {
   ArrowUpRight,
   BookOpen,
   CheckCircle,
+  ChevronDown,
+  ChevronUp,
   FileText,
   Layers,
   Lightbulb,
@@ -51,6 +53,7 @@ export default function InsightsView({ setView, onCreateWorkspace, onSelectWorks
   const [insights, setInsights] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [expandedCardId, setExpandedCardId] = useState(null);
 
   useEffect(() => {
     let ignore = false;
@@ -228,31 +231,45 @@ export default function InsightsView({ setView, onCreateWorkspace, onSelectWorks
             <EmptyState icon={Lightbulb} title={t('insights.noCards')} body={t('insights.noCardsHint')} compact />
           ) : (
             <div className="recent-card-list">
-              {insights.recentCards.map((card) => (
-                <article
-                  key={card.id}
-                  className={`recent-card-item type-${card.type}${onSelectCard ? ' is-clickable' : ''}`}
-                  onClick={onSelectCard ? () => onSelectCard(card.id, card.workspaceId) : undefined}
-                  role={onSelectCard ? 'button' : undefined}
-                  tabIndex={onSelectCard ? 0 : undefined}
-                  onKeyDown={onSelectCard ? (e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onSelectCard(card.id, card.workspaceId);
-                    }
-                  } : undefined}
-                >
-                  <div className="recent-card-head">
-                    <span className="recent-card-type">{cardTypeLabel(card.type)}</span>
-                    <span className="recent-card-status">{claimStatusLabel(card.claimStatus)}</span>
-                  </div>
-                  <h3>{card.title}</h3>
-                  <footer>
-                    <span>{card.workspaceTitle}</span>
-                    <span>{formatDate(card.createdAt)}</span>
-                  </footer>
-                </article>
-              ))}
+              {insights.recentCards.map((card) => {
+                const isExpanded = expandedCardId === card.id;
+                const handleToggle = () => setExpandedCardId(isExpanded ? null : card.id);
+                return (
+                  <article
+                    key={card.id}
+                    className={`recent-card-item type-${card.type} is-expandable${isExpanded ? ' is-expanded' : ''}`}
+                    onClick={handleToggle}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleToggle();
+                      }
+                    }}
+                  >
+                    <div className="recent-card-head">
+                      <span className="recent-card-type">{cardTypeLabel(card.type)}</span>
+                      <span className="recent-card-status">{claimStatusLabel(card.claimStatus)}</span>
+                      {isExpanded ? <ChevronUp size={14} className="recent-card-chevron" /> : <ChevronDown size={14} className="recent-card-chevron" />}
+                    </div>
+                    <h3>{card.title}</h3>
+                    {isExpanded && (
+                      <div className="recent-card-body">
+                        {card.body ? (
+                          <pre className="recent-card-body-text">{card.body}</pre>
+                        ) : (
+                          <span className="recent-card-body-empty">{t('insights.cardBodyEmpty')}</span>
+                        )}
+                      </div>
+                    )}
+                    <footer>
+                      <span>{card.workspaceTitle}</span>
+                      <span>{formatDate(card.createdAt)}</span>
+                    </footer>
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
