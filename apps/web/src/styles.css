@@ -1040,6 +1040,80 @@ button { cursor: pointer; }
   font-weight: 600;
 }
 
+.modal-meta {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--primary);
+}
+
+.modal-meta.muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.folder-import-result {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.folder-import-result h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.folder-import-summary {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+}
+
+.folder-import-stat.ok { color: var(--sage-text); }
+.folder-import-stat.skip { color: var(--muted); }
+.folder-import-stat.fail { color: #d9534f; }
+
+.folder-import-errors {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.folder-import-errors summary {
+  cursor: pointer;
+  color: var(--scholar);
+  font-weight: 600;
+}
+
+.folder-import-errors ul {
+  margin: 8px 0 0;
+  padding-left: 16px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.folder-import-errors li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.folder-import-errors li code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--primary);
+  word-break: break-all;
+}
+
+.folder-import-errors li span {
+  color: #d9534f;
+  font-size: 11px;
+}
+
 .btn-ghost {
   min-height: 40px;
   border: 1px solid var(--line-soft);
@@ -5386,6 +5460,33 @@ button { cursor: pointer; }
 
 .capture-box button:disabled,
 .file-import-button.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.folder-import-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--sage);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--sage-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.folder-import-button:hover:not(:disabled) {
+  background: rgba(107, 142, 127, 0.1);
+  border-color: var(--sage-text);
+}
+
+.folder-import-button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }

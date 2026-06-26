@@ -13,6 +13,7 @@ import {
   ChevronUp,
   Clock3,
   FileText,
+  FolderOpen,
   RefreshCw,
   Search,
   Send,
@@ -36,6 +37,7 @@ import {
 import { workspaceTitle } from '../utils/knowledge';
 import CaptureSuccessBanner from '../components/CaptureSuccessBanner';
 import EmptyState from '../components/EmptyState';
+import FolderImportDialog from '../components/FolderImportDialog';
 import ImportLifecyclePanel from '../components/ImportLifecyclePanel';
 import MediaPreview from '../components/MediaPreview';
 import ParseTimeline from '../components/ParseTimeline';
@@ -63,6 +65,7 @@ import {
 export default function LibraryView({ apiStatus, workspaces, onCaptureResult, onMaterialMutation, onNavigate, onParseMaterial, parsingMaterialId, selectedWorkspaceId }) {
   const { t } = useTranslation();
   const [expandedMaterialId, setExpandedMaterialId] = useState(null);
+  const [folderImportOpen, setFolderImportOpen] = useState(false);
 
   const {
     items,
@@ -146,6 +149,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
   const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected;
 
   return (
+    <>
     <section className="page-main full">
       <div className="page-title-row">
         <div>
@@ -226,6 +230,15 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
                 type="file"
               />
             </label>
+            <button
+              type="button"
+              className="folder-import-button"
+              disabled={apiStatus !== 'online'}
+              onClick={() => setFolderImportOpen(true)}
+            >
+              <FolderOpen size={18} />
+              {t('folderImport.button')}
+            </button>
           </div>
         </div>
         <p>{status}</p>
@@ -445,5 +458,16 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
         </div>
       )}
     </section>
+    <FolderImportDialog
+      open={folderImportOpen}
+      onClose={() => setFolderImportOpen(false)}
+      workspaceId={selectedWorkspaceId}
+      workspaceTitle={workspaceTitle(workspaces, selectedWorkspaceId)}
+      onImported={() => {
+        loadMaterials();
+        onMaterialMutation?.();
+      }}
+    />
+    </>
   );
 }

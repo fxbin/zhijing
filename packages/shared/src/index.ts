@@ -61,6 +61,56 @@ export interface IntakeRequest {
   scope?: IntakeScope;
 }
 
+/**
+ * 文件夹导入请求：扫描本地路径下的 .md/.txt 文件批量入库。
+ * 不触发 AI 处理，仅入库为 parseStatus='pending' 的资料。
+ * @author fxbin
+ */
+export interface FolderIntakeRequest {
+  /** 本地绝对路径，必须存在且是目录 */
+  path: string;
+  /** 目标工作区 ID，缺省时使用当前选中工作区或 default */
+  workspaceId?: string;
+}
+
+/**
+ * 文件夹导入单条文件结果。
+ * @author fxbin
+ */
+export interface FolderIntakeItem {
+  /** 相对于扫描根目录的文件路径 */
+  relativePath: string;
+  /** 文件名 */
+  fileName: string;
+  /** 是否成功入库 */
+  ok: boolean;
+  /** 失败原因（ok=false 时填充） */
+  error?: string;
+  /** 入库后的 materialId（ok=true 时填充） */
+  materialId?: string;
+}
+
+/**
+ * 文件夹导入汇总结果。
+ * @author fxbin
+ */
+export interface FolderIntakeResult {
+  /** 扫描根目录绝对路径 */
+  scannedPath: string;
+  /** 目标工作区 ID */
+  workspaceId: string;
+  /** 目标工作区标题 */
+  workspaceTitle: string;
+  /** 成功入库条数 */
+  imported: number;
+  /** 跳过条数（如空文件、不支持格式） */
+  skipped: number;
+  /** 失败条数 */
+  failed: number;
+  /** 逐条结果 */
+  items: FolderIntakeItem[];
+}
+
 export interface ModelProviderModel {
   id: string;
 }

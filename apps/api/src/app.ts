@@ -49,6 +49,7 @@ import {
   getTask,
   initializeArtifactSections,
   intakeKnowledge,
+  intakeFolderFromPath,
   KnowledgeCoreError,
   listArchivedItems,
   listArtifactRevisions,
@@ -137,6 +138,7 @@ import type {
   IntakeDepth,
   IntakeRequest,
   IntakeScope,
+  FolderIntakeRequest,
   KnowledgeKitId,
   MaterialType,
   ParseStatus,
@@ -1738,6 +1740,26 @@ export function buildApi() {
       }
       request.log.error({ error }, 'intake failed');
       return reply.code(500).send({ error: 'Intake failed.' });
+    }
+  });
+
+  app.post<{ Body: Partial<FolderIntakeRequest> }>('/api/intake/folder', async (request, reply) => {
+    const path = typeof request.body?.path === 'string' ? request.body.path.trim() : '';
+    if (!path) {
+      return reply.code(400).send({ error: 'path is required.' });
+    }
+    try {
+      return await intakeFolderFromPath({
+        path,
+        workspaceId: request.body.workspaceId,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Folder intake failed.';
+      if (/Path (not found|is not a directory)|Workspace not found|Too many files/.test(message)) {
+        return reply.code(400).send({ error: message });
+      }
+      request.log.error({ error }, 'folder intake failed');
+      return reply.code(500).send({ error: 'Folder intake failed.' });
     }
   });
 

@@ -128,6 +128,9 @@ import {
   type CreateDecisionLogRequest,
   type EvidenceFeedback,
   type RejectedCardFeature,
+  type FolderIntakeRequest,
+  type FolderIntakeResult,
+  type FolderIntakeItem,
 } from '@zhijing/shared';
 import { fetchUrlAsMarkdown } from './web-fetch.js';
 import {
@@ -188,8 +191,8 @@ import {
 import { DuckDBConnection } from '@duckdb/node-api';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
-import { readFile, unlink } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { readFile, readdir, stat, unlink } from 'node:fs/promises';
+import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -5021,6 +5024,166 @@ async function generateKnowledge(
     schema,
     context,
   });
+}
+
+/** 文件夹导入支持的扩展名（小写）。 */
+const FOLDER_INTAKE_EXTENSIONS = ['.md', '.markdown', '.txt'];
+
+/** 文件夹导入单文件大小上限：2MB。 */
+const FOLDER_INTAKE_MAX_FILE_SIZE = 2 * 1024 * 1024;
+
+/** 文件夹导入扫描文件数上限，避免误扫超大目录。 */
+const FOLDER_INTAKE_MAX_FILES = 500;
+
+/**
+ * 递归扫描目录，返回所有支持扩展名的文件绝对路径。
+ * 跳过隐藏目录（如 .git、.zhijing）和隐藏文件。
+ * @param rootPath 根目录
+ * @param collected 累积的文件路径列表
+ * @author fxbin
+ */
+async function collectSupportedFiles(
+  rootPath: string,
+  collected: string[],
+): Promise<void> {
+  const entries = await readdir(rootPath, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    const entryPath = join(rootPath, entry.name);
+    if (entry.isDirectory()) {
+      await collectSupportedFiles(entryPath, collected);
+    } else if (entry.isFile()) {
+      const ext = extname(entry.name).toLowerCase();
+      if (FOLDER_INTAKE_EXTENSIONS.includes(ext)) {
+        collected.push(entryPath);
+      }
+    }
+  }
+}
+
+/**
+ * 文件夹导入：扫描本地路径下所有 .md/.txt 文件，批量入库到指定工作区。
+ *
+ * 行为：
+ *  - 递归扫描根目录及其子目录
+ *  - 跳过隐藏目录（.git/.zhijing 等）和隐藏文件
+ *  - 仅处理 .md/.markdown/.txt 文件，单文件 ≤ 2MB
+ *  - 不触发 AI 处理，资料入库为 parseStatus='pending'
+ *  - 单文件失败不阻断整批，错误汇总到 items[].error
+ *  - 文件总数上限 500，超出抛错
+ *
+ * @param request 文件夹导入请求
+ * @returns 导入汇总结果
+ * @author fxbin
+ */
+export async function intakeFolderFromPath(
+  request: FolderIntakeRequest,
+): Promise<FolderIntakeResult> {
+  const targetPath = request.path?.trim();
+  if (!targetPath) {
+    throw new Error('Path is required.');
+  }
+
+  const absolutePath = resolve(targetPath);
+  let pathStat;
+  try {
+    pathStat = await stat(absolutePath);
+  } catch {
+    throw new Error(`Path not found: ${absolutePath}`);
+  }
+  if (!pathStat.isDirectory()) {
+    throw new Error(`Path is not a directory: ${absolutePath}`);
+  }
+
+  const workspaceId = resolveWorkspaceId(request.workspaceId);
+  const base = repository.findWorkspace(workspaceId);
+  if (!base) {
+    throw new Error(`Workspace not found: ${workspaceId}`);
+  }
+
+  const files: string[] = [];
+  await collectSupportedFiles(absolutePath, files);
+  if (files.length === 0) {
+    return {
+      scannedPath: absolutePath,
+      workspaceId,
+      workspaceTitle: base.title,
+      imported: 0,
+      skipped: 0,
+      failed: 0,
+      items: [],
+    };
+  }
+  if (files.length > FOLDER_INTAKE_MAX_FILES) {
+    throw new Error(`Too many files: ${files.length} (max ${FOLDER_INTAKE_MAX_FILES}).`);
+  }
+
+  const items: FolderIntakeItem[] = [];
+  let imported = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const filePath of files) {
+    const relativePath = relative(absolutePath, filePath);
+    const fileName = basename(filePath);
+    const item: FolderIntakeItem = { relativePath, fileName, ok: false };
+
+    try {
+      const fileStat = await stat(filePath);
+      if (fileStat.size > FOLDER_INTAKE_MAX_FILE_SIZE) {
+        item.error = `File too large: ${fileStat.size} bytes (max ${FOLDER_INTAKE_MAX_FILE_SIZE})`;
+        skipped += 1;
+        items.push(item);
+        continue;
+      }
+
+      const content = await readFile(filePath, 'utf8');
+      const trimmed = content.trim();
+      if (!trimmed) {
+        item.error = 'Empty file';
+        skipped += 1;
+        items.push(item);
+        continue;
+      }
+
+      const title = extractMaterialTitle(trimmed) || fileName;
+      const timestamp = now();
+      const material: MaterialRecord = {
+        id: id('mat'),
+        workspaceId: base.id,
+        type: 'text',
+        rawInput: trimmed,
+        title,
+        contentText: trimmed,
+        mediaUrls: [],
+        parseStatus: 'saved',
+        createdAt: timestamp,
+        statusTimeline: { capturedAt: timestamp },
+      };
+      repository.insertMaterial(material);
+      base.sourceCount += 1;
+      base.updatedAt = timestamp;
+      repository.updateWorkspace(base);
+
+      item.ok = true;
+      item.materialId = material.id;
+      imported += 1;
+    } catch (err) {
+      item.error = err instanceof Error ? err.message : String(err);
+      failed += 1;
+    }
+    items.push(item);
+  }
+
+  return {
+    scannedPath: absolutePath,
+    workspaceId,
+    workspaceTitle: base.title,
+    imported,
+    skipped,
+    failed,
+    items,
+  };
 }
 
 const DEFAULT_INTAKE_AUDIENCE: IntakeAudience = 'intermediate';
