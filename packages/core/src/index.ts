@@ -1969,7 +1969,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         LIMIT ?
       `).all(workspaceId, sanitized, limit) as CardRow[];
       return rows.map(mapCard);
-    } catch {
+    } catch (error) {
+      console.warn('[searchCardsByRelevance] FTS query failed', error);
       return [];
     }
   }
@@ -1996,7 +1997,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         LIMIT ?
       `).all(workspaceId, sanitized, limit) as MaterialRow[];
       return rows.map(mapMaterial);
-    } catch {
+    } catch (error) {
+      console.warn('[searchMaterialsByRelevance] FTS query failed', error);
       return [];
     }
   }
@@ -2772,7 +2774,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
    * @author fxbin
    */
   private ensureFtsTables() {
-    this.db.exec(`
+    this.ensureFtsTable('cards_fts', 'card_id', 'body', `
       CREATE VIRTUAL TABLE IF NOT EXISTS cards_fts USING fts5(
         card_id UNINDEXED,
         workspace_id UNINDEXED,
@@ -2780,7 +2782,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         body,
         tokenize = '${FTS_TOKENIZER}'
       );
-
+    `);
+    this.ensureFtsTable('materials_fts', 'material_id', 'content_text', `
       CREATE VIRTUAL TABLE IF NOT EXISTS materials_fts USING fts5(
         material_id UNINDEXED,
         workspace_id UNINDEXED,
@@ -2788,6 +2791,46 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         content_text,
         tokenize = '${FTS_TOKENIZER}'
       );
+    `);
+    this.backfillFtsIndex();
+  }
+
+  /**
+   * 校验并创建 FTS 表：若已存在但缺少 workspace_id 列（旧 schema），先 DROP 再重建。
+   * @param {string} tableName - FTS 表名
+   * @param {string} idColumn - 主键列名（card_id / material_id）
+   * @param {string} bodyColumn - 正文列名（body / content_text）
+   * @param {string} createSql - 建表 SQL
+   */
+  private ensureFtsTable(tableName: string, idColumn: string, bodyColumn: string, createSql: string) {
+    const exists = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?").get(tableName);
+    if (exists) {
+      const columns = this.db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+      if (!columns.some((column) => column.name === 'workspace_id')) {
+        this.db.exec(`DROP TABLE ${tableName};`);
+      }
+    }
+    this.db.exec(createSql);
+  }
+
+  /**
+   * 回填 FTS 索引：将主表中存在但 FTS 表缺失的卡片/资料补充到全文索引。
+   *
+   * 解决场景：FTS5 表在 migrate 时创建为空，历史数据未进入索引，
+   * 导致 Agent 的 search_cards / search_materials 工具检索不到内容。
+   * 采用 INSERT OR IGNORE 避免重复，仅补充缺失行。
+   */
+  private backfillFtsIndex() {
+    this.db.exec(`
+      INSERT OR IGNORE INTO cards_fts (card_id, workspace_id, title, body)
+      SELECT id, COALESCE(workspace_id, 'default'), COALESCE(title, ''), COALESCE(body, '')
+      FROM cards
+      WHERE archived = 0;
+
+      INSERT OR IGNORE INTO materials_fts (material_id, workspace_id, title, content_text)
+      SELECT id, COALESCE(workspace_id, 'default'), COALESCE(title, ''), COALESCE(content_text, '')
+      FROM materials
+      WHERE archived = 0;
     `);
   }
 
