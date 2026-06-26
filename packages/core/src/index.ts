@@ -5164,8 +5164,6 @@ export async function intakeFolderFromPath(
       };
       repository.insertMaterial(material);
       base.sourceCount += 1;
-      base.updatedAt = timestamp;
-      repository.updateWorkspace(base);
 
       item.ok = true;
       item.materialId = material.id;
@@ -5175,6 +5173,11 @@ export async function intakeFolderFromPath(
       failed += 1;
     }
     items.push(item);
+  }
+
+  if (imported > 0) {
+    base.updatedAt = now();
+    repository.updateWorkspace(base);
   }
 
   return {
@@ -5267,8 +5270,6 @@ export function intakeFilesFromBatch(
       };
       repository.insertMaterial(material);
       base.sourceCount += 1;
-      base.updatedAt = timestamp;
-      repository.updateWorkspace(base);
 
       item.ok = true;
       item.materialId = material.id;
@@ -5278,6 +5279,11 @@ export function intakeFilesFromBatch(
       failed += 1;
     }
     items.push(item);
+  }
+
+  if (imported > 0) {
+    base.updatedAt = now();
+    repository.updateWorkspace(base);
   }
 
   return {
