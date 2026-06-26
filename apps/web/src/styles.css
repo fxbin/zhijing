@@ -12930,6 +12930,24 @@ button { cursor: pointer; }
   animation: card-detail-drawer-in 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
+.card-detail-resize-handle {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  right: 520px;
+  width: 6px;
+  z-index: 92;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.card-detail-resize-handle:hover,
+.card-detail-resize-handle:active {
+  background: var(--scholar-blue, #2C5F8D);
+  opacity: 0.4;
+}
+
 @keyframes card-detail-drawer-in {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }

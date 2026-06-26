@@ -15,6 +15,7 @@ import { renderMarkdown } from '../utils/markdown';
 import ParseTimeline from './ParseTimeline';
 import MediaPreview from './MediaPreview';
 import useModalA11y from '../hooks/useModalA11y';
+import { useResizableDrawer } from '../hooks/useResizableDrawer';
 
 /**
  * 判断文本是否包含 Markdown 语法特征。
@@ -47,6 +48,7 @@ function looksLikeMarkdown(text) {
 export default function MaterialDetailDrawer({ material, onClose, workspaces }) {
   const { t } = useTranslation();
   const drawerRef = useRef(null);
+  const { width, resizeHandleProps } = useResizableDrawer();
   const isOpen = material !== null;
 
   useModalA11y(drawerRef, isOpen, onClose);
@@ -80,9 +82,16 @@ export default function MaterialDetailDrawer({ material, onClose, workspaces }) 
 
   return (
     <div className="card-detail-overlay" onClick={onClose} role="presentation">
+      <div
+        className="card-detail-resize-handle"
+        style={{ right: `${width}px` }}
+        {...resizeHandleProps}
+        aria-hidden="true"
+      />
       <aside
         ref={drawerRef}
         className="card-detail-drawer"
+        style={{ width: `${width}px` }}
         role="dialog"
         aria-modal="true"
         aria-label={material.title || t('library.materialDetail')}

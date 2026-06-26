@@ -11,6 +11,7 @@ import { useCardTypeLabel, useClaimStatusLabel } from '../utils/i18nLabels';
 import { formatDate } from '../utils/material';
 import { renderMarkdown } from '../utils/markdown';
 import useModalA11y from '../hooks/useModalA11y';
+import { useResizableDrawer } from '../hooks/useResizableDrawer';
 
 /**
  * 判断文本是否包含 Markdown 语法特征。
@@ -45,6 +46,7 @@ export default function CardDetailDrawer({ card, onClose, workspaceTitle }) {
   const cardTypeLabel = useCardTypeLabel();
   const claimStatusLabel = useClaimStatusLabel();
   const drawerRef = useRef(null);
+  const { width, resizeHandleProps } = useResizableDrawer();
   const isOpen = card !== null;
 
   useModalA11y(drawerRef, isOpen, onClose);
@@ -74,9 +76,16 @@ export default function CardDetailDrawer({ card, onClose, workspaceTitle }) {
 
   return (
     <div className="card-detail-overlay" onClick={onClose} role="presentation">
+      <div
+        className="card-detail-resize-handle"
+        style={{ right: `${width}px` }}
+        {...resizeHandleProps}
+        aria-hidden="true"
+      />
       <aside
         ref={drawerRef}
         className="card-detail-drawer"
+        style={{ width: `${width}px` }}
         role="dialog"
         aria-modal="true"
         aria-label={card.title || t('cardDetail.title')}
