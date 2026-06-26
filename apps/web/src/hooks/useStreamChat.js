@@ -176,14 +176,20 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
   /**
    * 中断当前正在进行的流式对话（如果有）。
    * 同时中断 fetch 请求并通知后端停止 Agent。
+   * 立即清空流相关的 ref，避免后续持久化写错工作区。
    */
   function abortCurrentStream() {
+    const sessionId = currentSessionId.current;
+    const workspaceId = streamWorkspaceId.current;
+
+    currentSessionId.current = null;
+    streamWorkspaceId.current = null;
+
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-    const sessionId = currentSessionId.current;
-    const workspaceId = streamWorkspaceId.current;
+
     if (sessionId && workspaceId) {
       api.post(`${WORKSPACES_PATH}/${workspaceId}/agent/abort`, { sessionId })
         .catch(() => {});
@@ -457,10 +463,13 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
 
   /**
    * 清空当前流式对话历史并删除 localStorage 持久化记录。
+   * 若流式对话正在进行，先中断再清空，避免状态不一致。
    * @author fxbin
    */
   const clearChat = useCallback(() => {
+    abortCurrentStream();
     setChatMessages(INITIAL_CHAT_MESSAGES);
+    setIsStreaming(INITIAL_IS_STREAMING);
     const targetWorkspaceId = streamWorkspaceId.current ?? selectedWorkspaceId;
     removeChatFromStorage(targetWorkspaceId);
   }, [selectedWorkspaceId]);

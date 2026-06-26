@@ -94,10 +94,22 @@ export function useAssistantState({
   const {
     chatMessages,
     isStreaming,
-    streamAsk,
+    streamAsk: streamAskRaw,
     abortStream,
     clearChat,
   } = useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t });
+
+  /**
+   * 流式对话提交包装：发送后清空输入框。
+   * @param {string} text - 用户输入文本
+   * @returns {Promise<void>}
+   */
+  async function streamAsk(text) {
+    const value = (text ?? '').trim();
+    if (!value) return;
+    setAssistantQuestion('');
+    await streamAskRaw(value);
+  }
 
   /**
    * 加载指定工作区的最近消息列表。
