@@ -256,7 +256,10 @@ export function buildApi() {
     return getDashboard(kbId);
   });
 
-  app.get('/api/insights', async () => getGlobalInsights());
+  app.get<{ Querystring: { workspaceId?: string } }>('/api/insights', async (request) => {
+    const workspaceId = request.query.workspaceId?.trim() || undefined;
+    return getGlobalInsights(workspaceId);
+  });
 
   app.get<{ Params: { workspaceId: string } }>(
     '/api/workspaces/:workspaceId/construction-progress',

@@ -9771,11 +9771,13 @@ const RECENT_CARDS_LIMIT = 4;
  */
 const WORKSPACE_PREVIEW_TOP_LIMIT = 8;
 
-export function getGlobalInsights(): GlobalInsights {
+export function getGlobalInsights(workspaceId?: string): GlobalInsights {
+  const scopedWorkspaceId = workspaceId && workspaceId.trim() ? workspaceId.trim() : undefined;
+
   const bases = repository.listWorkspaces();
-  const materials = repository.listMaterials();
-  const cards = repository.listCards();
-  const artifacts = repository.listArtifacts();
+  const materials = repository.listMaterials(scopedWorkspaceId);
+  const cards = repository.listCards(scopedWorkspaceId);
+  const artifacts = repository.listArtifacts(scopedWorkspaceId);
   const tasks = repository.listTasks();
 
   const sourcedCards = cards.filter((card) => card.claimStatus === 'sourced').length;

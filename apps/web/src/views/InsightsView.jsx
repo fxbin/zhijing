@@ -44,7 +44,7 @@ function sparseLabels(labels) {
  * @param {(cardId: string, workspaceId: string) => void} [props.onSelectCard] - 选中知识卡片回调，跳转到工作区详情页高亮该卡片
  * @returns {JSX.Element} 洞察视图
  */
-export default function InsightsView({ setView, onCreateWorkspace, onSelectWorkspace, onSelectCard, onOpenCardDetail }) {
+export default function InsightsView({ setView, onCreateWorkspace, onSelectWorkspace, onSelectCard, onOpenCardDetail, selectedWorkspaceId }) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
   const claimStatusLabel = useClaimStatusLabel();
@@ -58,7 +58,10 @@ export default function InsightsView({ setView, onCreateWorkspace, onSelectWorks
       setLoading(true);
       setError('');
       try {
-        const payload = await api.get('/api/insights');
+        const url = selectedWorkspaceId
+          ? `/api/insights?workspaceId=${encodeURIComponent(selectedWorkspaceId)}`
+          : '/api/insights';
+        const payload = await api.get(url);
         if (!ignore) setInsights(payload);
       } catch {
         if (!ignore) setError(t('insights.loadError'));
@@ -68,7 +71,7 @@ export default function InsightsView({ setView, onCreateWorkspace, onSelectWorks
     }
     loadInsights();
     return () => { ignore = true; };
-  }, [t]);
+  }, [t, selectedWorkspaceId]);
 
   const maxGrowth = useMemo(() => {
     if (!insights) return 1;

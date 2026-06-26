@@ -645,6 +645,7 @@ function App() {
               }}
               onSelectCard={handleSelectCard}
               onOpenCardDetail={openCardDrawer}
+              selectedWorkspaceId={selectedWorkspaceId}
             />
           )}
           {view === 'path' && <PathView selectedWorkspaceId={selectedWorkspaceId} setView={go} />}
