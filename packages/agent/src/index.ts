@@ -14,10 +14,23 @@ export type { WorkspaceAgentOptions } from './agent-factory.js';
 export { serializeAgentEvent } from './agent-event-serializer.js';
 
 export {
+  assertToolCapabilityAllowed,
+  wrapToolWithGuard,
+  defaultConsoleAuditSink,
+} from './capability-guard.js';
+export type {
+  ToolCapability,
+  ToolCapabilityDeclaration,
+  ToolCallAuditEntry,
+  ToolCallAuditSink,
+} from './capability-guard.js';
+
+export {
   createWorkspaceTools,
   createSearchCardsTool,
   createSearchMaterialsTool,
   createGetWorkspaceSummaryTool,
+  getToolCapabilityDeclaration,
 } from './tools/index.js';
 
 export type {

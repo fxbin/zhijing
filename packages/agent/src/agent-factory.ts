@@ -8,7 +8,13 @@ import {
   type Model,
 } from '@earendil-works/pi-ai';
 import { Agent, type AgentMessage, type AgentOptions, type ThinkingLevel } from '@earendil-works/pi-agent-core';
-import { createWorkspaceTools } from './tools/index.js';
+import { createWorkspaceTools, getToolCapabilityDeclaration } from './tools/index.js';
+import {
+  assertToolCapabilityAllowed,
+  wrapToolWithGuard,
+  defaultConsoleAuditSink,
+  type ToolCallAuditSink,
+} from './capability-guard.js';
 
 /**
  * 默认 LLM provider；与 pi-runtime 保持一致以便复用同一份环境变量配置。
@@ -89,6 +95,7 @@ function defaultConvertToLlm(messages: AgentMessage[]): Message[] {
  * - thinkingLevel：推理强度，省略时使用 medium
  * - toolExecution：工具执行模式，省略时使用 parallel
  * - systemPromptOverride：覆盖默认系统提示词
+ * - auditSink：工具调用审计日志接收器，省略时使用 defaultConsoleAuditSink
  */
 export interface WorkspaceAgentOptions {
   provider?: KnownProvider;
@@ -97,6 +104,7 @@ export interface WorkspaceAgentOptions {
   thinkingLevel?: ThinkingLevel;
   toolExecution?: AgentOptions['toolExecution'];
   systemPromptOverride?: string;
+  auditSink?: ToolCallAuditSink;
 }
 
 /**
@@ -139,6 +147,35 @@ function resolveApiKey(provider: KnownProvider, explicit?: string): string | und
 }
 
 /**
+ * 为指定工作区构造经 capability 门禁包装的工具集。
+ *
+ * 流程：
+ * 1. 调用 createWorkspaceTools 生成原始工具集
+ * 2. 逐个查表 getToolCapabilityDeclaration 获取能力声明
+ *    - 未声明：fail-fast，抛错（防止新增工具忘记声明 capability）
+ * 3. assertToolCapabilityAllowed 校验 capability 是否在白名单内
+ *    - 非白名单：fail-fast，抛错（防止越界工具挂载）
+ * 4. wrapToolWithGuard 包装 execute，注入审计日志
+ *
+ * @param workspaceId - 工作区 id
+ * @param auditSink - 审计日志接收器；省略时使用 defaultConsoleAuditSink
+ * @returns 经门禁包装的工具集，可直接传入 AgentState.tools
+ * @author fxbin
+ */
+function createGuardedWorkspaceTools(workspaceId: string, auditSink?: ToolCallAuditSink) {
+  const sink = auditSink ?? defaultConsoleAuditSink;
+  const rawTools = createWorkspaceTools(workspaceId);
+  return rawTools.map((tool) => {
+    const declaration = getToolCapabilityDeclaration(tool.name);
+    if (!declaration) {
+      throw new Error(`createGuardedWorkspaceTools: tool "${tool.name}" has no capability declaration. Add it to TOOL_CAPABILITY_DECLARATIONS.`);
+    }
+    assertToolCapabilityAllowed(declaration);
+    return wrapToolWithGuard(tool, declaration, sink);
+  });
+}
+
+/**
  * 为指定工作区构造一个可即用的 Agent 实例。
  *
  * 装配内容：
@@ -167,7 +204,7 @@ export function createWorkspaceAgent(workspaceId: string, options: WorkspaceAgen
   }
 
   const model = getModel(provider, modelId as never) as Model<Api>;
-  const tools = createWorkspaceTools(workspaceId);
+  const tools = createGuardedWorkspaceTools(workspaceId, options.auditSink);
 
   return new Agent({
     initialState: {
