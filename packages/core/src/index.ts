@@ -113,6 +113,7 @@ import {
   type TestModelProviderSettingsRequest,
   detectPlatform,
 } from '@zhijing/shared';
+import { fetchUrlAsMarkdown } from './web-fetch.js';
 import {
   createPiAiRuntime,
   createMockPiRuntime,
@@ -5580,48 +5581,15 @@ async function parseOrdinaryWebMaterial(material: MaterialRecord): Promise<Parse
     throw new KnowledgeCoreError('Material source URL is required for parsing.', 400);
   }
 
-  const url = new URL(sourceUrl);
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new KnowledgeCoreError('Only http and https URLs can be parsed.', 400);
-  }
-
   const jinaParsed = await tryParseWithJinaReader(sourceUrl);
   if (jinaParsed) return jinaParsed;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      redirect: 'follow',
-      headers: {
-        accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8',
-        'user-agent': 'ZhijingBot/0.1 (+https://local.zhijing.app)',
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`Web parser received HTTP ${response.status}.`);
-    }
-
-    const contentType = response.headers.get('content-type') ?? '';
-    const raw = await response.text();
-    const limited = raw.slice(0, 500_000);
-    const parsed = contentType.includes('text/plain')
-      ? { title: titleFromLink(sourceUrl), text: cleanText(decodeHtmlEntities(limited)) }
-      : extractReadableText(limited, titleFromLink(sourceUrl));
-
-    if (parsed.text.length < 120) {
-      throw new Error('Parsed web content is too short for a reliable summary.');
-    }
-
-    return {
-      title: parsed.title,
-      text: parsed.text.slice(0, 18_000),
-      mediaUrls: [],
-    };
-  } finally {
-    clearTimeout(timer);
-  }
+  const fetched = await fetchUrlAsMarkdown(sourceUrl);
+  return {
+    title: fetched.title,
+    text: fetched.text,
+    mediaUrls: fetched.mediaUrls,
+  };
 }
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');

@@ -13,7 +13,11 @@
   },
   "dependencies": {
     "@duckdb/node-api": "^1.5.3-r.3",
+    "@mozilla/readability": "^0.6.0",
     "@zhijing/pi-runtime": "0.1.0",
-    "@zhijing/shared": "0.1.0"
+    "@zhijing/shared": "0.1.0",
+    "linkedom": "^0.18.12",
+    "turndown": "^7.2.4",
+    "unpdf": "^1.6.2"
   }
 }
