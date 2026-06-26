@@ -10343,3 +10343,29 @@ export {
   type ScanVaultResult,
   type ExportVaultResult,
 } from './file-sync-adapter.js';
+
+export {
+  aggregateAttentionSignals,
+  selectMode,
+  evaluateConstraints,
+  buildOrchestratorDecisionFromData,
+  DEFAULT_EXPERIENCE_CONSTRAINTS,
+} from './orchestrator.js';
+
+import { buildOrchestratorDecisionFromData as buildDecisionFromData } from './orchestrator.js';
+
+/**
+ * 编排 Agent 决策入口（薄包装）。
+ *
+ * 从 repository 获取注意力信号和 Agent 提议，
+ * 委托 orchestrator.ts 纯逻辑层完成聚合 → 模式选择 → 约束评估的完整链路。
+ *
+ * @param workspaceId - 工作区 ID
+ * @returns 编排决策结果
+ * @author fxbin
+ */
+export function buildOrchestratorDecision(workspaceId: string): import('@zhijing/shared').OrchestratorDecision {
+  const signals = repository.listAttentionSignals(workspaceId, 20);
+  const proposalReport = generateAgentProposals();
+  return buildDecisionFromData(signals, proposalReport.proposals);
+}

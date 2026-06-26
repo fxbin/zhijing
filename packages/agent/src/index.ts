@@ -24,3 +24,13 @@ export type {
 export type {
   SearchMaterialsDetails,
 } from './tools/search-materials.js';
+
+export {
+  selectOrchestratorSystemPrompt,
+  createOrchestratedWorkspaceAgent,
+  ORCHESTRATOR_BASE_PROMPT,
+  MIRROR_BEHAVIOR_PROMPT,
+  CATALYST_BEHAVIOR_PROMPT,
+  NAVIGATOR_BEHAVIOR_PROMPT,
+} from './orchestrator-integration.js';
+export type { OrchestratedAgentOptions } from './orchestrator-integration.js';

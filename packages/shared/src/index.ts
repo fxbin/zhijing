@@ -1279,3 +1279,72 @@ export interface RecallResult {
   query: string;
   totalFound: number;
 }
+
+/**
+ * 编排 Agent 的三种交互模式，对应「镜子不保姆」理念的不同姿态。
+ * - mirror 镜子模式（默认）：只呈现、不打扰，被动响应用户提问
+ * - catalyst 催化剂模式：主动提问、不替代，用苏格拉底追问引导用户自己得出答案
+ * - navigator 导航员模式：主动建议、可操作，生成具体行动建议
+ * @author fxbin
+ */
+export type OrchestratorMode = 'mirror' | 'catalyst' | 'navigator';
+
+/**
+ * 体验约束配置，落实「对用户注意力的尊重」这一最高约束。
+ * 编排 Agent 在做出主动提议前必须通过约束评估。
+ * @author fxbin
+ */
+export interface ExperienceConstraints {
+  /** 每日主动提议上限 */
+  maxDailyActiveSuggestions: number;
+  /** 两次提议间最小间隔（毫秒） */
+  minIntervalBetweenSuggestionsMs: number;
+  /** 用户正在编辑时永远不打断 */
+  neverInterruptDuringWriting: boolean;
+  /** 没有来源时不声称知识 */
+  neverClaimKnowledgeWithoutSource: boolean;
+  /** 始终提供怀疑模式选项 */
+  alwaysOfferSkepticMode: boolean;
+}
+
+/**
+ * 聚合后的注意力信号摘要，供编排 Agent 做模式选择。
+ * @author fxbin
+ */
+export interface AttentionAggregate {
+  /** 最近注意力信号的统一强度评分（0-3） */
+  maxStrength: number;
+  /** 未消费的强信号数量 */
+  unconsumedStrongCount: number;
+  /** 最近一条信号的类型 */
+  latestSignalType: string;
+  /** 当前 Agent 提议的类型列表 */
+  proposalTypes: string[];
+  /** 是否存在知识盲区提议 */
+  hasBlindSpot: boolean;
+  /** 是否存在遗忘复习提议 */
+  hasRecallReview: boolean;
+  /** 聚合时间戳 */
+  evaluatedAt: string;
+}
+
+/**
+ * 编排 Agent 的完整决策结果，包含模式选择、信号摘要和约束评估。
+ * @author fxbin
+ */
+export interface OrchestratorDecision {
+  /** 选中的交互模式 */
+  mode: OrchestratorMode;
+  /** 模式选择的理由（日志可见，P0.1 不做 UI） */
+  reason: string;
+  /** 信号聚合摘要 */
+  aggregate: AttentionAggregate;
+  /** 约束评估结果 */
+  constraintsPassed: boolean;
+  /** 约束未通过时的说明 */
+  constraintsReason: string;
+  /** 建议的后续行动（催化剂/导航员模式下有值） */
+  suggestedAction: string;
+  /** 决策时间戳 */
+  decidedAt: string;
+}

@@ -70,6 +70,7 @@ import {
   computeRecallDecay,
   applyRecallDecay,
   generateAgentProposals,
+  buildOrchestratorDecision,
   acceptProposedCards,
   listAgentActionLogs,
   listInspectTables,
@@ -699,6 +700,15 @@ export function buildApi() {
     const limit = request.query.limit ? Number(request.query.limit) : undefined;
     const cards = await listDueCards(request.params.id, limit);
     return { cards };
+  });
+
+  app.get<{ Params: { id: string } }>('/api/workspaces/:id/orchestrator/decision', async (request, reply) => {
+    const workspace = getWorkspace(request.params.id);
+    if (!workspace) {
+      return reply.code(404).send({ error: 'Knowledge base not found.' });
+    }
+    const decision = buildOrchestratorDecision(request.params.id);
+    return { decision };
   });
 
   app.post<{ Params: { id: string }; Body: { grade?: string } }>('/api/cards/:id/review', async (request, reply) => {
