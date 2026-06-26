@@ -3,7 +3,7 @@
  * @module views/DetailView
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   BarChart3,
@@ -178,6 +178,26 @@ export default function DetailView({
 
   const cards = detail.cards ?? [];
   const materials = detail.materials ?? [];
+
+  const [highlightedMaterialId, setHighlightedMaterialId] = useState(null);
+  const materialHighlightTimerRef = useRef(null);
+
+  useEffect(() => {
+    const materialId = sessionStorage.getItem('zhijing:pathMaterialId');
+    if (!materialId) return;
+    if (materials.length === 0) return;
+    sessionStorage.removeItem('zhijing:pathMaterialId');
+    setHighlightedMaterialId(materialId);
+    const element = document.getElementById(`material-${materialId}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    if (materialHighlightTimerRef.current) clearTimeout(materialHighlightTimerRef.current);
+    materialHighlightTimerRef.current = setTimeout(() => setHighlightedMaterialId(null), 2000);
+    return () => {
+      if (materialHighlightTimerRef.current) clearTimeout(materialHighlightTimerRef.current);
+    };
+  }, [materials]);
 
   const {
     feedMode,
@@ -608,7 +628,7 @@ export default function DetailView({
               </div>
             )}
             {materials.map((material) => (
-              <article className="source-strip" key={material.id ?? material.title}>
+              <article className={`source-strip${highlightedMaterialId === material.id ? ' highlighted' : ''}`} id={`material-${material.id}`} key={material.id ?? material.title}>
                 <BookOpen size={22} />
                 <div>
                   <strong>{material.title}</strong>

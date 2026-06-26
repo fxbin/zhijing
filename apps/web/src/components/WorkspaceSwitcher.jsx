@@ -109,7 +109,7 @@ export default function WorkspaceSwitcher({ workspaces, selectedWorkspaceId, onS
                       onClick={(event) => handleAction(event, onEdit, base)}
                       type="button"
                     >
-                      <Pencil size={14} />
+                      <Pencil size={16} />
                     </button>
                     <button
                       aria-label={t('workspace.delete')}
@@ -117,7 +117,7 @@ export default function WorkspaceSwitcher({ workspaces, selectedWorkspaceId, onS
                       onClick={(event) => handleAction(event, onDelete, base)}
                       type="button"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 )}

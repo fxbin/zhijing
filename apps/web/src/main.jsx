@@ -420,7 +420,10 @@ function App() {
   };
 
   const handleViewMaterialDetail = (material) => {
-    go('library');
+    if (material?.id) {
+      sessionStorage.setItem('zhijing:pathMaterialId', material.id);
+    }
+    go('detail');
   };
 
   /**

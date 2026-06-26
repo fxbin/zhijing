@@ -51,6 +51,8 @@ export const CITATION_SNIPPET_LIMIT = 280;
 
 export const PATH_CARD_ID_STORAGE_KEY = 'zhijing:pathCardId';
 
+export const PATH_MATERIAL_ID_STORAGE_KEY = 'zhijing:pathMaterialId';
+
 export const SEARCH_HISTORY_STORAGE_KEY = 'zhijing:searchHistory';
 
 export const SEARCH_HISTORY_MAX_COUNT = 5;

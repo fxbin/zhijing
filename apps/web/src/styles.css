@@ -3857,6 +3857,11 @@ button { cursor: pointer; }
   opacity: 0.55;
 }
 
+.source-strip.highlighted {
+  box-shadow: 0 0 0 3px rgba(44, 95, 141, 0.25), 0 8px 24px rgba(9, 20, 38, 0.1);
+  transform: scale(1.01);
+}
+
 .material-transcript {
   margin-top: 12px;
   padding: 12px 14px;
