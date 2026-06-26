@@ -174,10 +174,13 @@ export function useChatLayout(storageKey = DEFAULT_STORAGE_KEY, options = {}) {
   }, []);
 
   const toggleMode = useCallback(() => {
-    setLayout((prev) => ({
-      ...prev,
-      mode: prev.mode === 'sidebar' ? 'floating' : 'sidebar',
-    }));
+    setLayout((prev) => {
+      const nextMode = prev.mode === 'sidebar' ? 'floating' : 'sidebar';
+      const nextPosition = nextMode === 'floating'
+        ? clampFloatingPosition(getDefaultFloatingPosition(), prev.size)
+        : prev.position;
+      return { ...prev, mode: nextMode, position: nextPosition };
+    });
   }, []);
 
   const setMinimized = useCallback((minimized) => {

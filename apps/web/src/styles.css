@@ -8752,10 +8752,12 @@ button { cursor: pointer; }
 }
 
 .ai-chat-shell-sidebar {
-  position: sticky;
+  position: fixed;
   top: 88px;
-  align-self: start;
+  right: 24px;
+  width: 380px;
   max-height: calc(100vh - 104px);
+  z-index: 50;
 }
 
 .ai-chat-shell-floating {
