@@ -79,6 +79,7 @@ import {
   listAgentActionLogs,
   listAgentUsageRecords,
   summarizeAgentUsageRecords,
+  compareAgentUsageRecords,
   listInspectTables,
   inspectQuery,
   activateModelProviderProfile,
@@ -111,6 +112,7 @@ import {
   decideWorkspaceProposal,
 } from '@zhijing/core';
 import { startOrchestratorSession, type OrchestratorSession } from '@zhijing/agent';
+import { getActiveRoutes, isRoutesOverriddenByEnv } from '@zhijing/pi-runtime';
 import type {
   AddMapEdgeRequest,
   AssignMaterialRequest,
@@ -774,6 +776,36 @@ export function buildApi() {
       return { summary: summarizeAgentUsageRecords(usageQuery) };
     }
     return { records: listAgentUsageRecords(usageQuery) };
+  });
+
+  app.get('/api/analytics/agent-usage/routes', async () => {
+    return {
+      routes: getActiveRoutes(),
+      overriddenByEnv: isRoutesOverriddenByEnv(),
+    };
+  });
+
+  app.get<{
+    Querystring: {
+      workspaceId?: string;
+      taskType?: string;
+      provider?: string;
+      since?: string;
+      until?: string;
+    };
+  }>('/api/analytics/agent-usage/compare', async (request, reply) => {
+    const query = request.query;
+    if (query.taskType !== undefined && !AGENT_TASK_TYPE_SET.has(query.taskType)) {
+      return reply.code(400).send({ error: `Invalid taskType. Allowed: ${AGENT_TASK_TYPE_VALUES.join(', ')}` });
+    }
+    const usageQuery: AgentUsageQuery = {
+      workspaceId: query.workspaceId,
+      taskType: query.taskType as AgentTaskType | undefined,
+      provider: query.provider,
+      since: query.since,
+      until: query.until,
+    };
+    return { comparison: compareAgentUsageRecords(usageQuery) };
   });
 
   app.get<{ Params: { id: string } }>('/api/workspaces/:id/path', async (request, reply) => {

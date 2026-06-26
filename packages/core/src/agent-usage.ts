@@ -1,4 +1,4 @@
-import type { AgentUsageRecord, AgentUsageQuery, AgentUsageSummary, AgentTaskType } from '@zhijing/shared';
+import type { AgentUsageRecord, AgentUsageQuery, AgentUsageSummary, AgentUsageComparison, AgentUsageComparisonItem, AgentTaskType } from '@zhijing/shared';
 
 /**
  * Agent 调用成本记录器。
@@ -109,6 +109,60 @@ export function buildUsageSummary(records: AgentUsageRecord[]): AgentUsageSummar
 export function applyQueryLimit(records: AgentUsageRecord[], query: AgentUsageQuery): AgentUsageRecord[] {
   const limit = query.limit ?? DEFAULT_QUERY_LIMIT;
   return records.slice(0, limit);
+}
+
+/**
+ * 从记录数组构建 Provider 成本对比（纯逻辑，无副作用）。
+ *
+ * 按 provider 分组聚合：总调用数、成功/失败数、成功率、总成本、平均成本、平均耗时。
+ * 用于 P2.3 智能路由策略优化，辅助判断互补 Provider 是否值得启用。
+ *
+ * @param records - 已过滤的记录数组
+ * @returns Provider 成本对比结果
+ * @author fxbin
+ */
+export function buildUsageComparison(records: AgentUsageRecord[]): AgentUsageComparison {
+  const byProviderMap = new Map<string, {
+    totalCalls: number;
+    successCount: number;
+    failedCount: number;
+    totalCostUsd: number;
+    totalDurationMs: number;
+  }>();
+
+  for (const record of records) {
+    const entry = byProviderMap.get(record.provider) ?? {
+      totalCalls: 0,
+      successCount: 0,
+      failedCount: 0,
+      totalCostUsd: 0,
+      totalDurationMs: 0,
+    };
+    entry.totalCalls += 1;
+    if (record.ok) {
+      entry.successCount += 1;
+    } else {
+      entry.failedCount += 1;
+    }
+    entry.totalCostUsd += record.costUsd ?? 0;
+    entry.totalDurationMs += record.durationMs ?? 0;
+    byProviderMap.set(record.provider, entry);
+  }
+
+  const items: AgentUsageComparisonItem[] = Array.from(byProviderMap.entries()).map(([provider, entry]) => ({
+    provider,
+    totalCalls: entry.totalCalls,
+    successCount: entry.successCount,
+    failedCount: entry.failedCount,
+    successRate: entry.totalCalls > 0 ? entry.successCount / entry.totalCalls : 0,
+    totalCostUsd: entry.totalCostUsd,
+    avgCostUsd: entry.totalCalls > 0 ? entry.totalCostUsd / entry.totalCalls : 0,
+    avgDurationMs: entry.totalCalls > 0 ? entry.totalDurationMs / entry.totalCalls : 0,
+  }));
+
+  items.sort((a, b) => b.totalCalls - a.totalCalls);
+
+  return { items };
 }
 
 export { DEFAULT_QUERY_LIMIT };

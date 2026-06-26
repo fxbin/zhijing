@@ -113,7 +113,7 @@ function formatTime(isoString) {
  */
 export default function AgentUsageDashboard({ workspaceId } = {}) {
   const { t } = useTranslation();
-  const { summary, records, loading, error, refresh } = useAgentUsage({ workspaceId });
+  const { summary, records, routes, comparison, loading, error, refresh } = useAgentUsage({ workspaceId });
 
   const maxTaskCost = useMemo(() => {
     if (!summary?.byTaskType?.length) return 0;
@@ -252,6 +252,72 @@ export default function AgentUsageDashboard({ workspaceId } = {}) {
           </div>
         </section>
       </div>
+
+      {routes && routes.routes && routes.routes.length > 0 && (
+        <section className="agent-usage-card">
+          <div className="agent-usage-card-head">
+            <h3>{t('agentUsage.routesTitle')}</h3>
+            <p className="agent-usage-card-desc">{t('agentUsage.routesDesc')}</p>
+            {routes.overriddenByEnv && (
+              <span className="agent-usage-badge env-override">ENV</span>
+            )}
+          </div>
+          <div className="agent-usage-records-table">
+            <div className="agent-usage-records-row agent-usage-records-header agent-usage-routes-header">
+              <span>{t('agentUsage.colRouteTaskType')}</span>
+              <span>{t('agentUsage.colRouteProvider')}</span>
+              <span>{t('agentUsage.colRouteModel')}</span>
+              <span>{t('agentUsage.colRouteRole')}</span>
+              <span>{t('agentUsage.colRouteReason')}</span>
+            </div>
+            {routes.routes.flatMap((route) =>
+              route.taskTypes.map((taskType) => (
+                <div key={`${route.provider}-${taskType}`} className="agent-usage-records-row agent-usage-routes-row">
+                  <span className="cell-task">{TASK_TYPE_LABELS[taskType] ?? taskType}</span>
+                  <span className="cell-provider">{route.provider}</span>
+                  <span className="cell-provider">{route.model}</span>
+                  <span className={`cell-role role-${route.role}`}>
+                    {ROLE_LABELS[route.role] ?? route.role}
+                  </span>
+                  <span className="cell-reason">{route.reason}</span>
+                </div>
+              )),
+            )}
+          </div>
+        </section>
+      )}
+
+      {comparison && comparison.items && comparison.items.length > 0 && (
+        <section className="agent-usage-card">
+          <div className="agent-usage-card-head">
+            <h3>{t('agentUsage.compareTitle')}</h3>
+            <p className="agent-usage-card-desc">{t('agentUsage.compareDesc')}</p>
+          </div>
+          <div className="agent-usage-records-table">
+            <div className="agent-usage-records-row agent-usage-records-header agent-usage-compare-header">
+              <span>{t('agentUsage.colCompareProvider')}</span>
+              <span>{t('agentUsage.colCompareCalls')}</span>
+              <span>{t('agentUsage.colCompareSuccessRate')}</span>
+              <span>{t('agentUsage.colCompareAvgCost')}</span>
+              <span>{t('agentUsage.colCompareAvgDuration')}</span>
+            </div>
+            {comparison.items.map((item) => (
+              <div key={item.provider} className="agent-usage-records-row agent-usage-compare-row">
+                <span className="cell-provider">{item.provider}</span>
+                <span className="cell-tokens">{item.totalCalls}</span>
+                <span className={`cell-status ${item.successRate >= 0.9 ? 'status-ok' : 'status-fail'}`}>
+                  {(item.successRate * 100).toFixed(1)}%
+                </span>
+                <span className="cell-cost">{formatCost(item.avgCostUsd)}</span>
+                <span className="cell-duration">
+                  <Clock size={12} />
+                  {formatDuration(item.avgDurationMs)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="agent-usage-card agent-usage-records-card">
         <div className="agent-usage-card-head">

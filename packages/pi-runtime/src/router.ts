@@ -11,8 +11,8 @@ import { createPiAiRuntime, getDefaultPiProvider, getDefaultPiModel, isKnownPiPr
  * 默认不启用（需配置 ANTHROPIC_API_KEY）。互补路由的 fallback 始终是 DeepSeek，
  * 确保外部 Provider 故障不会导致系统不可用。
  *
- * 未来扩展：调用方可通过 createRoutedPiRuntime 的 routesOverride 参数传入自定义路由，
- * 或将此常量迁移到数据库/配置文件驱动。
+ * P2.3 扩展：支持通过 ZHIJING_PI_ROUTES_JSON 环境变量覆盖默认路由表，
+ * 格式为 ProviderRoute[] 的 JSON 字符串。解析失败时回退到 DEFAULT_ROUTES 并输出警告。
  *
  * @author fxbin
  */
@@ -51,6 +51,52 @@ const DEFAULT_ROUTES: ProviderRoute[] = [
 ];
 
 /**
+ * 环境变量名：覆盖默认路由表的 JSON 字符串。
+ *
+ * 格式为 ProviderRoute[] 的 JSON，例如：
+ *   [{"provider":"deepseek","model":"deepseek-v4-flash","role":"primary",
+ *     "taskTypes":["conversation"],"reason":"自定义路由"}]
+ *
+ * 解析失败或未设置时回退到 DEFAULT_ROUTES。
+ */
+const ROUTES_JSON_ENV = 'ZHIJING_PI_ROUTES_JSON';
+
+/**
+ * 解析环境变量覆盖的路由表。
+ *
+ * 读取 ZHIJING_PI_ROUTES_JSON 环境变量，解析为 ProviderRoute[]。
+ * 解析失败时输出 stderr 警告并返回 null，调用方回退到 DEFAULT_ROUTES。
+ *
+ * @returns 解析成功返回路由数组；未设置或解析失败返回 null
+ * @author fxbin
+ */
+function parseEnvRoutes(): ProviderRoute[] | null {
+  const raw = process.env[ROUTES_JSON_ENV];
+  if (!raw || raw.trim().length === 0) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      throw new Error('routes JSON must be an array');
+    }
+    return parsed as ProviderRoute[];
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[pi-runtime] Failed to parse ${ROUTES_JSON_ENV}: ${message}. Falling back to DEFAULT_ROUTES.`);
+    return null;
+  }
+}
+
+/**
+ * 当前生效的路由表。
+ *
+ * 优先使用 ZHIJING_PI_ROUTES_JSON 环境变量覆盖，未设置或解析失败时回退到 DEFAULT_ROUTES。
+ * 模块加载时解析一次，运行时不再重复读取。
+ */
+const ACTIVE_ROUTES: ProviderRoute[] = parseEnvRoutes() ?? DEFAULT_ROUTES;
+
+/**
  * 判断指定 Provider 是否有可用的 API key。
  *
  * 主力 Provider（DeepSeek）检查 ZHIJING_PI_API_KEY 或 provider 默认 env key；
@@ -79,7 +125,7 @@ function hasAvailableApiKey(provider: string): boolean {
  * 1. 在 routes 中查找 taskTypes 包含目标 taskType 的路由
  * 2. 若命中的是 primary 路由：
  *    - 尊重 ZHIJING_PI_PROVIDER / ZHIJING_PI_MODEL 环境变量覆盖
- *    - env 未设置时用 DEFAULT_ROUTES 中的硬编码值
+ *    - env 未设置时用路由表中的硬编码值
  * 3. 若命中的是 complementary 路由：
  *    - 检查其 Provider 是否有 API key
  *    - 有：使用该 Provider
@@ -87,13 +133,13 @@ function hasAvailableApiKey(provider: string): boolean {
  * 4. 未命中任何路由：回退到默认 Provider/Model（DeepSeek）
  *
  * @param taskType - 任务类型
- * @param routes - 路由配置；省略时使用 DEFAULT_ROUTES
+ * @param routes - 路由配置；省略时使用当前生效路由表（ACTIVE_ROUTES）
  * @returns 路由解析结果，含最终生效的 Provider/Model
  * @author fxbin
  */
 export function routeProvider(
   taskType: AgentTaskType,
-  routes: ProviderRoute[] = DEFAULT_ROUTES,
+  routes: ProviderRoute[] = ACTIVE_ROUTES,
 ): RouteResolution {
   const matched = routes.find((route) => route.taskTypes.includes(taskType));
   if (!matched) {
@@ -158,7 +204,7 @@ export function createRoutedPiRuntime(
   taskType: AgentTaskType,
   options: { routesOverride?: ProviderRoute[] } = {},
 ): PiRuntime {
-  const resolution = routeProvider(taskType, options.routesOverride ?? DEFAULT_ROUTES);
+  const resolution = routeProvider(taskType, options.routesOverride ?? ACTIVE_ROUTES);
   const provider = resolution.resolvedProvider as KnownProvider;
   const model = resolution.resolvedModel;
   const apiKey = resolution.resolvedProvider === getDefaultPiProvider()
@@ -172,6 +218,31 @@ export function createRoutedPiRuntime(
     enabled: process.env.ZHIJING_PI_ENABLED === '1' ? true : undefined,
     fallbackToMock: process.env.ZHIJING_PI_FALLBACK === '0' ? false : true,
   });
+}
+
+/**
+ * 返回当前生效的路由表。
+ *
+ * 优先返回环境变量覆盖的路由（若已设置且解析成功），否则返回 DEFAULT_ROUTES。
+ * 供 API 层 /dashboard 透明化展示当前路由配置。
+ *
+ * @returns 当前生效的 ProviderRoute 数组
+ * @author fxbin
+ */
+export function getActiveRoutes(): ProviderRoute[] {
+  return ACTIVE_ROUTES;
+}
+
+/**
+ * 返回路由表是否被环境变量覆盖。
+ *
+ * 供 API 层标注当前路由来源（内置默认 vs 环境变量覆盖）。
+ *
+ * @returns true 表示当前路由来自 ZHIJING_PI_ROUTES_JSON 环境变量
+ * @author fxbin
+ */
+export function isRoutesOverriddenByEnv(): boolean {
+  return ACTIVE_ROUTES !== DEFAULT_ROUTES;
 }
 
 /**

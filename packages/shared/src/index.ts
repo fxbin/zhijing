@@ -1597,3 +1597,31 @@ export interface AgentUsageSummary {
   byTaskType: Array<{ taskType: AgentTaskType; count: number; costUsd: number }>;
   byProvider: Array<{ provider: string; count: number; costUsd: number }>;
 }
+
+/**
+ * Provider 成本对比单项。
+ *
+ * 用于 P2.3 智能路由策略优化，对比各 Provider 的成功率、平均成本与平均耗时，
+ * 辅助判断互补 Provider 是否值得启用。
+ *
+ * @author fxbin
+ */
+export interface AgentUsageComparisonItem {
+  provider: string;
+  totalCalls: number;
+  successCount: number;
+  failedCount: number;
+  successRate: number;
+  totalCostUsd: number;
+  avgCostUsd: number;
+  avgDurationMs: number;
+}
+
+/**
+ * Provider 成本对比结果。
+ *
+ * @author fxbin
+ */
+export interface AgentUsageComparison {
+  items: AgentUsageComparisonItem[];
+}

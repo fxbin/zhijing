@@ -117,6 +117,7 @@ import {
   type AgentUsageRecord,
   type AgentUsageQuery,
   type AgentUsageSummary,
+  type AgentUsageComparison,
 } from '@zhijing/shared';
 import { fetchUrlAsMarkdown } from './web-fetch.js';
 import {
@@ -129,6 +130,7 @@ import {
 import {
   buildUsageFilter,
   buildUsageSummary,
+  buildUsageComparison,
   applyQueryLimit,
   DEFAULT_QUERY_LIMIT,
   type AgentUsageRepository,
@@ -484,6 +486,7 @@ type KnowledgeRepository = {
   recordAgentUsage(record: AgentUsageRecord): void;
   listAgentUsage(query: AgentUsageQuery): AgentUsageRecord[];
   summarizeAgentUsage(query: AgentUsageQuery): AgentUsageSummary;
+  compareAgentUsage(query: AgentUsageQuery): AgentUsageComparison;
   insertAgentActionLog(log: AgentActionLog): void;
   listAgentActionLogs(options?: { workspaceId?: string; action?: string; limit?: number }): AgentActionLog[];
   countAgentActionLogs(options?: { workspaceId?: string; action?: string }): number;
@@ -1157,6 +1160,12 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     const filter = buildUsageFilter(query);
     const filtered = this.state.agentUsage.filter(filter);
     return buildUsageSummary(filtered);
+  }
+
+  compareAgentUsage(query: AgentUsageQuery): AgentUsageComparison {
+    const filter = buildUsageFilter(query);
+    const filtered = this.state.agentUsage.filter(filter);
+    return buildUsageComparison(filtered);
   }
 
   /**
@@ -2330,6 +2339,11 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   summarizeAgentUsage(query: AgentUsageQuery): AgentUsageSummary {
     const records = this.listAgentUsage({ ...query, limit: undefined });
     return buildUsageSummary(records);
+  }
+
+  compareAgentUsage(query: AgentUsageQuery): AgentUsageComparison {
+    const records = this.listAgentUsage({ ...query, limit: undefined });
+    return buildUsageComparison(records);
   }
 
   private ensureWorkspaceRename() {
@@ -10823,6 +10837,20 @@ export function listAgentUsageRecords(query: AgentUsageQuery): AgentUsageRecord[
  */
 export function summarizeAgentUsageRecords(query: AgentUsageQuery): AgentUsageSummary {
   return repository.summarizeAgentUsage(query);
+}
+
+/**
+ * 对比查询 Agent 调用成本。
+ *
+ * 返回按 provider 拆分的成功率、平均成本与平均耗时，
+ * 用于 P2.3 智能路由策略优化与 dashboard 成本对比展示。
+ *
+ * @param query - 查询条件
+ * @returns Provider 成本对比结果
+ * @author fxbin
+ */
+export function compareAgentUsageRecords(query: AgentUsageQuery): AgentUsageComparison {
+  return repository.compareAgentUsage(query);
 }
 
 export { type AgentUsageRepository } from './agent-usage.js';

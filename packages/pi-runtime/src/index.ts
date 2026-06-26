@@ -423,6 +423,8 @@ export function createConfiguredPiRuntime(): PiRuntime {
 export {
   routeProvider,
   createRoutedPiRuntime,
+  getActiveRoutes,
+  isRoutesOverriddenByEnv,
   DEFAULT_ROUTES,
 } from './router.js';
 export type { ProviderRoute, RouteResolution, AgentTaskType, ProviderRole } from '@zhijing/shared';
