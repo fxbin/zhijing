@@ -1458,6 +1458,26 @@ export type AgentTaskType =
   | 'auxiliary_probe';
 
 /**
+ * AgentTaskType 合法值集合。
+ *
+ * 用于 API 层做白名单校验，拦截非法 taskType 查询参数。
+ * 与 AgentTaskType 联合类型保持同步。
+ *
+ * @author fxbin
+ */
+export const AGENT_TASK_TYPE_VALUES: readonly AgentTaskType[] = [
+  'workspace_skeleton',
+  'material_summary',
+  'knowledge_cards',
+  'question_answer',
+  'entity_extraction',
+  'socratic_questioning',
+  'deep_research',
+  'conversation',
+  'auxiliary_probe',
+];
+
+/**
  * Provider 路由角色。
  *
  * - primary：主力 Provider，承载大部分任务（知径当前为 DeepSeek）
@@ -1508,4 +1528,72 @@ export interface RouteResolution {
   resolvedProvider: string;
   resolvedModel: string;
   fellBack: boolean;
+}
+
+/**
+ * Agent LLM 调用成本记录。
+ *
+ * 每次 completeStructured / streamText / runToolCalling 调用产生一条记录，
+ * 用于成本追踪 dashboard 与智能路由策略优化（P2.3）。
+ *
+ * - workspaceId：工作区 id；对话路径可能为 null（全局调用）
+ * - taskType：任务类型，与 AgentTaskType 对齐
+ * - provider / model：实际生效的 Provider/Model（含 fallback 后的值）
+ * - role：Provider 角色（primary / complementary）
+ * - inputTokens / outputTokens / costUsd：token 用量与成本
+ * - ok：调用是否成功；false 时 errorMessage 含错误信息
+ * - startedAt / durationMs：调用开始时间与耗时
+ *
+ * @author fxbin
+ */
+export interface AgentUsageRecord {
+  id: string;
+  workspaceId: string | null;
+  taskType: AgentTaskType;
+  provider: string;
+  model: string;
+  role: ProviderRole;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  costUsd: number | null;
+  ok: boolean;
+  errorMessage: string | null;
+  startedAt: string;
+  durationMs: number;
+}
+
+/**
+ * 成本追踪查询过滤条件。
+ *
+ * - workspaceId：按工作区过滤；省略时查全部
+ * - taskType：按任务类型过滤
+ * - provider：按 Provider 过滤
+ * - since / until：时间范围（ISO 字符串）
+ * - limit：返回条数上限
+ *
+ * @author fxbin
+ */
+export interface AgentUsageQuery {
+  workspaceId?: string;
+  taskType?: AgentTaskType;
+  provider?: string;
+  since?: string;
+  until?: string;
+  limit?: number;
+}
+
+/**
+ * 成本追踪聚合结果。
+ *
+ * 用于 dashboard 展示，按 taskType / provider / role 拆分。
+ *
+ * @author fxbin
+ */
+export interface AgentUsageSummary {
+  totalCount: number;
+  totalCostUsd: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  byTaskType: Array<{ taskType: AgentTaskType; count: number; costUsd: number }>;
+  byProvider: Array<{ provider: string; count: number; costUsd: number }>;
 }

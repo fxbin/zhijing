@@ -77,6 +77,8 @@ import {
   recordSuggestionSent,
   acceptProposedCards,
   listAgentActionLogs,
+  listAgentUsageRecords,
+  summarizeAgentUsageRecords,
   listInspectTables,
   inspectQuery,
   activateModelProviderProfile,
@@ -135,11 +137,14 @@ import type {
   AgentStreamEvent,
   OrchestratorDecision,
   ProposalStatus,
+  AgentTaskType,
+  AgentUsageQuery,
 } from '@zhijing/shared';
 import {
   INTAKE_AUDIENCE_VALUES,
   INTAKE_DEPTH_VALUES,
   INTAKE_SCOPE_VALUES,
+  AGENT_TASK_TYPE_VALUES,
 } from '@zhijing/shared';
 
 const DEFAULT_ALLOWED_ORIGINS = [
@@ -153,6 +158,11 @@ const INTAKE_SCOPE_SET = new Set<string>(INTAKE_SCOPE_VALUES);
 
 const SOCRATIC_TRIGGER_VALUES: readonly SocraticTrigger[] = ['skeleton_card', 'semantic_tension', 'manual'];
 const SOCRATIC_TRIGGER_SET = new Set<string>(SOCRATIC_TRIGGER_VALUES);
+
+const AGENT_TASK_TYPE_SET = new Set<string>(AGENT_TASK_TYPE_VALUES);
+
+const AGENT_USAGE_DEFAULT_LIMIT = 100;
+const AGENT_USAGE_MAX_LIMIT = 500;
 
 function resolveAllowedOrigins(): string[] {
   const raw = process.env.ZHIJING_ALLOWED_ORIGINS;
@@ -730,6 +740,40 @@ export function buildApi() {
       return reply.code(404).send({ error: 'Knowledge base not found.' });
     }
     return analytics;
+  });
+
+  app.get<{
+    Querystring: {
+      workspaceId?: string;
+      taskType?: string;
+      provider?: string;
+      since?: string;
+      until?: string;
+      limit?: string;
+      view?: string;
+    };
+  }>('/api/analytics/agent-usage', async (request, reply) => {
+    const query = request.query;
+    if (query.taskType !== undefined && !AGENT_TASK_TYPE_SET.has(query.taskType)) {
+      return reply.code(400).send({ error: `Invalid taskType. Allowed: ${AGENT_TASK_TYPE_VALUES.join(', ')}` });
+    }
+    const limitRaw = query.limit !== undefined ? Number(query.limit) : AGENT_USAGE_DEFAULT_LIMIT;
+    if (!Number.isFinite(limitRaw) || limitRaw <= 0) {
+      return reply.code(400).send({ error: 'Invalid limit. Must be a positive number.' });
+    }
+    const limit = Math.min(Math.floor(limitRaw), AGENT_USAGE_MAX_LIMIT);
+    const usageQuery: AgentUsageQuery = {
+      workspaceId: query.workspaceId,
+      taskType: query.taskType as AgentTaskType | undefined,
+      provider: query.provider,
+      since: query.since,
+      until: query.until,
+      limit,
+    };
+    if (query.view === 'summary') {
+      return { summary: summarizeAgentUsageRecords(usageQuery) };
+    }
+    return { records: listAgentUsageRecords(usageQuery) };
   });
 
   app.get<{ Params: { id: string } }>('/api/workspaces/:id/path', async (request, reply) => {

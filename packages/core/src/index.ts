@@ -114,6 +114,9 @@ import {
   detectPlatform,
   type PersistedProposal,
   type ProposalStatus,
+  type AgentUsageRecord,
+  type AgentUsageQuery,
+  type AgentUsageSummary,
 } from '@zhijing/shared';
 import { fetchUrlAsMarkdown } from './web-fetch.js';
 import {
@@ -124,7 +127,15 @@ import {
   type ProposalRepository,
 } from './memory.js';
 import {
+  buildUsageFilter,
+  buildUsageSummary,
+  applyQueryLimit,
+  DEFAULT_QUERY_LIMIT,
+  type AgentUsageRepository,
+} from './agent-usage.js';
+import {
   createPiAiRuntime,
+  createInstrumentedPiRuntime,
   createMockPiRuntime,
   createRoutedPiRuntime,
   entityExtractionSchema,
@@ -385,6 +396,7 @@ type StoreState = {
   attentionSignals: AttentionSignal[];
   agentActionLogs: AgentActionLog[];
   proposals: PersistedProposal[];
+  agentUsage: AgentUsageRecord[];
 };
 
 type KnowledgeRepository = {
@@ -469,6 +481,9 @@ type KnowledgeRepository = {
   listProposals(workspaceId: string, status?: ProposalStatus, limit?: number): PersistedProposal[];
   updateProposalStatus(proposalId: string, status: ProposalStatus, decidedAt: string): void;
   findRecentProposals(workspaceId: string, type: string, title: string, sinceIso: string): PersistedProposal[];
+  recordAgentUsage(record: AgentUsageRecord): void;
+  listAgentUsage(query: AgentUsageQuery): AgentUsageRecord[];
+  summarizeAgentUsage(query: AgentUsageQuery): AgentUsageSummary;
   insertAgentActionLog(log: AgentActionLog): void;
   listAgentActionLogs(options?: { workspaceId?: string; action?: string; limit?: number }): AgentActionLog[];
   countAgentActionLogs(options?: { workspaceId?: string; action?: string }): number;
@@ -532,6 +547,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     attentionSignals: [],
     agentActionLogs: [],
     proposals: [],
+    agentUsage: [],
   };
 
   private wereadApiKey: string | null = null;
@@ -1125,6 +1141,22 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
         && p.title === title
         && p.generatedAt >= sinceIso,
     );
+  }
+
+  recordAgentUsage(record: AgentUsageRecord): void {
+    this.state.agentUsage.unshift(record);
+  }
+
+  listAgentUsage(query: AgentUsageQuery): AgentUsageRecord[] {
+    const filter = buildUsageFilter(query);
+    const filtered = this.state.agentUsage.filter(filter);
+    return applyQueryLimit(filtered, query);
+  }
+
+  summarizeAgentUsage(query: AgentUsageQuery): AgentUsageSummary {
+    const filter = buildUsageFilter(query);
+    const filtered = this.state.agentUsage.filter(filter);
+    return buildUsageSummary(filtered);
   }
 
   /**
@@ -2244,6 +2276,62 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     ).all(workspaceId, type, title, sinceIso) as ProposalRow[]).map(mapProposal);
   }
 
+  recordAgentUsage(record: AgentUsageRecord): void {
+    this.db.prepare(
+      `INSERT INTO agent_usage (id, workspace_id, task_type, provider, model, role, input_tokens, output_tokens, cost_usd, ok, error_message, started_at, duration_ms)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      record.id,
+      record.workspaceId,
+      record.taskType,
+      record.provider,
+      record.model,
+      record.role,
+      record.inputTokens,
+      record.outputTokens,
+      record.costUsd,
+      record.ok ? 1 : 0,
+      record.errorMessage,
+      record.startedAt,
+      record.durationMs,
+    );
+  }
+
+  listAgentUsage(query: AgentUsageQuery): AgentUsageRecord[] {
+    const params: Array<string | number> = [];
+    let sql = 'SELECT * FROM agent_usage WHERE 1=1';
+    if (query.workspaceId !== undefined) {
+      sql += ' AND workspace_id = ?';
+      params.push(query.workspaceId);
+    }
+    if (query.taskType !== undefined) {
+      sql += ' AND task_type = ?';
+      params.push(query.taskType);
+    }
+    if (query.provider !== undefined) {
+      sql += ' AND provider = ?';
+      params.push(query.provider);
+    }
+    if (query.since !== undefined) {
+      sql += ' AND started_at >= ?';
+      params.push(query.since);
+    }
+    if (query.until !== undefined) {
+      sql += ' AND started_at <= ?';
+      params.push(query.until);
+    }
+    sql += ' ORDER BY started_at DESC';
+    const limit = query.limit ?? DEFAULT_QUERY_LIMIT;
+    sql += ' LIMIT ?';
+    params.push(limit);
+    return (this.db.prepare(sql).all(...params) as AgentUsageRow[]).map(mapAgentUsage);
+  }
+
+  summarizeAgentUsage(query: AgentUsageQuery): AgentUsageSummary {
+    const records = this.listAgentUsage({ ...query, limit: undefined });
+    return buildUsageSummary(records);
+  }
+
   private ensureWorkspaceRename() {
     const renameOrMerge = (source: string, target: string) => {
       const sourceExists = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(source) as { name: string } | undefined;
@@ -2920,6 +3008,27 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       CREATE INDEX IF NOT EXISTS idx_agent_proposals_status ON agent_proposals(workspace_id, status);
       CREATE INDEX IF NOT EXISTS idx_agent_proposals_dedup ON agent_proposals(workspace_id, type, title, generated_at);
     `);
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS agent_usage (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT,
+        task_type TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        role TEXT NOT NULL,
+        input_tokens INTEGER,
+        output_tokens INTEGER,
+        cost_usd REAL,
+        ok INTEGER NOT NULL DEFAULT 1,
+        error_message TEXT,
+        started_at TEXT NOT NULL,
+        duration_ms INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_agent_usage_workspace ON agent_usage(workspace_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_usage_task ON agent_usage(task_type);
+      CREATE INDEX IF NOT EXISTS idx_agent_usage_started ON agent_usage(started_at);
+    `);
   }
 
   /**
@@ -3424,6 +3533,40 @@ function mapProposal(row: ProposalRow): PersistedProposal {
     status: row.status as ProposalStatus,
     generatedAt: row.generated_at,
     decidedAt: row.decided_at,
+  };
+}
+
+type AgentUsageRow = {
+  id: string;
+  workspace_id: string | null;
+  task_type: string;
+  provider: string;
+  model: string;
+  role: string;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cost_usd: number | null;
+  ok: number;
+  error_message: string | null;
+  started_at: string;
+  duration_ms: number;
+};
+
+function mapAgentUsage(row: AgentUsageRow): AgentUsageRecord {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    taskType: row.task_type as AgentUsageRecord['taskType'],
+    provider: row.provider,
+    model: row.model,
+    role: row.role as AgentUsageRecord['role'],
+    inputTokens: row.input_tokens,
+    outputTokens: row.output_tokens,
+    costUsd: row.cost_usd,
+    ok: row.ok === 1,
+    errorMessage: row.error_message,
+    startedAt: row.started_at,
+    durationMs: row.duration_ms,
   };
 }
 
@@ -7480,7 +7623,10 @@ export async function extractEntities(workspaceId: string, piRuntime?: PiRuntime
   }
   const cardDigest = cards.slice(0, 40).map((card) => `- ${card.title}: ${card.body.slice(0, 120)}`).join('\n');
   const prompt = `请从以下知识库卡片中提取关键实体（人物、组织、概念、工具、地点、事件等）。\n知识库主题：${base.title}\n卡片摘要：\n${cardDigest}`;
-  const runtime = piRuntime ?? createRoutedPiRuntime('entity_extraction');
+  const runtime = piRuntime ?? createInstrumentedPiRuntime(
+    createRoutedPiRuntime('entity_extraction'),
+    { taskType: 'entity_extraction', workspaceId, recorder: recordAgentUsage },
+  );
   const result = await runtime.completeStructured<{ entities: Array<{ name: string; type: string; description: string }> }>({
     task: 'entity_extraction',
     prompt,
@@ -9338,7 +9484,10 @@ export async function generateSocraticQuestions(
   }
 
   const prompt = buildSocraticPrompt(base.title, cards, trigger, cardId, tensionKey);
-  const runtime = options?.piRuntime ?? createRoutedPiRuntime('socratic_questioning');
+  const runtime = options?.piRuntime ?? createInstrumentedPiRuntime(
+    createRoutedPiRuntime('socratic_questioning'),
+    { taskType: 'socratic_questioning', workspaceId, recorder: recordAgentUsage },
+  );
   const result = await runtime.completeStructured<{ questions: SocraticQuestion[] }>({
     task: 'socratic_questioning',
     prompt,
@@ -10636,6 +10785,47 @@ export function decideWorkspaceProposal(
 ): PersistedProposal {
   return decideProposal(repository, workspaceId, proposalId, decision);
 }
+
+/**
+ * 记录一次 Agent LLM 调用的成本。
+ *
+ * 由 InstrumentedPiRuntime 调用，每次 completeStructured / streamText / runToolCalling
+ * 后写入一条 AgentUsageRecord，供成本追踪 dashboard 查询。
+ *
+ * @param record - 成本记录
+ * @author fxbin
+ */
+export function recordAgentUsage(record: AgentUsageRecord): void {
+  repository.recordAgentUsage(record);
+}
+
+/**
+ * 查询 Agent 调用成本记录。
+ *
+ * 支持按 workspaceId / taskType / provider / 时间范围过滤。
+ *
+ * @param query - 查询条件
+ * @returns 成本记录数组，按 startedAt 降序
+ * @author fxbin
+ */
+export function listAgentUsageRecords(query: AgentUsageQuery): AgentUsageRecord[] {
+  return repository.listAgentUsage(query);
+}
+
+/**
+ * 聚合查询 Agent 调用成本。
+ *
+ * 返回按 taskType / provider 拆分的聚合摘要，用于 dashboard 展示。
+ *
+ * @param query - 查询条件
+ * @returns 聚合摘要
+ * @author fxbin
+ */
+export function summarizeAgentUsageRecords(query: AgentUsageQuery): AgentUsageSummary {
+  return repository.summarizeAgentUsage(query);
+}
+
+export { type AgentUsageRepository } from './agent-usage.js';
 
 export { canTransitionProposalStatus } from './memory.js';
 
