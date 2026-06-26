@@ -32,6 +32,7 @@ import { useModalState } from './hooks/useModalState';
 import SystemNotice from './components/SystemNotice';
 import NotificationDropdown from './components/NotificationDropdown';
 import CreateKbModal from './components/CreateKbModal';
+import CardDetailDrawer from './components/CardDetailDrawer';
 import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import GlobalChatDock from './components/GlobalChatDock';
 import SearchCommand from './components/SearchCommand';
@@ -139,6 +140,18 @@ function App() {
 
   const [selectedArtifact, setSelectedArtifact] = useState(null);
   const [artifactOrigin, setArtifactOrigin] = useState(null);
+  const [drawerCard, setDrawerCard] = useState(null);
+  const [drawerWorkspaceTitle, setDrawerWorkspaceTitle] = useState('');
+
+  const openCardDrawer = (card, workspaceTitle = '') => {
+    setDrawerCard(card);
+    setDrawerWorkspaceTitle(workspaceTitle);
+  };
+
+  const closeCardDrawer = () => {
+    setDrawerCard(null);
+    setDrawerWorkspaceTitle('');
+  };
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchInitialQuery, setSearchInitialQuery] = useState('');
@@ -570,12 +583,13 @@ function App() {
         <div className="canvas">
           {apiStatus === 'offline' && <SystemNotice status="offline" />}
           <Suspense fallback={<div className="view-loading">{t('common.loading')}</div>}>
-          {view === 'workspace' && <WorkspaceView activity={activity} apiStatus={apiStatus} isSubmitting={isSubmitting} materials={materials} query={query} selectedWorkspaceId={selectedWorkspaceId} setQuery={setQuery} setView={go} submit={submit} onViewMaterialDetail={handleViewMaterialDetail} browserAiStatus={browserAiStatus} />}
+          {view === 'workspace' && <WorkspaceView activity={activity} apiStatus={apiStatus} isSubmitting={isSubmitting} materials={materials} query={query} selectedWorkspaceId={selectedWorkspaceId} setQuery={setQuery} setView={go} submit={submit} onViewMaterialDetail={handleViewMaterialDetail} onOpenCardDetail={openCardDrawer} browserAiStatus={browserAiStatus} />}
           {view === 'detail' && (
             <DetailView
               analytics={workspaceAnalytics}
               detail={workspaceDetail}
               latestTask={latestTask}
+              onOpenCardDetail={openCardDrawer}
               onParseMaterial={parseMaterial}
               parsingMaterialId={parsingMaterialId}
               selectedWorkspaceId={selectedWorkspaceId}
@@ -618,7 +632,7 @@ function App() {
           )}
           {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={workspaceDetail} setView={go} artifactOrigin={artifactOrigin} onClearOrigin={() => setArtifactOrigin(null)} onArtifactUpdate={handleArtifactUpdate} />}
           {view === 'maps' && <MapsView apiStatus={apiStatus} selectedWorkspaceId={selectedWorkspaceId} setView={go} />}
-          {view === 'assets' && <GlobalAssetsDashboard data={advancedOpsData} setView={go} onOpenArtifact={openArtifact} onSelectCard={handleSelectCard} />}
+          {view === 'assets' && <GlobalAssetsDashboard data={advancedOpsData} setView={go} onOpenArtifact={openArtifact} onSelectCard={handleSelectCard} onOpenCardDetail={openCardDrawer} />}
           {view === 'compare' && <MultiEntityComparisonView data={advancedOpsData} setView={go} />}
           {view === 'conflicts' && <KnowledgeConflictResolverView data={advancedOpsData} setView={go} />}
           {view === 'insights' && (
@@ -630,6 +644,7 @@ function App() {
                 go('workspace');
               }}
               onSelectCard={handleSelectCard}
+              onOpenCardDetail={openCardDrawer}
             />
           )}
           {view === 'path' && <PathView selectedWorkspaceId={selectedWorkspaceId} setView={go} />}
@@ -761,6 +776,12 @@ function App() {
           </div>
         </div>
       )}
+
+      <CardDetailDrawer
+        card={drawerCard}
+        onClose={closeCardDrawer}
+        workspaceTitle={drawerWorkspaceTitle}
+      />
 
       <GlobalChatDock
         apiStatus={apiStatus}

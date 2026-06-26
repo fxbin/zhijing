@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronUp, Database, FileText, Layers } from 'lucide-react';
+import { Database, FileText, Layers } from 'lucide-react';
 
 import AdvancedOpsTabs from '../components/AdvancedOpsTabs';
 import EmptyState from '../components/EmptyState';
@@ -31,7 +31,7 @@ const PREVIEW_LIMIT_ARTIFACTS = 4;
  * @param {(cardId: string, workspaceId: string) => void} [props.onSelectCard] - 选中知识卡片的回调，跳转到工作区详情页高亮该卡片
  * @returns {JSX.Element} 资产仪表盘
  */
-export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact, onSelectCard }) {
+export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact, onSelectCard, onOpenCardDetail }) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
   const claimStatusLabel = useClaimStatusLabel();
@@ -42,7 +42,6 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact, o
   const [filterKeyword, setFilterKeyword] = useState('');
   const [filterLoaded, setFilterLoaded] = useState(false);
   const [filterError, setFilterError] = useState('');
-  const [expandedCardId, setExpandedCardId] = useState(null);
   const [expandedMaterials, setExpandedMaterials] = useState(false);
   const [expandedCards, setExpandedCards] = useState(false);
   const [expandedArtifacts, setExpandedArtifacts] = useState(false);
@@ -258,19 +257,18 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact, o
               <div className="asset-list">
                 {displayedCards.map((card, index) => {
                   const cardKey = card.id ?? `${card.title}-${index}`;
-                  const isExpanded = expandedCardId === cardKey;
-                  const handleToggle = () => setExpandedCardId(isExpanded ? null : cardKey);
+                  const handleOpen = () => onOpenCardDetail?.(card, card.workspaceId);
                   return (
                     <article
                       key={cardKey}
-                      className={`is-expandable${isExpanded ? ' is-expanded' : ''}`}
-                      onClick={handleToggle}
+                      className="is-clickable"
+                      onClick={handleOpen}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
-                          handleToggle();
+                          handleOpen();
                         }
                       }}
                     >
@@ -278,21 +276,12 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact, o
                         <span className="asset-card-type">{cardTypeLabel(card.type)}</span>
                         <strong className="asset-card-title">{card.title}</strong>
                         <small className="asset-card-status">{claimStatusLabel(card.claimStatus)}</small>
-                        {isExpanded ? <ChevronUp size={16} className="asset-card-chevron" /> : <ChevronDown size={16} className="asset-card-chevron" />}
                       </div>
-                      {isExpanded && (
-                        <div className="asset-card-body">
-                          {card.body ? (
-                            <pre className="asset-card-body-text">{card.body}</pre>
-                          ) : (
-                            <span className="asset-card-body-empty">{t('assets.cardBodyEmpty')}</span>
-                          )}
-                          <div className="asset-card-meta">
-                            {card.workspaceId && <span className="asset-card-workspace">{card.workspaceId}</span>}
-                            <span className="asset-card-updated">{formatMaterialTime(card.updatedAt)}</span>
-                          </div>
-                        </div>
-                      )}
+                      <p className="asset-card-preview">{card.body || t('assets.cardBodyEmpty')}</p>
+                      <div className="asset-card-meta">
+                        {card.workspaceId && <span className="asset-card-workspace">{card.workspaceId}</span>}
+                        <span className="asset-card-updated">{formatMaterialTime(card.updatedAt)}</span>
+                      </div>
                     </article>
                   );
                 })}

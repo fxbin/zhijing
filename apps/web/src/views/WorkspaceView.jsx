@@ -4,10 +4,13 @@
  */
 
 import { Sparkles, SquareArrowOutUpRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import EmptyState from '../components/EmptyState';
 import RecentImports from '../components/RecentImports';
 import KnowledgeMapPanel from '../components/KnowledgeMapPanel';
-import { useTranslation } from 'react-i18next';
+import { useCardTypeLabel } from '../utils/i18nLabels';
+import api from '../utils/api';
 
 /**
  * 工作区首页视图。
@@ -25,10 +28,29 @@ import { useTranslation } from 'react-i18next';
  * @param {string} props.browserAiStatus - 浏览器内置 AI 模型状态
  * @returns {JSX.Element} 工作区视图
  */
-export default function WorkspaceView({ activity, apiStatus, isSubmitting, materials, query, selectedWorkspaceId, setQuery, setView, submit, onViewMaterialDetail, browserAiStatus = 'checking' }) {
+export default function WorkspaceView({ activity, apiStatus, isSubmitting, materials, query, selectedWorkspaceId, setQuery, setView, submit, onViewMaterialDetail, onOpenCardDetail, browserAiStatus = 'checking' }) {
   const { t } = useTranslation();
+  const cardTypeLabel = useCardTypeLabel();
   const hasContent = materials.length > 0;
   const offline = apiStatus !== 'online';
+  const [recentCards, setRecentCards] = useState([]);
+
+  useEffect(() => {
+    if (offline) return undefined;
+    let ignore = false;
+    const loadRecentCards = async () => {
+      try {
+        const payload = await api.get('/api/insights');
+        if (!ignore && payload?.recentCards?.length) {
+          setRecentCards(payload.recentCards.slice(0, 5));
+        }
+      } catch {
+        ;
+      }
+    };
+    loadRecentCards();
+    return () => { ignore = true; };
+  }, [offline]);
   return (
     <>
       <section className="hero">
@@ -97,6 +119,29 @@ export default function WorkspaceView({ activity, apiStatus, isSubmitting, mater
       {!isSubmitting && !hasContent && (
         <section className="workspace-empty-guide">
           <EmptyState title={t('workspace.empty.title')} body={t('workspace.empty.body')} />
+        </section>
+      )}
+
+      {recentCards.length > 0 && (
+        <section className="workspace-recent-cards">
+          <div className="workspace-recent-cards-head">
+            <h3>{t('cardDetail.recentCardsTitle')}</h3>
+            <small>{t('cardDetail.recentCardsHint')}</small>
+          </div>
+          <div className="workspace-recent-cards-list">
+            {recentCards.map((card) => (
+              <button
+                key={card.id}
+                type="button"
+                className={`workspace-recent-card-item type-${card.type ?? 'general'}`}
+                onClick={() => onOpenCardDetail?.(card, card.workspaceTitle)}
+              >
+                <span className="workspace-recent-card-type">{cardTypeLabel(card.type)}</span>
+                <span className="workspace-recent-card-title">{card.title}</span>
+                {card.workspaceTitle && <span className="workspace-recent-card-workspace">{card.workspaceTitle}</span>}
+              </button>
+            ))}
+          </div>
         </section>
       )}
     </>

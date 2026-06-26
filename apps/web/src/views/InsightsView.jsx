@@ -9,8 +9,6 @@ import {
   ArrowUpRight,
   BookOpen,
   CheckCircle,
-  ChevronDown,
-  ChevronUp,
   FileText,
   Layers,
   Lightbulb,
@@ -46,14 +44,13 @@ function sparseLabels(labels) {
  * @param {(cardId: string, workspaceId: string) => void} [props.onSelectCard] - 选中知识卡片回调，跳转到工作区详情页高亮该卡片
  * @returns {JSX.Element} 洞察视图
  */
-export default function InsightsView({ setView, onCreateWorkspace, onSelectWorkspace, onSelectCard }) {
+export default function InsightsView({ setView, onCreateWorkspace, onSelectWorkspace, onSelectCard, onOpenCardDetail }) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
   const claimStatusLabel = useClaimStatusLabel();
   const [insights, setInsights] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [expandedCardId, setExpandedCardId] = useState(null);
 
   useEffect(() => {
     let ignore = false;
@@ -232,37 +229,26 @@ export default function InsightsView({ setView, onCreateWorkspace, onSelectWorks
           ) : (
             <div className="recent-card-list">
               {insights.recentCards.map((card) => {
-                const isExpanded = expandedCardId === card.id;
-                const handleToggle = () => setExpandedCardId(isExpanded ? null : card.id);
+                const handleOpen = () => onOpenCardDetail?.(card, card.workspaceTitle);
                 return (
                   <article
                     key={card.id}
-                    className={`recent-card-item type-${card.type} is-expandable${isExpanded ? ' is-expanded' : ''}`}
-                    onClick={handleToggle}
+                    className={`recent-card-item type-${card.type} is-clickable`}
+                    onClick={handleOpen}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        handleToggle();
+                        handleOpen();
                       }
                     }}
                   >
                     <div className="recent-card-head">
                       <span className="recent-card-type">{cardTypeLabel(card.type)}</span>
                       <span className="recent-card-status">{claimStatusLabel(card.claimStatus)}</span>
-                      {isExpanded ? <ChevronUp size={14} className="recent-card-chevron" /> : <ChevronDown size={14} className="recent-card-chevron" />}
                     </div>
                     <h3>{card.title}</h3>
-                    {isExpanded && (
-                      <div className="recent-card-body">
-                        {card.body ? (
-                          <pre className="recent-card-body-text">{card.body}</pre>
-                        ) : (
-                          <span className="recent-card-body-empty">{t('insights.cardBodyEmpty')}</span>
-                        )}
-                      </div>
-                    )}
                     <footer>
                       <span>{card.workspaceTitle}</span>
                       <span>{formatDate(card.createdAt)}</span>
