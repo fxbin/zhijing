@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import EmptyState from './EmptyState';
 import { useParseStatusLabel } from '../utils/i18nLabels';
 import { materialMediaUrls, isImageUrl, isVideoUrl, proxyImageUrl } from '../utils/material';
+import { renderMarkdown } from '../utils/markdown';
 
 const SUMMARY_MAX_CHARS = 300;
 
@@ -65,13 +66,15 @@ export default function RecentImports({ materials, onViewAll, onViewDetail, brow
   }
 
   /**
-   * 截断摘要文本到指定长度。
+   * 截断摘要文本到指定长度，尽量保留 Markdown 结构。
+   * 仅压缩连续空白为单个空格，保留换行符以维持 Markdown 段落语义，
+   * 避免将 `# 标题\n内容` 合并为一行导致被解析为单个标题。
    * @param {string} text - 原始文本
    * @returns {string} 截断后的文本
    */
   function truncateSummary(text) {
     if (!text) return '';
-    const cleaned = text.replace(/\s+/g, ' ').trim();
+    const cleaned = text.replace(/[^\S\n]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
     return cleaned.length > SUMMARY_MAX_CHARS
       ? `${cleaned.slice(0, SUMMARY_MAX_CHARS)}...`
       : cleaned;
@@ -154,7 +157,10 @@ export default function RecentImports({ materials, onViewAll, onViewDetail, brow
                   )}
                 </button>
               )}
-              <p>{truncatedSummary}</p>
+              <div
+                className="material-summary markdown-body"
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(truncatedSummary) }}
+              />
               {hasMore && onViewDetail && (
                 <button
                   type="button"

@@ -1560,6 +1560,127 @@ button { cursor: pointer; }
   line-height: 1.5;
 }
 
+.material-summary {
+  margin: 10px 0 14px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.material-summary > *:first-child {
+  margin-top: 0;
+}
+
+.material-summary > *:last-child {
+  margin-bottom: 0;
+}
+
+.material-summary p {
+  margin: 0 0 6px;
+}
+
+.material-summary h1,
+.material-summary h2,
+.material-summary h3,
+.material-summary h4,
+.material-summary h5,
+.material-summary h6 {
+  margin: 8px 0 4px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.material-summary h1 { font-size: 15px; }
+.material-summary h2 { font-size: 14px; }
+.material-summary h3,
+.material-summary h4,
+.material-summary h5,
+.material-summary h6 { font-size: 13px; }
+
+.material-summary ul,
+.material-summary ol {
+  margin: 0 0 6px;
+  padding-left: 18px;
+}
+
+.material-summary li {
+  margin: 1px 0;
+}
+
+.material-summary code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface-low, rgba(0, 0, 0, 0.04));
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+.material-summary pre {
+  margin: 0 0 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--surface-low, rgba(0, 0, 0, 0.04));
+  overflow-x: auto;
+}
+
+.material-summary pre code {
+  padding: 0;
+  background: none;
+  font-size: 12px;
+}
+
+.material-summary blockquote {
+  margin: 0 0 6px;
+  padding: 4px 10px;
+  border-left: 3px solid var(--line-soft, #ddd);
+  color: var(--muted);
+}
+
+.material-summary a {
+  color: var(--scholar-blue, #2C5F8D);
+  text-decoration: none;
+}
+
+.material-summary a:hover {
+  text-decoration: underline;
+}
+
+.material-summary strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.material-summary hr {
+  margin: 8px 0;
+  border: none;
+  border-top: 1px solid var(--line-soft, #ddd);
+}
+
+.material-summary img {
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+.material-summary table {
+  width: 100%;
+  margin: 0 0 6px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.material-summary th,
+.material-summary td {
+  padding: 4px 6px;
+  border: 1px solid var(--line-soft, #ddd);
+}
+
+.material-summary th {
+  background: var(--surface-low, rgba(0, 0, 0, 0.04));
+  font-weight: 600;
+}
+
 .material-card.is-clickable {
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
