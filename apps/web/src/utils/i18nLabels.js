@@ -41,6 +41,45 @@ export function getIntakeKindLabel(t, kind) {
 }
 
 /**
+ * 错误关键词 → i18n key 映射表。
+ * 顺序敏感：靠前的先匹配，命中即返回。
+ * 每条规则包含 pattern（正则，忽略大小写）与 key（i18n 路径）。
+ */
+const PARSE_ERROR_RULES = [
+  { pattern: /(\[timeout\]|timed?\s*out|aborted|ETIMEDOUT)/i, key: 'parseError.timeout' },
+  { pattern: /(fetch\s*failed|ECONNREFUSED|ENOTFOUND|ENETUNREACH|network\s*error|socket\s*hang\s*up)/i, key: 'parseError.network' },
+  { pattern: /(401|unauthorized|403|forbidden)/i, key: 'parseError.unauthorized' },
+  { pattern: /(429|rate\s*limit|too\s*many\s*requests)/i, key: 'parseError.rateLimit' },
+  { pattern: /(500|502|503|504|internal\s*server\s*error|bad\s*gateway|service\s*unavailable)/i, key: 'parseError.serverError' },
+  { pattern: /(insufficient.{0,10}quota|billing|payment|credit)/i, key: 'parseError.quota' },
+  { pattern: /(context.{0,10}length|token.{0,10}limit|too\s*long|payload\s*too\s*large)/i, key: 'parseError.tooLarge' },
+];
+
+/**
+ * 将后端返回的原始错误文案映射成本地化 i18n key。
+ * 命中任一规则返回对应 key；未命中返回 'parseError.unknown'。
+ * 原始文案由调用方保留在 title 属性供技术排查。
+ * @param {string} rawError - 后端原始错误文案
+ * @returns {string} i18n key，如 'parseError.timeout'
+ */
+export function classifyParseError(rawError) {
+  const text = String(rawError ?? '').trim();
+  if (!text) return 'parseError.unknown';
+  const hit = PARSE_ERROR_RULES.find((rule) => rule.pattern.test(text));
+  return hit ? hit.key : 'parseError.unknown';
+}
+
+/**
+ * 使用 react-i18next 的 t 函数，将原始错误文案本地化为用户可读的中文。
+ * @param {Function} t - react-i18next 的 t 函数
+ * @param {string} rawError - 后端原始错误文案
+ * @returns {string} 本地化后的错误文案
+ */
+export function getParseErrorLabel(t, rawError) {
+  return t(classifyParseError(rawError), String(rawError ?? '').slice(0, 120));
+}
+
+/**
  * 在 React 组件中获取卡片类型标签的便捷 Hook。
  * @returns {(type: string) => string} 接收类型返回本地化名称的函数
  */
@@ -56,6 +95,15 @@ export function useCardTypeLabel() {
 export function useClaimStatusLabel() {
   const { t } = useTranslation();
   return (status) => getClaimStatusLabel(t, status);
+}
+
+/**
+ * 在 React 组件中将后端原始错误文案本地化为用户可读文案的便捷 Hook。
+ * @returns {(rawError: string) => string} 接收原始错误返回本地化文案的函数
+ */
+export function useParseErrorLabel() {
+  const { t } = useTranslation();
+  return (rawError) => getParseErrorLabel(t, rawError);
 }
 
 /**

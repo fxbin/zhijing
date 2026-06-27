@@ -6,7 +6,7 @@
  */
 
 import { RotateCw } from 'lucide-react';
-import { useTaskStatusLabel, useTaskWorkflowLabel } from '../utils/i18nLabels';
+import { useParseErrorLabel, useTaskStatusLabel, useTaskWorkflowLabel } from '../utils/i18nLabels';
 import { useTranslation } from 'react-i18next';
 
 const PARSE_MATERIAL_WORKFLOW = 'parse_material';
@@ -24,19 +24,21 @@ export default function TaskStatus({ task, materialId, onRetry }) {
   const { t } = useTranslation();
   const taskStatusLabel = useTaskStatusLabel();
   const taskWorkflowLabel = useTaskWorkflowLabel();
+  const parseErrorLabel = useParseErrorLabel();
   if (!task) return null;
 
   const isFailed = task.status === FAILED_STATUS;
   const isParseMaterial = task.workflow === PARSE_MATERIAL_WORKFLOW;
   const canRetry = isFailed && isParseMaterial && Boolean(materialId) && typeof onRetry === 'function';
-  const errorMessage = task.error?.trim();
+  const rawError = task.error?.trim();
+  const friendlyError = rawError ? parseErrorLabel(rawError) : '';
 
   return (
-    <div className={`task-status ${task.status}`} title={`${taskWorkflowLabel(task.workflow)} · ${task.id}`}>
+    <div className={`task-status ${task.status}`} title={`${taskWorkflowLabel(task.workflow)} · ${task.id}${rawError ? `\n${rawError}` : ''}`}>
       <span>{taskStatusLabel(task.status)}</span>
       <strong>{taskWorkflowLabel(task.workflow)}</strong>
-      {isFailed && errorMessage && (
-        <small className="task-status-error" title={errorMessage}>{errorMessage}</small>
+      {isFailed && friendlyError && (
+        <small className="task-status-error" title={rawError || friendlyError}>{friendlyError}</small>
       )}
       {canRetry && (
         <button
