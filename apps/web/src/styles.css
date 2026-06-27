@@ -533,6 +533,27 @@ button { cursor: pointer; }
   font-weight: 700;
 }
 
+.notification-mark-all {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.notification-mark-all:hover {
+  background: var(--surface-low);
+  color: var(--primary);
+}
+
 .notification-menu .task-panel {
   width: 100%;
   margin: 0;
