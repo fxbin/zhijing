@@ -28,9 +28,10 @@ import api, { ApiError } from '../utils/api';
  * @param {Object} [props.artifactOrigin] - 产物来源信息
  * @param {Function} [props.onClearOrigin] - 清除来源标记回调
  * @param {Function} [props.onArtifactUpdate] - 产物更新回调
+ * @param {Function} [props.onSwitchArtifact] - 切换当前查看的产物回调（多产物场景下使用）
  * @returns {JSX.Element} 产物视图
  */
-export default function ArtifactView({ artifact, detail, setView, artifactOrigin, onClearOrigin, onArtifactUpdate }) {
+export default function ArtifactView({ artifact, detail, setView, artifactOrigin, onClearOrigin, onArtifactUpdate, onSwitchArtifact }) {
   const { t } = useTranslation();
   const fallbackArtifact = detail.artifacts?.[0];
   const activeArtifact = artifact ?? fallbackArtifact;
@@ -44,6 +45,8 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
   const sourceCards = cards.filter((card) => card.claimStatus === 'sourced');
   const persistedSections = activeArtifact?.sections ?? [];
   const hasPersistedSections = persistedSections.length > 0;
+  const switchableArtifacts = (detail.artifacts ?? []).filter((item) => item.id !== activeArtifact?.id);
+  const showArtifactSwitcher = switchableArtifacts.length > 0;
 
   const [editingSectionId, setEditingSectionId] = useState(null);
   const [draftTitle, setDraftTitle] = useState('');
@@ -178,6 +181,32 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
           <button onClick={() => downloadArtifactMarkdown(activeArtifact, detail)} type="button">{t('artifact.exportMarkdown')}</button>
         </div>
       </div>
+
+      {showArtifactSwitcher && (
+        <div className="artifact-switcher" role="tablist" aria-label={t('artifact.switcherLabel')}>
+          <span className="artifact-switcher-label">{t('artifact.switcherLabel')}</span>
+          <div className="artifact-switcher-list">
+            {switchableArtifacts.map((item) => {
+              const itemVariant = inferArtifactVariant(item, detail);
+              const itemConfig = artifactVariantConfig(itemVariant);
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  className="artifact-switcher-item"
+                  onClick={() => onSwitchArtifact?.(item)}
+                  title={formatDateTime(item.createdAt)}
+                >
+                  <span className="artifact-switcher-item-type">{t(`artifact.variant.${itemVariant}.label`, { defaultValue: itemConfig.label })}</span>
+                  <span className="artifact-switcher-item-title">{item.title}</span>
+                  <span className="artifact-switcher-item-time">{formatDate(item.createdAt)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="artifact-metrics">
         <article><span>{t('artifact.metric.sourceLinks')}</span><strong>{sourceCount}</strong></article>

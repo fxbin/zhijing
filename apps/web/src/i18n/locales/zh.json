@@ -55,6 +55,7 @@
   "artifact.sourceBoundaryNeeds": "当前产物尚未关联来源，建议先补充资料。",
   "artifact.sourcedRatio": "已溯源 {{ratio}}",
   "artifact.subtitle": "查看生成的产物与修订历史",
+  "artifact.switcherLabel": "切换产物",
   "artifact.title": "产物",
   "artifact.variant.deep.label": "深度研究",
   "artifact.variant.deep.lead": "把资料压缩成核心问题、证据链和下一步研究方向。",

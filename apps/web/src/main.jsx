@@ -659,7 +659,7 @@ function App() {
               setView={go}
             />
           )}
-          {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={workspaceDetail} setView={go} artifactOrigin={artifactOrigin} onClearOrigin={() => setArtifactOrigin(null)} onArtifactUpdate={handleArtifactUpdate} />}
+          {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={workspaceDetail} setView={go} artifactOrigin={artifactOrigin} onClearOrigin={() => setArtifactOrigin(null)} onArtifactUpdate={handleArtifactUpdate} onSwitchArtifact={(next) => { setArtifactOrigin(null); setSelectedArtifact(next); }} />}
           {view === 'maps' && <MapsView apiStatus={apiStatus} selectedWorkspaceId={selectedWorkspaceId} setView={go} />}
           {view === 'assets' && <GlobalAssetsDashboard data={advancedOpsData} setView={go} onOpenArtifact={openArtifact} onSelectCard={handleSelectCard} onOpenCardDetail={openCardDrawer} />}
           {view === 'compare' && <MultiEntityComparisonView data={advancedOpsData} setView={go} />}
