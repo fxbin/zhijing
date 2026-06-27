@@ -3,9 +3,9 @@
  * 产物详情视图：展示产物分区内容、来源边界、修订历史，并支持分区编辑。
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ClipboardList } from 'lucide-react';
+import { ClipboardList, Eye, Pencil } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import {
   inferArtifactVariant,
@@ -16,6 +16,7 @@ import {
 import { downloadArtifactMarkdown } from '../utils/export';
 import { formatPercent } from '../utils/format';
 import { formatDate, formatDateTime } from '../utils/material';
+import { renderMarkdown } from '../utils/markdown';
 import api, { ApiError } from '../utils/api';
 
 /**
@@ -52,6 +53,7 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
   const [revisions, setRevisions] = useState([]);
   const [loadingRevisions, setLoadingRevisions] = useState(false);
   const [editError, setEditError] = useState('');
+  const [draftMode, setDraftMode] = useState('edit');
 
   useEffect(() => {
     if (!activeArtifact?.id) return;
@@ -110,11 +112,15 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
     setDraftTitle(section.title);
     setDraftBody(section.body);
     setEditError('');
+    setDraftMode('edit');
   }
 
   function cancelEditSection() {
     setEditingSectionId(null);
+    setDraftMode('edit');
   }
+
+  const draftPreviewHtml = useMemo(() => renderMarkdown(draftBody), [draftBody]);
 
   async function saveSectionEdit() {
     if (!editingSectionId || saving || !activeArtifact?.id) return;
@@ -212,10 +218,43 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
                         <span>{t('artifact.sectionTitle')}</span>
                         <input value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} placeholder={t('artifact.sectionTitle')} />
                       </label>
-                      <label>
-                        <span>{t('artifact.sectionBodyLabel')}</span>
-                        <textarea rows={6} value={draftBody} onChange={(event) => setDraftBody(event.target.value)} placeholder={t('artifact.sectionBody')} />
-                      </label>
+                      <div className="artifact-section-editor">
+                        <div className="artifact-section-editor-tabs" role="tablist">
+                          <button
+                            type="button"
+                            role="tab"
+                            aria-selected={draftMode === 'edit'}
+                            className={draftMode === 'edit' ? 'active' : ''}
+                            onClick={() => setDraftMode('edit')}
+                          >
+                            <Pencil size={14} />
+                            {t('artifact.sectionBodyLabel')}
+                          </button>
+                          <button
+                            type="button"
+                            role="tab"
+                            aria-selected={draftMode === 'preview'}
+                            className={draftMode === 'preview' ? 'active' : ''}
+                            onClick={() => setDraftMode('preview')}
+                          >
+                            <Eye size={14} />
+                            {t('common.preview')}
+                          </button>
+                        </div>
+                        {draftMode === 'edit' ? (
+                          <textarea
+                            rows={10}
+                            value={draftBody}
+                            onChange={(event) => setDraftBody(event.target.value)}
+                            placeholder={t('artifact.sectionBody')}
+                          />
+                        ) : (
+                          <div
+                            className="markdown-body artifact-section-preview"
+                            dangerouslySetInnerHTML={{ __html: draftPreviewHtml }}
+                          />
+                        )}
+                      </div>
                       <div className="artifact-section-form-actions">
                         <button type="button" className="primary" onClick={saveSectionEdit} disabled={saving}>{saving ? t('common.saving') : t('artifact.saveRevision')}</button>
                         <button type="button" className="ghost" onClick={cancelEditSection} disabled={saving}>{t('common.cancel')}</button>
@@ -229,7 +268,10 @@ export default function ArtifactView({ artifact, detail, setView, artifactOrigin
                           <button type="button" className="artifact-section-edit-btn" onClick={() => startEditSection(section)}>{t('common.edit')}</button>
                         )}
                       </div>
-                      {section.body.split(/\n+/).filter(Boolean).map((block, blockIndex) => <p key={`${section.id}-${blockIndex}`}>{block}</p>)}
+                      <div
+                        className="markdown-body artifact-section-body"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(section.body) }}
+                      />
                     </>
                   )}
                 </div>
