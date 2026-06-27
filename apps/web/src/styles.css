@@ -1458,6 +1458,46 @@ button { cursor: pointer; }
   white-space: nowrap;
 }
 
+.task-status-error {
+  max-width: 280px;
+  color: var(--error);
+  font-size: 12px;
+}
+
+.task-status-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 1px solid var(--error);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--error);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.task-status-retry:hover:not(:disabled) {
+  background: rgba(186, 26, 26, 0.08);
+  box-shadow: 0 1px 4px rgba(186, 26, 26, 0.18);
+}
+
+.task-status-retry:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.entity-list-hint {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
 .task-panel {
   width: min(100%, 780px);
   margin: 16px auto 0;

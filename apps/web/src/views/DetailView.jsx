@@ -470,7 +470,11 @@ export default function DetailView({
             )}
           </section>
         )}
-        <TaskStatus task={latestTask} />
+        <TaskStatus
+          task={latestTask}
+          materialId={latestTask?.input?.materialId}
+          onRetry={onParseMaterial}
+        />
         {selectedWorkspaceId && cards.length > 0 && (
           <EvidenceToolsPanel workspaceId={selectedWorkspaceId} />
         )}
@@ -506,6 +510,7 @@ export default function DetailView({
               <div>
                 <span>{t('detail.entities')}</span>
                 <h4>{t('detail.entityList')}</h4>
+                <small className="entity-list-hint">{t('detail.entityListHint')}</small>
               </div>
               <button
                 className="entity-extract-btn"
@@ -656,18 +661,7 @@ export default function DetailView({
                           <strong>{cardTypeLabel(type)}</strong>
                           <small>{t('detail.cardCount', { count: group.length })}</small>
                         </header>
-                        {group.map((card) => (
-                          <article className={`knowledge-card type-${type}`} key={card.id ?? card.title}>
-                            <div className="card-head">
-                              <span className="card-type-badge">{cardTypeLabel(card.type)}</span>
-                              {card.claimStatus === 'sourced' && (
-                                <span className="card-source-badge"><CheckCircle2 size={14} />{claimStatusLabel(card.claimStatus)}</span>
-                              )}
-                            </div>
-                            <h3>{card.title}</h3>
-                            <p>{card.body}</p>
-                          </article>
-                        ))}
+                        {group.map((card) => renderCard(card))}
                       </section>
                     ))}
                   </div>

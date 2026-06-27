@@ -376,6 +376,7 @@
   "detail.distributionTooltip": "{{label}}：{{count}}（{{ratio}}%）",
   "detail.entities": "实体",
   "detail.entityList": "实体清单",
+  "detail.entityListHint": "从工作区卡片自动识别人物、组织、概念、工具等实体，作为后续知识图谱与对话追溯的基础索引",
   "detail.entityType.person": "人物",
   "detail.entityType.organization": "组织",
   "detail.entityType.concept": "概念",
