@@ -62,3 +62,10 @@ export const SEARCH_HISTORY_MAX_COUNT = 5;
  * concept-tag 点击与 Cmd+J 快捷键均通过此事件唤起胶囊。
  */
 export const CHAT_OPEN_EVENT = 'zhijing:open-chat';
+
+/**
+ * 卡片归档完成后的全局事件名。
+ * CardDetailDrawer 归档成功后派发，main.jsx 监听后调 loadDashboard 刷新当前工作区。
+ * detail 携带 { cardId } 便于后续精细处理。
+ */
+export const CARD_ARCHIVED_EVENT = 'zhijing:card-archived';

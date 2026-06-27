@@ -38,7 +38,7 @@ import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import GlobalChatDock from './components/GlobalChatDock';
 import SearchCommand from './components/SearchCommand';
 import { useHotkey } from './hooks/useHotkey';
-import { CHAT_OPEN_EVENT, PATH_CARD_ID_STORAGE_KEY } from './constants/options';
+import { CHAT_OPEN_EVENT, CARD_ARCHIVED_EVENT, PATH_CARD_ID_STORAGE_KEY } from './constants/options';
 const WorkspaceView = lazy(() => import('./views/WorkspaceView'));
 const DetailView = lazy(() => import('./views/DetailView'));
 const LibraryView = lazy(() => import('./views/LibraryView'));
@@ -364,6 +364,14 @@ function App() {
       cancelled = true;
     };
   }, [selectedWorkspaceId]);
+
+  useEffect(() => {
+    const handleCardArchived = () => {
+      loadDashboard(selectedWorkspaceId, () => false);
+    };
+    window.addEventListener(CARD_ARCHIVED_EVENT, handleCardArchived);
+    return () => window.removeEventListener(CARD_ARCHIVED_EVENT, handleCardArchived);
+  }, [selectedWorkspaceId, loadDashboard]);
 
   useEffect(() => {
     if (!selectedWorkspaceId) {

@@ -13410,6 +13410,130 @@ button { cursor: pointer; }
   color: var(--primary);
 }
 
+.card-detail-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.card-detail-archive {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #e4c7c4;
+  border-radius: 8px;
+  background: rgba(255, 245, 243, 0.6);
+  color: #ba1a1a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card-detail-archive:hover:not(:disabled) {
+  background: #fdecea;
+  border-color: #ba1a1a;
+  box-shadow: 0 2px 8px rgba(186, 26, 26, 0.12);
+}
+
+.card-detail-archive:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.card-detail-archive .spin {
+  animation: spin 1s linear infinite;
+}
+
+.card-detail-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(6px);
+}
+
+.card-detail-confirm-body {
+  width: min(360px, 100%);
+  padding: 24px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 16px 40px rgba(9, 20, 38, 0.18);
+}
+
+.card-detail-confirm-body p {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.card-detail-confirm-hint {
+  color: var(--muted) !important;
+  font-size: 13px !important;
+}
+
+.card-detail-confirm-error {
+  margin-top: 8px !important;
+  padding: 8px 10px;
+  background: rgba(255, 245, 243, 0.7);
+  border: 1px solid #e4c7c4;
+  border-radius: 8px;
+  color: #ba1a1a !important;
+  font-size: 12px !important;
+}
+
+.card-detail-confirm-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.card-detail-confirm-actions button {
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.card-detail-confirm-actions button:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: rgba(216, 227, 251, 0.5);
+}
+
+.card-detail-confirm-actions button.danger {
+  border-color: #ba1a1a;
+  background: #ba1a1a;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-detail-confirm-actions button.danger:hover:not(:disabled) {
+  background: #9a1414;
+  box-shadow: 0 2px 8px rgba(186, 26, 26, 0.2);
+}
+
+.card-detail-confirm-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .card-detail-body {
   flex: 1 1 auto;
   overflow-y: auto;

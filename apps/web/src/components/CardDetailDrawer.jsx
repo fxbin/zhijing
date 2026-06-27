@@ -4,14 +4,16 @@
  * @author fxbin
  */
 
-import { useEffect, useMemo, useRef } from 'react';
-import { CheckCircle2, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Archive, CheckCircle2, Loader2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCardTypeLabel, useClaimStatusLabel } from '../utils/i18nLabels';
 import { formatDate } from '../utils/material';
 import { renderMarkdown } from '../utils/markdown';
 import useModalA11y from '../hooks/useModalA11y';
 import { useResizableDrawer } from '../hooks/useResizableDrawer';
+import { CARD_ARCHIVED_EVENT } from '../constants/options';
+import api from '../utils/api';
 
 /**
  * 判断文本是否包含 Markdown 语法特征。
@@ -48,6 +50,9 @@ export default function CardDetailDrawer({ card, onClose, workspaceTitle }) {
   const drawerRef = useRef(null);
   const { width, resizeHandleProps } = useResizableDrawer();
   const isOpen = card !== null;
+  const [archiving, setArchiving] = useState(false);
+  const [archiveError, setArchiveError] = useState('');
+  const [confirmingArchive, setConfirmingArchive] = useState(false);
 
   useModalA11y(drawerRef, isOpen, onClose);
 
@@ -62,6 +67,12 @@ export default function CardDetailDrawer({ card, onClose, workspaceTitle }) {
     return () => document.removeEventListener('wheel', handleBodyScroll);
   }, [isOpen]);
 
+  useEffect(() => {
+    setArchiving(false);
+    setArchiveError('');
+    setConfirmingArchive(false);
+  }, [card?.id]);
+
   const contentHtml = useMemo(() => {
     if (!card?.body) return '';
     if (looksLikeMarkdown(card.body)) {
@@ -73,6 +84,22 @@ export default function CardDetailDrawer({ card, onClose, workspaceTitle }) {
   if (!card) return null;
 
   const isSourced = card.claimStatus === 'sourced';
+
+  const handleArchive = async () => {
+    if (archiving || !card?.id) return;
+    setArchiving(true);
+    setArchiveError('');
+    try {
+      await api.post(`/api/cards/${card.id}/archive`);
+      window.dispatchEvent(new CustomEvent(CARD_ARCHIVED_EVENT, { detail: { cardId: card.id } }));
+      onClose();
+    } catch (err) {
+      setArchiveError(err?.message || t('cardDetail.archiveFailed'));
+    } finally {
+      setArchiving(false);
+      setConfirmingArchive(false);
+    }
+  };
 
   return (
     <div className="card-detail-overlay" onClick={onClose} role="presentation">
@@ -103,14 +130,27 @@ export default function CardDetailDrawer({ card, onClose, workspaceTitle }) {
               </span>
             )}
           </div>
-          <button
-            type="button"
-            className="card-detail-close"
-            onClick={onClose}
-            aria-label={t('common.close')}
-          >
-            <X size={20} />
-          </button>
+          <div className="card-detail-actions">
+            <button
+              type="button"
+              className="card-detail-archive"
+              onClick={() => setConfirmingArchive(true)}
+              disabled={archiving}
+              aria-label={t('cardDetail.archive')}
+              title={t('cardDetail.archive')}
+            >
+              {archiving ? <Loader2 size={18} className="spin" /> : <Archive size={18} />}
+              <span>{t('cardDetail.archive')}</span>
+            </button>
+            <button
+              type="button"
+              className="card-detail-close"
+              onClick={onClose}
+              aria-label={t('common.close')}
+            >
+              <X size={20} />
+            </button>
+          </div>
         </header>
 
         <div className="card-detail-body">
@@ -153,6 +193,34 @@ export default function CardDetailDrawer({ card, onClose, workspaceTitle }) {
             </span>
           </footer>
         </div>
+
+        {confirmingArchive && (
+          <div className="card-detail-confirm" role="alertdialog" aria-modal="true">
+            <div className="card-detail-confirm-body">
+              <p>{t('cardDetail.archiveConfirm')}</p>
+              <p className="card-detail-confirm-hint">{t('cardDetail.archiveHint')}</p>
+              {archiveError && <p className="card-detail-confirm-error">{archiveError}</p>}
+              <div className="card-detail-confirm-actions">
+                <button
+                  type="button"
+                  onClick={() => setConfirmingArchive(false)}
+                  disabled={archiving}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={handleArchive}
+                  disabled={archiving}
+                >
+                  {archiving ? <Loader2 size={16} className="spin" /> : null}
+                  {t('cardDetail.archiveConfirmAction')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </aside>
     </div>
   );
