@@ -85,6 +85,9 @@ import {
   type MaterialAssignmentSuggestionsResult,
   type MaterialParseQueueResult,
   type MaterialRecord,
+  type MaterialCursor,
+  type MaterialQueryOptions,
+  type MaterialQueryResult,
   type MaterialStatusTimeline,
   type MaterialTranscriptStatus,
   type MaterialReviewResult,
@@ -452,6 +455,7 @@ type KnowledgeRepository = {
   updateMaterial(material: MaterialRecord): void;
   findMaterial(id: string): MaterialRecord | undefined;
   listMaterials(workspaceId?: string, limit?: number): MaterialRecord[];
+  queryMaterialsPaged(options: MaterialQueryOptions): MaterialQueryResult;
   searchMaterialsByRelevance(workspaceId: string, query: string, limit: number): MaterialRecord[];
   findCard(id: string): KnowledgeCard | undefined;
   deleteMaterial(id: string): void;
@@ -659,6 +663,51 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
       : this.state.materials
     ).filter((item) => !item.archived);
     return typeof limit === 'number' ? materials.slice(0, limit) : materials;
+  }
+
+  queryMaterialsPaged(options: MaterialQueryOptions): MaterialQueryResult {
+    const limit = typeof options.limit === 'number' && options.limit > 0 ? options.limit : 20;
+    const query = options.query?.trim().toLowerCase();
+    const cursorCreatedAt = options.cursorCreatedAt?.trim();
+    const cursorId = options.cursorId?.trim();
+    const hasCursor = Boolean(cursorCreatedAt && cursorId);
+
+    let items = (options.workspaceId
+      ? this.state.materials.filter((item) => item.workspaceId === options.workspaceId)
+      : this.state.materials
+    ).filter((item) => !item.archived);
+
+    if (options.type) items = items.filter((item) => item.type === options.type);
+    if (options.parseStatus) items = items.filter((item) => item.parseStatus === options.parseStatus);
+    if (query) {
+      items = items.filter((item) => {
+        const searchable = [item.title, item.rawInput, item.contentText, item.platform, item.sourceUrl, item.parseError]
+          .filter(Boolean).join(' ').toLowerCase();
+        return searchable.includes(query);
+      });
+    }
+
+    items.sort((a, b) => {
+      if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
+      return a.id < b.id ? 1 : -1;
+    });
+
+    if (hasCursor) {
+      const cc = cursorCreatedAt as string;
+      const ci = cursorId as string;
+      items = items.filter((item) => {
+        if (item.createdAt < cc) return true;
+        if (item.createdAt > cc) return false;
+        return item.id < ci;
+      });
+    }
+
+    const fetched = items.slice(0, limit + 1);
+    const hasMore = fetched.length > limit;
+    const materials = hasMore ? fetched.slice(0, limit) : fetched;
+    const last = materials[materials.length - 1];
+    const nextCursor = hasMore && last ? { createdAt: last.createdAt, id: last.id } : null;
+    return { materials, nextCursor, hasMore };
   }
 
   deleteMaterial(id: string) {
@@ -1599,6 +1648,49 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       ? this.db.prepare('SELECT * FROM materials WHERE workspace_id = ? AND archived = 0 ORDER BY created_at DESC').all(workspaceId)
       : this.db.prepare(`SELECT * FROM materials WHERE archived = 0 ORDER BY created_at DESC${limit ? ` LIMIT ${limit}` : ''}`).all();
     return (rows as MaterialRow[]).map(mapMaterial);
+  }
+
+  queryMaterialsPaged(options: MaterialQueryOptions): MaterialQueryResult {
+    const limit = typeof options.limit === 'number' && options.limit > 0 ? options.limit : 20;
+    const query = options.query?.trim();
+    const cursorCreatedAt = options.cursorCreatedAt?.trim();
+    const cursorId = options.cursorId?.trim();
+    const hasCursor = Boolean(cursorCreatedAt && cursorId);
+
+    const where: string[] = ['archived = 0'];
+    const params: (string | number)[] = [];
+    if (options.workspaceId) {
+      where.push('workspace_id = ?');
+      params.push(options.workspaceId);
+    }
+    if (options.type) {
+      where.push('type = ?');
+      params.push(options.type);
+    }
+    if (options.parseStatus) {
+      where.push('parse_status = ?');
+      params.push(options.parseStatus);
+    }
+    if (query) {
+      where.push('(LOWER(title) LIKE ? OR LOWER(COALESCE(content_text, \'\')) LIKE ? OR LOWER(COALESCE(raw_input, \'\')) LIKE ?)');
+      const like = `%${query.toLowerCase()}%`;
+      params.push(like, like, like);
+    }
+    if (hasCursor) {
+      where.push('(created_at < ? OR (created_at = ? AND id < ?))');
+      params.push(cursorCreatedAt as string, cursorCreatedAt as string, cursorId as string);
+    }
+
+    const sql = `SELECT * FROM materials WHERE ${where.join(' AND ')} ORDER BY created_at DESC, id DESC LIMIT ?`;
+    params.push(limit + 1);
+
+    const rows = this.db.prepare(sql).all(...params) as MaterialRow[];
+    const hasMore = rows.length > limit;
+    const slice = hasMore ? rows.slice(0, limit) : rows;
+    const materials = slice.map(mapMaterial);
+    const last = materials[materials.length - 1];
+    const nextCursor = hasMore && last ? { createdAt: last.createdAt, id: last.id } : null;
+    return { materials, nextCursor, hasMore };
   }
 
   archiveMaterial(id: string) {
@@ -2740,6 +2832,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       );
 
       CREATE INDEX IF NOT EXISTS idx_materials_workspace_id ON materials(workspace_id);
+      CREATE INDEX IF NOT EXISTS idx_materials_cursor ON materials(archived, workspace_id, created_at DESC, id DESC);
       CREATE INDEX IF NOT EXISTS idx_cards_workspace_id ON cards(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_card_revisions_card_id ON card_revisions(card_id, version);
       CREATE INDEX IF NOT EXISTS idx_exports_workspace_id ON exports(workspace_id, created_at DESC);
@@ -3013,6 +3106,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       this.db.exec('ALTER TABLE materials ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;');
     }
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_materials_archived ON materials(archived, workspace_id);');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_materials_cursor ON materials(archived, workspace_id, created_at DESC, id DESC);');
 
     const cardColumns = this.db.prepare('PRAGMA table_info(cards)').all() as Array<{ name: string }>;
     if (!cardColumns.some((column) => column.name === 'archived')) {
@@ -7853,6 +7947,20 @@ export function listMaterials(options: ListMaterialsOptions = {}) {
   });
 
   return typeof options.limit === 'number' ? filtered.slice(0, options.limit) : filtered;
+}
+
+/**
+ * 资料分页查询（cursor 分页）。
+ * 把 type / parseStatus / query / cursor 全部下沉到 repository 层 SQL，避免内存过滤与 cursor 错位。
+ * limit 缺省为 20；返回结构含 nextCursor 与 hasMore，前端据此渲染「加载更多」。
+ *
+ * @param options - 分页查询参数
+ * @returns 分页结果（含 nextCursor / hasMore）
+ *
+ * @author fxbin
+ */
+export function listMaterialsPaged(options: MaterialQueryOptions): MaterialQueryResult {
+  return repository.queryMaterialsPaged(options);
 }
 
 /**
