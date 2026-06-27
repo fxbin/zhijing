@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Database, FileText, Layers } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, ChevronUp, ChevronRight, Database, FileText, Layers, RotateCcw } from 'lucide-react';
 
 import AdvancedOpsTabs from '../components/AdvancedOpsTabs';
 import EmptyState from '../components/EmptyState';
@@ -148,7 +148,10 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact, o
           <h2>{t('assets.subtitle')}</h2>
           <p>{t('assets.description')}</p>
         </div>
-        <button onClick={() => setView('library')} type="button">{t('assets.openLibrary')}</button>
+        <button onClick={() => setView('library')} type="button">
+          {t('assets.openLibrary')}
+          <ChevronRight size={16} />
+        </button>
       </div>
       <AdvancedOpsTabs active="assets" setView={setView} />
 
@@ -204,7 +207,10 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact, o
             <input value={filterKeyword} onChange={(event) => setFilterKeyword(event.target.value)} placeholder={t('assets.search')} />
           </label>
         </div>
-        <button type="button" className="assets-filter-reset" onClick={resetFilter}>{t('assets.resetFilter')}</button>
+        <button type="button" className="assets-filter-reset" onClick={resetFilter}>
+          <RotateCcw size={14} />
+          {t('assets.resetFilter')}
+        </button>
       </section>
 
       <div className="advanced-panel-grid">
@@ -235,6 +241,7 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact, o
                   className="asset-show-all"
                   onClick={() => setExpandedMaterials((prev) => !prev)}
                 >
+                  {expandedMaterials ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                   {expandedMaterials ? t('compare.collapse') : t('common.showAll')}
                 </button>
               )}
@@ -292,6 +299,7 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact, o
                   className="asset-show-all"
                   onClick={() => setExpandedCards((prev) => !prev)}
                 >
+                  {expandedCards ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                   {expandedCards ? t('compare.collapse') : t('common.showAll')}
                 </button>
               )}
@@ -318,7 +326,10 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact, o
                       <strong>{artifact.title}</strong>
                       <span>{artifact.type ?? t('assets.artifactFallback')} · {t('assets.sectionsCount', { count: artifact.sections?.length ?? 0 })}</span>
                     </div>
-                    <button onClick={() => onOpenArtifact(artifact)} type="button">{t('common.open')}</button>
+                    <button onClick={() => onOpenArtifact(artifact)} type="button">
+                      {t('common.open')}
+                      <ArrowUpRight size={14} />
+                    </button>
                   </article>
                 ))}
               </div>
@@ -328,6 +339,7 @@ export default function GlobalAssetsDashboard({ data, setView, onOpenArtifact, o
                   className="asset-show-all"
                   onClick={() => setExpandedArtifacts((prev) => !prev)}
                 >
+                  {expandedArtifacts ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                   {expandedArtifacts ? t('compare.collapse') : t('common.showAll')}
                 </button>
               )}
