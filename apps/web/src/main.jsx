@@ -33,6 +33,7 @@ import SystemNotice from './components/SystemNotice';
 import NotificationDropdown from './components/NotificationDropdown';
 import CreateKbModal from './components/CreateKbModal';
 import CardDetailDrawer from './components/CardDetailDrawer';
+import MaterialDetailDrawer from './components/MaterialDetailDrawer';
 import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import GlobalChatDock from './components/GlobalChatDock';
 import SearchCommand from './components/SearchCommand';
@@ -142,6 +143,7 @@ function App() {
   const [artifactOrigin, setArtifactOrigin] = useState(null);
   const [drawerCard, setDrawerCard] = useState(null);
   const [drawerWorkspaceTitle, setDrawerWorkspaceTitle] = useState('');
+  const [drawerMaterial, setDrawerMaterial] = useState(null);
 
   const openCardDrawer = (card, workspaceTitle = '') => {
     setDrawerCard(card);
@@ -151,6 +153,20 @@ function App() {
   const closeCardDrawer = () => {
     setDrawerCard(null);
     setDrawerWorkspaceTitle('');
+  };
+
+  /**
+   * 打开资料详情抽屉（全局挂载，跨视图可用）。
+   * 首页最近导入、搜索结果等入口直接弹出抽屉查看完整正文，
+   * 不再跳转到工作区详情视图，避免与侧栏「工作区详情」菜单语义混淆。
+   * @param {object} material 资料对象
+   */
+  const openMaterialDrawer = (material) => {
+    if (material) setDrawerMaterial(material);
+  };
+
+  const closeMaterialDrawer = () => {
+    setDrawerMaterial(null);
   };
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -420,10 +436,7 @@ function App() {
   };
 
   const handleViewMaterialDetail = (material) => {
-    if (material?.id) {
-      sessionStorage.setItem('zhijing:pathMaterialId', material.id);
-    }
-    go('detail');
+    openMaterialDrawer(material);
   };
 
   /**
@@ -791,6 +804,12 @@ function App() {
         card={drawerCard}
         onClose={closeCardDrawer}
         workspaceTitle={drawerWorkspaceTitle}
+      />
+
+      <MaterialDetailDrawer
+        material={drawerMaterial}
+        onClose={closeMaterialDrawer}
+        workspaces={workspaces}
       />
 
       <GlobalChatDock
