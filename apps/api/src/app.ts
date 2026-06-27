@@ -105,6 +105,7 @@ import {
   recordCardReview,
   listWorkspaces,
   listMaterials,
+  listMaterialsPaged,
   listAllCards,
   listAllMaterials,
   listAllArtifacts,
@@ -793,16 +794,22 @@ export function buildApi() {
       q?: string;
       limit?: string;
       workspaceId?: string;
+      cursorCreatedAt?: string;
+      cursorId?: string;
     };
-  }>('/api/materials', async (request) => ({
-    materials: listMaterials({
+  }>('/api/materials', async (request) => {
+    const cursorCreatedAt = request.query.cursorCreatedAt?.trim();
+    const cursorId = request.query.cursorId?.trim();
+    return listMaterialsPaged({
       workspaceId: request.query.workspaceId || undefined,
       type: parseMaterialType(request.query.type),
-      status: parseStatus(request.query.status),
+      parseStatus: parseStatus(request.query.status),
       query: request.query.q,
       limit: parseLimit(request.query.limit),
-    }),
-  }));
+      cursorCreatedAt: cursorCreatedAt || undefined,
+      cursorId: cursorId || undefined,
+    });
+  });
 
   app.get<{ Params: { id: string } }>('/api/workspaces/:id', async (request, reply) => {
     const base = getWorkspace(request.params.id);
