@@ -3,7 +3,7 @@
  * @module views/WorkspaceView
  */
 
-import { Sparkles, SquareArrowOutUpRight } from 'lucide-react';
+import { Sparkles, SquareArrowOutUpRight, Layers } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import EmptyState from '../components/EmptyState';
@@ -11,6 +11,8 @@ import RecentImports from '../components/RecentImports';
 import KnowledgeMapPanel from '../components/KnowledgeMapPanel';
 import { useCardTypeLabel } from '../utils/i18nLabels';
 import api from '../utils/api';
+
+const OVERVIEW_SCROLL_STORAGE_KEY = 'zhijing:overviewScrollY';
 
 /**
  * 工作区首页视图。
@@ -60,6 +62,20 @@ export default function WorkspaceView({ activity, apiStatus, isSubmitting, mater
     return () => { ignore = true; };
   }, [offline, selectedWorkspaceId]);
 
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(OVERVIEW_SCROLL_STORAGE_KEY);
+      if (stored === null) return;
+      sessionStorage.removeItem(OVERVIEW_SCROLL_STORAGE_KEY);
+      const y = Number.parseInt(stored, 10);
+      if (Number.isFinite(y) && y > 0) {
+        requestAnimationFrame(() => window.scrollTo(0, y));
+      }
+    } catch {
+      // 静默降级
+    }
+  }, []);
+
   return (
     <>
       <section className="hero">
@@ -96,6 +112,26 @@ export default function WorkspaceView({ activity, apiStatus, isSubmitting, mater
         )}
         {!isSubmitting && activity && <p className="activity">{activity}</p>}
       </section>
+
+      <button
+        type="button"
+        className="workspace-detail-entry"
+        onClick={() => {
+          try {
+            sessionStorage.setItem(OVERVIEW_SCROLL_STORAGE_KEY, String(window.scrollY));
+          } catch {
+            // 静默降级，不影响跳转
+          }
+          setView('detail');
+        }}
+      >
+        <span className="workspace-detail-entry-icon"><Layers size={18} /></span>
+        <span className="workspace-detail-entry-text">
+          <strong>{t('workspace.viewFullDetail')}</strong>
+          <small>{t('workspace.viewFullDetailHint')}</small>
+        </span>
+        <span className="workspace-detail-entry-arrow" aria-hidden="true">→</span>
+      </button>
 
       {recentCards.length > 0 && (
         <section className="workspace-recent-cards">

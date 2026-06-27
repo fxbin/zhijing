@@ -492,7 +492,6 @@ function App() {
 
   const navItems = [
     { key: 'workspace', label: t('nav.workspace'), icon: Database, group: 'core' },
-    { key: 'detail', label: t('nav.detail'), icon: Layers, group: 'core' },
     { key: 'library', label: t('nav.library'), icon: FolderOpen, group: 'core' },
     { key: 'insights', label: t('nav.insights'), icon: Lightbulb, group: 'insight' },
     { key: 'assets', label: t('nav.assets'), icon: Layers, group: 'insight' },

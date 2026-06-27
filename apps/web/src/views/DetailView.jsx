@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  ArrowLeft,
   BarChart3,
   BookOpen,
   CheckCircle2,
@@ -334,6 +335,22 @@ export default function DetailView({
             <p>{detail.summary}</p>
           </div>
           <div className="page-title-actions">
+            <button
+              type="button"
+              className="detail-back-overview"
+              onClick={() => {
+                try {
+                  sessionStorage.removeItem('zhijing:pathMaterialId');
+                  sessionStorage.removeItem('zhijing:pathCardId');
+                } catch {
+                  // 静默降级
+                }
+                setView('workspace');
+              }}
+            >
+              <ArrowLeft size={16} />
+              {t('detail.backToOverview')}
+            </button>
             <button onClick={() => setView('workflow')} type="button">{t('detail.runKit')}</button>
           </div>
         </div>

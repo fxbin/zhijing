@@ -1457,6 +1457,73 @@ button { cursor: pointer; }
   margin: 40px auto 0;
 }
 
+.workspace-detail-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: max-content;
+  max-width: 100%;
+  margin: 20px auto 0;
+  padding: 10px 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.workspace-detail-entry:hover {
+  border-color: var(--scholar-blue, #2C5F8D);
+  box-shadow: 0 2px 8px rgba(9, 20, 38, 0.06);
+  transform: translateY(-1px);
+}
+
+.workspace-detail-entry:focus-visible {
+  outline: 2px solid var(--scholar-blue, #2C5F8D);
+  outline-offset: 2px;
+}
+
+.workspace-detail-entry-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--surface-low, rgba(0, 0, 0, 0.04));
+  color: var(--scholar-blue, #2C5F8D);
+  flex-shrink: 0;
+}
+
+.workspace-detail-entry-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  min-width: 0;
+}
+
+.workspace-detail-entry-text strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.workspace-detail-entry-text small {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-detail-entry-arrow {
+  color: var(--muted);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
 .lower-grid > * {
   min-width: 0;
   min-height: 0;
@@ -2177,6 +2244,26 @@ button { cursor: pointer; }
   flex-wrap: wrap;
   gap: 10px;
   justify-content: flex-start;
+}
+
+.detail-back-overview {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.detail-back-overview:hover {
+  border-color: var(--scholar-blue, #2C5F8D);
+  background: var(--surface-low, rgba(0, 0, 0, 0.02));
 }
 
 .page-title-row > button,
