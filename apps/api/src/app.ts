@@ -51,6 +51,8 @@ import {
   intakeKnowledge,
   intakeFolderFromPath,
   intakeFilesFromBatch,
+  intakeRawHtml,
+  type RawHtmlIntakeRequest,
   KnowledgeCoreError,
   listArchivedItems,
   listArtifactRevisions,
@@ -127,6 +129,10 @@ import {
   getActiveAgentCredentials,
   listWorkspaceProposals,
   decideWorkspaceProposal,
+  initProxyDispatcher,
+  getCurrentProxy,
+  detectSystemProxy,
+  setManualProxy,
 } from '@zhijing/core';
 import { startOrchestratorSession, type OrchestratorSession } from '@zhijing/agent';
 import { getActiveRoutes, isRoutesOverriddenByEnv, buildRouteAdvisor } from '@zhijing/pi-runtime';
@@ -243,6 +249,37 @@ export function buildApi() {
     service: 'zhijing-api',
     timestamp: new Date().toISOString(),
   }));
+
+  app.get('/api/proxy', async () => {
+    const proxyUrl = getCurrentProxy();
+    const detected = detectSystemProxy();
+    return {
+      active: Boolean(proxyUrl),
+      proxyUrl,
+      detected,
+      mode: proxyUrl ? 'auto' : 'none',
+    };
+  });
+
+  app.post<{ Body: { proxyUrl?: string } }>('/api/proxy', async (request, reply) => {
+    const raw = typeof request.body?.proxyUrl === 'string' ? request.body.proxyUrl.trim() : '';
+    if (!raw) {
+      setManualProxy(undefined);
+      initProxyDispatcher();
+      return { ok: true, active: false, proxyUrl: undefined };
+    }
+    try {
+      const url = new URL(raw);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        return reply.code(400).send({ error: 'proxyUrl must be http or https.' });
+      }
+      setManualProxy(raw);
+      initProxyDispatcher();
+      return { ok: true, active: true, proxyUrl: raw };
+    } catch {
+      return reply.code(400).send({ error: 'Invalid proxyUrl.' });
+    }
+  });
 
   app.post('/api/system/reveal-data-dir', async () => {
     const result = await revealDataDirectory();
@@ -1786,6 +1823,28 @@ export function buildApi() {
       }
       request.log.error({ error }, 'file batch intake failed');
       return reply.code(500).send({ error: 'File batch intake failed.' });
+    }
+  });
+
+  app.post<{ Body: Partial<RawHtmlIntakeRequest> }>('/api/intake/raw-html', async (request, reply) => {
+    const html = typeof request.body?.html === 'string' ? request.body.html.trim() : '';
+    if (!html) {
+      return reply.code(400).send({ error: 'HTML content is required.' });
+    }
+    try {
+      const result = intakeRawHtml({
+        html,
+        title: typeof request.body?.title === 'string' ? request.body.title.trim() : undefined,
+        sourceUrl: typeof request.body?.sourceUrl === 'string' ? request.body.sourceUrl.trim() : undefined,
+        workspaceId: request.body?.workspaceId,
+      });
+      return result;
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'raw html intake failed');
+      return reply.code(500).send({ error: 'Raw HTML intake failed.' });
     }
   });
 

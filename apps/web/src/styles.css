@@ -1141,6 +1141,116 @@ button { cursor: pointer; }
   font-size: 11px;
 }
 
+.raw-html-import-modal {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.raw-html-import-hint {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  background: var(--surface-soft);
+  border-left: 3px solid var(--primary);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.raw-html-import-label {
+  display: block;
+  margin: 12px 0 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.raw-html-import-input {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.raw-html-import-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(44, 95, 141, 0.12);
+}
+
+.raw-html-import-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.raw-html-import-textarea {
+  width: 100%;
+  min-height: 240px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  resize: vertical;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.raw-html-import-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(44, 95, 141, 0.12);
+}
+
+.raw-html-import-textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.raw-html-import-error {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  background: rgba(255, 245, 243, 0.7);
+  border: 1px solid #e4c7c4;
+  border-radius: 8px;
+  color: #ba1a1a;
+  font-size: 13px;
+}
+
+.raw-html-import-success {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  background: rgba(107, 142, 127, 0.12);
+  border: 1px solid var(--sage);
+  border-radius: 8px;
+  color: var(--sage-text);
+  font-size: 13px;
+}
+
+.raw-html-import-modal .modal-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.raw-html-import-modal .modal-actions button.primary {
+  border: none;
+  background: var(--primary);
+  color: #fff;
+}
+
+.raw-html-import-modal .modal-actions button.primary:not(:disabled):hover {
+  background: #1f4a73;
+  box-shadow: 0 2px 8px rgba(44, 95, 141, 0.2);
+}
+
 .folder-import-modal .modal-mode-tabs {
   display: flex;
   gap: 8px;
@@ -5858,6 +5968,34 @@ button { cursor: pointer; }
 }
 
 .folder-import-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.raw-html-import-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--primary);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.raw-html-import-button:hover:not(:disabled) {
+  background: rgba(44, 95, 141, 0.08);
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(44, 95, 141, 0.12);
+}
+
+.raw-html-import-button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }

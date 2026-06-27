@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   BookOpen,
   ChevronRight,
+  ClipboardPaste,
   Clock3,
   FileText,
   FolderOpen,
@@ -37,6 +38,7 @@ import { workspaceTitle } from '../utils/knowledge';
 import CaptureSuccessBanner from '../components/CaptureSuccessBanner';
 import EmptyState from '../components/EmptyState';
 import FolderImportDialog from '../components/FolderImportDialog';
+import RawHtmlImportDialog from '../components/RawHtmlImportDialog';
 import ImportLifecyclePanel from '../components/ImportLifecyclePanel';
 import MaterialDetailDrawer from '../components/MaterialDetailDrawer';
 import MediaPreview from '../components/MediaPreview';
@@ -66,6 +68,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
   const { t } = useTranslation();
   const [drawerMaterial, setDrawerMaterial] = useState(null);
   const [folderImportOpen, setFolderImportOpen] = useState(false);
+  const [rawHtmlImportOpen, setRawHtmlImportOpen] = useState(false);
 
   const {
     items,
@@ -238,6 +241,15 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
             >
               <FolderOpen size={18} />
               {t('folderImport.button')}
+            </button>
+            <button
+              type="button"
+              className="raw-html-import-button"
+              disabled={apiStatus !== 'online'}
+              onClick={() => setRawHtmlImportOpen(true)}
+            >
+              <ClipboardPaste size={18} />
+              {t('rawHtmlImport.button')}
             </button>
           </div>
         </div>
@@ -460,6 +472,16 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
     <FolderImportDialog
       open={folderImportOpen}
       onClose={() => setFolderImportOpen(false)}
+      workspaceId={selectedWorkspaceId}
+      workspaceTitle={workspaceTitle(workspaces, selectedWorkspaceId)}
+      onImported={() => {
+        loadMaterials();
+        onMaterialMutation?.();
+      }}
+    />
+    <RawHtmlImportDialog
+      open={rawHtmlImportOpen}
+      onClose={() => setRawHtmlImportOpen(false)}
       workspaceId={selectedWorkspaceId}
       workspaceTitle={workspaceTitle(workspaces, selectedWorkspaceId)}
       onImported={() => {

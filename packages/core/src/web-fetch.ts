@@ -140,6 +140,22 @@ export async function fetchUrlAsMarkdown(sourceUrl: string): Promise<FetchedCont
 }
 
 /**
+ * 从用户粘贴的 HTML/源码直接提取 markdown（无需后端访问外网）。
+ *
+ * 使用场景：用户浏览器能打开页面但后端无法访问（受限网络、墙、登录态等）。
+ * 用户从浏览器 View Source 复制 HTML，粘贴到前端入口，后端直接复用 parseHtmlContent 解析。
+ *
+ * @param html - 原始 HTML 字符串（可为完整页面或片段）
+ * @param fallbackTitle - 标题回退值（如用户输入的页面标题）
+ * @returns 解析结果；内容过短时抛出错误
+ * @throws {Error} 内容过短
+ * @author fxbin
+ */
+export function parseRawHtml(html: string, fallbackTitle: string): FetchedContent {
+  return parseHtmlContent(html, fallbackTitle);
+}
+
+/**
  * 从 HTML 提取正文并转为 markdown。
  *
  * 使用 @mozilla/readability + linkedom 组合（无需 jsdom，更轻量）：

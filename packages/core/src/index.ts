@@ -134,7 +134,9 @@ import {
   type FileBatchIntakeRequest,
   type FileBatchIntakeResult,
 } from '@zhijing/shared';
-import { fetchUrlAsMarkdown } from './web-fetch.js';
+import { fetchUrlAsMarkdown, parseRawHtml } from './web-fetch.js';
+export { initProxyDispatcher, getCurrentProxy } from './fetch-dispatcher.js';
+export { detectSystemProxy, setManualProxy, resetProxyCache } from './proxy-detector.js';
 import {
   persistGeneratedProposals,
   getActiveProposals,
@@ -5393,6 +5395,96 @@ export function intakeFilesFromBatch(
     skipped,
     failed,
     items,
+  };
+}
+
+/**
+ * 粘贴 HTML 源码入料请求。
+ */
+export interface RawHtmlIntakeRequest {
+  /** 用户粘贴的 HTML/源码字符串 */
+  html: string;
+  /** 用户填写的标题（可选） */
+  title?: string;
+  /** 原始 URL（可选，仅用于记录 sourceUrl） */
+  sourceUrl?: string;
+  /** 工作区 ID；不传时落到 default */
+  workspaceId?: string;
+}
+
+/**
+ * 粘贴 HTML 源码入料结果。
+ */
+export interface RawHtmlIntakeResult {
+  /** 创建的 material 记录 */
+  material: MaterialRecord;
+  /** 解析状态：saved/ingested/failed */
+  parseStatus: MaterialRecord['parseStatus'];
+  /** 提取的标题 */
+  title: string;
+}
+
+/**
+ * 粘贴 HTML 源码入料（无需后端访问外网）。
+ *
+ * 使用场景：用户浏览器能打开页面但后端无法访问（受限网络、墙、登录态等）。
+ * 用户从浏览器 View Source 复制 HTML，粘贴到前端入口，后端复用 readability + turndown 解析。
+ *
+ * 流程：
+ * 1. 解析 HTML 为 markdown
+ * 2. 创建 type=text material（带 sourceUrl 但不抓取）
+ * 3. 直接标记为 ingested 状态（已解析）
+ *
+ * @param request 入料请求
+ * @returns 入料结果；HTML 过短时抛出 KnowledgeCoreError
+ * @throws {KnowledgeCoreError} HTML 内容过短或解析失败
+ * @author fxbin
+ */
+export function intakeRawHtml(request: RawHtmlIntakeRequest): RawHtmlIntakeResult {
+  const html = typeof request.html === 'string' ? request.html.trim() : '';
+  if (!html) {
+    throw new KnowledgeCoreError('HTML content is required.', 400);
+  }
+  if (html.length < 120) {
+    throw new KnowledgeCoreError('HTML content is too short for a reliable summary.', 400);
+  }
+
+  const fallbackTitle = request.title?.trim() || (request.sourceUrl ? titleFromLink(request.sourceUrl) : 'Pasted HTML');
+  let parsed: { title: string; text: string };
+  try {
+    const result = parseRawHtml(html, fallbackTitle);
+    parsed = { title: result.title, text: result.text };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to parse HTML.';
+    throw new KnowledgeCoreError(message, 400);
+  }
+
+  const workspaceId = resolveWorkspaceId(request.workspaceId);
+  const base = repository.findWorkspace(workspaceId);
+  if (!base) {
+    throw new KnowledgeCoreError(`Workspace not found: ${workspaceId}`, 404);
+  }
+
+  const timestamp = now();
+  const material: MaterialRecord = {
+    id: id('mat'),
+    workspaceId: base.id,
+    type: 'text',
+    rawInput: parsed.text,
+    sourceUrl: request.sourceUrl?.trim() || undefined,
+    title: parsed.title,
+    contentText: parsed.text,
+    mediaUrls: [],
+    parseStatus: 'ingested',
+    createdAt: timestamp,
+    statusTimeline: { capturedAt: timestamp, ingestedAt: timestamp },
+  };
+  repository.insertMaterial(material);
+
+  return {
+    material,
+    parseStatus: 'ingested',
+    title: parsed.title,
   };
 }
 
