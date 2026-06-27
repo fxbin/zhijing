@@ -87,6 +87,9 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
     setItems,
     setStatus,
     loadMaterials,
+    loadMore,
+    hasMore,
+    isLoadingMore,
   } = useLibraryDataState({ t, selectedWorkspaceId });
 
   const {
@@ -140,13 +143,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
     onParseMaterial,
   });
 
-  const filteredItems = items.filter((item) => {
-    if (filter === 'all') return true;
-    if (filter === 'failed' || filter === 'parsing') return item.parseStatus === filter;
-    return item.type === filter;
-  });
-
-  const visibleIds = filteredItems.map((item) => item.id);
+  const visibleIds = items.map((item) => item.id);
   const selectedVisibleCount = visibleIds.filter((id) => selectedIds.has(id)).length;
   const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
   const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected;
@@ -266,7 +263,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
             checked={allVisibleSelected}
             ref={(node) => { if (node) node.indeterminate = someVisibleSelected; }}
             onChange={() => toggleSelectAllVisible(visibleIds)}
-            disabled={filteredItems.length === 0}
+            disabled={items.length === 0}
           />
           <span>{selectedIds.size > 0 ? t('library.selectedCount', { count: selectedIds.size }) : t('library.selectAll')}</span>
         </label>
@@ -323,11 +320,12 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
 
       {isLoading ? (
         <EmptyState title={t('library.syncing')} body={t('library.syncingHint')} />
-      ) : filteredItems.length === 0 ? (
+      ) : items.length === 0 ? (
         <EmptyState title={t('library.noMatch')} body={t('library.noMatchHint')} />
       ) : (
+      <>
       <div className="library-grid">
-        {filteredItems.map((item) => {
+        {items.map((item) => {
           const Icon = materialIcon(item.type);
           const handleOpenDrawer = () => setDrawerMaterial(item);
           return (
@@ -445,6 +443,22 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
           );
         })}
       </div>
+      {hasMore && (
+        <div className="library-load-more">
+          <button
+            type="button"
+            className="library-load-more-button"
+            onClick={loadMore}
+            disabled={isLoadingMore}
+          >
+            {isLoadingMore ? t('common.loading') : t('library.loadMore')}
+          </button>
+        </div>
+      )}
+      {!hasMore && items.length > 0 && (
+        <div className="library-no-more">{t('library.noMore')}</div>
+      )}
+      </>
       )}
       {deleteConfirm && (
         <div className="modal-overlay" ref={deleteModalRef} onClick={(event) => { if (event.target === event.currentTarget) setDeleteConfirm(null); }} role="dialog" aria-modal="true">
