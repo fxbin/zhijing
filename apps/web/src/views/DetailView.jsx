@@ -14,6 +14,7 @@ import {
   ChevronUp,
   Filter,
   Search,
+  ShieldCheck,
   Sparkles,
   Users,
 } from 'lucide-react';
@@ -410,21 +411,63 @@ export default function DetailView({
           </section>
         )}
         {analytics && (
-          <section className="source-health">
-            <div>
-              <strong>{t('detail.sourceHealth')}</strong>
-              <span>{analytics.generatedAt ? formatTime(analytics.generatedAt) : t('detail.now')}</span>
-            </div>
-            <div className="health-list">
-              {statusDistribution.map((item) => (
-                <p key={item.name}><span>{item.name}</span><strong>{item.count}</strong></p>
-              ))}
-            </div>
-            <div className="health-list muted">
-              {platformDistribution.map((item) => (
-                <p key={item.name}><span>{item.name}</span><strong>{item.count}</strong></p>
-              ))}
-            </div>
+          <section className="source-health" aria-label={t('detail.sourceHealth')}>
+            <header className="source-health-head">
+              <span className="source-health-title">
+                <ShieldCheck size={18} />
+                <strong>{t('detail.sourceHealth')}</strong>
+              </span>
+              <span className="source-health-meta">
+                {analytics.generatedAt ? formatTime(analytics.generatedAt) : t('detail.now')}
+              </span>
+            </header>
+            <p className="source-health-hint">{t('detail.sourceHealthHint')}</p>
+            {statusDistribution.length === 0 && platformDistribution.length === 0 ? (
+              <p className="source-health-empty">{t('detail.sourceHealthEmpty')}</p>
+            ) : (
+              <>
+                {statusDistribution.length > 0 && (
+                  <div className="source-health-block">
+                    <small className="source-health-block-label">{t('detail.statusDistribution')}</small>
+                    <div className="source-health-bars">
+                      {statusDistribution.map((item) => {
+                        const total = statusDistribution.reduce((sum, it) => sum + it.count, 0);
+                        const ratio = total > 0 ? Math.round((item.count / total) * 100) : 0;
+                        const statusKey = item.name || 'unknown';
+                        return (
+                          <div className="source-health-bar-row" key={item.name}>
+                            <span className="source-health-bar-label">{parseStatusLabel(statusKey)}</span>
+                            <div className="source-health-bar-track">
+                              <div
+                                className={`source-health-bar-fill status-${statusKey}`}
+                                style={{ width: `${ratio}%` }}
+                              />
+                            </div>
+                            <span className="source-health-bar-count">
+                              <strong>{item.count}</strong>
+                              <small>{ratio}%</small>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {platformDistribution.length > 0 && (
+                  <div className="source-health-block">
+                    <small className="source-health-block-label">{t('detail.platformDistribution')}</small>
+                    <div className="source-health-chips">
+                      {platformDistribution.map((item) => (
+                        <span className="source-health-chip" key={item.name}>
+                          <span className="source-health-chip-name">{item.name || 'unknown'}</span>
+                          <span className="source-health-chip-count">{item.count}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </section>
         )}
         <TaskStatus task={latestTask} />

@@ -4310,45 +4310,190 @@ button { cursor: pointer; }
 
 .source-health {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   border: 1px solid var(--line-soft);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.58);
-  padding: 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 18px 20px;
+  margin: -6px 0 24px;
+  box-shadow: 0 1px 3px rgba(9, 20, 38, 0.04);
+  transition: box-shadow 0.2s ease;
 }
 
-.source-health > div:first-child {
+.source-health:hover {
+  box-shadow: 0 4px 14px rgba(9, 20, 38, 0.08);
+}
+
+.source-health-head {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.source-health strong {
+.source-health-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   color: var(--primary);
 }
 
-.source-health span {
+.source-health-title strong {
+  font-size: 15px;
+  color: var(--primary);
+}
+
+.source-health-meta {
   color: var(--muted);
   font-size: 12px;
 }
 
-.health-list {
-  display: grid;
-  gap: 7px;
-}
-
-.health-list p {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+.source-health-hint {
   margin: 0;
-  color: var(--primary);
+  color: var(--muted);
   font-size: 13px;
+  line-height: 1.5;
 }
 
-.health-list.muted {
+.source-health-empty {
+  margin: 0;
+  padding: 18px 12px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  background: var(--surface-soft);
+  border-radius: 9px;
+}
+
+.source-health-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.source-health-block + .source-health-block {
+  padding-top: 12px;
   border-top: 1px solid var(--line-soft);
-  padding-top: 10px;
+}
+
+.source-health-block-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.source-health-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.source-health-bar-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 64px;
+  align-items: center;
+  gap: 12px;
+}
+
+.source-health-bar-label {
+  color: var(--text);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-health-bar-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  overflow: hidden;
+}
+
+.source-health-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--muted);
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.source-health-bar-fill.status-ingested,
+.source-health-bar-fill.status-sourced {
+  background: var(--sage, #6B8E7F);
+}
+
+.source-health-bar-fill.status-parsing,
+.source-health-bar-fill.status-pending {
+  background: var(--primary, #2C5F8D);
+}
+
+.source-health-bar-fill.status-failed,
+.source-health-bar-fill.status-error {
+  background: #ba1a1a;
+}
+
+.source-health-bar-fill.status-saved,
+.source-health-bar-fill.status-archived {
+  background: var(--muted);
+}
+
+.source-health-bar-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  justify-self: end;
+  white-space: nowrap;
+}
+
+.source-health-bar-count strong {
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.source-health-bar-count small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.source-health-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.source-health-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(44, 95, 141, 0.08);
+  border: 1px solid rgba(44, 95, 141, 0.2);
+  color: var(--primary);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.source-health-chip-name {
+  font-weight: 600;
+}
+
+.source-health-chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .chat-user {
