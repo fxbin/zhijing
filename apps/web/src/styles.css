@@ -14169,6 +14169,164 @@ button { cursor: pointer; }
   opacity: 0.7;
 }
 
+.weread-quadrant-section {
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.weread-quadrant-section h2 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--scholar-blue, #2C5F8D);
+}
+
+.quadrant-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.quadrant-grid-warning {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(212, 148, 74, 0.12);
+  color: #8a5a1a;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.quadrant-grid-loading,
+.quadrant-grid-empty,
+.quadrant-grid-error {
+  margin: 0;
+  padding: 20px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.quadrant-grid-error {
+  color: #ba1a1a;
+}
+
+.quadrant-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.6);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.quadrant-card.is-seed {
+  border-color: var(--scholar-blue, #2C5F8D);
+  box-shadow: 0 2px 10px rgba(44, 95, 141, 0.1);
+}
+
+.quadrant-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.quadrant-card-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.quadrant-card.is-seed .quadrant-card-header h3 {
+  color: var(--scholar-blue, #2C5F8D);
+}
+
+.quadrant-seed-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--sage-green, #6B8E7F);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.quadrant-card-description {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.quadrant-card-empty {
+  margin: 0;
+  padding: 12px 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--muted);
+  text-align: center;
+}
+
+.quadrant-card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quadrant-card-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(44, 95, 141, 0.04);
+  font-size: 12px;
+}
+
+.quadrant-card-bookid {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.quadrant-card-percentile {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--scholar-blue, #2C5F8D);
+}
+
+.quadrant-card-more {
+  margin: 0;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: right;
+}
+
+@media (max-width: 720px) {
+  .quadrant-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .weread-stats-band {
   border: 1px solid var(--line-soft);
   border-radius: 12px;
