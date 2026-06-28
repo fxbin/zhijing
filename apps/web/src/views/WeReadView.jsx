@@ -1092,6 +1092,7 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
         title: book.title,
         onShelf: true,
         finishReading: book.finishReading === 1,
+        hasReadActivity: book.readUpdateTime != null,
         highlightCount: bookmarkCount,
         noteCharCount: reviewCount * 80,
         chapterCount: Math.max(1, book.chapterCount ?? 1),

@@ -12205,6 +12205,7 @@ function buildQuadrantInputsFromMeta(rows: WeReadBookMetaRow[]): BookSignalInput
     title: row.title,
     onShelf: row.presentOnShelf === 1,
     finishReading: row.finishReading === 1,
+    hasReadActivity: row.readUpdateTime != null,
     highlightCount: row.bookmarkCount ?? 0,
     noteCharCount: (row.reviewCount ?? 0) * NOTE_CHARS_PER_REVIEW,
     chapterCount: Math.max(MIN_CHAPTER_COUNT, row.chapterCount ?? MIN_CHAPTER_COUNT),

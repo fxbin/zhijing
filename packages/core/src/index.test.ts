@@ -200,6 +200,7 @@ describe('note_depth raw formula', () => {
         bookId: 'b1',
         onShelf: true,
         finishReading: false,
+        hasReadActivity: true,
         highlightCount: 30,
         noteCharCount: 1200,
         chapterCount: 10,
@@ -217,6 +218,7 @@ describe('note_depth raw formula', () => {
         bookId: 'b2',
         onShelf: false,
         finishReading: false,
+        hasReadActivity: false,
         highlightCount: 0,
         noteCharCount: 0,
         chapterCount: 0,
@@ -247,14 +249,14 @@ describe('rolling percentile', () => {
 describe('quadrant summary', () => {
   test('classifies books into four quadrants and produces recommendation seeds', () => {
     const inputs = [
-      { bookId: 'a', onShelf: true, finishReading: false, highlightCount: 80, noteCharCount: 2000, chapterCount: 10, hasLongReview: true },
-      { bookId: 'b', onShelf: true, finishReading: false, highlightCount: 1, noteCharCount: 0, chapterCount: 10, hasLongReview: false },
-      { bookId: 'c', onShelf: false, finishReading: false, highlightCount: 50, noteCharCount: 800, chapterCount: 8, hasLongReview: false },
-      { bookId: 'd', onShelf: false, finishReading: false, highlightCount: 0, noteCharCount: 0, chapterCount: 5, hasLongReview: false },
-      { bookId: 'e', onShelf: true, finishReading: true, highlightCount: 60, noteCharCount: 1500, chapterCount: 12, hasLongReview: true },
-      { bookId: 'f', onShelf: true, finishReading: false, highlightCount: 5, noteCharCount: 50, chapterCount: 8, hasLongReview: false },
-      { bookId: 'g', onShelf: false, finishReading: false, highlightCount: 20, noteCharCount: 100, chapterCount: 6, hasLongReview: false },
-      { bookId: 'h', onShelf: true, finishReading: false, highlightCount: 30, noteCharCount: 600, chapterCount: 9, hasLongReview: false },
+      { bookId: 'a', onShelf: true, finishReading: false, hasReadActivity: true, highlightCount: 80, noteCharCount: 2000, chapterCount: 10, hasLongReview: true },
+      { bookId: 'b', onShelf: true, finishReading: false, hasReadActivity: true, highlightCount: 1, noteCharCount: 0, chapterCount: 10, hasLongReview: false },
+      { bookId: 'c', onShelf: false, finishReading: false, hasReadActivity: true, highlightCount: 50, noteCharCount: 800, chapterCount: 8, hasLongReview: false },
+      { bookId: 'd', onShelf: false, finishReading: false, hasReadActivity: false, highlightCount: 0, noteCharCount: 0, chapterCount: 5, hasLongReview: false },
+      { bookId: 'e', onShelf: true, finishReading: true, hasReadActivity: true, highlightCount: 60, noteCharCount: 1500, chapterCount: 12, hasLongReview: true },
+      { bookId: 'f', onShelf: true, finishReading: false, hasReadActivity: true, highlightCount: 5, noteCharCount: 50, chapterCount: 8, hasLongReview: false },
+      { bookId: 'g', onShelf: false, finishReading: false, hasReadActivity: true, highlightCount: 20, noteCharCount: 100, chapterCount: 6, hasLongReview: false },
+      { bookId: 'h', onShelf: true, finishReading: false, hasReadActivity: true, highlightCount: 30, noteCharCount: 600, chapterCount: 9, hasLongReview: false },
     ];
     const summary = computeQuadrantSummary(inputs);
     assert.ok(summary.irrelevant >= 1, 'at least one off-shelf shallow book should be irrelevant');
@@ -268,7 +270,7 @@ describe('quadrant summary', () => {
 
   test('flags insufficientData when input size below threshold', () => {
     const inputs = [
-      { bookId: 'x', onShelf: true, finishReading: false, highlightCount: 5, noteCharCount: 100, chapterCount: 5, hasLongReview: false },
+      { bookId: 'x', onShelf: true, finishReading: false, hasReadActivity: true, highlightCount: 5, noteCharCount: 100, chapterCount: 5, hasLongReview: false },
     ];
     const summary = computeQuadrantSummary(inputs);
     assert.equal(summary.insufficientData, true);
@@ -288,6 +290,23 @@ describe('quadrant summary', () => {
     assert.equal(summary.irrelevant, 0);
     assert.equal(summary.insufficientData, true);
     assert.deepEqual(summary.recommendationSeeds, []);
+  });
+
+  test('routes on-shelf never-opened and on-shelf finished shallow books to irrelevant instead of commitment_debt', () => {
+    const inputs = [
+      { bookId: 'deep1', onShelf: true, finishReading: false, hasReadActivity: true, highlightCount: 80, noteCharCount: 2000, chapterCount: 10, hasLongReview: true },
+      { bookId: 'deep2', onShelf: true, finishReading: false, hasReadActivity: true, highlightCount: 70, noteCharCount: 1800, chapterCount: 10, hasLongReview: true },
+      { bookId: 'deep3', onShelf: false, finishReading: false, hasReadActivity: true, highlightCount: 60, noteCharCount: 1500, chapterCount: 9, hasLongReview: false },
+      { bookId: 'deep4', onShelf: true, finishReading: true, hasReadActivity: true, highlightCount: 50, noteCharCount: 1200, chapterCount: 8, hasLongReview: true },
+      { bookId: 'p1', onShelf: true, finishReading: false, hasReadActivity: true, highlightCount: 1, noteCharCount: 0, chapterCount: 10, hasLongReview: false },
+      { bookId: 'p2', onShelf: true, finishReading: false, hasReadActivity: false, highlightCount: 0, noteCharCount: 0, chapterCount: 10, hasLongReview: false },
+      { bookId: 'p3', onShelf: true, finishReading: true, hasReadActivity: true, highlightCount: 2, noteCharCount: 0, chapterCount: 10, hasLongReview: false },
+      { bookId: 'p4', onShelf: false, finishReading: false, hasReadActivity: false, highlightCount: 0, noteCharCount: 0, chapterCount: 5, hasLongReview: false },
+    ];
+    const summary = computeQuadrantSummary(inputs);
+    const debtIds = summary.commitmentDebt.map((r) => r.bookId);
+    assert.deepEqual(debtIds, ['p1'], 'only on-shelf + unfinished + has-read-activity + shallow should be commitment_debt');
+    assert.ok(summary.irrelevant >= 3, 'p2/p3/p4 should all fall into irrelevant');
   });
 });
 

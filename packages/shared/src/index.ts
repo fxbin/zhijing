@@ -2207,6 +2207,11 @@ export interface BookSignalInputs {
    */
   finishReading: boolean;
   /**
+   * 是否有阅读痕迹（read_update_time 非空，即至少翻开过一次）
+   * 用于区分「在书架从未打开」与「在书架翻过但未读完」两种状态
+   */
+  hasReadActivity: boolean;
+  /**
    * 划线条数
    */
   highlightCount: number;
