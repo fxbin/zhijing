@@ -11692,7 +11692,12 @@ export async function importWeReadBook(bookId: string, workspaceId?: string): Pr
 const WEREAD_SYNC_STALE_MS = 10 * 60 * 1000;
 
 /**
- * 同步微信读书书架到本地缓存（SWR 模式）。
+ * 同步微信读书书架到本地缓存（SWR 模式 + updateTime 增量短路）。
+ *
+ * 同步策略（按优先级）：
+ * 1. 时间窗节流：非 force 模式下，距上次同步不足 10 分钟则跳过远端请求
+ * 2. updateTime 短路：拉取远端 shelf 后，若 shelf.updateTime 与本地一致则跳过全量 upsert
+ * 3. 全量 upsert + 软删除：updateTime 变化时对所有书做 upsert，不在 shelf 中的书标记下架
  *
  * @param force - true 时强制全量同步，忽略时间窗与 updateTime 短路
  * @returns 同步结果摘要
@@ -11729,6 +11734,29 @@ export async function syncWeReadShelf(force = false): Promise<{
   try {
     const shelf = await client.getShelf();
 
+    const remoteUpdateTime = shelf.updateTime ?? null;
+    const localUpdateTime = existingState?.shelfUpdateTime ?? null;
+
+    if (
+      !force &&
+      remoteUpdateTime !== null &&
+      localUpdateTime !== null &&
+      remoteUpdateTime === localUpdateTime
+    ) {
+      repository.writeWeReadSyncState({
+        shelfUpdateTime: localUpdateTime,
+        totalBooks: existingState?.totalBooks ?? shelf.books?.length ?? 0,
+        lastFullSyncAt: now(),
+        lastSyncError: null,
+      });
+      return {
+        synced: false,
+        totalBooks: existingState?.totalBooks ?? shelf.books?.length ?? 0,
+        skipped: true,
+        error: null,
+      };
+    }
+
     const archiveYearMap = new Map<string, string>();
     for (const archive of shelf.archive ?? []) {
       for (const bookId of archive.bookIds ?? []) {
@@ -11740,7 +11768,7 @@ export async function syncWeReadShelf(force = false): Promise<{
 
     const totalBooks = shelf.books?.length ?? 0;
     repository.writeWeReadSyncState({
-      shelfUpdateTime: shelf.updateTime ?? null,
+      shelfUpdateTime: remoteUpdateTime,
       totalBooks,
       lastFullSyncAt: now(),
       lastSyncError: null,
