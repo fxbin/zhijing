@@ -305,19 +305,26 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
    * 向当前选中工作区发起 SSE 流式 Agent 对话。
    *
    * 状态变更顺序：
-   * 1. 立即追加 user 消息 + assistant 占位消息（isStreaming=true）
-   * 2. reasoning_delta 事件增量累加 assistant.reasoning
-   * 3. message_delta 事件增量累加 assistant.text
-   * 4. tool_start/tool_end 事件维护 assistant.toolCalls 列表（含 result 文本）
-   * 5. message_end 用服务端最终文本兜底
-   * 6. error 事件把错误文案写入 assistant.error
-   * 7. 流结束统一把 assistant.isStreaming 置为 false
+   * 1. （可选）retry 模式下先移除被重试的 user 消息及其后续
+   * 2. 立即追加 user 消息 + assistant 占位消息（isStreaming=true）
+   * 3. reasoning_delta 事件增量累加 assistant.reasoning
+   * 4. message_delta 事件增量累加 assistant.text
+   * 5. tool_start/tool_end 事件维护 assistant.toolCalls 列表（含 result 文本）
+   * 6. message_end 用服务端最终文本兜底
+   * 7. error 事件把错误文案写入 assistant.error
+   * 8. 流结束统一把 assistant.isStreaming 置为 false
    *
    * @param {string} text - 用户输入文本
+   * @param {object} [options] - 选项对象
+   * @param {boolean} [options.retry=false] - 是否为「重试上一条」模式；
+   *                                          true 时会在请求体带上 retryLastTurn 标志，
+   *                                          让后端同步截断 sessionStore 中最后一条 user 消息
+   * @param {string} [options.retryUserId] - 被重试的 user 消息 id；
+   *                                          提供时会在追加新消息前先从 chatMessages 移除该消息及其后续
    * @returns {Promise<void>}
    * @author fxbin
    */
-  const streamAsk = useCallback(async (text) => {
+  const streamAsk = useCallback(async (text, options = {}) => {
     const trimmed = (text ?? '').trim();
     if (!trimmed || !selectedWorkspaceId || apiStatus !== API_STATUS_ONLINE || isStreaming) return;
 
@@ -332,6 +339,15 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
 
     setOrchestratorMode(DEFAULT_ORCHESTRATOR_MODE);
     setOrchestratorReason('');
+
+    if (options.retryUserId) {
+      const retryUserId = options.retryUserId;
+      setChatMessages((prev) => {
+        const targetIndex = prev.findIndex((message) => message.id === retryUserId && message.role === ROLE_USER);
+        if (targetIndex < 0) return prev;
+        return prev.slice(0, targetIndex);
+      });
+    }
 
     const userTimestamp = Date.now();
     const assistantTimestamp = userTimestamp + 1;
@@ -359,7 +375,7 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     try {
       response = await api.raw(`${WORKSPACES_PATH}/${selectedWorkspaceId}/agent/stream`, {
         method: 'POST',
-        body: { message: trimmed, sessionId, isWriting: false },
+        body: { message: trimmed, sessionId, isWriting: false, retryLastTurn: options.retry === true },
         timeout: STREAM_TIMEOUT_DISABLED,
         signal: controller.signal,
       });
@@ -601,6 +617,27 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     removeSessionId(targetWorkspaceId);
   }, [selectedWorkspaceId]);
 
+  /**
+   * 重试指定的 user 消息：从 chatMessages 中读取该消息的文本，
+   * 然后调用 streamAsk 携带 retry 标志重新发起流式请求。
+   *
+   * streamAsk 内部会先从 chatMessages 中移除该 user 消息及其后续 assistant/tool 消息，
+   * 再追加新的 user + assistant 占位；同时通过 retryLastTurn 标志让后端同步截断
+   * sessionStore 中最后一条 user 消息，等价于「重答上一条」。
+   *
+   * 流式对话进行中或消息不存在时静默返回。
+   *
+   * @param {string} userId - 被重试的 user 消息 id
+   * @returns {Promise<void>}
+   * @author fxbin
+   */
+  const retryLastMessage = useCallback(async (userId) => {
+    if (!userId || isStreaming) return;
+    const target = chatMessages.find((message) => message.id === userId && message.role === ROLE_USER);
+    if (!target) return;
+    await streamAsk(target.text, { retry: true, retryUserId: userId });
+  }, [chatMessages, isStreaming, streamAsk]);
+
   return {
     chatMessages,
     isStreaming,
@@ -610,5 +647,6 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     streamAsk,
     abortStream,
     clearChat,
+    retryLastMessage,
   };
 }

@@ -420,6 +420,71 @@ export function clearAgentSession(sessionId: string): void {
 }
 
 /**
+ * 「重试上一条」的截断结果。
+ */
+export interface RetryTurnResult {
+  /** 是否成功截断（sessionId 不存在 / workspaceId 不匹配 / 找不到 user 消息时为 false） */
+  ok: boolean;
+  /** 截断前的消息总数 */
+  beforeCount: number;
+  /** 截断后剩余的消息数 */
+  remainingCount: number;
+  /** 是否真的丢弃了 user 消息及其后续 */
+  truncated: boolean;
+}
+
+/**
+ * 截断会话到最后一条 user 消息之前，丢弃该 user 消息及其后续所有 assistant/toolResult。
+ *
+ * 用于「重试上一条」：调用方随后会带着相同 message 走 /agent/stream，
+ * startOrchestratorSession 会读取此处截断后的 messages 作为 priorMessages，
+ * prompt(message) 自动追加新 user 消息 → 等价于重答上一条。
+ *
+ * 静默失败场景（返回 ok=false，不阻断后续流程）：
+ * - sessionId 为空
+ * - sessionStore 中无对应记录
+ * - workspaceId 与 sessionStore 中记录不匹配
+ * - messages 中找不到任何 role="user" 的消息
+ *
+ * @param sessionId - 会话 id
+ * @param workspaceId - 工作区 id（必须匹配 sessionStore 中的记录）
+ * @returns 截断结果
+ * @author fxbin
+ */
+export function truncateSessionForRetry(
+  sessionId: string,
+  workspaceId: string,
+): RetryTurnResult {
+  if (!sessionId) {
+    return { ok: false, beforeCount: 0, remainingCount: 0, truncated: false };
+  }
+  const record = sessionStore.get(sessionId);
+  if (!record || record.workspaceId !== workspaceId) {
+    return { ok: false, beforeCount: 0, remainingCount: 0, truncated: false };
+  }
+  const messages = record.messages;
+  let lastUserIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].role === 'user') {
+      lastUserIndex = i;
+      break;
+    }
+  }
+  if (lastUserIndex < 0) {
+    return { ok: false, beforeCount: messages.length, remainingCount: messages.length, truncated: false };
+  }
+  const remaining = messages.slice(0, lastUserIndex);
+  record.messages = remaining;
+  record.lastUsedAt = Date.now();
+  return {
+    ok: true,
+    beforeCount: messages.length,
+    remainingCount: remaining.length,
+    truncated: true,
+  };
+}
+
+/**
  * 列出当前缓存的会话信息。
  * 可选 workspaceId 过滤；返回按 lastUsedAt 倒序。
  *

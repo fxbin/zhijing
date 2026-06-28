@@ -67,6 +67,7 @@ export {
   startOrchestratorSession,
   clearAgentSession,
   listAgentSessions,
+  truncateSessionForRetry,
 } from './orchestrator-session.js';
 export type {
   OrchestratorCredentials,
@@ -74,4 +75,5 @@ export type {
   OrchestratorRunCallbacks,
   OrchestratorSession,
   AgentSessionInfo,
+  RetryTurnResult,
 } from './orchestrator-session.js';

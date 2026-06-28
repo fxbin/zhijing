@@ -47,6 +47,7 @@ const DOCK_STORAGE_KEY = 'zhijing-chat-dock';
  * @param {object[]} [props.chatMessages=[]] - 流式对话消息列表（useStreamChat 维护）
  * @param {boolean} [props.isStreaming=false] - 流式对话运行态
  * @param {() => void} [props.onClearChat] - 清空流式对话回调
+ * @param {(userId: string) => void} [props.onRetryMessage] - 重试上一条流式对话回调
  * @param {() => void} [props.onAbortStream] - 中断当前流式对话回调
  * @param {string} [props.orchestratorMode=''] - 当前编排模式英文标识（mirror/catalyst/navigator）
  * @param {(artifact: object, meta?: object) => void} props.onOpenArtifact - 打开产物回调
@@ -72,6 +73,7 @@ export default function GlobalChatDock({
   orchestratorMode = '',
   orchestratorReason = '',
   onClearChat,
+  onRetryMessage,
   onAbortStream,
   onOpenArtifact,
   onSelectWorkspace,
@@ -214,6 +216,8 @@ export default function GlobalChatDock({
                 materials={materials}
                 proposedCardsState={proposedCardsState}
                 onOpenArtifact={onOpenArtifact}
+                onRetry={onRetryMessage}
+                isStreaming={isStreaming}
               />
             ))}
             {orchestratorMode === 'catalyst' && hasStreamPath && threadItems.length > 0 && canAsk && (

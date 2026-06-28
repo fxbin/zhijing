@@ -10364,6 +10364,41 @@ button { cursor: pointer; }
   justify-content: flex-end;
 }
 
+.chat-message-user {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.chat-message-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.chat-message-retry-btn:hover {
+  color: var(--scholar);
+  border-color: var(--scholar);
+  background: var(--scholar-soft);
+}
+
+.chat-message-retry-btn:active {
+  transform: translateY(1px);
+}
+
+.chat-message-retry-btn svg {
+  flex-shrink: 0;
+}
+
 .chat-stream-user .chat-stream-text,
 .chat-message-user .chat-message-text {
   max-width: 80%;

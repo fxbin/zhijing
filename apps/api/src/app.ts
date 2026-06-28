@@ -135,7 +135,7 @@ import {
   detectSystemProxy,
   setManualProxy,
 } from '@zhijing/core';
-import { startOrchestratorSession, type OrchestratorSession } from '@zhijing/agent';
+import { startOrchestratorSession, truncateSessionForRetry, type OrchestratorSession } from '@zhijing/agent';
 import { getActiveRoutes, isRoutesOverriddenByEnv, buildRouteAdvisor } from '@zhijing/pi-runtime';
 import type {
   AddMapEdgeRequest,
@@ -1469,7 +1469,7 @@ export function buildApi() {
     }
   });
 
-  app.post<{ Params: { id: string }; Body: { message?: string; sessionId?: string; isWriting?: boolean } }>(
+  app.post<{ Params: { id: string }; Body: { message?: string; sessionId?: string; isWriting?: boolean; retryLastTurn?: boolean } }>(
     '/api/workspaces/:id/agent/stream',
     async (request, reply) => {
       const message = typeof request.body?.message === 'string' ? request.body.message.trim() : '';
@@ -1480,6 +1480,22 @@ export function buildApi() {
         ? request.body.sessionId
         : `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       const isWriting = Boolean(request.body?.isWriting);
+      const retryRequested = Boolean(request.body?.retryLastTurn);
+
+      if (retryRequested) {
+        const retryResult = truncateSessionForRetry(sessionId, request.params.id);
+        if (retryResult.truncated) {
+          request.log.info(
+            { sessionId, workspaceId: request.params.id, before: retryResult.beforeCount, remaining: retryResult.remainingCount },
+            'agent retry: session truncated before last user message',
+          );
+        } else {
+          request.log.info(
+            { sessionId, workspaceId: request.params.id, reason: 'no-op' },
+            'agent retry: session missing or no user message, fallback to fresh turn',
+          );
+        }
+      }
 
       reply.hijack();
       reply.raw.writeHead(200, {

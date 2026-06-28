@@ -13,7 +13,7 @@
  * @author fxbin
  */
 
-import { Loader2, Sparkles, SquareArrowOutUpRight, Wrench } from 'lucide-react';
+import { Loader2, RotateCcw, Sparkles, SquareArrowOutUpRight, Wrench } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCardTypeLabel } from '../utils/i18nLabels';
 import { renderMarkdown } from '../utils/markdown';
@@ -136,6 +136,8 @@ function ToolResultDetails({ toolName, details, t }) {
  * @param {Array<object>} [props.materials=[]] - 工作区资料列表（引用渲染查找）
  * @param {object} [props.proposedCardsState] - 提议卡片交互状态（useProposedCards 返回值）
  * @param {(artifact: object, meta?: object) => void} [props.onOpenArtifact] - 打开产物回调
+ * @param {(userId: string) => void} [props.onRetry] - 重试该 user 消息回调
+ * @param {boolean} [props.isStreaming=false] - 当前流式对话运行态；运行中隐藏重试按钮
  * @returns {JSX.Element} 消息渲染节点
  * @author fxbin
  */
@@ -145,14 +147,28 @@ export default function ChatMessageItem({
   materials = [],
   proposedCardsState,
   onOpenArtifact,
+  onRetry,
+  isStreaming = false,
 }) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
 
   if (item.role === 'user') {
+    const canRetry = typeof onRetry === 'function' && !isStreaming && !item.isStreaming;
     return (
       <div className="chat-message-item chat-message-user">
         <p className="chat-message-text">{item.userText}</p>
+        {canRetry && (
+          <button
+            type="button"
+            className="chat-message-retry-btn"
+            onClick={() => onRetry(item.id)}
+            title={t('chat.retryHint')}
+          >
+            <RotateCcw size={13} />
+            {t('chat.retry')}
+          </button>
+        )}
       </div>
     );
   }

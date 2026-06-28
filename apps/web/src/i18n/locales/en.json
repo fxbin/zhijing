@@ -214,6 +214,8 @@
   "chat.askPlaceholderOffline": "Select a workspace and keep API online to ask.",
   "chat.askPlaceholderOnline": "Ask this workspace...",
   "chat.auxProbeTitle": "You might also want to know",
+  "chat.retry": "Retry",
+  "chat.retryHint": "Regenerate the answer to the same question",
   "chat.assistantOnboarding": "Assistant Onboarding",
   "chat.backToWorkspace": "Back to Workspace",
   "chat.citations": "Citations",

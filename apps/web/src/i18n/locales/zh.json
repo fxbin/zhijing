@@ -214,6 +214,8 @@
   "chat.askPlaceholderOffline": "选择一个工作区并保持 API 在线以提问。",
   "chat.askPlaceholderOnline": "向该工作区提问...",
   "chat.auxProbeTitle": "可能还想知道",
+  "chat.retry": "重试",
+  "chat.retryHint": "用同样的问题重新生成回答",
   "chat.assistantOnboarding": "助手引导",
   "chat.backToWorkspace": "返回工作区",
   "chat.citations": "引用来源",

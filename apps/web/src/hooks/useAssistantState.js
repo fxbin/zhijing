@@ -100,6 +100,7 @@ export function useAssistantState({
     streamAsk: streamAskRaw,
     abortStream,
     clearChat,
+    retryLastMessage,
   } = useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t });
 
   /**
@@ -220,5 +221,6 @@ export function useAssistantState({
     streamAsk,
     abortStream,
     clearChat,
+    retryLastMessage,
   };
 }
