@@ -452,6 +452,7 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
                 toolName: event.toolName,
                 isError: Boolean(event.isError),
                 result: typeof event.result === 'string' ? event.result : '',
+                details: event.details,
                 isStreaming: false,
               });
               syncToolCallsToMessage();

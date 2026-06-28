@@ -1609,7 +1609,7 @@ export type AgentStreamEvent =
   | { type: 'reasoning_delta'; delta: string }
   | { type: 'message_end'; text: string }
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
-  | { type: 'tool_end'; toolCallId: string; toolName: string; isError: boolean; result: string }
+  | { type: 'tool_end'; toolCallId: string; toolName: string; isError: boolean; result: string; details?: unknown }
   | { type: 'mode_update'; mode: string; reason: string; suggestedAction: string }
   | { type: 'aux_start' }
   | { type: 'aux_delta'; delta: string }

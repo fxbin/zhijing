@@ -56,6 +56,24 @@ function extractToolResultText(result: unknown): string {
 }
 
 /**
+ * 从 AgentToolResult.details 中提取结构化结果，供前端按工具类型定向渲染。
+ *
+ * 仅当 details 为非空对象时透传，避免把 null / undefined 一并写入 wire。
+ * 工具实现保证 details 已做 JSON-safe 序列化（无函数 / 循环引用）。
+ *
+ * @param result - 工具执行结果（AgentToolResult）
+ * @returns 结构化 details；无 details 时返回 undefined
+ * @author fxbin
+ */
+function extractToolResultDetails(result: unknown): unknown {
+  if (!result || typeof result !== 'object') return undefined;
+  const details = (result as { details?: unknown }).details;
+  if (details === null || typeof details === 'undefined') return undefined;
+  if (typeof details !== 'object') return undefined;
+  return details;
+}
+
+/**
  * 将 pi-agent-core 的 AgentEvent 转换为前端可消费的 wire 事件。
  *
  * 处理细节：
@@ -108,6 +126,7 @@ export function serializeAgentEvent(event: AgentEvent): AgentStreamEvent[] {
         toolName: event.toolName,
         isError: event.isError,
         result: extractToolResultText(event.result),
+        details: extractToolResultDetails(event.result),
       }];
     default:
       return [];

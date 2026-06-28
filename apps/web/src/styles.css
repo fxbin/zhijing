@@ -10687,6 +10687,121 @@ button { cursor: pointer; }
   overflow-y: auto;
 }
 
+.chat-message-tool-args,
+.chat-message-tool-structured {
+  margin-left: 4px;
+}
+
+.chat-stream-tool-args summary,
+.chat-message-tool-args summary,
+.chat-message-tool-structured summary {
+  font-size: 11px;
+  color: var(--color-text-secondary, #999);
+  cursor: pointer;
+  user-select: none;
+}
+
+.chat-stream-tool-args-text,
+.chat-message-tool-args-text,
+.chat-message-tool-details-text {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-text-secondary, #666);
+  background: var(--color-bg-soft, rgba(0, 0, 0, 0.03));
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.chat-tool-cards-list,
+.chat-tool-materials-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.chat-tool-cards-list li,
+.chat-tool-materials-list li {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--color-bg-soft, rgba(0, 0, 0, 0.03));
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-primary, #333);
+}
+
+.chat-tool-card-type,
+.chat-tool-material-platform,
+.chat-tool-material-status {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--scholar-soft, rgba(44, 95, 141, 0.12));
+  color: var(--scholar, #2c5f8d);
+}
+
+.chat-tool-card-title,
+.chat-tool-material-title {
+  font-weight: 600;
+  color: var(--color-text-primary, #333);
+}
+
+.chat-tool-card-body,
+.chat-tool-material-preview {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary, #666);
+  font-size: 11px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.chat-tool-material-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.chat-tool-overview {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--color-bg-soft, rgba(0, 0, 0, 0.03));
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-primary, #333);
+}
+
+.chat-tool-overview p {
+  margin: 4px 0;
+  color: var(--color-text-secondary, #666);
+  font-size: 11px;
+}
+
+.chat-tool-overview-meta,
+.chat-tool-overview-stage {
+  display: inline-block;
+  margin-top: 4px;
+  margin-right: 6px;
+  font-size: 11px;
+  color: var(--color-text-secondary, #999);
+}
+
 .chat-stream-abort,
 .chat-message-abort {
   display: inline-flex;

@@ -20,6 +20,114 @@ import { renderMarkdown } from '../utils/markdown';
 import SourceCitation from './SourceCitation';
 
 /**
+ * 安全地把任意值格式化为 JSON 字符串，用于工具入参折叠展示。
+ * 循环引用、BigInt、函数等会被 JSON.stringify 跳过或转换为字符串。
+ *
+ * @param {unknown} value - 任意入参值
+ * @returns {string} 格式化后的 JSON 字符串；转换失败时回退为 String(value)
+ * @author fxbin
+ */
+function safeFormatJson(value) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * 按工具名定向渲染结构化 details。
+ *
+ * 已识别的工具名与渲染策略：
+ * - search_cards：列表展示返回的卡片（type 徽章 + 标题 + 摘要）
+ * - search_materials：列表展示返回的资料（platform/parseStatus 徽章 + 标题 + 预览）
+ * - get_workspace_summary：紧凑展示工作区概览（标题 / 摘要 / 来源·卡片·资料数）
+ * - 其他：回退到 JSON.stringify 折叠展示
+ *
+ * @param {object} props - 组件属性
+ * @param {string} props.toolName - 工具名
+ * @param {unknown} props.details - 结构化结果
+ * @param {function} props.t - i18n 翻译函数
+ * @returns {JSX.Element|null} 结构化结果节点
+ * @author fxbin
+ */
+function ToolResultDetails({ toolName, details, t }) {
+  if (!details || typeof details !== 'object') return null;
+
+  if (toolName === 'search_cards') {
+    const casted = details;
+    const items = Array.isArray(casted.items) ? casted.items : [];
+    if (items.length === 0) return null;
+    return (
+      <details className="chat-message-tool-structured">
+        <summary>{t('chat.toolResultCards', { count: casted.count ?? items.length })}</summary>
+        <ul className="chat-tool-cards-list">
+          {items.map((card) => (
+            <li key={card.id}>
+              <span className="chat-tool-card-type">{card.type}</span>
+              <span className="chat-tool-card-title">{card.title}</span>
+              {card.body && <p className="chat-tool-card-body">{card.body}</p>}
+            </li>
+          ))}
+        </ul>
+      </details>
+    );
+  }
+
+  if (toolName === 'search_materials') {
+    const casted = details;
+    const items = Array.isArray(casted.items) ? casted.items : [];
+    if (items.length === 0) return null;
+    return (
+      <details className="chat-message-tool-structured">
+        <summary>{t('chat.toolResultMaterials', { count: casted.count ?? items.length })}</summary>
+        <ul className="chat-tool-materials-list">
+          {items.map((material) => (
+            <li key={material.id}>
+              <div className="chat-tool-material-head">
+                <span className="chat-tool-material-title">{material.title}</span>
+                {material.platform && <span className="chat-tool-material-platform">{material.platform}</span>}
+                {material.parseStatus && <span className="chat-tool-material-status">{material.parseStatus}</span>}
+              </div>
+              {material.preview && <p className="chat-tool-material-preview">{material.preview}</p>}
+            </li>
+          ))}
+        </ul>
+      </details>
+    );
+  }
+
+  if (toolName === 'get_workspace_summary') {
+    const overview = details;
+    if (!overview || typeof overview !== 'object' || !overview.title) return null;
+    return (
+      <details className="chat-message-tool-structured">
+        <summary>{t('chat.toolResultOverview')}</summary>
+        <div className="chat-tool-overview">
+          <strong>{overview.title}</strong>
+          {overview.summary && <p>{overview.summary}</p>}
+          <span className="chat-tool-overview-meta">
+            {t('chat.toolResultOverviewFields', {
+              sourceCount: overview.sourceCount ?? 0,
+              cardCount: overview.cardCount ?? 0,
+              materialCount: overview.materialCount ?? 0,
+            })}
+          </span>
+          {overview.stage && <span className="chat-tool-overview-stage">{overview.stage}</span>}
+        </div>
+      </details>
+    );
+  }
+
+  return (
+    <details className="chat-message-tool-structured">
+      <summary>{t('chat.toolResultStructured')}</summary>
+      <pre className="chat-message-tool-details-text">{safeFormatJson(details)}</pre>
+    </details>
+  );
+}
+
+/**
  * 统一渲染一条 ChatThreadItem。
  *
  * @param {object} props - 组件属性
@@ -80,6 +188,19 @@ export default function ChatMessageItem({
                 <Wrench size={13} />
                 <span>{tool.toolName}</span>
                 {tool.isStreaming && <Loader2 size={12} className="chat-message-tool-spinner" />}
+                {!tool.isStreaming && tool.args !== undefined && tool.args !== null && (
+                  <details className="chat-message-tool-args">
+                    <summary>{t('chat.toolArgs')}</summary>
+                    <pre className="chat-message-tool-args-text">{safeFormatJson(tool.args)}</pre>
+                  </details>
+                )}
+                {!tool.isStreaming && tool.details && (
+                  <ToolResultDetails
+                    toolName={tool.toolName}
+                    details={tool.details}
+                    t={t}
+                  />
+                )}
                 {!tool.isStreaming && tool.result && (
                   <details className="chat-message-tool-result">
                     <summary>{t('chat.toolResult')}</summary>
