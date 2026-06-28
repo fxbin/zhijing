@@ -256,6 +256,8 @@ function App() {
     abortStream,
     clearChat,
     retryLastMessage,
+    switchSession,
+    currentSessionId,
   } = useAssistantState({
     selectedWorkspaceId,
     apiStatus,
@@ -838,6 +840,8 @@ function App() {
         orchestratorReason={orchestratorReason}
         onClearChat={clearChat}
         onRetryMessage={retryLastMessage}
+        onSwitchSession={switchSession}
+        currentSessionId={currentSessionId}
         onOpenArtifact={openArtifact}
         onSelectWorkspace={(id) => {
           if (id) {

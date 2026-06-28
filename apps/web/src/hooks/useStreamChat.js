@@ -229,6 +229,74 @@ function removeChatFromStorage(workspaceId) {
 }
 
 /**
+ * 从 AgentMessage.content 提取纯文本（兼容 string 与 TextContent[]）。
+ *
+ * @param {object} message - 后端 AgentMessage
+ * @returns {string} 纯文本
+ * @author fxbin
+ */
+function extractAgentMessageText(message) {
+  const content = message?.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((part) => part && typeof part === 'object' && part.type === 'text' && typeof part.text === 'string')
+      .map((part) => part.text)
+      .join('');
+  }
+  return '';
+}
+
+/**
+ * 从 AssistantMessage.content 提取推理文本（thinking 类型部分）。
+ *
+ * @param {object} message - 后端 AgentMessage
+ * @returns {string} 推理文本
+ * @author fxbin
+ */
+function extractAgentMessageReasoning(message) {
+  const content = message?.content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((part) => part && typeof part === 'object' && part.type === 'thinking' && typeof part.text === 'string')
+    .map((part) => part.text)
+    .join('');
+}
+
+/**
+ * 把后端 AgentMessage[] 转换为前端 chatMessages 格式。
+ * toolResult 消息跳过；assistant 消息提取 text + reasoning，不还原 toolCalls（最小可用）。
+ *
+ * @param {Array} agentMessages - 后端 AgentMessage 列表
+ * @returns {Array} 前端 chatMessages 列表
+ * @author fxbin
+ */
+function agentMessagesToChatMessages(agentMessages) {
+  if (!Array.isArray(agentMessages)) return INITIAL_CHAT_MESSAGES;
+  const result = [];
+  for (const msg of agentMessages) {
+    if (msg.role === ROLE_USER) {
+      result.push({
+        id: createChatMessageId(ROLE_USER, msg.timestamp ?? Date.now()),
+        role: ROLE_USER,
+        text: extractAgentMessageText(msg),
+      });
+    } else if (msg.role === ROLE_ASSISTANT) {
+      result.push({
+        id: createChatMessageId(ROLE_ASSISTANT, msg.timestamp ?? Date.now() + 1),
+        role: ROLE_ASSISTANT,
+        text: extractAgentMessageText(msg),
+        reasoning: extractAgentMessageReasoning(msg),
+        toolCalls: [],
+        auxContent: '',
+        isStreaming: false,
+      });
+    }
+  }
+  return result;
+}
+
+/**
  * 流式 Agent 对话状态 Hook。
  *
  * @param {object} params - 入参对象
@@ -638,6 +706,38 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     await streamAsk(target.text, { retry: true, retryUserId: userId });
   }, [chatMessages, isStreaming, streamAsk]);
 
+  /**
+   * 切换到指定会话：设置 localStorage sessionId，并从后端拉取该会话的 messages
+   * 转换为 chatMessages 渲染。流式对话进行中或目标 sessionId 与当前相同时静默返回。
+   *
+   * @param {string} sessionId - 目标会话 id
+   * @returns {Promise<void>}
+   * @author fxbin
+   */
+  const switchSession = useCallback(async (sessionId) => {
+    if (!sessionId || !selectedWorkspaceId || isStreaming) return;
+    if (sessionId === currentSessionId.current) return;
+    abortCurrentStream();
+    saveSessionId(selectedWorkspaceId, sessionId);
+    currentSessionId.current = sessionId;
+    setOrchestratorMode(DEFAULT_ORCHESTRATOR_MODE);
+    setOrchestratorReason('');
+    setActivity(t('activity.askWorkspace'));
+    try {
+      const detail = await api.get(`${WORKSPACES_PATH}/${selectedWorkspaceId}/agent/sessions/${sessionId}`);
+      const restored = agentMessagesToChatMessages(detail?.messages ?? []);
+      setChatMessages(restored);
+      saveChatToStorage(selectedWorkspaceId, restored);
+    } catch {
+      setChatMessages(INITIAL_CHAT_MESSAGES);
+    }
+  }, [selectedWorkspaceId, isStreaming, t, setActivity]);
+
+  /**
+   * 当前会话 id（用于历史面板高亮当前条目）。
+   */
+  const currentSessionIdValue = currentSessionId.current;
+
   return {
     chatMessages,
     isStreaming,
@@ -648,5 +748,7 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     abortStream,
     clearChat,
     retryLastMessage,
+    switchSession,
+    currentSessionId: currentSessionIdValue,
   };
 }

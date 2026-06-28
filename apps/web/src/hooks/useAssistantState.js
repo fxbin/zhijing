@@ -101,6 +101,8 @@ export function useAssistantState({
     abortStream,
     clearChat,
     retryLastMessage,
+    switchSession,
+    currentSessionId,
   } = useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t });
 
   /**
@@ -222,5 +224,7 @@ export function useAssistantState({
     abortStream,
     clearChat,
     retryLastMessage,
+    switchSession,
+    currentSessionId,
   };
 }

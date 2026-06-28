@@ -135,7 +135,15 @@ import {
   detectSystemProxy,
   setManualProxy,
 } from '@zhijing/core';
-import { startOrchestratorSession, truncateSessionForRetry, type OrchestratorSession } from '@zhijing/agent';
+import {
+  startOrchestratorSession,
+  truncateSessionForRetry,
+  listAgentSessions,
+  getAgentSessionMessages,
+  renameAgentSession,
+  deleteAgentSession,
+  type OrchestratorSession,
+} from '@zhijing/agent';
 import { getActiveRoutes, isRoutesOverriddenByEnv, buildRouteAdvisor } from '@zhijing/pi-runtime';
 import type {
   AddMapEdgeRequest,
@@ -1629,6 +1637,48 @@ export function buildApi() {
         request.log.warn({ error, sessionId }, 'agent abort failed');
       }
       return reply.send({ ok: true });
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    '/api/workspaces/:id/agent/sessions',
+    async (request) => {
+      const sessions = listAgentSessions(request.params.id);
+      return { sessions };
+    },
+  );
+
+  app.get<{ Params: { id: string; sessionId: string } }>(
+    '/api/workspaces/:id/agent/sessions/:sessionId',
+    async (request, reply) => {
+      const detail = getAgentSessionMessages(request.params.sessionId, request.params.id);
+      if (!detail) {
+        return reply.code(404).send({ error: 'Session not found.' });
+      }
+      return detail;
+    },
+  );
+
+  app.patch<{ Params: { id: string; sessionId: string }; Body: { title?: string } }>(
+    '/api/workspaces/:id/agent/sessions/:sessionId',
+    async (request, reply) => {
+      const title = typeof request.body?.title === 'string' ? request.body.title : '';
+      const ok = renameAgentSession(request.params.sessionId, request.params.id, title);
+      if (!ok) {
+        return reply.code(404).send({ error: 'Session not found or title empty.' });
+      }
+      return { ok: true };
+    },
+  );
+
+  app.delete<{ Params: { id: string; sessionId: string } }>(
+    '/api/workspaces/:id/agent/sessions/:sessionId',
+    async (request, reply) => {
+      const ok = deleteAgentSession(request.params.sessionId, request.params.id);
+      if (!ok) {
+        return reply.code(404).send({ error: 'Session not found.' });
+      }
+      return { ok: true };
     },
   );
 

@@ -11,7 +11,7 @@
  * @module components/GlobalChatDock
  */
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Database,
@@ -26,6 +26,7 @@ import { useChatLayout } from '../hooks/useChatLayout';
 import { useProposedCards } from '../hooks/useProposedCards';
 import { mergeToThread } from '../utils/chatThread';
 import AIChatShell from './AIChatShell';
+import ChatHistoryPanel from './ChatHistoryPanel';
 import ChatMessageItem from './ChatMessageItem';
 import EmptyState from './EmptyState';
 import { CHAT_OPEN_EVENT } from '../constants/options';
@@ -48,6 +49,8 @@ const DOCK_STORAGE_KEY = 'zhijing-chat-dock';
  * @param {boolean} [props.isStreaming=false] - 流式对话运行态
  * @param {() => void} [props.onClearChat] - 清空流式对话回调
  * @param {(userId: string) => void} [props.onRetryMessage] - 重试上一条流式对话回调
+ * @param {(sessionId: string) => void} [props.onSwitchSession] - 切换会话回调
+ * @param {string} [props.currentSessionId] - 当前会话 id；用于历史面板高亮
  * @param {() => void} [props.onAbortStream] - 中断当前流式对话回调
  * @param {string} [props.orchestratorMode=''] - 当前编排模式英文标识（mirror/catalyst/navigator）
  * @param {(artifact: object, meta?: object) => void} props.onOpenArtifact - 打开产物回调
@@ -74,6 +77,8 @@ export default function GlobalChatDock({
   orchestratorReason = '',
   onClearChat,
   onRetryMessage,
+  onSwitchSession,
+  currentSessionId,
   onAbortStream,
   onOpenArtifact,
   onSelectWorkspace,
@@ -87,6 +92,7 @@ export default function GlobalChatDock({
     initialMode: 'floating',
   });
   const textareaRef = useRef(null);
+  const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
 
   const cards = detail.cards ?? [];
   const materials = detail.materials ?? [];
@@ -201,7 +207,27 @@ export default function GlobalChatDock({
               )}
               {t('chat.metric.sources')} {materials.length} · {t('chat.metric.cards')} {cards.length}
             </span>
+            <button
+              type="button"
+              className={`global-chat-dock-history-btn ${historyPanelOpen ? 'active' : ''}`}
+              onClick={() => setHistoryPanelOpen((prev) => !prev)}
+              title={t('chat.historyToggle')}
+              aria-label={t('chat.historyToggle')}
+              aria-expanded={historyPanelOpen}
+              disabled={isStreaming}
+            >
+              <History size={14} />
+            </button>
           </div>
+
+          {historyPanelOpen && (
+            <ChatHistoryPanel
+              workspaceId={selectedWorkspaceId}
+              currentSessionId={currentSessionId}
+              onSwitch={onSwitchSession}
+              onClose={() => setHistoryPanelOpen(false)}
+            />
+          )}
 
           <div className="chat-conversation">
             <div className="chat-message-item chat-message-hint">

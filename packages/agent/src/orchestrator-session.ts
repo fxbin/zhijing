@@ -41,6 +41,8 @@ interface SessionRecord {
   messages: AgentMessage[];
   /** 最近一次访问时间戳（毫秒），用于 idle 过期清理 */
   lastUsedAt: number;
+  /** 用户自定义标题；未设置时按首条 user 消息文本动态生成 */
+  title?: string;
 }
 
 /**
@@ -63,6 +65,75 @@ const SESSION_IDLE_TTL_MS = 30 * 60 * 1000;
  * 单会话最大保留消息条数，超过时按 FIFO 截断以控制上下文体积。
  */
 const SESSION_MAX_MESSAGES = 100;
+
+/**
+ * 会话默认标题最大长度（字符），超过时尾部省略号。
+ */
+const SESSION_TITLE_MAX_LENGTH = 40;
+
+/**
+ * 会话默认标题（找不到 user 消息时的兜底文案）。
+ */
+const SESSION_DEFAULT_TITLE = '未命名会话';
+
+/**
+ * 从单条 AgentMessage 中提取纯文本内容。
+ * 兼容 string content 与 TextContent[] 两种结构。
+ * 用结构化类型访问绕开 AgentMessage 联合类型 narrow 限制
+ * （联合中包含无 content 字段的自定义消息类型）。
+ *
+ * @param message - Agent 消息
+ * @returns 纯文本；无法提取时返回空串
+ * @author fxbin
+ */
+function extractAgentMessageText(message: AgentMessage): string {
+  const msg = message as { content?: unknown };
+  if (typeof msg.content === 'string') return msg.content;
+  if (Array.isArray(msg.content)) {
+    const parts: string[] = [];
+    for (const part of msg.content) {
+      if (part && typeof part === 'object' && part.type === 'text' && typeof part.text === 'string') {
+        parts.push(part.text);
+      }
+    }
+    return parts.join('');
+  }
+  return '';
+}
+
+/**
+ * 判断 AgentMessage 是否为 user 角色。
+ * 用结构化类型访问绕开联合类型 narrow 限制。
+ *
+ * @param message - Agent 消息
+ * @returns 是否为 user 消息
+ * @author fxbin
+ */
+function isUserMessage(message: AgentMessage): boolean {
+  return (message as { role?: string }).role === 'user';
+}
+
+/**
+ * 按会话 messages 推导默认标题：取首条 user 消息文本，截断到 SESSION_TITLE_MAX_LENGTH。
+ * 找不到 user 消息时回退为 SESSION_DEFAULT_TITLE。
+ *
+ * @param messages - 会话累积消息
+ * @returns 默认标题
+ * @author fxbin
+ */
+function deriveSessionTitle(messages: AgentMessage[]): string {
+  for (const msg of messages) {
+    if (isUserMessage(msg)) {
+      const text = extractAgentMessageText(msg).trim();
+      if (text) {
+        return text.length > SESSION_TITLE_MAX_LENGTH
+          ? `${text.slice(0, SESSION_TITLE_MAX_LENGTH)}…`
+          : text;
+      }
+    }
+  }
+  return SESSION_DEFAULT_TITLE;
+}
 
 /**
  * 清理过期会话。在每次 startOrchestratorSession 入口调用，
@@ -405,6 +476,16 @@ export interface AgentSessionInfo {
   messageCount: number;
   /** 最近一次访问时间（ISO 字符串） */
   lastUsedAt: string;
+  /** 会话标题；用户未自定义时按首条 user 消息文本生成 */
+  title: string;
+}
+
+/**
+ * 会话详情（包含完整 messages，用于切换会话时回填前端 chatMessages）。
+ */
+export interface AgentSessionDetail extends AgentSessionInfo {
+  /** 完整消息列表（AgentMessage[] 原样返回，由前端转换渲染） */
+  messages: AgentMessage[];
 }
 
 /**
@@ -465,7 +546,7 @@ export function truncateSessionForRetry(
   const messages = record.messages;
   let lastUserIndex = -1;
   for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (messages[i].role === 'user') {
+    if (isUserMessage(messages[i])) {
       lastUserIndex = i;
       break;
     }
@@ -502,8 +583,80 @@ export function listAgentSessions(workspaceId?: string): AgentSessionInfo[] {
       workspaceId: record.workspaceId,
       messageCount: record.messages.length,
       lastUsedAt: new Date(record.lastUsedAt).toISOString(),
+      title: record.title ?? deriveSessionTitle(record.messages),
     });
   }
   list.sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt));
   return list;
+}
+
+/**
+ * 获取指定会话的详情（含完整 messages）。
+ * 用于前端切换会话时回填 chatMessages 渲染。
+ *
+ * @param sessionId - 会话 id
+ * @param workspaceId - 工作区 id（必须匹配）
+ * @returns 会话详情；sessionId 不存在或 workspaceId 不匹配时返回 null
+ * @author fxbin
+ */
+export function getAgentSessionMessages(
+  sessionId: string,
+  workspaceId: string,
+): AgentSessionDetail | null {
+  if (!sessionId) return null;
+  const record = sessionStore.get(sessionId);
+  if (!record || record.workspaceId !== workspaceId) return null;
+  return {
+    sessionId,
+    workspaceId: record.workspaceId,
+    messageCount: record.messages.length,
+    lastUsedAt: new Date(record.lastUsedAt).toISOString(),
+    title: record.title ?? deriveSessionTitle(record.messages),
+    messages: record.messages,
+  };
+}
+
+/**
+ * 重命名指定会话。
+ * 标题去空白后非空才写入；空字符串视为取消重命名，返回 false。
+ *
+ * @param sessionId - 会话 id
+ * @param workspaceId - 工作区 id（必须匹配）
+ * @param title - 新标题
+ * @returns 是否重命名成功（sessionId 不存在 / workspaceId 不匹配 / 标题为空时返回 false）
+ * @author fxbin
+ */
+export function renameAgentSession(
+  sessionId: string,
+  workspaceId: string,
+  title: string,
+): boolean {
+  if (!sessionId) return false;
+  const record = sessionStore.get(sessionId);
+  if (!record || record.workspaceId !== workspaceId) return false;
+  const trimmed = (title ?? '').trim();
+  if (!trimmed) return false;
+  record.title = trimmed;
+  record.lastUsedAt = Date.now();
+  return true;
+}
+
+/**
+ * 删除指定会话（带 workspaceId 校验）。
+ * 与 clearAgentSession 的区别：本函数做 workspaceId 鉴权，避免跨工作区误删。
+ *
+ * @param sessionId - 会话 id
+ * @param workspaceId - 工作区 id（必须匹配）
+ * @returns 是否删除成功（sessionId 不存在或 workspaceId 不匹配时返回 false）
+ * @author fxbin
+ */
+export function deleteAgentSession(
+  sessionId: string,
+  workspaceId: string,
+): boolean {
+  if (!sessionId) return false;
+  const record = sessionStore.get(sessionId);
+  if (!record || record.workspaceId !== workspaceId) return false;
+  sessionStore.delete(sessionId);
+  return true;
 }
