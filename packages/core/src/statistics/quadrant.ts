@@ -131,6 +131,7 @@ export function computeQuadrantSummary(
     const kind = classifyQuadrant(input, noteDepth.isDeep);
     return {
       bookId: input.bookId,
+      title: input.title,
       kind,
       noteDepth,
       isRecommendationSeed: RECOMMENDATION_SEED_KINDS.includes(kind),
