@@ -2823,3 +2823,152 @@ export interface MinimalFeatureState {
   /** 更新时间戳（毫秒） */
   updatedAt: number;
 }
+
+/**
+ * 隐性真兴趣提示模式（NS-8）。
+ * - banner_24h：轻量横幅提示（首次发现 Q3 后展示，可关闭）
+ * - annual_review：年度回望汇总（推迟实现，当前仅占位）
+ * - permanently_disabled：用户已永久关闭提示
+ */
+export const HIDDEN_INTEREST_HINT_MODE_VALUES = ['banner_24h', 'annual_review', 'permanently_disabled'] as const;
+export type HiddenInterestHintMode = typeof HIDDEN_INTEREST_HINT_MODE_VALUES[number];
+
+/**
+ * 隐性真兴趣代表书目（NS-8）：从 Q3 中选出的高 noteDepth 代表。
+ */
+export interface HiddenInterestBook {
+  bookId: string;
+  title: string;
+  /** 笔记深度原始分（取自 NoteDepthScore.raw） */
+  noteDepthRaw: number;
+  /** 是否判定为深读（取自 NoteDepthScore.isDeep） */
+  isDeep: boolean;
+}
+
+/**
+ * 隐性真兴趣提示结果（NS-8）：四象限 Q3 数据 + 频率控制 + 永久关闭状态。
+ */
+export interface HiddenInterestHint {
+  /** 是否应当展示提示 */
+  shouldShow: boolean;
+  /** 当前提示模式 */
+  mode: HiddenInterestHintMode;
+  /** Q3 书籍总数 */
+  totalCount: number;
+  /** 代表书目（noteDepth 最高的 1 本） */
+  representativeBook: HiddenInterestBook | null;
+  /** 提示理由（向用户解释为何推荐关注） */
+  reason: string;
+}
+
+/**
+ * 隐性真兴趣提示持久化状态（NS-8）。
+ */
+export interface HiddenInterestState {
+  /** 是否永久关闭 */
+  permanentlyDismissed: boolean;
+  /** 上次展示时间戳（毫秒，0 表示从未展示） */
+  lastShownAt: number;
+  /** 已被用户单本忽略的书籍 ID 列表 */
+  dismissedBookIds: string[];
+  /** 更新时间戳（毫秒） */
+  updatedAt: number;
+}
+
+/**
+ * 数据可携导出格式（NS-8）。
+ */
+export const DATA_PORTABILITY_FORMAT_VALUES = ['json', 'markdown'] as const;
+export type DataPortabilityFormat = typeof DATA_PORTABILITY_FORMAT_VALUES[number];
+
+/**
+ * 数据可携算法版本记录（NS-8）：向用户声明产出了哪些派生指标、用了什么算法。
+ */
+export interface DataPortabilityAlgorithmVersion {
+  /** 指标/算法名称（如 truly_read_score、topic_spectrum） */
+  name: string;
+  /** 版本号（如 v1、sm2-lite） */
+  version: string;
+}
+
+/**
+ * 数据可携说明书（NS-8）：随导出数据附带的元信息清单。
+ */
+export interface DataPortabilityManifest {
+  /** 生成时间戳（毫秒） */
+  generatedAt: number;
+  /** 算法版本清单 */
+  algorithmVersions: DataPortabilityAlgorithmVersion[];
+  /** 原始信号源 key 列表（对应 DataAccountEntry.key） */
+  signalSources: string[];
+  /** 派生指标 key 列表（对应 DegradeMatrixEntry.metricKey） */
+  derivedMetrics: string[];
+  /** 数据账本条目总数 */
+  dataAccountEntries: number;
+  /** 微信读书书籍总数 */
+  bookCount: number;
+}
+
+/**
+ * 数据可携导出记录（NS-8）：一次导出操作的结果 + 30 天撤回窗口。
+ *
+ * 与 D3 ExportRecord 的区别：ExportRecord 导出知识库内容（卡片/产物），
+ * DataPortabilityRecord 导出用户统计数据画像（信号+派生指标+算法版本+说明书）。
+ */
+export interface DataPortabilityRecord {
+  /** 记录 ID */
+  id: string;
+  /** 导出格式 */
+  format: DataPortabilityFormat;
+  /** 数据说明书 */
+  manifest: DataPortabilityManifest;
+  /** 文件名 */
+  filename: string;
+  /** 导出内容预览（截断，用于历史列表展示） */
+  contentPreview: string;
+  /** 创建时间戳（毫秒） */
+  createdAt: number;
+  /** 撤回截止时间戳（毫秒，createdAt + 30 天） */
+  revokeDeadline: number;
+  /** 已撤回时间戳（毫秒，null 表示未撤回） */
+  revokedAt: number | null;
+}
+
+/**
+ * 受众分层（NS-8）：基于信号丰富度自动判定的用户档位。
+ * - novice：新手（信号稀疏，默认隐藏复杂统计）
+ * - regular：常规用户
+ * - power：重度用户（信号丰富，默认展示全部统计）
+ */
+export const AUDIENCE_TIER_VALUES = ['novice', 'regular', 'power'] as const;
+export type AudienceTier = typeof AUDIENCE_TIER_VALUES[number];
+
+/**
+ * 受众档案（NS-8）：同一架构 + 不同默认参数 + 渐进解锁。
+ */
+export interface AudienceProfile {
+  /** 当前档位 */
+  tier: AudienceTier;
+  /** 该档位的信号阈值（划线总数） */
+  signalThreshold: number;
+  /** 该档位默认可见的功能 featureKey 列表 */
+  visibleFeatures: string[];
+  /** 该档位默认隐藏的功能 featureKey 列表 */
+  hiddenFeatures: string[];
+  /** 档位判定理由 */
+  reason: string;
+}
+
+/**
+ * 阅读模式状态（NS-8）：当前档位 + 可临时回退到更低档位（30 天自动恢复）。
+ */
+export interface ReaderModeState {
+  /** 当前生效档位 */
+  currentTier: AudienceTier;
+  /** 临时回退到的档位（null 表示无回退） */
+  tempRollbackTier: AudienceTier | null;
+  /** 临时回退截止时间戳（毫秒，null 表示无回退） */
+  tempRollbackDeadline: number | null;
+  /** 更新时间戳（毫秒） */
+  updatedAt: number;
+}

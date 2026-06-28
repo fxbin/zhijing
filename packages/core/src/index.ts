@@ -144,6 +144,17 @@ import {
   type FolderIntakeItem,
   type FileBatchIntakeRequest,
   type FileBatchIntakeResult,
+  type HiddenInterestState,
+  type HiddenInterestHint,
+  type HiddenInterestBook,
+  type HiddenInterestHintMode,
+  type DataPortabilityFormat,
+  type DataPortabilityManifest,
+  type DataPortabilityRecord,
+  type DataPortabilityAlgorithmVersion,
+  type AudienceTier,
+  type AudienceProfile,
+  type ReaderModeState,
 } from '@zhijing/shared';
 import { fetchUrlAsMarkdown, parseRawHtml } from './web-fetch.js';
 import {
@@ -152,6 +163,29 @@ import {
 } from './data-account-book.js';
 import { buildEmptyCoverage } from './statistics/verification-bank.js';
 import { LONG_REVIEW_CHAR_THRESHOLD } from './statistics/saturate.js';
+import {
+  buildHiddenInterestHint,
+  applyHiddenInterestDismissal,
+  applyPermanentDismissal,
+  markHintShown,
+} from './statistics/hidden-interest.js';
+import {
+  buildDataPortabilityManifest,
+  computeRevokeDeadline,
+  serializePortability,
+  DATA_PORTABILITY_ALGORITHM_VERSIONS,
+} from './statistics/data-export.js';
+import {
+  classifyAudienceTier,
+  buildAudienceProfile,
+  buildInitialReaderModeState,
+  startTempRollback,
+  cancelTempRollback,
+  resolveEffectiveTier,
+} from './statistics/audience-adapter.js';
+import type { BookSignalInputs } from '@zhijing/shared';
+import { DEGRADE_MATRIX_REGISTRY } from './statistics/degrade-matrix.js';
+import { computeQuadrantSummary } from './statistics/quadrant.js';
 export { initProxyDispatcher, getCurrentProxy } from './fetch-dispatcher.js';
 export { detectSystemProxy, setManualProxy, resetProxyCache } from './proxy-detector.js';
 import {
@@ -546,6 +580,13 @@ type KnowledgeRepository = {
     longReviewCount: number;
     signalsSyncedAt: string;
   }): void;
+  readHiddenInterestState(): HiddenInterestState | null;
+  saveHiddenInterestState(state: HiddenInterestState): void;
+  recordDataPortability(record: DataPortabilityRecord): void;
+  listDataPortability(): DataPortabilityRecord[];
+  revokeDataPortability(id: string, revokedAt: number): void;
+  readReaderModeState(): ReaderModeState | null;
+  saveReaderModeState(state: ReaderModeState): void;
   computeWeReadStats(): WeReadStatsResponse;
   insertAttentionSignal(signal: AttentionSignal): void;
   listAttentionSignals(workspaceId?: string, limit?: number): AttentionSignal[];
@@ -1172,6 +1213,61 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
       row.longReviewCount = input.longReviewCount;
       row.signalsSyncedAt = input.signalsSyncedAt;
     }
+  }
+
+  private hiddenInterestState: HiddenInterestState | null = null;
+  private dataPortabilityRecords: DataPortabilityRecord[] = [];
+  private readerModeState: ReaderModeState | null = null;
+
+  /**
+   * 读取隐性真兴趣提示的持久化状态（NS-8）。
+   */
+  readHiddenInterestState(): HiddenInterestState | null {
+    return this.hiddenInterestState;
+  }
+
+  /**
+   * 保存隐性真兴趣提示状态（NS-8），写入时做浅拷贝以隔离外部变更。
+   */
+  saveHiddenInterestState(state: HiddenInterestState): void {
+    this.hiddenInterestState = { ...state };
+  }
+
+  /**
+   * 记录一条数据可携导出（NS-8），新记录置顶。
+   */
+  recordDataPortability(record: DataPortabilityRecord): void {
+    this.dataPortabilityRecords = [record, ...this.dataPortabilityRecords];
+  }
+
+  /**
+   * 列出全部数据可携导出记录（NS-8），按创建时间倒序返回副本。
+   */
+  listDataPortability(): DataPortabilityRecord[] {
+    return [...this.dataPortabilityRecords].sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  /**
+   * 撤回指定数据可携导出记录（NS-8），写入撤回时间戳。
+   */
+  revokeDataPortability(id: string, revokedAt: number): void {
+    this.dataPortabilityRecords = this.dataPortabilityRecords.map((record) =>
+      record.id === id ? { ...record, revokedAt } : record,
+    );
+  }
+
+  /**
+   * 读取阅读模式（受众档位）持久化状态（NS-8）。
+   */
+  readReaderModeState(): ReaderModeState | null {
+    return this.readerModeState;
+  }
+
+  /**
+   * 保存阅读模式状态（NS-8），写入时做浅拷贝以隔离外部变更。
+   */
+  saveReaderModeState(state: ReaderModeState): void {
+    this.readerModeState = { ...state };
   }
 
   computeWeReadStats(): WeReadStatsResponse {
@@ -3062,6 +3158,9 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureWeReadSettingsTable();
     this.ensureWeReadBookMetaTable();
     this.ensureWeReadSyncStateTable();
+    this.ensureWeReadHiddenInterestStateTable();
+    this.ensureWeReadDataPortabilityTable();
+    this.ensureWeReadReaderModeTable();
     this.ensureVerificationStateTable();
     this.ensureMaterialMediaColumn();
     this.ensureMaterialStatusTimelineColumn();
@@ -3477,6 +3576,46 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     `);
   }
 
+  private ensureWeReadHiddenInterestStateTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS weread_hidden_interest_state (
+        id TEXT PRIMARY KEY DEFAULT 'default',
+        permanently_dismissed INTEGER NOT NULL DEFAULT 0,
+        last_shown_at INTEGER NOT NULL DEFAULT 0,
+        dismissed_book_ids TEXT NOT NULL DEFAULT '[]',
+        updated_at INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+  }
+
+  private ensureWeReadDataPortabilityTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS weread_data_portability (
+        id TEXT PRIMARY KEY,
+        format TEXT NOT NULL,
+        manifest_json TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        content_preview TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        revoke_deadline INTEGER NOT NULL,
+        revoked_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_weread_data_portability_created ON weread_data_portability(created_at DESC);
+    `);
+  }
+
+  private ensureWeReadReaderModeTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS weread_reader_mode (
+        id TEXT PRIMARY KEY DEFAULT 'default',
+        current_tier TEXT NOT NULL DEFAULT 'regular',
+        temp_rollback_tier TEXT,
+        temp_rollback_deadline INTEGER,
+        updated_at INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+  }
+
   /**
    * 为轻校验覆盖状态表做向后兼容：若旧库没有 verification_state 表则创建（NS-7）。
    *
@@ -3609,6 +3748,156 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         signals_synced_at = @signalsSyncedAt
       WHERE book_id = @bookId
     `).run(input);
+  }
+
+  /**
+   * 读取隐性真兴趣提示状态（NS-8）。库中无记录时返回 null。
+   */
+  readHiddenInterestState(): HiddenInterestState | null {
+    const row = this.db.prepare('SELECT * FROM weread_hidden_interest_state WHERE id = ?').get('default') as
+      | {
+          permanently_dismissed: number;
+          last_shown_at: number;
+          dismissed_book_ids: string;
+          updated_at: number;
+        }
+      | undefined;
+    if (!row) return null;
+    return {
+      permanentlyDismissed: row.permanently_dismissed === 1,
+      lastShownAt: row.last_shown_at,
+      dismissedBookIds: JSON.parse(row.dismissed_book_ids) as string[],
+      updatedAt: row.updated_at,
+    };
+  }
+
+  /**
+   * 保存隐性真兴趣提示状态（NS-8）。单行 upsert，主键固定为 'default'。
+   */
+  saveHiddenInterestState(state: HiddenInterestState): void {
+    this.db
+      .prepare(
+        `
+      INSERT INTO weread_hidden_interest_state (id, permanently_dismissed, last_shown_at, dismissed_book_ids, updated_at)
+      VALUES ('default', @permanentlyDismissed, @lastShownAt, @dismissedBookIds, @updatedAt)
+      ON CONFLICT(id) DO UPDATE SET
+        permanently_dismissed = @permanentlyDismissed,
+        last_shown_at = @lastShownAt,
+        dismissed_book_ids = @dismissedBookIds,
+        updated_at = @updatedAt
+    `,
+      )
+      .run({
+        permanentlyDismissed: state.permanentlyDismissed ? 1 : 0,
+        lastShownAt: state.lastShownAt,
+        dismissedBookIds: JSON.stringify(state.dismissedBookIds),
+        updatedAt: state.updatedAt,
+      });
+  }
+
+  /**
+   * 记录一条数据可携导出（NS-8）。manifest 以 JSON 文本落库。
+   */
+  recordDataPortability(record: DataPortabilityRecord): void {
+    this.db
+      .prepare(
+        `
+      INSERT INTO weread_data_portability (id, format, manifest_json, filename, content_preview, created_at, revoke_deadline, revoked_at)
+      VALUES (@id, @format, @manifestJson, @filename, @contentPreview, @createdAt, @revokeDeadline, @revokedAt)
+    `,
+      )
+      .run({
+        id: record.id,
+        format: record.format,
+        manifestJson: JSON.stringify(record.manifest),
+        filename: record.filename,
+        contentPreview: record.contentPreview,
+        createdAt: record.createdAt,
+        revokeDeadline: record.revokeDeadline,
+        revokedAt: record.revokedAt,
+      });
+  }
+
+  /**
+   * 列出全部数据可携导出记录（NS-8），按创建时间倒序返回。
+   */
+  listDataPortability(): DataPortabilityRecord[] {
+    const rows = this.db
+      .prepare('SELECT * FROM weread_data_portability ORDER BY created_at DESC')
+      .all() as Array<{
+      id: string;
+      format: string;
+      manifest_json: string;
+      filename: string;
+      content_preview: string;
+      created_at: number;
+      revoke_deadline: number;
+      revoked_at: number | null;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      format: row.format as DataPortabilityFormat,
+      manifest: JSON.parse(row.manifest_json) as DataPortabilityManifest,
+      filename: row.filename,
+      contentPreview: row.content_preview,
+      createdAt: row.created_at,
+      revokeDeadline: row.revoke_deadline,
+      revokedAt: row.revoked_at,
+    }));
+  }
+
+  /**
+   * 撤回指定数据可携导出记录（NS-8），写入撤回时间戳。
+   */
+  revokeDataPortability(id: string, revokedAt: number): void {
+    this.db
+      .prepare('UPDATE weread_data_portability SET revoked_at = ? WHERE id = ?')
+      .run(revokedAt, id);
+  }
+
+  /**
+   * 读取阅读模式状态（NS-8）。库中无记录时返回 null。
+   */
+  readReaderModeState(): ReaderModeState | null {
+    const row = this.db.prepare('SELECT * FROM weread_reader_mode WHERE id = ?').get('default') as
+      | {
+          current_tier: string;
+          temp_rollback_tier: string | null;
+          temp_rollback_deadline: number | null;
+          updated_at: number;
+        }
+      | undefined;
+    if (!row) return null;
+    return {
+      currentTier: row.current_tier as AudienceTier,
+      tempRollbackTier: row.temp_rollback_tier as AudienceTier | null,
+      tempRollbackDeadline: row.temp_rollback_deadline,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  /**
+   * 保存阅读模式状态（NS-8）。单行 upsert，主键固定为 'default'。
+   */
+  saveReaderModeState(state: ReaderModeState): void {
+    this.db
+      .prepare(
+        `
+      INSERT INTO weread_reader_mode (id, current_tier, temp_rollback_tier, temp_rollback_deadline, updated_at)
+      VALUES ('default', @currentTier, @tempRollbackTier, @tempRollbackDeadline, @updatedAt)
+      ON CONFLICT(id) DO UPDATE SET
+        current_tier = @currentTier,
+        temp_rollback_tier = @tempRollbackTier,
+        temp_rollback_deadline = @tempRollbackDeadline,
+        updated_at = @updatedAt
+    `,
+      )
+      .run({
+        currentTier: state.currentTier,
+        tempRollbackTier: state.tempRollbackTier,
+        tempRollbackDeadline: state.tempRollbackDeadline,
+        updatedAt: state.updatedAt,
+      });
   }
 
   computeWeReadStats(): WeReadStatsResponse {
@@ -11797,6 +12086,238 @@ export async function refreshWeReadBookSignals(
   };
 }
 
+/**
+ * 笔记字数估算系数：每条原创笔记按平均字数折算为 noteCharCount。
+ */
+const NOTE_CHARS_PER_REVIEW = 80;
+
+/**
+ * 数据可携导出内容预览的截取长度。
+ */
+const PORTABILITY_PREVIEW_LENGTH = 200;
+
+/**
+ * 数据可携记录随机后缀长度。
+ */
+const PORTABILITY_RANDOM_SUFFIX_LENGTH = 6;
+
+/**
+ * ISO 日期（YYYY-MM-DD）固定字符长度。
+ */
+const ISO_DATE_LENGTH = 10;
+
+/**
+ * 章节数下限，用于规避除零与空章节。
+ */
+const MIN_CHAPTER_COUNT = 1;
+
+/**
+ * 构造隐性真兴趣状态的默认值（NS-8）。首次访问或状态缺失时使用。
+ */
+function createDefaultHiddenInterestState(now: number): HiddenInterestState {
+  return {
+    permanentlyDismissed: false,
+    lastShownAt: 0,
+    dismissedBookIds: [],
+    updatedAt: now,
+  };
+}
+
+/**
+ * 计算微信读书书籍的划线总数，用于受众档位判定（NS-8）。
+ */
+function sumBookmarkCounts(rows: WeReadBookMetaRow[]): number {
+  return rows.reduce((sum, row) => sum + (row.bookmarkCount ?? 0), 0);
+}
+
+/**
+ * 从微信读书 meta 列表构造四象限输入（NS-8）。
+ */
+function buildQuadrantInputsFromMeta(rows: WeReadBookMetaRow[]): BookSignalInputs[] {
+  return rows.map((row) => ({
+    bookId: row.bookId,
+    title: row.title,
+    onShelf: row.presentOnShelf === 1,
+    highlightCount: row.bookmarkCount ?? 0,
+    noteCharCount: (row.reviewCount ?? 0) * NOTE_CHARS_PER_REVIEW,
+    chapterCount: Math.max(MIN_CHAPTER_COUNT, row.chapterCount ?? MIN_CHAPTER_COUNT),
+    hasLongReview: (row.longReviewCount ?? 0) > 0,
+  }));
+}
+
+/**
+ * 读取数据账本条目（NS-8）。账本未初始化时返回空数组。
+ */
+function listDataAccountEntries(): DataAccountEntry[] {
+  return repository.readDataAccountBook()?.entries ?? [];
+}
+
+/**
+ * 收集全部派生指标 key（NS-8）。来源为降级矩阵登记表。
+ */
+function collectDerivedMetricKeys(): string[] {
+  return DEGRADE_MATRIX_REGISTRY.map((entry) => entry.key);
+}
+
+/**
+ * 获取隐性真兴趣提示（NS-8）。
+ *
+ * 从四象限 Q3（隐性真兴趣）数据结合用户持久化状态，决定是否展示提示。
+ *
+ * @returns 隐性真兴趣提示对象
+ */
+export function getHiddenInterestHint(): HiddenInterestHint {
+  const metaRows = repository.readWeReadBookMetaList();
+  const inputs = buildQuadrantInputsFromMeta(metaRows);
+  const quadrant = computeQuadrantSummary(inputs);
+  const now = Date.now();
+  const state = repository.readHiddenInterestState() ?? createDefaultHiddenInterestState(now);
+  return buildHiddenInterestHint(quadrant, state, now);
+}
+
+/**
+ * 标记隐性真兴趣提示为永久关闭或重新开启（NS-8）。
+ *
+ * @param dismissed 是否永久关闭
+ */
+export function setHiddenInterestPermanentlyDismissed(dismissed: boolean): void {
+  const now = Date.now();
+  const current = repository.readHiddenInterestState() ?? createDefaultHiddenInterestState(now);
+  repository.saveHiddenInterestState(applyPermanentDismissal(current, dismissed, now));
+}
+
+/**
+ * 忽略单本隐性真兴趣书目（NS-8）。
+ *
+ * @param bookId 待忽略的书目 ID
+ */
+export function dismissHiddenInterestBook(bookId: string): void {
+  const now = Date.now();
+  const current = repository.readHiddenInterestState() ?? createDefaultHiddenInterestState(now);
+  repository.saveHiddenInterestState(applyHiddenInterestDismissal(current, bookId, now));
+}
+
+/**
+ * 标记隐性真兴趣提示已展示（NS-8），更新 lastShownAt。
+ */
+export function markHiddenInterestHintShown(): void {
+  const now = Date.now();
+  const current = repository.readHiddenInterestState() ?? createDefaultHiddenInterestState(now);
+  repository.saveHiddenInterestState(markHintShown(current, now));
+}
+
+/**
+ * 导出统计数据画像（NS-8）。
+ *
+ * 构建数据说明书、序列化为目标格式、落库，并返回导出记录。
+ *
+ * @param format 目标格式（json 或 markdown）
+ * @returns 数据可携导出记录
+ */
+export function exportDataPortability(format: DataPortabilityFormat): DataPortabilityRecord {
+  const metaRows = repository.readWeReadBookMetaList();
+  const dataAccountEntries = listDataAccountEntries();
+  const derivedMetricKeys = collectDerivedMetricKeys();
+  const now = Date.now();
+  const manifest = buildDataPortabilityManifest({
+    dataAccountEntries,
+    derivedMetricKeys,
+    bookCount: metaRows.length,
+    now,
+  });
+  const payload = {
+    dataAccount: dataAccountEntries,
+    bookSignals: metaRows.map((row) => ({
+      bookId: row.bookId,
+      title: row.title,
+      bookmarkCount: row.bookmarkCount,
+      reviewCount: row.reviewCount,
+      chapterCount: row.chapterCount,
+      longReviewCount: row.longReviewCount,
+      onShelf: row.presentOnShelf === 1,
+    })),
+  };
+  const content = serializePortability(format, manifest, payload);
+  const ext = format === 'json' ? 'json' : 'md';
+  const filename = `zhijing-portability-${new Date(now).toISOString().slice(0, ISO_DATE_LENGTH)}.${ext}`;
+  const randomSuffix = Math.random().toString(36).slice(2, 2 + PORTABILITY_RANDOM_SUFFIX_LENGTH);
+  const record: DataPortabilityRecord = {
+    id: `portability-${now}-${randomSuffix}`,
+    format,
+    manifest,
+    filename,
+    contentPreview: content.slice(0, PORTABILITY_PREVIEW_LENGTH),
+    createdAt: now,
+    revokeDeadline: computeRevokeDeadline(now),
+    revokedAt: null,
+  };
+  repository.recordDataPortability(record);
+  return record;
+}
+
+/**
+ * 列出数据可携导出记录（NS-8），按创建时间倒序。
+ *
+ * @returns 导出记录列表
+ */
+export function listDataPortabilityRecords(): DataPortabilityRecord[] {
+  return repository.listDataPortability();
+}
+
+/**
+ * 撤回数据可携导出记录（NS-8）。
+ *
+ * @param id 待撤回记录的 ID
+ */
+export function revokeDataPortabilityExport(id: string): void {
+  repository.revokeDataPortability(id, Date.now());
+}
+
+/**
+ * 获取当前受众档案（NS-8）。
+ *
+ * 基于划线信号自动判定档位，并与临时回退状态合并后返回有效档案。
+ *
+ * @returns 受众档案
+ */
+export function getReaderModeProfile(): AudienceProfile {
+  const metaRows = repository.readWeReadBookMetaList();
+  const baseTier = classifyAudienceTier(sumBookmarkCounts(metaRows));
+  const now = Date.now();
+  const stored = repository.readReaderModeState() ?? buildInitialReaderModeState(baseTier, now);
+  const { effectiveTier, nextState } = resolveEffectiveTier(stored, baseTier, now);
+  if (nextState !== stored) {
+    repository.saveReaderModeState(nextState);
+  }
+  return buildAudienceProfile(effectiveTier);
+}
+
+/**
+ * 发起阅读模式临时回退（NS-8）。
+ *
+ * @param targetTier 回退目标档位
+ */
+export function startReaderModeRollback(targetTier: AudienceTier): void {
+  const metaRows = repository.readWeReadBookMetaList();
+  const baseTier = classifyAudienceTier(sumBookmarkCounts(metaRows));
+  const now = Date.now();
+  const stored = repository.readReaderModeState() ?? buildInitialReaderModeState(baseTier, now);
+  const merged = { ...stored, currentTier: baseTier };
+  const next = startTempRollback(merged, targetTier, now);
+  repository.saveReaderModeState(next);
+}
+
+/**
+ * 取消阅读模式临时回退（NS-8）。
+ */
+export function cancelReaderModeRollback(): void {
+  const metaRows = repository.readWeReadBookMetaList();
+  const baseTier = classifyAudienceTier(sumBookmarkCounts(metaRows));
+  const now = Date.now();
+  const stored = repository.readReaderModeState() ?? buildInitialReaderModeState(baseTier, now);
+  repository.saveReaderModeState(cancelTempRollback(stored, baseTier, now));
+}
+
 async function distribution(connection: Awaited<ReturnType<typeof DuckDBConnection.create>>, table: string, column: string) {
   const reader = await connection.runAndReadAll(`
     SELECT coalesce(nullif(${column}, ''), 'unknown') AS name, count(*)::INTEGER AS count
@@ -12741,3 +13262,46 @@ export {
   validateTopicSpectrum,
 } from './statistics/topic-spectrum.js';
 export type { TopicSpectrumInput, TopicSpectrumValidation } from './statistics/topic-spectrum.js';
+
+export {
+  buildHiddenInterestHint,
+  selectRepresentativeBook,
+  applyHiddenInterestDismissal,
+  applyPermanentDismissal,
+  markHintShown,
+  buildContentPreview as buildHiddenInterestPreview,
+} from './statistics/hidden-interest.js';
+export {
+  buildDataPortabilityManifest,
+  computeRevokeDeadline,
+  isRevocable,
+  serializePortability,
+  DATA_PORTABILITY_ALGORITHM_VERSIONS,
+  DATA_PORTABILITY_REVOKE_WINDOW_MS,
+} from './statistics/data-export.js';
+export {
+  classifyAudienceTier,
+  buildAudienceProfile,
+  buildInitialReaderModeState,
+  startTempRollback,
+  cancelTempRollback,
+  resolveEffectiveTier,
+  isLowerTier,
+  NOVICE_SIGNAL_THRESHOLD,
+  POWER_SIGNAL_THRESHOLD,
+  READER_MODE_ROLLBACK_WINDOW_MS,
+} from './statistics/audience-adapter.js';
+
+export type {
+  HiddenInterestState,
+  HiddenInterestHint,
+  HiddenInterestBook,
+  HiddenInterestHintMode,
+  DataPortabilityFormat,
+  DataPortabilityManifest,
+  DataPortabilityRecord,
+  DataPortabilityAlgorithmVersion,
+  AudienceTier,
+  AudienceProfile,
+  ReaderModeState,
+} from '@zhijing/shared';
