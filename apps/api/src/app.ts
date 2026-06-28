@@ -37,6 +37,7 @@ import {
   computeWeReadStats,
   computeWeReadRecommendations,
   previewWeReadBook,
+  refreshWeReadBookSignals,
   loadFilter,
   recordExport,
   getWorkspaceAnalytics,
@@ -2073,6 +2074,26 @@ export function buildApi() {
       }
       request.log.error({ error }, 'preview weread book failed');
       return reply.code(500).send({ error: 'Failed to preview WeRead book.' });
+    }
+  });
+
+  app.post<{ Body: { bookIds?: string[]; concurrency?: number } }>('/api/weread/signals/refresh', async (request, reply) => {
+    const raw = request.body?.bookIds;
+    const bookIds = Array.isArray(raw) ? raw.filter((id): id is string => typeof id === 'string' && id.trim().length > 0) : [];
+    const concurrency = typeof request.body?.concurrency === 'number' && request.body.concurrency > 0
+      ? Math.floor(request.body.concurrency)
+      : undefined;
+    if (bookIds.length === 0) {
+      return reply.code(400).send({ error: 'bookIds must be a non-empty array.' });
+    }
+    try {
+      return await refreshWeReadBookSignals(bookIds, concurrency);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'refresh weread signals failed');
+      return reply.code(500).send({ error: 'Failed to refresh WeRead signals.' });
     }
   });
 
