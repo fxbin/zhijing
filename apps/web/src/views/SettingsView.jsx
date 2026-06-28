@@ -40,6 +40,7 @@ import {
   DATA_ACTION_TYPE_CLEAR,
   DATA_ACTION_TYPE_REVEAL,
 } from '../hooks/useSettingsStats';
+import { useMinimalMode } from '../hooks/useMinimalMode';
 
 /**
  * 设置分区默认激活 profiles。
@@ -124,6 +125,12 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     clearLocalCache,
     revealDataDir,
   } = useSettingsStats();
+
+  const minimalMode = useMinimalMode();
+
+  useEffect(() => {
+    minimalMode.fetchMinimalMode();
+  }, [minimalMode]);
 
   useEffect(() => {
     if (initialSection) {
@@ -681,6 +688,46 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
             {dataAction?.type === DATA_ACTION_TYPE_CLEAR && dataAction?.ok === false && (
               <p className="settings-note">{t('settings.clearFailed')}</p>
             )}
+            <div className="minimal-mode-block">
+              <div className="minimal-mode-head">
+                <h4>{t('settings.minimalMode.title')}</h4>
+                <p>{t('settings.minimalMode.desc')}</p>
+              </div>
+              <label className="minimal-mode-toggle">
+                <input
+                  type="checkbox"
+                  checked={minimalMode.enabled}
+                  disabled={minimalMode.loading}
+                  onChange={(e) => minimalMode.toggleMinimalMode(e.target.checked)}
+                />
+                <span>
+                  {minimalMode.enabled
+                    ? t('settings.minimalMode.on')
+                    : t('settings.minimalMode.off')}
+                </span>
+              </label>
+              {minimalMode.featureState?.features && (
+                <ul className="minimal-mode-contract">
+                  {minimalMode.featureState.features.map((feature) => (
+                    <li
+                      key={feature.featureKey}
+                      className={`minimal-mode-feature minimal-mode-feature--${feature.disposition}`}
+                    >
+                      <span className="minimal-mode-feature-label">{feature.label}</span>
+                      <span className="minimal-mode-feature-disposition">
+                        {feature.disposition === 'retained'
+                          ? t('settings.minimalMode.retained')
+                          : t('settings.minimalMode.silenced')}
+                      </span>
+                      <span className="minimal-mode-feature-reason">{feature.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {minimalMode.error && (
+                <p className="settings-note">{t('settings.minimalMode.failed')}</p>
+              )}
+            </div>
           </section>
         )}
 

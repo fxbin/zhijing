@@ -21,8 +21,13 @@ import {
 
 import api from '../utils/api';
 import { useWeReadShelfState } from '../hooks/useWeReadShelfState';
+import { useStatisticsGate } from '../hooks/useStatisticsGate';
+import { useQuadrantSummary } from '../hooks/useQuadrantSummary';
+import { QuadrantGrid } from '../components/QuadrantCard';
+import TopicSpectrumChart from '../components/TopicSpectrumChart';
 import { useWeReadCatalogState } from '../hooks/useWeReadCatalogState';
 import { useWeReadImportState } from '../hooks/useWeReadImportState';
+import { useTopicSpectrum } from '../hooks/useTopicSpectrum';
 import {
   TAB_BOOKS,
   TAB_ALBUMS,
@@ -571,6 +576,7 @@ function WeReadPreviewDrawer({ book, mode, batchCount, onClose, onImport, t }) {
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [collapsedChapters, setCollapsedChapters] = useState(() => new Set());
+  const topicSpectrum = useTopicSpectrum();
 
   useEffect(() => {
     if (!book) return;
@@ -594,6 +600,11 @@ function WeReadPreviewDrawer({ book, mode, batchCount, onClose, onImport, t }) {
     })();
     return () => { alive = false; };
   }, [book, t]);
+
+  useEffect(() => {
+    if (!data?.notes || !book?.bookId) return;
+    topicSpectrum.fetchSpectrum(book.bookId, data.notes);
+  }, [data, book, topicSpectrum]);
 
   const filteredNotes = useMemo(() => {
     if (!data?.notes) return [];
@@ -729,6 +740,17 @@ function WeReadPreviewDrawer({ book, mode, batchCount, onClose, onImport, t }) {
             <X size={18} />
           </button>
         </div>
+
+        {data ? (
+          <div className="weread-preview-topic">
+            <TopicSpectrumChart
+              spectrum={topicSpectrum.spectrum}
+              degradeAssessment={topicSpectrum.degradeAssessment}
+              loading={topicSpectrum.loading}
+              error={topicSpectrum.error}
+            />
+          </div>
+        ) : null}
 
         <div className="weread-preview-tools">
           <div className="weread-preview-search">
@@ -996,6 +1018,29 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
     syncShelf,
     handleToggleStatsCollapse,
   } = useWeReadShelfState({ t });
+
+  const statsGate = useStatisticsGate('weReadStatsBand', {
+    dependsOnBehaviorTrace: true,
+    sharedAcrossUsers: false,
+    hasRankingOrComparison: false,
+    emphasizesQuantity: true,
+    exposesRawData: true,
+    allowsUserChallenge: true,
+    isLinearlyOptimizable: false,
+  });
+
+  const quadrantBooks = useMemo(() => {
+    if (!Array.isArray(shelfBooks)) return [];
+    return shelfBooks.map((book) => ({
+      bookId: book.bookId,
+      onShelf: true,
+      highlightCount: 0,
+      noteCharCount: 0,
+      chapterCount: 1,
+      hasLongReview: false,
+    }));
+  }, [shelfBooks]);
+  const quadrantState = useQuadrantSummary(quadrantBooks);
 
   const {
     query,
@@ -1551,13 +1596,64 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
         )}
 
         {configured && !error && activeTab === TAB_STATS && (
-          <WeReadStatsBand
-            stats={stats}
-            collapsed={false}
-            onToggleCollapse={() => setActiveTab(TAB_BOOKS)}
-            onKpiClick={handleKpiClick}
-            t={t}
-          />
+          statsGate.isAllowed ? (
+            <div className="weread-stats-band-wrap">
+              <WeReadStatsBand
+                stats={stats}
+                collapsed={false}
+                onToggleCollapse={() => setActiveTab(TAB_BOOKS)}
+                onKpiClick={handleKpiClick}
+                t={t}
+              />
+              <section className="weread-quadrant-section" aria-label="书架×笔记四象限">
+                <h2>书架 × 笔记 四象限</h2>
+                {quadrantState.loading ? (
+                  <p className="quadrant-grid-loading">计算四象限…</p>
+                ) : quadrantState.summary ? (
+                  <QuadrantGrid
+                    summary={quadrantState.summary}
+                    labels={{
+                      coreReading: '核心阅读',
+                      commitmentDebt: '承诺债务',
+                      hiddenInterest: '隐性真兴趣',
+                      irrelevant: '无关',
+                    }}
+                    descriptions={{
+                      coreReading: '在书架上且笔记深度较高的书，是你的真实兴趣核心',
+                      commitmentDebt: '在书架上但笔记稀疏，想读未读的囤积',
+                      hiddenInterest: '不在书架但笔记深度较高，被忽视的金矿',
+                      irrelevant: '不在书架且无笔记，不进入统计',
+                    }}
+                    emptyHints={{
+                      coreReading: '书架上还没有足够的深度笔记',
+                      commitmentDebt: '没有未读的囤积书',
+                      hiddenInterest: '暂无被忽视的金矿',
+                      irrelevant: '0 本',
+                    }}
+                  />
+                ) : (
+                  <p className="quadrant-grid-empty">尚未生成四象限</p>
+                )}
+                {quadrantState.error && (
+                  <p className="quadrant-grid-error">四象限计算失败：{String(quadrantState.error)}</p>
+                )}
+              </section>
+            </div>
+          ) : (
+            <div className="weread-stats-gate">
+              <p>{t('weread.stats.gateBlocked') ?? '本视图未通过反虚荣门禁'}</p>
+              {statsGate.failedKeys && statsGate.failedKeys.length > 0 && (
+                <p className="weread-stats-gate-detail">
+                  {statsGate.failedKeys.join('、')}
+                </p>
+              )}
+              {statsGate.error && (
+                <p className="weread-stats-gate-error">
+                  {t('weread.stats.gateError') ?? '门禁评估失败，统计已隐藏'}
+                </p>
+              )}
+            </div>
+          )
         )}
 
         {configured && !error && activeTab === TAB_RECOMMEND && (
