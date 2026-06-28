@@ -1,14 +1,20 @@
+import { randomUUID } from 'node:crypto';
 import {
   getModel,
   getEnvApiKey,
   streamSimple,
+  createAssistantMessageEventStream,
   type Api,
+  type AssistantMessage,
+  type AssistantMessageEvent,
   type KnownProvider,
   type Message,
   type Model,
 } from '@earendil-works/pi-ai';
 import { Agent, type AgentMessage, type AgentOptions, type ThinkingLevel } from '@earendil-works/pi-agent-core';
 import { routeProvider, type AgentTaskType } from '@zhijing/pi-runtime';
+import { recordAgentUsage } from '@zhijing/core';
+import type { ProviderRole } from '@zhijing/shared';
 import { createWorkspaceTools, getToolCapabilityDeclaration } from './tools/index.js';
 import {
   assertToolCapabilityAllowed,
@@ -33,6 +39,42 @@ const DEFAULT_THINKING_LEVEL: ThinkingLevel = 'off';
  * 缩短单轮多检索场景下的等待时间。
  */
 const DEFAULT_TOOL_EXECUTION: AgentOptions['toolExecution'] = 'parallel';
+
+/**
+ * 从 streamSimple 的 chunk 中提取 usage 信息。
+ *
+ * pi-ai 的 chunk 类型是 AssistantMessageEvent 联合类型，不同事件 usage
+ * 挂载位置不同：
+ * - start / text_* / thinking_* / toolcall_* 事件：usage 在 chunk.partial.usage（流式累计值）
+ * - done 事件：usage 在 chunk.message.usage（最终值）
+ * - error 事件：usage 在 chunk.error.usage（已用值）
+ *
+ * pi-ai 的 Usage 字段是 input / output / cost.total，与 AgentUsageRecord 的
+ * inputTokens / outputTokens / costUsd 不同名，这里做字段映射。
+ *
+ * @param chunk - streamSimple 的事件 chunk
+ * @returns 映射后的 usage 信息；无 usage 时返回 null
+ * @author fxbin
+ */
+function extractStreamChunkUsage(
+  chunk: AssistantMessageEvent,
+): { inputTokens: number | null; outputTokens: number | null; costUsd: number | null } | null {
+  let message: AssistantMessage | undefined;
+  if ('partial' in chunk) {
+    message = chunk.partial;
+  } else if ('message' in chunk) {
+    message = chunk.message;
+  } else if ('error' in chunk) {
+    message = chunk.error;
+  }
+  const usage = message?.usage;
+  if (!usage) return null;
+  return {
+    inputTokens: usage.input ?? null,
+    outputTokens: usage.output ?? null,
+    costUsd: usage.cost?.total ?? null,
+  };
+}
 
 /**
  * 知径工作区 Agent 的系统提示词。
@@ -187,7 +229,62 @@ export function createWorkspaceAgent(workspaceId: string, options: WorkspaceAgen
     convertToLlm: defaultConvertToLlm,
     streamFn: (...args) => {
       const streamOptions = args[2] ?? {};
-      return streamSimple(args[0], args[1], { ...streamOptions, apiKey });
+      const innerStream = streamSimple(args[0], args[1], { ...streamOptions, apiKey });
+      const startedAt = new Date().toISOString();
+      const startMs = Date.now();
+      let lastUsage: { inputTokens: number | null; outputTokens: number | null; costUsd: number | null } = {
+        inputTokens: null,
+        outputTokens: null,
+        costUsd: null,
+      };
+      const role: ProviderRole = resolution.route.role;
+      const outStream = createAssistantMessageEventStream();
+
+      void (async () => {
+        let ok = true;
+        let errorMessage: string | null = null;
+        let finalMessage: AssistantMessage | undefined;
+        try {
+          for await (const chunk of innerStream) {
+            const usage = extractStreamChunkUsage(chunk);
+            if (usage) lastUsage = usage;
+            outStream.push(chunk);
+            if (chunk.type === 'done') {
+              finalMessage = chunk.message;
+            } else if (chunk.type === 'error') {
+              ok = false;
+              errorMessage = chunk.error.errorMessage ?? chunk.reason ?? 'stream error';
+              finalMessage = chunk.error;
+            }
+          }
+        } catch (error) {
+          ok = false;
+          errorMessage = error instanceof Error ? error.message : String(error);
+        } finally {
+          if (finalMessage) {
+            outStream.end(finalMessage);
+          } else {
+            outStream.end();
+          }
+          recordAgentUsage({
+            id: randomUUID(),
+            workspaceId,
+            taskType,
+            provider,
+            model: modelId,
+            role,
+            inputTokens: lastUsage.inputTokens,
+            outputTokens: lastUsage.outputTokens,
+            costUsd: lastUsage.costUsd,
+            ok,
+            errorMessage,
+            startedAt,
+            durationMs: Date.now() - startMs,
+          });
+        }
+      })();
+
+      return outStream;
     },
     toolExecution: options.toolExecution ?? DEFAULT_TOOL_EXECUTION,
   });
