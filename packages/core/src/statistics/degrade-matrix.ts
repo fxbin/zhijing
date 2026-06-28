@@ -84,6 +84,16 @@ export const DEGRADE_MATRIX_REGISTRY: readonly DegradeMatrixEntry[] = [
     whyItMatters: '阅读健康度依赖停留时长信号，缺失时无法评估节奏。',
     howToRestore: '前往「设置 → 数据账本」重新开启停留时长维度。',
   },
+  {
+    key: 'recommendations',
+    label: '书籍推荐',
+    baseConfidence: 0.8,
+    requiredDimensions: ['highlight', 'note'],
+    gammaFactor: DEFAULT_GAMMA_FACTOR,
+    missingHint: `书籍推荐缺失维度：${DEGRADE_MISSING_DIMS_PLACEHOLDER}`,
+    whyItMatters: '推荐种子依赖划线与笔记深度信号，缺失维度会导致 Q1∪Q3 种子误判。',
+    howToRestore: '前往「设置 → 数据账本」重新开启划线或笔记维度。',
+  },
 ];
 
 export interface AssessDegradeOptions {

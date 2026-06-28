@@ -2972,3 +2972,8 @@ export interface ReaderModeState {
   /** 更新时间戳（毫秒） */
   updatedAt: number;
 }
+
+/** 推荐实验桶标识（NS-5）。control 为现有三策略逻辑，treatment 为 Q1∪Q3 种子优先。 */
+export const RECOMMENDATION_BUCKET_VALUES = ['control', 'treatment'] as const;
+/** 推荐实验桶类型 */
+export type RecommendationBucket = typeof RECOMMENDATION_BUCKET_VALUES[number];

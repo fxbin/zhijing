@@ -155,6 +155,7 @@ import {
   type AudienceTier,
   type AudienceProfile,
   type ReaderModeState,
+  type RecommendationBucket,
 } from '@zhijing/shared';
 import { fetchUrlAsMarkdown, parseRawHtml } from './web-fetch.js';
 import {
@@ -11796,6 +11797,7 @@ const RECOMMEND_MAX_RESULTS = 10;
 const RECOMMEND_COVERAGE_WEIGHT = 3;
 const RECOMMEND_DEPTH_WEIGHT = 2;
 const RECOMMEND_CARD_LINKED_WEIGHT = 1;
+const RECOMMEND_SEED_BOOST_WEIGHT = 5;
 
 function resolveThemeByCategory(category: string | null): string {
   if (!category) return 'general';
@@ -11811,12 +11813,23 @@ function resolveThemeByCategory(category: string | null): string {
  * 计算微信读书书籍推荐列表。
  * 基于三种策略：覆盖缺口（知识库缺少的主题）、深度推荐（同主题进阶）、卡片关联（已导入笔记的同主题书）。
  * @param workspaceId - 当前知识库 ID，用于计算覆盖缺口
+ * @param bucket - 推荐实验桶（NS-5）。control 为现有逻辑，treatment 为 Q1∪Q3 种子优先加权
  * @returns 推荐结果，包含推荐书籍列表和覆盖缺口分析
  */
-export function computeWeReadRecommendations(workspaceId?: string): WeReadRecommendResult {
+export function computeWeReadRecommendations(
+  workspaceId?: string,
+  bucket: RecommendationBucket = 'control',
+): WeReadRecommendResult {
   const books = repository.readWeReadBookMetaList().filter((b) => b.presentOnShelf === 1);
   const unimportedBooks = books.filter((b) => !b.materialId);
   const importedBooks = books.filter((b) => b.materialId);
+
+  let seedBookIds: Set<string> | null = null;
+  if (bucket === 'treatment') {
+    const seedInputs = buildQuadrantInputsFromMeta(repository.readWeReadBookMetaList());
+    const seedQuadrant = computeQuadrantSummary(seedInputs);
+    seedBookIds = new Set(seedQuadrant.recommendationSeeds);
+  }
 
   let kbCards: { type: string }[] = [];
   if (workspaceId) {
@@ -11931,13 +11944,15 @@ export function computeWeReadRecommendations(workspaceId?: string): WeReadRecomm
   }
 
   const sorted = recommendations.sort((a, b) => {
-    const weightA = a.reason === 'coverage_gap' ? RECOMMEND_COVERAGE_WEIGHT
+    const baseWeightA = a.reason === 'coverage_gap' ? RECOMMEND_COVERAGE_WEIGHT
       : a.reason === 'depth' ? RECOMMEND_DEPTH_WEIGHT
       : RECOMMEND_CARD_LINKED_WEIGHT;
-    const weightB = b.reason === 'coverage_gap' ? RECOMMEND_COVERAGE_WEIGHT
+    const baseWeightB = b.reason === 'coverage_gap' ? RECOMMEND_COVERAGE_WEIGHT
       : b.reason === 'depth' ? RECOMMEND_DEPTH_WEIGHT
       : RECOMMEND_CARD_LINKED_WEIGHT;
-    return weightB - weightA;
+    const seedBoostA = bucket === 'treatment' && seedBookIds?.has(a.bookId) ? RECOMMEND_SEED_BOOST_WEIGHT : 0;
+    const seedBoostB = bucket === 'treatment' && seedBookIds?.has(b.bookId) ? RECOMMEND_SEED_BOOST_WEIGHT : 0;
+    return (baseWeightB + seedBoostB) - (baseWeightA + seedBoostA);
   });
 
   return {
@@ -13304,4 +13319,5 @@ export type {
   AudienceTier,
   AudienceProfile,
   ReaderModeState,
+  RecommendationBucket,
 } from '@zhijing/shared';
