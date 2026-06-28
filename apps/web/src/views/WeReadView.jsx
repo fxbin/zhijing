@@ -907,29 +907,6 @@ function WeReadRecommendPanel({ workspaceId, onImport, t, forceExpanded }) {
   const [collapsed, setCollapsed] = useState(false);
   const isCollapsed = forceExpanded ? false : collapsed;
 
-  const recommendGate = useStatisticsGate('weReadRecommendPanel', {
-    dependsOnBehaviorTrace: true,
-    sharedAcrossUsers: false,
-    hasRankingOrComparison: false,
-    emphasizesQuantity: false,
-    exposesRawData: false,
-    allowsUserChallenge: false,
-    isLinearlyOptimizable: false,
-  });
-
-  if (!recommendGate.isAllowed) {
-    return (
-      <div className="weread-recommend-band weread-recommend-band--gated">
-        <p>{t('weread.stats.gateBlocked') ?? '本视图未通过反虚荣门禁'}</p>
-        {recommendGate.failedKeys && recommendGate.failedKeys.length > 0 && (
-          <p className="weread-stats-gate-detail">
-            {recommendGate.failedKeys.join('、')}
-          </p>
-        )}
-      </div>
-    );
-  }
-
   if (loading || total === 0) return null;
 
   const reasonLabel = (reason) => {

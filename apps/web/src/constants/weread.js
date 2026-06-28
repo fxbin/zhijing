@@ -149,12 +149,12 @@ const YEAR_CHART_MAX_BARS = 8;
 /**
  * 年份柱状图最小高度（像素）。
  */
-const YEAR_BAR_MIN_HEIGHT_PX = 8;
+const YEAR_BAR_MIN_HEIGHT_PX = 12;
 
 /**
  * 年份柱状图最大高度（像素）。
  */
-const YEAR_BAR_MAX_HEIGHT_PX = 80;
+const YEAR_BAR_MAX_HEIGHT_PX = 120;
 
 /**
  * 月度活跃图最大柱数。
@@ -164,12 +164,12 @@ const MONTH_CHART_MAX_BARS = 12;
 /**
  * 月度柱状图最小高度（像素）。
  */
-const MONTH_BAR_MIN_HEIGHT_PX = 8;
+const MONTH_BAR_MIN_HEIGHT_PX = 12;
 
 /**
  * 月度柱状图最大高度（像素）。
  */
-const MONTH_BAR_MAX_HEIGHT_PX = 80;
+const MONTH_BAR_MAX_HEIGHT_PX = 120;
 
 /**
  * 毫秒与秒换算基数。
