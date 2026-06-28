@@ -12,6 +12,12 @@ const WEREAD_SKILL_VERSION = '1.0.3';
 const WEREAD_AUTHORIZATION_PREFIX = 'Bearer ';
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
+/**
+ * 批量信号刷新的默认并发上限。
+ * 取值偏低以兼顾微信读书网关的限流策略，避免触发 429 或封禁。
+ */
+export const SIGNALS_REFRESH_DEFAULT_CONCURRENCY = 5;
+
 export type WeReadShelfBook = {
   bookId: string;
   bookIdLong?: string;
@@ -65,6 +71,10 @@ export type WeReadBookMetaRow = {
   presentOnShelf: number;
   materialId: string | null;
   bookmarkCount: number | null;
+  reviewCount: number | null;
+  chapterCount: number | null;
+  longReviewCount: number | null;
+  signalsSyncedAt: string | null;
   firstSeenAt: string;
   lastSyncedAt: string;
 };
@@ -214,6 +224,21 @@ export type WeReadImportResult = {
   contentText: string;
   bookmarkCount: number;
   reviewCount: number;
+};
+
+/**
+ * 批量信号刷新结果。
+ *
+ * - total: 本次处理的书籍总数
+ * - synced: 成功写入信号的书籍数
+ * - failed: 失败书籍数（等于 failures.length）
+ * - failures: 失败明细，含 bookId 与失败原因
+ */
+export type WeReadSignalsRefreshResult = {
+  total: number;
+  synced: number;
+  failed: number;
+  failures: Array<{ bookId: string; reason: string }>;
 };
 
 /**

@@ -151,6 +151,7 @@ import {
   setMinimalMode,
 } from './data-account-book.js';
 import { buildEmptyCoverage } from './statistics/verification-bank.js';
+import { LONG_REVIEW_CHAR_THRESHOLD } from './statistics/saturate.js';
 export { initProxyDispatcher, getCurrentProxy } from './fetch-dispatcher.js';
 export { detectSystemProxy, setManualProxy, resetProxyCache } from './proxy-detector.js';
 import {
@@ -240,6 +241,8 @@ import {
   type WeReadPreviewResult,
   type WeReadRecommendation,
   type WeReadRecommendResult,
+  SIGNALS_REFRESH_DEFAULT_CONCURRENCY,
+  type WeReadSignalsRefreshResult,
 } from './weread.js';
 
 type PersistedModelProviderConfig = Partial<{
@@ -535,6 +538,14 @@ type KnowledgeRepository = {
   readWeReadSyncState(): WeReadSyncStateRow | null;
   writeWeReadSyncState(state: WeReadSyncStateRow): void;
   updateWeReadBookMetaImport(bookId: string, materialId: string, bookmarkCount: number): void;
+  updateWeReadBookMetaSignals(input: {
+    bookId: string;
+    bookmarkCount: number;
+    reviewCount: number;
+    chapterCount: number;
+    longReviewCount: number;
+    signalsSyncedAt: string;
+  }): void;
   computeWeReadStats(): WeReadStatsResponse;
   insertAttentionSignal(signal: AttentionSignal): void;
   listAttentionSignals(workspaceId?: string, limit?: number): AttentionSignal[];
@@ -1109,6 +1120,10 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
           presentOnShelf: 1,
           materialId: null,
           bookmarkCount: null,
+          reviewCount: null,
+          chapterCount: null,
+          longReviewCount: null,
+          signalsSyncedAt: null,
           firstSeenAt: nowIso,
           lastSyncedAt: nowIso,
         });
@@ -1138,6 +1153,24 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     if (row) {
       row.materialId = materialId;
       row.bookmarkCount = bookmarkCount;
+    }
+  }
+
+  updateWeReadBookMetaSignals(input: {
+    bookId: string;
+    bookmarkCount: number;
+    reviewCount: number;
+    chapterCount: number;
+    longReviewCount: number;
+    signalsSyncedAt: string;
+  }): void {
+    const row = this.wereadBookMeta.find((row) => row.bookId === input.bookId);
+    if (row) {
+      row.bookmarkCount = input.bookmarkCount;
+      row.reviewCount = input.reviewCount;
+      row.chapterCount = input.chapterCount;
+      row.longReviewCount = input.longReviewCount;
+      row.signalsSyncedAt = input.signalsSyncedAt;
     }
   }
 
@@ -3418,6 +3451,18 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     if (!columns.some((column) => column.name === 'book_id_long')) {
       this.db.exec('ALTER TABLE weread_book_meta ADD COLUMN book_id_long TEXT;');
     }
+    if (!columns.some((column) => column.name === 'review_count')) {
+      this.db.exec('ALTER TABLE weread_book_meta ADD COLUMN review_count INTEGER;');
+    }
+    if (!columns.some((column) => column.name === 'chapter_count')) {
+      this.db.exec('ALTER TABLE weread_book_meta ADD COLUMN chapter_count INTEGER;');
+    }
+    if (!columns.some((column) => column.name === 'long_review_count')) {
+      this.db.exec('ALTER TABLE weread_book_meta ADD COLUMN long_review_count INTEGER;');
+    }
+    if (!columns.some((column) => column.name === 'signals_synced_at')) {
+      this.db.exec('ALTER TABLE weread_book_meta ADD COLUMN signals_synced_at TEXT;');
+    }
   }
 
   private ensureWeReadSyncStateTable() {
@@ -3506,6 +3551,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
              finish_reading AS finishReading, read_update_time AS readUpdateTime,
              secret, archive_year AS archiveYear, present_on_shelf AS presentOnShelf,
              material_id AS materialId, bookmark_count AS bookmarkCount,
+             review_count AS reviewCount, chapter_count AS chapterCount,
+             long_review_count AS longReviewCount, signals_synced_at AS signalsSyncedAt,
              first_seen_at AS firstSeenAt, last_synced_at AS lastSyncedAt
       FROM weread_book_meta WHERE present_on_shelf = 1
       ORDER BY read_update_time DESC
@@ -3543,6 +3590,25 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       UPDATE weread_book_meta SET material_id = ?, bookmark_count = ?
       WHERE book_id = ?
     `).run(materialId, bookmarkCount, bookId);
+  }
+
+  updateWeReadBookMetaSignals(input: {
+    bookId: string;
+    bookmarkCount: number;
+    reviewCount: number;
+    chapterCount: number;
+    longReviewCount: number;
+    signalsSyncedAt: string;
+  }): void {
+    this.db.prepare(`
+      UPDATE weread_book_meta SET
+        bookmark_count = @bookmarkCount,
+        review_count = @reviewCount,
+        chapter_count = @chapterCount,
+        long_review_count = @longReviewCount,
+        signals_synced_at = @signalsSyncedAt
+      WHERE book_id = @bookId
+    `).run(input);
   }
 
   computeWeReadStats(): WeReadStatsResponse {
@@ -11139,6 +11205,7 @@ export type {
   WeReadPreviewResult,
   WeReadRecommendation,
   WeReadRecommendResult,
+  WeReadSignalsRefreshResult,
 };
 
 /**
@@ -11653,6 +11720,80 @@ export async function previewWeReadBook(bookId: string): Promise<WeReadPreviewRe
     notes,
     bookmarkCount: bookmarks.updated?.length ?? 0,
     reviewCount: reviews.reviews?.length ?? 0,
+  };
+}
+
+/**
+ * 批量刷新书架书籍的阅读信号（划线数/笔记数/章节数/长评数）。
+ *
+ * 作为四象限等派生统计的真实信号数据源。采用分批并发限流避免冲击微信读书网关，
+ * 单本失败不中断整体刷新，返回明细供前端展示进度与错误。
+ *
+ * @author fxbin
+ * @param bookIds - 待刷新的书籍 ID 列表
+ * @param concurrency - 并发数上限，默认 5
+ * @returns 同步结果统计（total/synced/failed）与失败明细列表
+ */
+export async function refreshWeReadBookSignals(
+  bookIds: string[],
+  concurrency = SIGNALS_REFRESH_DEFAULT_CONCURRENCY,
+): Promise<WeReadSignalsRefreshResult> {
+  const apiKey = repository.readWeReadApiKey();
+  if (!apiKey) {
+    throw new KnowledgeCoreError('未配置微信读书 API Key', 400);
+  }
+
+  const client = new WeReadClient(apiKey);
+  const total = bookIds.length;
+  const failures: Array<{ bookId: string; reason: string }> = [];
+  let synced = 0;
+  const nowIso = new Date().toISOString();
+
+  for (let i = 0; i < bookIds.length; i += concurrency) {
+    const batch = bookIds.slice(i, i + concurrency);
+    const results = await Promise.allSettled(
+      batch.map(async (bookId) => {
+        const [bookmarks, reviews] = await Promise.all([
+          client.getBookmarkList(bookId),
+          client.getReviewList(bookId),
+        ]);
+        const bookmarkCount = bookmarks.updated?.length ?? 0;
+        const chapterCount = bookmarks.chapters?.length ?? 0;
+        const reviewList = reviews.reviews ?? [];
+        const reviewCount = reviewList.length;
+        const longReviewCount = reviewList.filter(
+          (entry) => (entry.review?.content?.length ?? 0) >= LONG_REVIEW_CHAR_THRESHOLD,
+        ).length;
+
+        repository.updateWeReadBookMetaSignals({
+          bookId,
+          bookmarkCount,
+          reviewCount,
+          chapterCount,
+          longReviewCount,
+          signalsSyncedAt: nowIso,
+        });
+
+        return bookId;
+      }),
+    );
+
+    for (let j = 0; j < results.length; j += 1) {
+      const result = results[j];
+      if (result.status === 'fulfilled') {
+        synced += 1;
+      } else {
+        const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        failures.push({ bookId: batch[j], reason });
+      }
+    }
+  }
+
+  return {
+    total,
+    synced,
+    failed: failures.length,
+    failures,
   };
 }
 
