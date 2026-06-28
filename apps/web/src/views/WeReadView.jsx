@@ -28,6 +28,8 @@ import TopicSpectrumChart from '../components/TopicSpectrumChart';
 import { useWeReadCatalogState } from '../hooks/useWeReadCatalogState';
 import { useWeReadImportState } from '../hooks/useWeReadImportState';
 import { useBookSignals } from '../hooks/useBookSignals';
+import { useHiddenInterest } from '../hooks/useHiddenInterest';
+import HiddenInterestBanner from '../components/HiddenInterestBanner';
 import { useTopicSpectrum } from '../hooks/useTopicSpectrum';
 import {
   TAB_BOOKS,
@@ -1122,6 +1124,33 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
 
   const [signalsToast, setSignalsToast] = useState(null);
 
+  const hiddenInterest = useHiddenInterest();
+
+  useEffect(() => {
+    hiddenInterest.fetchHint();
+  }, [hiddenInterest]);
+
+  const handleHiddenInterestShown = useCallback(async () => {
+    const ok = await hiddenInterest.markShown();
+    if (ok) {
+      await hiddenInterest.fetchHint();
+    }
+  }, [hiddenInterest]);
+
+  const handleHiddenInterestDismissBook = useCallback(async (bookId) => {
+    const ok = await hiddenInterest.dismissBook(bookId);
+    if (ok) {
+      await hiddenInterest.fetchHint();
+    }
+  }, [hiddenInterest]);
+
+  const handleHiddenInterestTogglePermanent = useCallback(async () => {
+    const ok = await hiddenInterest.togglePermanent(true);
+    if (ok) {
+      await hiddenInterest.fetchHint();
+    }
+  }, [hiddenInterest]);
+
   const handleRefreshSignals = useCallback(async () => {
     if (!Array.isArray(shelfBooks) || shelfBooks.length === 0) return;
     const ids = shelfBooks.map((book) => String(book.bookId));
@@ -1696,6 +1725,13 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
                 {quadrantState.error && (
                   <p className="quadrant-grid-error">四象限计算失败：{String(quadrantState.error)}</p>
                 )}
+                <HiddenInterestBanner
+                  hint={hiddenInterest.hint}
+                  onMarkShown={handleHiddenInterestShown}
+                  onDismissBook={handleHiddenInterestDismissBook}
+                  onTogglePermanent={handleHiddenInterestTogglePermanent}
+                  busy={hiddenInterest.loading}
+                />
               </section>
             </div>
           ) : (

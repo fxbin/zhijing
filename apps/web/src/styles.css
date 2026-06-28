@@ -4100,6 +4100,303 @@ button { cursor: pointer; }
   line-height: 1.5;
 }
 
+.hidden-interest-banner {
+  margin-top: 16px;
+  padding: 16px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--question, #D4944A);
+  background: rgba(212, 148, 74, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hidden-interest-banner__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, rgba(0, 0, 0, 0.85));
+}
+
+.hidden-interest-banner__book {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hidden-interest-banner__book-title {
+  font-size: 13px;
+  color: var(--text-primary, rgba(0, 0, 0, 0.85));
+}
+
+.hidden-interest-banner__badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  background: var(--sage-green, #6B8E7F);
+}
+
+.hidden-interest-banner__reason {
+  font-size: 12px;
+  color: var(--text-muted, rgba(0, 0, 0, 0.55));
+  line-height: 1.5;
+}
+
+.hidden-interest-banner__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hidden-interest-banner__btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle, rgba(44, 95, 141, 0.18));
+  background: var(--surface-elevated, #ffffff);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.hidden-interest-banner__btn:hover:not(:disabled) {
+  border-color: var(--scholar-blue, #2C5F8D);
+}
+
+.hidden-interest-banner__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hidden-interest-banner__btn--primary {
+  color: #ffffff;
+  background: var(--scholar-blue, #2C5F8D);
+  border-color: var(--scholar-blue, #2C5F8D);
+}
+
+.hidden-interest-banner__btn--primary:hover:not(:disabled) {
+  background: #245079;
+}
+
+.hidden-interest-banner__btn--ghost {
+  border-color: transparent;
+  color: var(--text-muted, rgba(0, 0, 0, 0.55));
+}
+
+.data-portability-block {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid var(--border-subtle, rgba(44, 95, 141, 0.18));
+  border-radius: 12px;
+  background: var(--surface-soft, rgba(44, 95, 141, 0.04));
+  display: grid;
+  gap: 16px;
+}
+
+.data-portability-head h4 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--scholar-blue, #2C5F8D);
+}
+
+.data-portability-head p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted, rgba(0, 0, 0, 0.55));
+}
+
+.data-portability-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.data-portability-actions button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--scholar-blue, #2C5F8D);
+  background: var(--surface-elevated, #ffffff);
+  color: var(--scholar-blue, #2C5F8D);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.data-portability-actions button:hover:not(:disabled) {
+  background: var(--scholar-blue, #2C5F8D);
+  color: #ffffff;
+}
+
+.data-portability-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.data-portability-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.data-portability-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-elevated, #ffffff);
+  border-left: 3px solid var(--sage-green, #6B8E7F);
+}
+
+.data-portability-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.data-portability-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary, rgba(0, 0, 0, 0.85));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-portability-item-meta {
+  font-size: 12px;
+  color: var(--text-muted, rgba(0, 0, 0, 0.55));
+}
+
+.data-portability-revoke-btn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, rgba(44, 95, 141, 0.18));
+  background: transparent;
+  font-size: 12px;
+  color: var(--text-muted, rgba(0, 0, 0, 0.55));
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.data-portability-revoke-btn:hover:not(:disabled) {
+  border-color: var(--question, #D4944A);
+  color: var(--question, #D4944A);
+}
+
+.reader-mode-block {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid var(--border-subtle, rgba(44, 95, 141, 0.18));
+  border-radius: 12px;
+  background: var(--surface-soft, rgba(44, 95, 141, 0.04));
+  display: grid;
+  gap: 16px;
+}
+
+.reader-mode-head h4 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--scholar-blue, #2C5F8D);
+}
+
+.reader-mode-head p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted, rgba(0, 0, 0, 0.55));
+}
+
+.reader-mode-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.reader-mode-tier {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.reader-mode-tier--novice {
+  background: var(--question, #D4944A);
+}
+
+.reader-mode-tier--regular {
+  background: var(--scholar-blue, #2C5F8D);
+}
+
+.reader-mode-tier--power {
+  background: var(--sage-green, #6B8E7F);
+}
+
+.reader-mode-reason {
+  font-size: 12px;
+  color: var(--text-muted, rgba(0, 0, 0, 0.55));
+}
+
+.reader-mode-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.reader-mode-actions button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle, rgba(44, 95, 141, 0.18));
+  background: var(--surface-elevated, #ffffff);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.reader-mode-actions button:hover:not(:disabled) {
+  border-color: var(--scholar-blue, #2C5F8D);
+}
+
+.reader-mode-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.reader-mode-features {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.reader-mode-features-label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted, rgba(0, 0, 0, 0.55));
+}
+
+.reader-mode-features-list {
+  font-size: 12px;
+  color: var(--text-primary, rgba(0, 0, 0, 0.65));
+  line-height: 1.6;
+}
+
 .settings-profile-layout {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);

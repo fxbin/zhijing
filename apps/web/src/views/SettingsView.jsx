@@ -41,6 +41,8 @@ import {
   DATA_ACTION_TYPE_REVEAL,
 } from '../hooks/useSettingsStats';
 import { useMinimalMode } from '../hooks/useMinimalMode';
+import { useDataPortability } from '../hooks/useDataPortability';
+import { useReaderMode } from '../hooks/useReaderMode';
 
 /**
  * 设置分区默认激活 profiles。
@@ -131,6 +133,18 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
   useEffect(() => {
     minimalMode.fetchMinimalMode();
   }, [minimalMode]);
+
+  const dataPortability = useDataPortability();
+
+  useEffect(() => {
+    dataPortability.fetchRecords();
+  }, [dataPortability]);
+
+  const readerMode = useReaderMode();
+
+  useEffect(() => {
+    readerMode.fetchProfile();
+  }, [readerMode]);
 
   useEffect(() => {
     if (initialSection) {
@@ -726,6 +740,123 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
               )}
               {minimalMode.error && (
                 <p className="settings-note">{t('settings.minimalMode.failed')}</p>
+              )}
+            </div>
+
+            <div className="data-portability-block">
+              <div className="data-portability-head">
+                <h4>数据可携</h4>
+                <p>导出你的统计数据画像（信号源 + 派生指标 + 算法版本），30 天内可撤回。</p>
+              </div>
+              <div className="data-portability-actions">
+                <button
+                  type="button"
+                  disabled={dataPortability.loading}
+                  onClick={() => dataPortability.exportProfile('json')}
+                >
+                  导出 JSON
+                </button>
+                <button
+                  type="button"
+                  disabled={dataPortability.loading}
+                  onClick={() => dataPortability.exportProfile('markdown')}
+                >
+                  导出 Markdown
+                </button>
+              </div>
+              {dataPortability.records.length > 0 && (
+                <ul className="data-portability-list">
+                  {dataPortability.records.map((record) => (
+                    <li key={record.id} className="data-portability-item">
+                      <div className="data-portability-item-info">
+                        <span className="data-portability-item-name">{record.filename}</span>
+                        <span className="data-portability-item-meta">
+                          {record.format.toUpperCase()} ·{' '}
+                          {new Date(record.createdAt).toLocaleDateString()}
+                          {record.revokedAt ? ' · 已撤回' : ''}
+                        </span>
+                      </div>
+                      {!record.revokedAt && Date.now() < record.revokeDeadline && (
+                        <button
+                          type="button"
+                          className="data-portability-revoke-btn"
+                          disabled={dataPortability.loading}
+                          onClick={() => dataPortability.revokeRecord(record.id)}
+                        >
+                          撤回
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {dataPortability.error && (
+                <p className="settings-note">数据可携操作失败，请重试。</p>
+              )}
+            </div>
+
+            <div className="reader-mode-block">
+              <div className="reader-mode-head">
+                <h4>阅读模式适配</h4>
+                <p>根据划线量自动适配功能可见度，可临时回退到新手模式（30 天后自动恢复）。</p>
+              </div>
+              {readerMode.profile && (
+                <div className="reader-mode-profile">
+                  <span className={`reader-mode-tier reader-mode-tier--${readerMode.profile.tier}`}>
+                    {readerMode.profile.tier === 'novice' ? '新手' : readerMode.profile.tier === 'power' ? '重度' : '常规'}
+                  </span>
+                  <span className="reader-mode-reason">{readerMode.profile.reason}</span>
+                </div>
+              )}
+              <div className="reader-mode-actions">
+                {readerMode.profile && readerMode.profile.tier !== 'novice' && (
+                  <button
+                    type="button"
+                    disabled={readerMode.loading}
+                    onClick={() => {
+                      readerMode.startRollback('novice').then((ok) => {
+                        if (ok) readerMode.fetchProfile();
+                      });
+                    }}
+                  >
+                    临时回到新手模式
+                  </button>
+                )}
+                {readerMode.profile && readerMode.profile.tier !== 'power' && (
+                  <button
+                    type="button"
+                    disabled={readerMode.loading}
+                    onClick={() => {
+                      readerMode.startRollback('regular').then((ok) => {
+                        if (ok) readerMode.fetchProfile();
+                      });
+                    }}
+                  >
+                    临时回到常规模式
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={readerMode.loading}
+                  onClick={() => {
+                    readerMode.cancelRollback().then((ok) => {
+                      if (ok) readerMode.fetchProfile();
+                    });
+                  }}
+                >
+                  取消临时回退
+                </button>
+              </div>
+              {readerMode.profile && readerMode.profile.visibleFeatures && (
+                <div className="reader-mode-features">
+                  <p className="reader-mode-features-label">可见功能：</p>
+                  <span className="reader-mode-features-list">
+                    {readerMode.profile.visibleFeatures.join('、')}
+                  </span>
+                </div>
+              )}
+              {readerMode.error && (
+                <p className="settings-note">阅读模式查询失败，请重试。</p>
               )}
             </div>
           </section>
