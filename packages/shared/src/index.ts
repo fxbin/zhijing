@@ -2195,6 +2195,10 @@ export type QuadrantKind = typeof QUADRANT_KIND_VALUES[number];
 export interface BookSignalInputs {
   bookId: string;
   /**
+   * 书名（可选，用于前端展示，避免裸显示数字 ID）
+   */
+  title?: string;
+  /**
    * 是否在用户书架（on shelf vs off shelf）
    */
   onShelf: boolean;
@@ -2240,6 +2244,10 @@ export interface NoteDepthScore {
  */
 export interface BookQuadrant {
   bookId: string;
+  /**
+   * 书名（可选，从 BookSignalInputs 透传，用于前端展示）
+   */
+  title?: string;
   kind: QuadrantKind;
   noteDepth: NoteDepthScore;
   /**
