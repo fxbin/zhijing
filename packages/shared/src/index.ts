@@ -2121,3 +2121,697 @@ export const DECISION_LOG_KIND_VALUES: readonly DecisionLogKind[] = [
   'mode_switch',
   'orchestrator',
 ];
+
+/**
+ * 统计视图可见性等级（反虚荣规范 NS-4）。
+ * - hidden 默认隐藏，用户主动查询才展示
+ * - passive 被动展示，但不在显眼位置
+ * - visible 正常展示
+ * - prominent 显著展示（仅对真正对用户决策有用的核心指标开放）
+ * @author fxbin
+ */
+export const STATISTICS_VIEW_VISIBILITY_VALUES = ['hidden', 'passive', 'visible', 'prominent'] as const;
+export type StatisticsViewVisibility = typeof STATISTICS_VIEW_VISIBILITY_VALUES[number];
+
+/**
+ * 数据隐私等级（反虚荣规范 NS-4 + 用户数据四权）。
+ * - public_local 仅本地可见，不参与任何对外聚合
+ * - private_only 仅本人可见（默认）
+ * - shared_explicit 用户明确同意后参与聚合
+ * - disabled 完全关闭采集（受用户关闭权保护）
+ * @author fxbin
+ */
+export const STATISTICS_PRIVACY_TIER_VALUES = ['public_local', 'private_only', 'shared_explicit', 'disabled'] as const;
+export type StatisticsPrivacyTier = typeof STATISTICS_PRIVACY_TIER_VALUES[number];
+
+/**
+ * 数据账本单项（用户数据四权：知情/导出/删除/关闭）。
+ * 每个数据账本单项对应一个原始采集维度（如划线、笔记、重读、停留），
+ * 用户可独立控制每个单项的隐私等级。
+ * @author fxbin
+ */
+export interface DataAccountEntry {
+  key: string;
+  label: string;
+  tier: StatisticsPrivacyTier;
+  /**
+   * 派生指标依赖声明：该项被关闭时影响哪些派生指标
+   * 用于降级矩阵（NS-6）的反向查询
+   */
+  dependentMetrics: string[];
+  /**
+   * 是否允许导出（数据可携 NS-8 的一部分）
+   */
+  exportable: boolean;
+  updatedAt: string;
+}
+
+export interface DataAccountBook {
+  entries: DataAccountEntry[];
+  /**
+   * 全局极简模式（NS-4）：一键关闭所有统计采集
+   * 开启后所有 entries 的 tier 强制设为 disabled
+   */
+  minimalMode: boolean;
+  updatedAt: string;
+}
+
+/**
+ * 四象限类型（NS-1）。
+ * - core_reading：核心阅读（在书架 + 深笔记）
+ * - commitment_debt：承诺债务（在书架 + 浅/无笔记）
+ * - hidden_interest：隐性真兴趣（不在书架 + 深笔记）
+ * - irrelevant：无关（不在书架 + 浅/无笔记）
+ *
+ * @author fxbin
+ */
+export const QUADRANT_KIND_VALUES = ['core_reading', 'commitment_debt', 'hidden_interest', 'irrelevant'] as const;
+export type QuadrantKind = typeof QUADRANT_KIND_VALUES[number];
+
+/**
+ * note_depth 计算输入：每本书的基础信号。
+ * @author fxbin
+ */
+export interface BookSignalInputs {
+  bookId: string;
+  /**
+   * 是否在用户书架（on shelf vs off shelf）
+   */
+  onShelf: boolean;
+  /**
+   * 划线条数
+   */
+  highlightCount: number;
+  /**
+   * 原创笔记字数（不含想法/便签）
+   */
+  noteCharCount: number;
+  /**
+   * 章节数
+   */
+  chapterCount: number;
+  /**
+   * 是否有长评（≥500 字原创笔记）
+   */
+  hasLongReview: boolean;
+}
+
+/**
+ * note_depth 输出：0-1 标准化深度分。
+ */
+export interface NoteDepthScore {
+  bookId: string;
+  /**
+   * 原始分（α·划线密度 + β·log 笔记字数 + γ·长评指示）
+   */
+  raw: number;
+  /**
+   * 用户自身滚动分位（0-1），null 表示数据不足无法计算
+   */
+  rollingPercentile: number | null;
+  /**
+   * 是否判定为「深」（rollingPercentile > τ_note）
+   */
+  isDeep: boolean;
+}
+
+/**
+ * 单本书的象限归属结果。
+ */
+export interface BookQuadrant {
+  bookId: string;
+  kind: QuadrantKind;
+  noteDepth: NoteDepthScore;
+  /**
+   * 是否推荐种子（Q1 ∪ Q3）
+   */
+  isRecommendationSeed: boolean;
+}
+
+/**
+ * 整组统计的四象限汇总（NS-1 PRD 主输出）。
+ */
+export interface QuadrantSummary {
+  coreReading: BookQuadrant[];
+  commitmentDebt: BookQuadrant[];
+  hiddenInterest: BookQuadrant[];
+  irrelevant: number;
+  /**
+   * 数据充分性警告：滚动分位不足时为 true
+   */
+  insufficientData: boolean;
+  /**
+   * 推荐种子集合：Q1 ∪ Q3
+   */
+  recommendationSeeds: string[];
+  computedAt: string;
+}
+
+/**
+ * 降级行为枚举（NS-6）。
+ *
+ * 当用户关闭某个原始采集维度后，依赖该维度的派生指标按置信度走三档降级：
+ * - normal        正常展示（置信度充足）
+ * - degraded      灰色缺角展示 + tooltip 三要素（置信度不足但仍有部分信号）
+ * - hidden        完全隐藏（置信度过低，展示反而误导）
+ *
+ * 红线：禁止用默认值「悄悄补齐」被关闭的维度。
+ *
+ * @author fxbin
+ */
+export const DEGRADE_BEHAVIOR_VALUES = ['normal', 'degraded', 'hidden'] as const;
+export type DegradeBehavior = typeof DEGRADE_BEHAVIOR_VALUES[number];
+
+/**
+ * 派生指标登记项（NS-6 派生指标登记表）。
+ *
+ * 每一个派生指标（truly_read_score / quadrant / topic_spectrum / reading_health 等）
+ * 都必须在此登记，声明它依赖哪些原始维度、基准置信度是多少。
+ *
+ * @author fxbin
+ */
+export interface DerivedMetric {
+  /**
+   * 派生指标唯一键（蛇形命名，与 data-account-book.dependentMetrics 对齐）
+   */
+  key: string;
+  /**
+   * 中文展示名（用于 tooltip / 设置页）
+   */
+  label: string;
+  /**
+   * 基准置信度 [0,1]：所有依赖维度都开启时的置信度
+   */
+  baseConfidence: number;
+  /**
+   * 依赖的原始维度 key 列表（对应 DataAccountEntry.key）
+   */
+  requiredDimensions: string[];
+}
+
+/**
+ * 降级矩阵登记项（NS-6）：派生指标 + 降置信量化参数 + tooltip 三要素模板。
+ *
+ * 置信度公式：conf = baseConfidence × retentionRatio × gammaFactor
+ * - retentionRatio = retainedDimensions / requiredDimensions.length
+ * - gammaFactor    数据充分性等附加因子（默认 1.0，由调用方按上下文调整）
+ *
+ * @author fxbin
+ */
+export interface DegradeMatrixEntry extends DerivedMetric {
+  /**
+   * 附加置信因子（数据充分性 / 算法版本 / 样本量等），默认 1.0
+   */
+  gammaFactor: number;
+  /**
+   * tooltip 三要素之一：缺失了什么维度（动态拼接模板，占位符 {dims}）
+   */
+  missingHint: string;
+  /**
+   * tooltip 三要素之二：为什么这个指标重要
+   */
+  whyItMatters: string;
+  /**
+   * tooltip 三要素之三：如何恢复（引导用户回到数据账本开启维度）
+   */
+  howToRestore: string;
+}
+
+/**
+ * 单个派生指标的降级评估结果（NS-6 主输出）。
+ *
+ * 由 assessDegrade 函数计算：输入被关闭的维度集合，输出该指标的当前置信度与降级行为。
+ * 前端 DegradeBadge 直接消费本结构。
+ *
+ * @author fxbin
+ */
+export interface DegradeAssessment {
+  /**
+   * 派生指标 key
+   */
+  metricKey: string;
+  /**
+   * 仍然开启的依赖维度
+   */
+  retainedDimensions: string[];
+  /**
+   * 被关闭的依赖维度
+   */
+  disabledDimensions: string[];
+  /**
+   * 保留比 = retainedDimensions / requiredDimensions.length
+   */
+  retentionRatio: number;
+  /**
+   * 最终权衡置信度 [0,1]
+   */
+  confidence: number;
+  /**
+   * 三档降级行为
+   */
+  behavior: DegradeBehavior;
+  /**
+   * tooltip 三要素（按当前缺失维度动态填充后）
+   */
+  tooltip: {
+    whatIsMissing: string;
+    whyItMatters: string;
+    howToRestore: string;
+  };
+}
+
+/**
+ * 真读过原始信号维度（NS-3）。
+ *
+ * 描述单本书的客观阅读信号，由 WeRead 书签/笔记 API 聚合而来。
+ * rereadCount 与 dwellSeconds 当前 WeRead API 不直接暴露，保留为可选字段，
+ * 待后续 API 扩展或代理信号接入后启用。
+ *
+ * @author fxbin
+ */
+export interface ReadSignalDims {
+  /**
+   * 划线总数（WeRead bookmarkCount）
+   */
+  highlightCount: number;
+  /**
+   * 笔记正文字符总量（所有 review.content 拼接长度）
+   */
+  noteCharCount: number;
+  /**
+   * 长书评正文字符量（独立长评，不计入零散笔记）
+   */
+  reviewCharCount: number;
+  /**
+   * 是否存在长书评（字符数超过阈值视为强信号）
+   */
+  hasLongReview: boolean;
+  /**
+   * 书籍总章节数（WeRead chapters.length）
+   */
+  totalChapters: number;
+  /**
+   * 被划线/笔记覆盖的章节数（去重 chapterUid 计数）
+   */
+  chaptersCovered: number;
+  /**
+   * 最后一次阅读活动的时间戳（ms），用于时间衰减
+   */
+  lastActivityTime: number;
+  /**
+   * 首次阅读活动的时间戳（ms），用于计算阅读跨度
+   */
+  firstActivityTime: number;
+  /**
+   * 重读次数（当前 API 不暴露，可选）
+   */
+  rereadCount?: number;
+  /**
+   * 停留时长秒数（当前 API 不暴露，可选）
+   */
+  dwellSeconds?: number;
+}
+
+/**
+ * 单条轻校验作答记录（NS-3 主观确认路径）。
+ *
+ * 轻校验通过分层抽样题（如「这本书第三章你划了哪句？」）确认用户真的读过。
+ * 题库契约与抽样逻辑推迟到 S6（NS-7 verification-bank），本结构仅承载作答结果。
+ *
+ * @author fxbin
+ */
+export interface VerificationClaim {
+  /**
+   * 题目 ID（由题库分配，S6 落地）
+   */
+  questionId: string;
+  /**
+   * 用户作答内容
+   */
+  userAnswer: string;
+  /**
+   * 是否回答正确
+   */
+  correct: boolean;
+  /**
+   * 作答时间戳（ms）
+   */
+  claimedAt: number;
+}
+
+/**
+ * 一本书的轻校验结果汇总（NS-3）。
+ *
+ * @author fxbin
+ */
+export interface LightVerification {
+  /**
+   * 书籍 ID
+   */
+  bookId: string;
+  /**
+   * 全部作答记录
+   */
+  claims: VerificationClaim[];
+  /**
+   * 通过率 [0,1] = correctCount / totalQuestions
+   */
+  passRate: number;
+  /**
+   * 校验完成时间戳（ms）
+   */
+  verifiedAt: number;
+}
+
+/**
+ * 真读过置信度评分结果（NS-3 主输出）。
+ *
+ * 红线：必须输出置信度 N%（[0,1] 浮点），禁止输出布尔值「读过/没读过」。
+ * 前端必须展示 N%，不得四舍五入为二元判断。
+ *
+ * @author fxbin
+ */
+export interface TrulyReadScore {
+  /**
+   * 书籍 ID
+   */
+  bookId: string;
+  /**
+   * 最终置信度 [0,1]，前端展示为 N%
+   */
+  confidence: number;
+  /**
+   * 客观分（加权四维归一化后）[0,1]
+   */
+  objectiveRaw: number;
+  /**
+   * 主观校验通过率 [0,1]（无校验时为 0）
+   */
+  subjectiveRate: number;
+  /**
+   * 时间衰减因子 (0,1]（越近期越接近 1）
+   */
+  timeDecayFactor: number;
+  /**
+   * 降级置信度 [0,1]（来自降级矩阵，默认 1.0）
+   */
+  degradeConfidence: number;
+  /**
+   * 分维度拆解（用于前端展示评分构成）
+   */
+  dimBreakdown: {
+    highlight: number;
+    note: number;
+    review: number;
+    coverage: number;
+  };
+  /**
+   * 关联的轻校验结果（可选，未校验时为 undefined）
+   */
+  verification?: LightVerification;
+  /**
+   * 评分计算时间戳（ms）
+   */
+  computedAt: number;
+}
+
+/**
+ * 单本书的阅读信号档案（NS-3 评分输入）。
+ *
+ * @author fxbin
+ */
+export interface ReadSignalProfile {
+  /**
+   * 书籍 ID
+   */
+  bookId: string;
+  /**
+   * 原始信号维度
+   */
+  dims: ReadSignalDims;
+  /**
+   * 该用户历史所有书籍的信号统计，用于滚动分位（可选）
+   */
+  history?: {
+    highlightCounts: number[];
+    noteCharCounts: number[];
+  };
+}
+
+/**
+ * 主题谱聚类算法标识（NS-2）。
+ *
+ * - tfidf：TF-IDF 加权 + k-means 基线（默认）
+ * - lda：LDA 概率主题模型（升级闸门通过后启用，Node 端暂缺成熟库，当前留接口）
+ */
+export const TOPIC_ALGORITHM_VALUES = ['tfidf', 'lda'] as const;
+
+/**
+ * 主题谱使用的算法类型（NS-2）。
+ */
+export type TopicAlgorithm = (typeof TOPIC_ALGORITHM_VALUES)[number];
+
+/**
+ * 主题稳定性三档等级（NS-2）。
+ *
+ * stable / borderline / unstable，由划线数量、时间跨度、轮廓系数三条件共同判定。
+ */
+export const TOPIC_STABILITY_VALUES = ['stable', 'borderline', 'unstable'] as const;
+
+/**
+ * 主题稳定性等级（NS-2）。
+ */
+export type TopicStabilityLevel = (typeof TOPIC_STABILITY_VALUES)[number];
+
+/**
+ * 主题可辨认性状态（NS-7 逐主题自检）。
+ *
+ * 与 S5 的 LDA 全局闸门正交：全局闸门决定 algorithm=tfidf|lda，
+ * 逐主题自检决定单个 cluster 是否可公开展示。
+ */
+export const RECOGNITION_STATUS_VALUES = ['confirmed', 'pending'] as const;
+
+/**
+ * 主题可辨认性等级（NS-7）。
+ */
+export type RecognitionStatus = (typeof RECOGNITION_STATUS_VALUES)[number];
+
+/**
+ * 单个主题簇（NS-2）。
+ *
+ * 一个簇代表一组语义相近的划线，包含代表词、原始划线索引与 coherence 评分，
+ * 供前端「点开看原始划线和代表句」使用。
+ *
+ * NS-7 追加 recognitionStatus 可选字段：未参与自检时缺省，参与自检后必填。
+ */
+export interface TopicCluster {
+  /** 主题簇 ID（从 0 开始，全局唯一） */
+  id: number;
+  /** 主题标签（代表词拼接而成，用于图例与摘要） */
+  label: string;
+  /** 代表词列表（按 TF-IDF 权重降序，取前若干） */
+  representativeTerms: string[];
+  /** 该簇包含的划线数量 */
+  highlightCount: number;
+  /** 该簇包含的划线 ID 列表（前端据此展开原始划线） */
+  highlightIds: string[];
+  /** 该簇内部的 coherence 一致性评分 [0,1] */
+  coherenceScore: number;
+  /** 该簇在图表中的颜色（调色板索引或十六进制色值） */
+  color: string;
+  /** 可辨认性状态（NS-7 自检后填充；confirmed 可公开展示，pending 需人工确认或合并） */
+  recognitionStatus?: RecognitionStatus;
+}
+
+/**
+ * 时间轴单个滑动窗口的主题分布（NS-2 堆叠面积图数据点）。
+ *
+ * 不使用「年」一刀切，而是按月滑动窗口聚合，避免跨年假信号。
+ */
+export interface TopicTimelinePoint {
+  /** 窗口起始时间（毫秒时间戳） */
+  windowStart: number;
+  /** 窗口结束时间（毫秒时间戳） */
+  windowEnd: number;
+  /** 窗口可读标签（如 "2024-03"） */
+  windowLabel: string;
+  /** 各主题簇在该窗口内的划线数量分布（键为簇 ID） */
+  distribution: Record<number, number>;
+}
+
+/**
+ * 主题稳定性评估结果（NS-2）。
+ *
+ * 三条件同真判 stable，部分满足判 borderline，大量不足判 unstable（标注「仅供参考」）。
+ */
+export interface TopicStability {
+  /** 稳定性等级 */
+  level: TopicStabilityLevel;
+  /** 轮廓系数（衡量簇间分离度，越大越稳定） */
+  silhouetteScore: number;
+  /** 参与聚类的划线总数 */
+  highlightCount: number;
+  /** 划线时间跨度（月） */
+  monthSpan: number;
+  /** 三档评级理由（逐条说明各条件是否满足） */
+  reasons: string[];
+}
+
+/**
+ * 完整主题谱（NS-2 核心输出）。
+ *
+ * 主题演变谱的端到端产物，包含聚类结果、时间轴分布、稳定性评估与 LDA 升级闸门状态，
+ * 是堆叠面积图与「待确认」标注的唯一数据源。
+ */
+export interface TopicSpectrum {
+  /** 书籍 ID（单本分析）或 'all'（全书架聚合） */
+  bookId: string;
+  /** 实际使用的聚类算法 */
+  algorithm: TopicAlgorithm;
+  /** 主题簇列表（按 highlightCount 降序） */
+  clusters: TopicCluster[];
+  /** 时间轴分布（堆叠面积图数据，按 windowStart 升序） */
+  timeline: TopicTimelinePoint[];
+  /** 全局 coherence 评分（所有簇的加权均值） */
+  coherenceScore: number;
+  /** 稳定性评估 */
+  stability: TopicStability;
+  /** LDA 升级闸门是否通过（未通过则停留 TF-IDF 基线） */
+  ldaGatePassed: boolean;
+  /** 滑动窗口月数（默认 3） */
+  windowMonths: number;
+  /** 参与分析的划线总数 */
+  totalHighlights: number;
+  /** 计算时间戳（毫秒） */
+  computedAt: number;
+}
+
+/**
+ * 轻校验题目类型（NS-7）。
+ *
+ * - sampling：从划线/笔记中分层抽样生成选择题（如「第三章你划了哪句？」）
+ * - marking：要求用户标记自己划过的内容并附理由（防作弊两层约束）
+ */
+export const VERIFICATION_KIND_VALUES = ['sampling', 'marking'] as const;
+
+/**
+ * 轻校验题目类型枚举（NS-7）。
+ */
+export type VerificationKind = (typeof VERIFICATION_KIND_VALUES)[number];
+
+/**
+ * 单道轻校验题目（NS-7）。
+ *
+ * 形状与 S4 LightVerifyDialog 的 props 对齐：questionId/prompt/options/expectedAnswer。
+ * 追加 kind/chapterRef/minReasonLength 用于防作弊约束与 UI 提示。
+ */
+export interface VerificationQuestion {
+  /** 题目 ID（确定性生成，便于幂等） */
+  questionId: string;
+  /** 题目类型 */
+  kind: VerificationKind;
+  /** 题干 */
+  prompt: string;
+  /** 选项（sampling 选择题提供） */
+  options?: string[];
+  /** 正确答案（与 options 元素匹配，或文本题的参考答案） */
+  expectedAnswer?: string;
+  /** 章节引用（如「第三章」，分层抽样的定位信息） */
+  chapterRef?: string;
+  /** marking 题要求的最小理由字数（默认 10，对应 PRD「附≥10字理由」） */
+  minReasonLength?: number;
+}
+
+/**
+ * 轻校验题库输出（NS-7）。
+ *
+ * 上限两道（抽样问 + 标记），通过一次后该书永久获覆盖权。
+ */
+export interface VerificationBankResult {
+  /** 书籍 ID */
+  bookId: string;
+  /** 生成的题目（≤ maxQuestions） */
+  questions: VerificationQuestion[];
+  /** 题目上限（PRD 约束：最多两道） */
+  maxQuestions: number;
+  /** 抽样池大小（参与抽样的有效划线数） */
+  sourceHighlights: number;
+  /** 生成时间戳（毫秒） */
+  generatedAt: number;
+}
+
+/**
+ * 单道题的作答记录（NS-7）。
+ */
+export interface VerificationAttempt {
+  /** 对应题目 ID */
+  questionId: string;
+  /** 题目类型 */
+  kind: VerificationKind;
+  /** 用户作答 */
+  userAnswer: string;
+  /** 附注理由（marking 题） */
+  reason?: string;
+  /** 是否通过（答案匹配 + 防作弊约束达标） */
+  correct: boolean;
+  /** 作答时间戳（毫秒） */
+  claimedAt: number;
+}
+
+/**
+ * 轻校验覆盖权状态（NS-7）。
+ *
+ * PRD：通过一次轻校验后，该书永久获得「真读过」覆盖权，不反复考核。
+ */
+export interface VerificationCoverage {
+  /** 书籍 ID */
+  bookId: string;
+  /** 是否已获永久覆盖权 */
+  verified: boolean;
+  /** 获权时间戳（毫秒，未获权则缺省） */
+  verifiedAt?: number;
+  /** 累计通过题数 */
+  passedCount: number;
+  /** 累计尝试次数 */
+  attempts: number;
+}
+
+/**
+ * 极简模式功能处置方式（NS-7）。
+ *
+ * 红线「数据静默 ≠ 数据剥夺」：
+ * - retained：核心功能保留（阅读器、书架、原始划线知情权）
+ * - silenced：派生指标静默（统计、推荐、排行、年度回望）
+ */
+export const MINIMAL_FEATURE_DISPOSITION_VALUES = ['retained', 'silenced'] as const;
+
+/**
+ * 极简模式功能处置枚举（NS-7）。
+ */
+export type MinimalFeatureDisposition = (typeof MINIMAL_FEATURE_DISPOSITION_VALUES)[number];
+
+/**
+ * 极简模式单条功能契约（NS-7）。
+ */
+export interface MinimalFeatureEntry {
+  /** 功能标识（如 reader、shelf、topic_spectrum） */
+  featureKey: string;
+  /** 功能展示名 */
+  label: string;
+  /** 处置方式 */
+  disposition: MinimalFeatureDisposition;
+  /** 处置理由（向用户解释为何保留/静默） */
+  reason: string;
+}
+
+/**
+ * 极简模式状态快照（NS-7）。
+ */
+export interface MinimalFeatureState {
+  /** 极简模式是否启用 */
+  enabled: boolean;
+  /** 功能集契约清单 */
+  features: MinimalFeatureEntry[];
+  /** 更新时间戳（毫秒） */
+  updatedAt: number;
+}
