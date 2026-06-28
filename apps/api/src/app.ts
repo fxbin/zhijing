@@ -2165,6 +2165,7 @@ export function buildApi() {
     Body: {
       books?: Array<{
         bookId?: string;
+        title?: string;
         onShelf?: boolean;
         highlightCount?: number;
         noteCharCount?: number;
@@ -2180,6 +2181,7 @@ export function buildApi() {
     }
     const inputs = body.books.map((book, index) => ({
       bookId: typeof book.bookId === 'string' ? book.bookId : `unknown-${index}`,
+      title: typeof book.title === 'string' ? book.title : '',
       onShelf: Boolean(book.onShelf),
       highlightCount: Number(book.highlightCount ?? 0),
       noteCharCount: Number(book.noteCharCount ?? 0),
