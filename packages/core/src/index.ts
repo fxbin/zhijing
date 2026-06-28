@@ -8544,7 +8544,7 @@ function normalizeEntityType(raw: string): EntityType {
  * 若 piRuntime 未提供，则使用 mock 数据生成占位实体。
  * 已有同名同类型实体会被合并（sourceCardIds 取并集），不会重复创建。
  */
-export async function extractEntities(workspaceId: string, piRuntime?: PiRuntime): Promise<Entity[]> {
+export async function extractEntities(workspaceId: string, runtimeOverride?: PiRuntime): Promise<Entity[]> {
   const base = repository.findWorkspace(workspaceId);
   if (!base) {
     throw new KnowledgeCoreError(`Knowledge base ${workspaceId} not found.`, 404);
@@ -8555,8 +8555,8 @@ export async function extractEntities(workspaceId: string, piRuntime?: PiRuntime
   }
   const cardDigest = cards.slice(0, 40).map((card) => `- ${card.title}: ${card.body.slice(0, 120)}`).join('\n');
   const prompt = `请从以下知识库卡片中提取关键实体（人物、组织、概念、工具、地点、事件等）。\n知识库主题：${base.title}\n卡片摘要：\n${cardDigest}`;
-  const runtime = piRuntime ?? createInstrumentedPiRuntime(
-    createRoutedPiRuntime('entity_extraction'),
+  const runtime = runtimeOverride ?? createInstrumentedPiRuntime(
+    piRuntime,
     { taskType: 'entity_extraction', workspaceId, recorder: recordAgentUsage },
   );
   const result = await runtime.completeStructured<{ entities: Array<{ name: string; type: string; description: string }> }>({
@@ -10420,7 +10420,7 @@ export function listSkeletonCards(workspaceId: string): KnowledgeCard[] {
  */
 export async function generateSocraticQuestions(
   workspaceId: string,
-  options?: { cardId?: string; tensionKey?: string; trigger?: SocraticTrigger; piRuntime?: PiRuntime },
+  options?: { cardId?: string; tensionKey?: string; trigger?: SocraticTrigger; runtimeOverride?: PiRuntime },
 ): Promise<SocraticQuestioningResult> {
   const startTime = Date.now();
   const base = repository.findWorkspace(workspaceId);
@@ -10452,8 +10452,8 @@ export async function generateSocraticQuestions(
     tensionKey,
     negativeExamples.length > 0 ? negativeExamples : undefined,
   );
-  const runtime = options?.piRuntime ?? createInstrumentedPiRuntime(
-    createRoutedPiRuntime('socratic_questioning'),
+  const runtime = options?.runtimeOverride ?? createInstrumentedPiRuntime(
+    piRuntime,
     { taskType: 'socratic_questioning', workspaceId, recorder: recordAgentUsage },
   );
   const result = await runtime.completeStructured<{ questions: SocraticQuestion[] }>({
