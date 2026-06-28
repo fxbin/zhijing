@@ -14972,8 +14972,8 @@ button { cursor: pointer; }
   display: flex;
   align-items: flex-end;
   gap: 12px;
-  height: 96px;
-  padding-top: 8px;
+  height: 160px;
+  padding-top: 4px;
 }
 
 .weread-stats-yearbar-col {
