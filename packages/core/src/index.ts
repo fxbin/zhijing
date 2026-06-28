@@ -10,6 +10,9 @@ import {
   type UserInterestProfile,
   type DailyDigest,
   type DailyDigestItem,
+  type DataAccountBook,
+  type DataAccountEntry,
+  type VerificationCoverage,
   type TopicCoverageHeatmap,
   type TopicCoverageItem,
   type TopicCoverageCell,
@@ -143,6 +146,11 @@ import {
   type FileBatchIntakeResult,
 } from '@zhijing/shared';
 import { fetchUrlAsMarkdown, parseRawHtml } from './web-fetch.js';
+import {
+  createDefaultDataAccount,
+  setMinimalMode,
+} from './data-account-book.js';
+import { buildEmptyCoverage } from './statistics/verification-bank.js';
 export { initProxyDispatcher, getCurrentProxy } from './fetch-dispatcher.js';
 export { detectSystemProxy, setManualProxy, resetProxyCache } from './proxy-detector.js';
 import {
@@ -518,6 +526,10 @@ type KnowledgeRepository = {
   readWeReadApiKey(): string | null;
   writeWeReadApiKey(apiKey: string): void;
   deleteWeReadApiKey(): void;
+  readDataAccountBook(): DataAccountBook | null;
+  writeDataAccountBook(book: DataAccountBook): void;
+  readVerificationCoverage(bookId: string): VerificationCoverage | null;
+  writeVerificationCoverage(coverage: VerificationCoverage): void;
   syncWeReadBookMeta(books: WeReadShelfBook[], archiveYearMap: Map<string, string>): void;
   readWeReadBookMetaList(): WeReadBookMetaRow[];
   readWeReadSyncState(): WeReadSyncStateRow | null;
@@ -1042,6 +1054,25 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     this.wereadApiKey = null;
   }
 
+  private dataAccountBook: DataAccountBook | null = null;
+  private verificationCoverageMap: Map<string, VerificationCoverage> = new Map();
+
+  readDataAccountBook(): DataAccountBook | null {
+    return this.dataAccountBook;
+  }
+
+  writeDataAccountBook(book: DataAccountBook): void {
+    this.dataAccountBook = book;
+  }
+
+  readVerificationCoverage(bookId: string): VerificationCoverage | null {
+    return this.verificationCoverageMap.get(bookId) ?? null;
+  }
+
+  writeVerificationCoverage(coverage: VerificationCoverage): void {
+    this.verificationCoverageMap.set(coverage.bookId, coverage);
+  }
+
   private wereadBookMeta: WeReadBookMetaRow[] = [];
   private wereadSyncState: WeReadSyncStateRow | null = null;
 
@@ -1519,6 +1550,30 @@ type ModelProviderProfileRow = {
 type WeReadSettingsRow = {
   id: string;
   api_key: string;
+  updated_at: string;
+};
+
+type DataAccountRow = {
+  key: string;
+  label: string;
+  tier: string;
+  dependent_metrics_json: string;
+  exportable: number;
+  updated_at: string;
+};
+
+type DataAccountMetaRow = {
+  id: string;
+  minimal_mode: number;
+  updated_at: string;
+};
+
+type VerificationStateRow = {
+  book_id: string;
+  verified: number;
+  verified_at: string | null;
+  passed_count: number;
+  attempts: number;
   updated_at: string;
 };
 
@@ -2386,6 +2441,117 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   }
 
   /**
+   * 读取数据账本（NS-4 用户数据四权）。
+   *
+   * 合并 data_account 表（单项维度）与 data_account_meta 表（minimalMode 全局开关）。
+   * 若库中无记录，返回 null，由调用方决定是否写入默认值。
+   *
+   * @returns {DataAccountBook | null}
+   * @author fxbin
+   */
+  readDataAccountBook(): DataAccountBook | null {
+    const entryRows = this.db.prepare('SELECT * FROM data_account').all() as DataAccountRow[];
+    if (entryRows.length === 0) return null;
+    const metaRow = this.db.prepare('SELECT * FROM data_account_meta WHERE id = ?').get('default') as DataAccountMetaRow | undefined;
+    const entries: DataAccountEntry[] = entryRows.map((row) => ({
+      key: row.key,
+      label: row.label,
+      tier: row.tier as DataAccountEntry['tier'],
+      dependentMetrics: JSON.parse(row.dependent_metrics_json) as string[],
+      exportable: Boolean(row.exportable),
+      updatedAt: row.updated_at,
+    }));
+    return {
+      entries,
+      minimalMode: Boolean(metaRow?.minimal_mode ?? 0),
+      updatedAt: metaRow?.updated_at ?? entries[0].updatedAt,
+    };
+  }
+
+  /**
+   * 保存数据账本（全量覆盖）。
+   *
+   * entries 逐条 upsert 到 data_account 表，minimalMode 写入 data_account_meta。
+   *
+   * @param {DataAccountBook} book 数据账本
+   * @author fxbin
+   */
+  writeDataAccountBook(book: DataAccountBook): void {
+    const upsertEntry = this.db.prepare(`
+      INSERT INTO data_account (key, label, tier, dependent_metrics_json, exportable, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET
+        label = excluded.label,
+        tier = excluded.tier,
+        dependent_metrics_json = excluded.dependent_metrics_json,
+        exportable = excluded.exportable,
+        updated_at = excluded.updated_at
+    `);
+    for (const entry of book.entries) {
+      upsertEntry.run(
+        entry.key,
+        entry.label,
+        entry.tier,
+        JSON.stringify(entry.dependentMetrics),
+        entry.exportable ? 1 : 0,
+        entry.updatedAt,
+      );
+    }
+    this.db.prepare(`
+      INSERT INTO data_account_meta (id, minimal_mode, updated_at)
+      VALUES ('default', ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        minimal_mode = excluded.minimal_mode,
+        updated_at = excluded.updated_at
+    `).run(book.minimalMode ? 1 : 0, book.updatedAt);
+  }
+
+  /**
+   * 读取单本书的轻校验覆盖状态（NS-7）。
+   *
+   * @param {string} bookId 微信读书 bookId
+   * @returns {VerificationCoverage | null} 未记录返回 null
+   * @author fxbin
+   */
+  readVerificationCoverage(bookId: string): VerificationCoverage | null {
+    const row = this.db.prepare('SELECT * FROM verification_state WHERE book_id = ?').get(bookId) as VerificationStateRow | undefined;
+    if (!row) return null;
+    return {
+      bookId: row.book_id,
+      verified: Boolean(row.verified),
+      verifiedAt: row.verified_at ? Number(row.verified_at) : undefined,
+      passedCount: row.passed_count,
+      attempts: row.attempts,
+    };
+  }
+
+  /**
+   * 保存单本书的轻校验覆盖状态（upsert）。
+   *
+   * @param {VerificationCoverage} coverage 覆盖状态
+   * @author fxbin
+   */
+  writeVerificationCoverage(coverage: VerificationCoverage): void {
+    this.db.prepare(`
+      INSERT INTO verification_state (book_id, verified, verified_at, passed_count, attempts, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(book_id) DO UPDATE SET
+        verified = excluded.verified,
+        verified_at = excluded.verified_at,
+        passed_count = excluded.passed_count,
+        attempts = excluded.attempts,
+        updated_at = excluded.updated_at
+    `).run(
+      coverage.bookId,
+      coverage.verified ? 1 : 0,
+      coverage.verifiedAt ? String(coverage.verifiedAt) : null,
+      coverage.passedCount,
+      coverage.attempts,
+      new Date().toISOString(),
+    );
+  }
+
+  /**
    * 插入一条注意力信号记录，供 Recall Agent 检索用户认知建构活动。
    * @param signal - 注意力信号对象
    * @author fxbin
@@ -2836,6 +3002,21 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         updated_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS data_account (
+        key TEXT PRIMARY KEY,
+        label TEXT NOT NULL,
+        tier TEXT NOT NULL,
+        dependent_metrics_json TEXT NOT NULL,
+        exportable INTEGER NOT NULL DEFAULT 1,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS data_account_meta (
+        id TEXT PRIMARY KEY,
+        minimal_mode INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_materials_workspace_id ON materials(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_materials_cursor ON materials(archived, workspace_id, created_at DESC, id DESC);
       CREATE INDEX IF NOT EXISTS idx_cards_workspace_id ON cards(workspace_id);
@@ -2848,6 +3029,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureWeReadSettingsTable();
     this.ensureWeReadBookMetaTable();
     this.ensureWeReadSyncStateTable();
+    this.ensureVerificationStateTable();
     this.ensureMaterialMediaColumn();
     this.ensureMaterialStatusTimelineColumn();
     this.ensureMaterialTranscriptColumns();
@@ -3246,6 +3428,25 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         total_books INTEGER,
         last_full_sync_at TEXT,
         last_sync_error TEXT
+      );
+    `);
+  }
+
+  /**
+   * 为轻校验覆盖状态表做向后兼容：若旧库没有 verification_state 表则创建（NS-7）。
+   *
+   * 追加块模式，兼容新旧数据库。verified_at 存毫秒时间戳字符串。
+   * @author fxbin
+   */
+  private ensureVerificationStateTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS verification_state (
+        book_id TEXT PRIMARY KEY,
+        verified INTEGER NOT NULL DEFAULT 0,
+        verified_at TEXT,
+        passed_count INTEGER NOT NULL DEFAULT 0,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
       );
     `);
   }
@@ -10970,6 +11171,61 @@ export function deleteWeReadSettings(): void {
 }
 
 /**
+ * 获取数据账本（NS-4 用户数据四权）。
+ *
+ * 库中无记录时写入默认值并返回，保证调用方始终拿到完整账本。
+ *
+ * @returns {DataAccountBook}
+ */
+export function getDataAccountBook(): DataAccountBook {
+  const existing = repository.readDataAccountBook();
+  if (existing) return existing;
+  const fresh = createDefaultDataAccount(now());
+  repository.writeDataAccountBook(fresh);
+  return fresh;
+}
+
+/**
+ * 切换全局极简模式（NS-4 / NS-7）。
+ *
+ * 调用 setMinimalMode 纯函数生成新账本后持久化。
+ * 开启时所有原始维度 tier 置 disabled，关闭时恢复 private_only。
+ * 极简模式下派生统计的处置契约由 minimal-set 模块声明，此处只管原始维度层。
+ *
+ * @param {boolean} enabled 是否启用极简模式
+ * @returns {DataAccountBook} 更新后的账本
+ */
+export function saveMinimalMode(enabled: boolean): DataAccountBook {
+  const current = getDataAccountBook();
+  const next = setMinimalMode(current, enabled, now());
+  repository.writeDataAccountBook(next);
+  return next;
+}
+
+/**
+ * 获取单本书的轻校验覆盖状态（NS-7）。
+ *
+ * 未记录返回空覆盖（verified=false），不触发持久化。
+ *
+ * @param {string} bookId 微信读书 bookId
+ * @returns {VerificationCoverage}
+ */
+export function getVerificationCoverage(bookId: string): VerificationCoverage {
+  const existing = repository.readVerificationCoverage(bookId);
+  if (existing) return existing;
+  return buildEmptyCoverage(bookId);
+}
+
+/**
+ * 保存单本书的轻校验覆盖状态（NS-7）。
+ *
+ * @param {VerificationCoverage} coverage 覆盖状态
+ */
+export function saveVerificationCoverage(coverage: VerificationCoverage): void {
+  repository.writeVerificationCoverage(coverage);
+}
+
+/**
  * 测试微信读书 API Key 是否可用。
  *
  * @returns 测试结果，失败时附带原因
@@ -12171,3 +12427,176 @@ export function interceptInStream(
   const proposalReport = generateAgentProposals();
   return preInterceptStream(toolCalls, currentDecision, proposalReport.proposals);
 }
+
+export {
+  ANTI_VANITY_THRESHOLD_PASS,
+  ANTI_VANITY_THRESHOLD_WARN,
+  evaluateAntiVanity,
+  isAllowedToShow,
+  summarizeFailedChecks,
+} from './privacy-gate.js';
+export type { VanityCheckItem, VanityCheckInput, VanityCheckResult } from './privacy-gate.js';
+
+export {
+  DATA_ACCOUNT_DEFAULT_ENTRIES,
+  createDefaultDataAccount,
+  setEntryTier,
+  setMinimalMode,
+  findEntry,
+  listActiveEntries,
+  listAffectedMetrics,
+  listDisabledDimensions,
+  toggleEntry,
+} from './data-account-book.js';
+
+export {
+  VERIFICATION_DEFAULT_MAX_QUESTIONS,
+  VERIFICATION_DEFAULT_OPTIONS_COUNT,
+  VERIFICATION_DEFAULT_SEED,
+  VERIFICATION_MIN_REASON_LENGTH,
+  VERIFICATION_MIN_POOL_SIZE,
+  buildVerificationBank,
+  buildEmptyCoverage,
+  evaluateVerificationAttempt,
+  evaluateVerificationAttempts,
+  updateVerificationCoverage,
+} from './statistics/verification-bank.js';
+export type {
+  VerificationHighlight,
+  BuildVerificationBankInput,
+} from './statistics/verification-bank.js';
+
+export {
+  RECOGNITION_COHERENCE_THRESHOLD,
+  RECOGNITION_MANUAL_SAMPLE_COUNT,
+  RECOGNITION_DEFAULT_SEED,
+  assessClusterRecognition,
+  applyRecognitionStatus,
+  buildEmptyRecognition,
+} from './statistics/recognition-check.js';
+export type { RecognitionAssessment } from './statistics/recognition-check.js';
+
+export {
+  MINIMAL_RETAINED_FEATURES,
+  MINIMAL_SILENCED_FEATURES,
+  MINIMAL_FEATURE_CONTRACT,
+  buildMinimalFeatureState,
+  getFeatureDisposition,
+  isFeatureVisible,
+  listSilencedFeatureKeys,
+} from './statistics/minimal-set.js';
+
+export {
+  DEFAULT_NOTE_DEPTH_ALPHA,
+  DEFAULT_NOTE_DEPTH_BETA,
+  DEFAULT_NOTE_DEPTH_GAMMA,
+  DEFAULT_TAU_NOTE,
+  MINIMUM_BOOKS_FOR_PERCENTILE,
+  RECOMMENDATION_SEED_KINDS,
+  computeNoteDepthRaw,
+  computeRollingPercentile,
+  computeQuadrantSummary,
+} from './statistics/quadrant.js';
+
+export {
+  DEGRADE_CONF_WARN_THRESHOLD,
+  DEGRADE_CONF_HIDE_THRESHOLD,
+  DEFAULT_GAMMA_FACTOR,
+  DEGRADE_MISSING_DIMS_PLACEHOLDER,
+  DEGRADE_MATRIX_REGISTRY,
+  getMatrixEntry,
+  classifyBehavior,
+  computeRetentionRatio,
+  assessDegrade,
+  assessAllDegrade,
+  findDegraded,
+} from './statistics/degrade-matrix.js';
+export type { AssessDegradeOptions } from './statistics/degrade-matrix.js';
+
+export {
+  SATURATE_TAU_HIGHLIGHT,
+  SATURATE_TAU_NOTE,
+  SATURATE_TAU_REVIEW,
+  LONG_REVIEW_CHAR_THRESHOLD,
+  saturate,
+  saturateHighlight,
+  saturateNote,
+  saturateReview,
+  computeCoverage,
+} from './statistics/saturate.js';
+
+export {
+  WEIGHT_HIGHLIGHT,
+  WEIGHT_NOTE,
+  WEIGHT_REVIEW,
+  WEIGHT_COVERAGE,
+  WEIGHT_OBJECTIVE,
+  WEIGHT_SUBJECTIVE,
+  TIME_DECAY_LAMBDA,
+  computeTimeDecay,
+  computeObjectiveScore,
+  computeSubjectiveRate,
+  computeTrulyReadScore,
+} from './statistics/truly-read.js';
+export type { ComputeTrulyReadOptions } from './statistics/truly-read.js';
+
+export {
+  TOKENIZE_NGRAM_SIZE,
+  TOKENIZE_ASCII_MIN_LENGTH,
+  TOKENIZE_STOP_CHARS,
+  tokenizeText,
+  tokenizeDocs,
+} from './statistics/tokenize.js';
+export type { TokenizedDoc } from './statistics/tokenize.js';
+
+export {
+  TFIDF_IDF_SMOOTHING,
+  computeIdf,
+  l2Normalize,
+  computeTfidfVector,
+  buildTfidfMatrix,
+  cosineSimilarity,
+  cosineDistance,
+} from './statistics/tfidf.js';
+export type { TfidfMatrix } from './statistics/tfidf.js';
+
+export {
+  CLUSTER_K_MIN,
+  CLUSTER_K_MAX,
+  CLUSTER_MAX_ITERATIONS,
+  CLUSTER_DEFAULT_SEED,
+  SILHOUETTE_SAMPLE_THRESHOLD,
+  SILHOUETTE_DEFAULT_SAMPLE_SIZE,
+  createSeededRng,
+  computeSilhouette,
+  runKmeans,
+  findBestK,
+} from './statistics/topic-cluster.js';
+export type {
+  ClusterResult,
+  FindBestKResult,
+  KmeansOptions,
+  FindBestKOptions,
+} from './statistics/topic-cluster.js';
+
+export {
+  COHERENCE_TOP_TERMS,
+  LDA_GATE_VOCABULARY_SIZE,
+  LDA_GATE_BOOKS_READ,
+  LDA_GATE_COHERENCE,
+  computeTopicCoherence,
+  computeOverallCoherence,
+  evaluateLdaGate,
+} from './statistics/coherence.js';
+export type { LdaGateInput, LdaGateResult } from './statistics/coherence.js';
+
+export {
+  TOPIC_DEFAULT_WINDOW_MONTHS,
+  TOPIC_PALETTE,
+  STABILITY_MIN_HIGHLIGHTS,
+  STABILITY_MIN_MONTHS,
+  STABILITY_MIN_SILHOUETTE,
+  computeTopicSpectrum,
+  validateTopicSpectrum,
+} from './statistics/topic-spectrum.js';
+export type { TopicSpectrumInput, TopicSpectrumValidation } from './statistics/topic-spectrum.js';
