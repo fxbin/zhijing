@@ -218,6 +218,7 @@ import type {
   RouteAdvisorResult,
   DataPortabilityFormat,
   AudienceTier,
+  RecommendationBucket,
 } from '@zhijing/shared';
 import {
   INTAKE_AUDIENCE_VALUES,
@@ -229,6 +230,7 @@ import {
   DECISION_LOG_KIND_VALUES,
   DATA_PORTABILITY_FORMAT_VALUES,
   AUDIENCE_TIER_VALUES,
+  RECOMMENDATION_BUCKET_VALUES,
 } from '@zhijing/shared';
 
 const DEFAULT_ALLOWED_ORIGINS = [
@@ -2065,10 +2067,14 @@ export function buildApi() {
     }
   });
 
-  app.get<{ Querystring: { workspaceId?: string } }>('/api/weread/recommendations', async (request, reply) => {
+  app.get<{ Querystring: { workspaceId?: string; bucket?: string } }>('/api/weread/recommendations', async (request, reply) => {
     try {
       const kbId = typeof request.query.workspaceId === 'string' ? request.query.workspaceId : undefined;
-      return computeWeReadRecommendations(kbId);
+      const rawBucket = typeof request.query.bucket === 'string' ? request.query.bucket : 'control';
+      if (!RECOMMENDATION_BUCKET_VALUES.includes(rawBucket as RecommendationBucket)) {
+        return reply.code(400).send({ error: `bucket must be one of: ${RECOMMENDATION_BUCKET_VALUES.join(', ')}.` });
+      }
+      return computeWeReadRecommendations(kbId, rawBucket as RecommendationBucket);
     } catch (error) {
       request.log.error({ error }, 'compute weread recommendations failed');
       return reply.code(500).send({ error: 'Failed to compute WeRead recommendations.' });
