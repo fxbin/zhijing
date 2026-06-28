@@ -2203,6 +2203,10 @@ export interface BookSignalInputs {
    */
   onShelf: boolean;
   /**
+   * 是否已读完（finish_reading 标记）
+   */
+  finishReading: boolean;
+  /**
    * 划线条数
    */
   highlightCount: number;

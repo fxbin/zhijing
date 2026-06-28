@@ -2167,6 +2167,7 @@ export function buildApi() {
         bookId?: string;
         title?: string;
         onShelf?: boolean;
+        finishReading?: boolean;
         highlightCount?: number;
         noteCharCount?: number;
         chapterCount?: number;
@@ -2183,6 +2184,7 @@ export function buildApi() {
       bookId: typeof book.bookId === 'string' ? book.bookId : `unknown-${index}`,
       title: typeof book.title === 'string' ? book.title : '',
       onShelf: Boolean(book.onShelf),
+      finishReading: Boolean(book.finishReading),
       highlightCount: Number(book.highlightCount ?? 0),
       noteCharCount: Number(book.noteCharCount ?? 0),
       chapterCount: Number(book.chapterCount ?? 1),

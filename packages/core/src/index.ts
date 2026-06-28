@@ -570,6 +570,7 @@ type KnowledgeRepository = {
   writeVerificationCoverage(coverage: VerificationCoverage): void;
   syncWeReadBookMeta(books: WeReadShelfBook[], archiveYearMap: Map<string, string>): void;
   readWeReadBookMetaList(): WeReadBookMetaRow[];
+  readAllWeReadBookMetaList(): WeReadBookMetaRow[];
   readWeReadSyncState(): WeReadSyncStateRow | null;
   writeWeReadSyncState(state: WeReadSyncStateRow): void;
   updateWeReadBookMetaImport(bookId: string, materialId: string, bookmarkCount: number): void;
@@ -1180,6 +1181,10 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
 
   readWeReadBookMetaList(): WeReadBookMetaRow[] {
     return this.wereadBookMeta.filter((row) => row.presentOnShelf === 1);
+  }
+
+  readAllWeReadBookMetaList(): WeReadBookMetaRow[] {
+    return [...this.wereadBookMeta];
   }
 
   readWeReadSyncState(): WeReadSyncStateRow | null {
@@ -3695,6 +3700,20 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
              long_review_count AS longReviewCount, signals_synced_at AS signalsSyncedAt,
              first_seen_at AS firstSeenAt, last_synced_at AS lastSyncedAt
       FROM weread_book_meta WHERE present_on_shelf = 1
+      ORDER BY read_update_time DESC
+    `).all() as WeReadBookMetaRow[];
+  }
+
+  readAllWeReadBookMetaList(): WeReadBookMetaRow[] {
+    return this.db.prepare(`
+      SELECT book_id AS bookId, book_id_long AS bookIdLong, title, author, cover, category,
+             finish_reading AS finishReading, read_update_time AS readUpdateTime,
+             secret, archive_year AS archiveYear, present_on_shelf AS presentOnShelf,
+             material_id AS materialId, bookmark_count AS bookmarkCount,
+             review_count AS reviewCount, chapter_count AS chapterCount,
+             long_review_count AS longReviewCount, signals_synced_at AS signalsSyncedAt,
+             first_seen_at AS firstSeenAt, last_synced_at AS lastSyncedAt
+      FROM weread_book_meta
       ORDER BY read_update_time DESC
     `).all() as WeReadBookMetaRow[];
   }
@@ -11796,6 +11815,10 @@ export function readWeReadBookMetaList(): WeReadBookMetaRow[] {
   return repository.readWeReadBookMetaList();
 }
 
+export function readAllWeReadBookMetaList(): WeReadBookMetaRow[] {
+  return repository.readAllWeReadBookMetaList();
+}
+
 /**
  * 读取本地缓存的同步状态。
  *
@@ -11854,7 +11877,7 @@ export function computeWeReadRecommendations(
 
   let seedBookIds: Set<string> | null = null;
   if (bucket === 'treatment') {
-    const seedInputs = buildQuadrantInputsFromMeta(repository.readWeReadBookMetaList());
+    const seedInputs = buildQuadrantInputsFromMeta(repository.readAllWeReadBookMetaList());
     const seedQuadrant = computeQuadrantSummary(seedInputs);
     seedBookIds = new Set(seedQuadrant.recommendationSeeds);
   }
@@ -12181,6 +12204,7 @@ function buildQuadrantInputsFromMeta(rows: WeReadBookMetaRow[]): BookSignalInput
     bookId: row.bookId,
     title: row.title,
     onShelf: row.presentOnShelf === 1,
+    finishReading: row.finishReading === 1,
     highlightCount: row.bookmarkCount ?? 0,
     noteCharCount: (row.reviewCount ?? 0) * NOTE_CHARS_PER_REVIEW,
     chapterCount: Math.max(MIN_CHAPTER_COUNT, row.chapterCount ?? MIN_CHAPTER_COUNT),
@@ -12210,7 +12234,7 @@ function collectDerivedMetricKeys(): string[] {
  * @returns 隐性真兴趣提示对象
  */
 export function getHiddenInterestHint(): HiddenInterestHint {
-  const metaRows = repository.readWeReadBookMetaList();
+  const metaRows = repository.readAllWeReadBookMetaList();
   const inputs = buildQuadrantInputsFromMeta(metaRows);
   const quadrant = computeQuadrantSummary(inputs);
   const now = Date.now();

@@ -5,6 +5,7 @@
  * - note_depth 公式：α·划线密度 + β·log 笔记字数 + γ·长评指示
  * - 滚动分位阈值（τ_note 默认 0.6）：基于用户自身读过书分布，不设全局绝对值
  * - 四象限：core_reading / commitment_debt / hidden_interest / irrelevant
+ * - Q3 隐性真兴趣双路径：(不在书架 + 有深度) OR (在书架 + 读完 + 有深度)
  * - 推荐种子：Q1 ∪ Q3（禁止用 Q2）
  * - Q2 不主动弹窗纪律
  *
@@ -96,9 +97,9 @@ function computeNoteDepthForBook(
 }
 
 function classifyQuadrant(input: BookSignalInputs, isDeep: boolean): QuadrantKind {
-  if (input.onShelf && isDeep) return 'core_reading';
+  if (input.onShelf && isDeep && !input.finishReading) return 'core_reading';
   if (input.onShelf && !isDeep) return 'commitment_debt';
-  if (!input.onShelf && isDeep) return 'hidden_interest';
+  if (isDeep && (!input.onShelf || input.finishReading)) return 'hidden_interest';
   return 'irrelevant';
 }
 
