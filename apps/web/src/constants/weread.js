@@ -312,6 +312,113 @@ const WEREAD_SYNC_PATH = '/api/weread/sync';
 const WEREAD_STATS_PATH = '/api/weread/stats';
 
 /**
+ * 反虚荣门禁评估接口路径（NS-4）。
+ */
+const STATISTICS_GATE_EVALUATE_PATH = '/api/statistics/evaluate-gate';
+
+/**
+ * 反虚荣门禁本地覆盖存储键前缀（NS-4）。
+ */
+const STATISTICS_GATE_STORAGE_PREFIX = 'weread.stats.gate.';
+
+/**
+ * 四象限请求接口路径（NS-1）。
+ */
+const STATISTICS_QUADRANT_PATH = '/api/statistics/quadrant';
+
+/**
+ * 主题演变谱查询路径（NS-2）：POST 提交划线文本，返回聚类堆叠面积图数据。
+ */
+const TOPIC_SPECTRUM_PATH = '/api/statistics/topic-spectrum';
+
+/**
+ * 主题演变谱 SVG viewBox 宽度（NS-2）。
+ */
+const TOPIC_SPECTRUM_VIEW_WIDTH = 1000;
+
+/**
+ * 主题演变谱 SVG viewBox 高度（NS-2）。
+ */
+const TOPIC_SPECTRUM_VIEW_HEIGHT = 460;
+
+/**
+ * 主题演变谱图表左侧留白（y 轴刻度空间）。
+ */
+const TOPIC_SPECTRUM_PADDING_LEFT = 52;
+
+/**
+ * 主题演变谱图表右侧留白。
+ */
+const TOPIC_SPECTRUM_PADDING_RIGHT = 24;
+
+/**
+ * 主题演变谱图表顶部留白。
+ */
+const TOPIC_SPECTRUM_PADDING_TOP = 24;
+
+/**
+ * 主题演变谱图表底部留白（x 轴标签空间）。
+ */
+const TOPIC_SPECTRUM_PADDING_BOTTOM = 56;
+
+/**
+ * 主题演变谱 y 轴刻度分段数。
+ */
+const TOPIC_SPECTRUM_Y_TICKS = 4;
+
+/**
+ * 主题演变谱图例每簇展示的代表词上限。
+ */
+const TOPIC_SPECTRUM_LEGEND_MAX_TERMS = 3;
+
+/**
+ * 主题演变谱稳定性展示文案映射键。
+ */
+const TOPIC_SPECTRUM_STABILITY_LABELS = {
+  stable: '稳定',
+  borderline: '边缘',
+  unstable: '不稳定',
+};
+
+/**
+ * 四象限 i18n 键（NS-1）。
+ */
+const QUADRANT_I18N_KEYS = {
+  coreReading: 'weread.quadrant.coreReading',
+  commitmentDebt: 'weread.quadrant.commitmentDebt',
+  hiddenInterest: 'weread.quadrant.hiddenInterest',
+  irrelevant: 'weread.quadrant.irrelevant',
+  title: 'weread.quadrant.title',
+  insufficientData: 'weread.quadrant.insufficientData',
+  recommendationSeeds: 'weread.quadrant.recommendationSeeds',
+};
+
+/**
+ * 数据账本降级评估查询路径（NS-6）：返回当前各派生指标的降级状态。
+ */
+const DATA_ACCOUNT_ASSESSMENTS_PATH = '/api/data-account/assessments';
+
+/**
+ * 数据账本单项切换路径（NS-6）：开启/关闭某个原始采集维度。
+ */
+const DATA_ACCOUNT_TOGGLE_PATH = '/api/data-account/toggle';
+
+/**
+ * 降级行为枚举（NS-6）：与 shared DEGRADE_BEHAVIOR_VALUES 对齐。
+ */
+const DEGRADE_BEHAVIOR_VALUES = ['normal', 'degraded', 'hidden'];
+
+/**
+ * 真读过置信度查询路径前缀（NS-3）。
+ */
+const TRULY_READ_PATH_PREFIX = '/api/truly-read';
+
+/**
+ * 真读过轻校验提交路径后缀（NS-3）。
+ */
+const TRULY_READ_VERIFY_SUFFIX = '/verify';
+
+/**
  * 微信读书导入接口路径。
  */
 const WEREAD_IMPORT_PATH = '/api/weread/import';
@@ -325,6 +432,31 @@ const WEREAD_PREVIEW_PATH = '/api/weread/preview';
  * 微信读书推荐接口路径。
  */
 const WEREAD_RECOMMENDATIONS_PATH = '/api/weread/recommendations';
+
+/**
+ * 数据账本查询路径（NS-4 / NS-7）。
+ */
+const DATA_ACCOUNT_SETTINGS_PATH = '/api/settings/data-account';
+
+/**
+ * 极简模式切换路径（NS-4 / NS-7）。
+ */
+const MINIMAL_MODE_PATH = '/api/settings/minimal-mode';
+
+/**
+ * 轻校验取题路径（NS-7）。
+ */
+const VERIFICATION_QUESTIONS_PATH = '/api/verification/questions';
+
+/**
+ * 轻校验提交路径（NS-7）。
+ */
+const VERIFICATION_SUBMIT_PATH = '/api/verification/submit';
+
+/**
+ * 轻校验覆盖状态查询路径前缀（NS-7）。
+ */
+const VERIFICATION_COVERAGE_PATH_PREFIX = '/api/verification/coverage';
 
 export {
   TAB_BOOKS,
@@ -388,7 +520,31 @@ export {
   WEREAD_META_PATH,
   WEREAD_SYNC_PATH,
   WEREAD_STATS_PATH,
+  STATISTICS_GATE_EVALUATE_PATH,
+  STATISTICS_GATE_STORAGE_PREFIX,
+  STATISTICS_QUADRANT_PATH,
+  TOPIC_SPECTRUM_PATH,
+  TOPIC_SPECTRUM_VIEW_WIDTH,
+  TOPIC_SPECTRUM_VIEW_HEIGHT,
+  TOPIC_SPECTRUM_PADDING_LEFT,
+  TOPIC_SPECTRUM_PADDING_RIGHT,
+  TOPIC_SPECTRUM_PADDING_TOP,
+  TOPIC_SPECTRUM_PADDING_BOTTOM,
+  TOPIC_SPECTRUM_Y_TICKS,
+  TOPIC_SPECTRUM_LEGEND_MAX_TERMS,
+  TOPIC_SPECTRUM_STABILITY_LABELS,
+  QUADRANT_I18N_KEYS,
+  DATA_ACCOUNT_ASSESSMENTS_PATH,
+  DATA_ACCOUNT_TOGGLE_PATH,
+  DEGRADE_BEHAVIOR_VALUES,
+  TRULY_READ_PATH_PREFIX,
+  TRULY_READ_VERIFY_SUFFIX,
   WEREAD_IMPORT_PATH,
   WEREAD_PREVIEW_PATH,
   WEREAD_RECOMMENDATIONS_PATH,
+  DATA_ACCOUNT_SETTINGS_PATH,
+  MINIMAL_MODE_PATH,
+  VERIFICATION_QUESTIONS_PATH,
+  VERIFICATION_SUBMIT_PATH,
+  VERIFICATION_COVERAGE_PATH_PREFIX,
 };
