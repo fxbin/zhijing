@@ -14184,6 +14184,64 @@ button { cursor: pointer; }
   color: var(--scholar-blue, #2C5F8D);
 }
 
+.weread-quadrant-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.weread-quadrant-head h2 {
+  margin: 0;
+}
+
+.weread-signals-refresh-btn {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border: 1px solid var(--scholar-blue, #2C5F8D);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--scholar-blue, #2C5F8D);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.weread-signals-refresh-btn:hover:not(:disabled) {
+  background: var(--scholar-blue, #2C5F8D);
+  color: #fff;
+}
+
+.weread-signals-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.weread-signals-toast {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.weread-signals-toast--success {
+  background: rgba(107, 142, 127, 0.12);
+  color: var(--sage-green, #6B8E7F);
+}
+
+.weread-signals-toast--warning {
+  background: rgba(212, 148, 74, 0.12);
+  color: #D4944A;
+}
+
+.weread-signals-toast--error {
+  background: rgba(192, 57, 43, 0.12);
+  color: #C0392B;
+}
+
 .quadrant-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

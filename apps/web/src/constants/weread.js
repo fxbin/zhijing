@@ -429,6 +429,11 @@ const WEREAD_IMPORT_PATH = '/api/weread/import';
 const WEREAD_PREVIEW_PATH = '/api/weread/preview';
 
 /**
+ * 微信读书批量信号刷新接口路径。
+ */
+const WEREAD_SIGNALS_REFRESH_PATH = '/api/weread/signals/refresh';
+
+/**
  * 微信读书推荐接口路径。
  */
 const WEREAD_RECOMMENDATIONS_PATH = '/api/weread/recommendations';
@@ -541,6 +546,7 @@ export {
   TRULY_READ_VERIFY_SUFFIX,
   WEREAD_IMPORT_PATH,
   WEREAD_PREVIEW_PATH,
+  WEREAD_SIGNALS_REFRESH_PATH,
   WEREAD_RECOMMENDATIONS_PATH,
   DATA_ACCOUNT_SETTINGS_PATH,
   MINIMAL_MODE_PATH,

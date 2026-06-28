@@ -27,6 +27,7 @@ import { QuadrantGrid } from '../components/QuadrantCard';
 import TopicSpectrumChart from '../components/TopicSpectrumChart';
 import { useWeReadCatalogState } from '../hooks/useWeReadCatalogState';
 import { useWeReadImportState } from '../hooks/useWeReadImportState';
+import { useBookSignals } from '../hooks/useBookSignals';
 import { useTopicSpectrum } from '../hooks/useTopicSpectrum';
 import {
   TAB_BOOKS,
@@ -1082,13 +1083,30 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
     handleOpenImported,
   } = useWeReadImportState({ t, onOpenWorkspace, bookMap, selectedWorkspaceId });
 
+  const allShelfBookIds = useMemo(() => {
+    if (!Array.isArray(shelfBooks)) return [];
+    return shelfBooks.map((book) => String(book.bookId));
+  }, [shelfBooks]);
+
+  const {
+    loading: signalsRefreshing,
+    error: signalsError,
+    refreshSignals,
+  } = useBookSignals(allShelfBookIds);
+
   const quadrantBooks = useMemo(() => {
     if (!Array.isArray(shelfBooks)) return [];
     return shelfBooks.map((book) => {
       const id = String(book.bookId);
+      const hasBackendSignals = Boolean(book.signalsSyncedAt);
       const imported = importResults[id];
-      const bookmarkCount = imported && imported.ok ? imported.bookmarkCount ?? 0 : 0;
-      const reviewCount = imported && imported.ok ? imported.reviewCount ?? 0 : 0;
+      const bookmarkCount = hasBackendSignals
+        ? book.bookmarkCount ?? 0
+        : imported && imported.ok ? imported.bookmarkCount ?? 0 : 0;
+      const reviewCount = hasBackendSignals
+        ? book.reviewCount ?? 0
+        : imported && imported.ok ? imported.reviewCount ?? 0 : 0;
+      const longReviewCount = hasBackendSignals ? book.longReviewCount ?? 0 : 0;
       return {
         bookId: id,
         title: book.title,
@@ -1096,11 +1114,25 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
         highlightCount: bookmarkCount,
         noteCharCount: reviewCount * 80,
         chapterCount: Math.max(1, book.chapterCount ?? 1),
-        hasLongReview: reviewCount > 0,
+        hasLongReview: longReviewCount > 0 || reviewCount > 0,
       };
     });
   }, [shelfBooks, importResults]);
   const quadrantState = useQuadrantSummary(quadrantBooks);
+
+  const [signalsToast, setSignalsToast] = useState(null);
+
+  const handleRefreshSignals = useCallback(async () => {
+    if (!Array.isArray(shelfBooks) || shelfBooks.length === 0) return;
+    const ids = shelfBooks.map((book) => String(book.bookId));
+    const next = await refreshSignals(ids);
+    if (next && next.failed > 0) {
+      setSignalsToast({ type: 'warning', text: `信号刷新完成：${next.synced}/${next.total} 成功，${next.failed} 失败` });
+    } else if (next) {
+      setSignalsToast({ type: 'success', text: `信号刷新完成：${next.synced}/${next.total} 本已更新` });
+    }
+    await loadMeta();
+  }, [shelfBooks, refreshSignals, loadMeta]);
 
   const archiveGroups = useMemo(() => {
     const groups = new Map();
@@ -1613,7 +1645,27 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
                 t={t}
               />
               <section className="weread-quadrant-section" aria-label="书架×笔记四象限">
-                <h2>书架 × 笔记 四象限</h2>
+                <div className="weread-quadrant-head">
+                  <h2>书架 × 笔记 四象限</h2>
+                  <button
+                    type="button"
+                    className="weread-signals-refresh-btn"
+                    onClick={handleRefreshSignals}
+                    disabled={signalsRefreshing || !Array.isArray(shelfBooks) || shelfBooks.length === 0}
+                  >
+                    {signalsRefreshing ? '刷新中…' : '刷新笔记信号'}
+                  </button>
+                </div>
+                {signalsToast && (
+                  <p className={`weread-signals-toast weread-signals-toast--${signalsToast.type}`}>
+                    {signalsToast.text}
+                  </p>
+                )}
+                {signalsError && !signalsRefreshing && (
+                  <p className="weread-signals-toast weread-signals-toast--error">
+                    信号刷新失败：{String(signalsError.message ?? signalsError)}
+                  </p>
+                )}
                 {quadrantState.loading ? (
                   <p className="quadrant-grid-loading">计算四象限…</p>
                 ) : quadrantState.summary ? (
