@@ -18,6 +18,7 @@ const INITIAL_ERROR = null;
 /**
  * @param {Array<{
  *   bookId: string,
+ *   title?: string,
  *   onShelf: boolean,
  *   highlightCount: number,
  *   noteCharCount: number,

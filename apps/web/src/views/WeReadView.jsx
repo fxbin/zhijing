@@ -1031,15 +1031,22 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
 
   const quadrantBooks = useMemo(() => {
     if (!Array.isArray(shelfBooks)) return [];
-    return shelfBooks.map((book) => ({
-      bookId: book.bookId,
-      onShelf: true,
-      highlightCount: 0,
-      noteCharCount: 0,
-      chapterCount: 1,
-      hasLongReview: false,
-    }));
-  }, [shelfBooks]);
+    return shelfBooks.map((book) => {
+      const id = String(book.bookId);
+      const imported = importResults[id];
+      const bookmarkCount = imported && imported.ok ? imported.bookmarkCount ?? 0 : 0;
+      const reviewCount = imported && imported.ok ? imported.reviewCount ?? 0 : 0;
+      return {
+        bookId: id,
+        title: book.title,
+        onShelf: true,
+        highlightCount: bookmarkCount,
+        noteCharCount: reviewCount * 80,
+        chapterCount: Math.max(1, book.chapterCount ?? 1),
+        hasLongReview: reviewCount > 0,
+      };
+    });
+  }, [shelfBooks, importResults]);
   const quadrantState = useQuadrantSummary(quadrantBooks);
 
   const {

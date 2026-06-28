@@ -43,13 +43,17 @@ export default function QuadrantCard({ title, description, books, isSeed, emptyH
         <ul className="quadrant-card-list">
           {books.slice(0, 8).map((book) => {
             const percentile = book.noteDepth?.rollingPercentile;
-            const percentileLabel =
-              typeof percentile === 'number'
+            const raw = book.noteDepth?.raw;
+            const hasNoSignal = typeof raw === 'number' && raw === 0;
+            const percentileLabel = hasNoSignal
+              ? '—'
+              : typeof percentile === 'number'
                 ? `${Math.round(percentile * 100)}%`
                 : '—';
+            const label = book.title || `#${book.bookId}`;
             return (
               <li key={book.bookId} className="quadrant-card-item">
-                <span className="quadrant-card-bookid">{book.bookId}</span>
+                <span className="quadrant-card-bookid" title={label}>{label}</span>
                 <span className="quadrant-card-percentile" title="在你自己的读过序列里的分位">
                   {percentileLabel}
                 </span>
