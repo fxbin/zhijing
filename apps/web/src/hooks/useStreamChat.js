@@ -52,6 +52,12 @@ const STREAM_TIMEOUT_DISABLED = 0;
 const STORAGE_KEY_PREFIX = 'zhijing:agent-chat:';
 
 /**
+ * 会话 id 持久化 key 前缀（与消息持久化分离，便于独立清理）。
+ * 跨轮对话时复用同一 sessionId，让后端累积上下文。
+ */
+const SESSION_ID_STORAGE_KEY_PREFIX = 'zhijing:agent-session:';
+
+/**
  * localStorage 持久化最大消息条数，超过时丢弃最早的消息以控制容量。
  */
 const STORAGE_MAX_MESSAGES = 100;
@@ -116,6 +122,55 @@ function createChatMessageId(role, timestamp) {
  */
 function createSessionId() {
   return `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * 从 localStorage 读取指定工作区持久化的 sessionId。
+ * 用于跨轮对话复用同一 sessionId，让后端累积上下文。
+ *
+ * @param {string} workspaceId - 工作区 ID
+ * @returns {string|null} 持久化的 sessionId；无记录时返回 null
+ * @author fxbin
+ */
+function loadSessionId(workspaceId) {
+  if (!workspaceId) return null;
+  try {
+    return localStorage.getItem(`${SESSION_ID_STORAGE_KEY_PREFIX}${workspaceId}`);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 把 sessionId 写入 localStorage，绑定到指定工作区。
+ *
+ * @param {string} workspaceId - 工作区 ID
+ * @param {string} sessionId - 会话 ID
+ * @author fxbin
+ */
+function saveSessionId(workspaceId, sessionId) {
+  if (!workspaceId || !sessionId) return;
+  try {
+    localStorage.setItem(`${SESSION_ID_STORAGE_KEY_PREFIX}${workspaceId}`, sessionId);
+  } catch {
+    // localStorage 不可用时静默降级，每次新生成 sessionId
+  }
+}
+
+/**
+ * 从 localStorage 删除指定工作区的 sessionId。
+ * 清空对话或切换工作区时调用。
+ *
+ * @param {string} workspaceId - 工作区 ID
+ * @author fxbin
+ */
+function removeSessionId(workspaceId) {
+  if (!workspaceId) return;
+  try {
+    localStorage.removeItem(`${SESSION_ID_STORAGE_KEY_PREFIX}${workspaceId}`);
+  } catch {
+    // 静默降级
+  }
 }
 
 /**
@@ -268,7 +323,8 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
 
     abortCurrentStream();
 
-    const sessionId = createSessionId();
+    const persistedSessionId = loadSessionId(selectedWorkspaceId);
+    const sessionId = persistedSessionId ?? createSessionId();
     const controller = new AbortController();
     currentSessionId.current = sessionId;
     streamWorkspaceId.current = selectedWorkspaceId;
@@ -342,6 +398,19 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     let assistantReasoning = '';
     let auxText = '';
     const toolCallsByKey = new Map();
+
+    /**
+     * 从响应头读取后端下发的 sessionId 并持久化。
+     * 后端可能在客户端未传 sessionId 或会话已过期时生成新的，
+     * 这里同步更新本地状态，保证下一轮请求能复用同一 sessionId。
+     */
+    const responseSessionId = response.headers.get('X-Session-Id');
+    if (responseSessionId && responseSessionId !== sessionId) {
+      currentSessionId.current = responseSessionId;
+    }
+    if (responseSessionId) {
+      saveSessionId(selectedWorkspaceId, responseSessionId);
+    }
 
     /**
      * 检查当前流是否仍然有效（工作区未切换、未被 abort）。
@@ -529,6 +598,7 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     setOrchestratorReason('');
     const targetWorkspaceId = streamWorkspaceId.current ?? selectedWorkspaceId;
     removeChatFromStorage(targetWorkspaceId);
+    removeSessionId(targetWorkspaceId);
   }, [selectedWorkspaceId]);
 
   return {

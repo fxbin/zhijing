@@ -140,6 +140,8 @@ export interface WorkspaceAgentOptions {
   systemPromptOverride?: string;
   auditSink?: ToolCallAuditSink;
   taskType?: AgentTaskType;
+  /** 历史消息，用于多轮对话上下文累积；省略时从空对话开始 */
+  messages?: AgentMessage[];
 }
 
 /**
@@ -224,7 +226,7 @@ export function createWorkspaceAgent(workspaceId: string, options: WorkspaceAgen
       model,
       thinkingLevel: options.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
       tools,
-      messages: [],
+      messages: options.messages ?? [],
     },
     convertToLlm: defaultConvertToLlm,
     streamFn: (...args) => {

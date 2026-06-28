@@ -1487,6 +1487,7 @@ export function buildApi() {
         'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
         'X-Accel-Buffering': 'no',
+        'X-Session-Id': sessionId,
       });
 
       const send = (event: AgentStreamEvent) => {
@@ -1575,6 +1576,7 @@ export function buildApi() {
             request.log.warn(info, warnMessage);
           },
         },
+        sessionId,
       );
 
       activeAgents.set(sessionId, session);

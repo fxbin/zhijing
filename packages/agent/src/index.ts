@@ -65,10 +65,13 @@ export type { AgentRole, AgentRoleConfig, MultiAgentOptions } from './multi-agen
 
 export {
   startOrchestratorSession,
+  clearAgentSession,
+  listAgentSessions,
 } from './orchestrator-session.js';
 export type {
   OrchestratorCredentials,
   OrchestratorRunContext,
   OrchestratorRunCallbacks,
   OrchestratorSession,
+  AgentSessionInfo,
 } from './orchestrator-session.js';

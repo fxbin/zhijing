@@ -13,8 +13,9 @@
  * @author fxbin
  */
 
+import { randomUUID } from 'node:crypto';
 import type { KnownProvider } from '@earendil-works/pi-ai';
-import { Agent } from '@earendil-works/pi-agent-core';
+import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
 import type { AgentStreamEvent, OrchestratorDecision } from '@zhijing/shared';
 import type { ToolCallSummary } from '@zhijing/core';
 import { interceptInStream } from '@zhijing/core';
@@ -28,6 +29,53 @@ import {
   AUXILIARY_PROBE_MIN_TOOL_CALLS,
   AUXILIARY_PROBE_MAX_OUTPUT_LENGTH,
 } from './multi-agent-orchestrator.js';
+
+/**
+ * 会话上下文累积条目：保存最近一轮 Agent 运行结束后的 messages 快照，
+ * 供下一轮 startOrchestratorSession 复用，实现跨轮上下文累积。
+ */
+interface SessionRecord {
+  /** 工作区 id；切换工作区时不应复用 */
+  workspaceId: string;
+  /** 最近一轮运行结束后从 agent.state.messages 提取的消息快照 */
+  messages: AgentMessage[];
+  /** 最近一次访问时间戳（毫秒），用于 idle 过期清理 */
+  lastUsedAt: number;
+}
+
+/**
+ * 会话级 Agent 状态存储：sessionId → SessionRecord。
+ *
+ * 设计要点：
+ * - 仅缓存 messages 快照，不缓存 Agent 实例；每轮新建 Agent，
+ *   通过 initialState.messages 注入历史，避免 Agent 内部状态管理的不可控副作用
+ * - 主 Agent 复用历史 messages；辅 probe Agent 不复用（设计本意是临时盲区检测）
+ * - idle TTL 30 分钟，过期自动清理
+ */
+const sessionStore = new Map<string, SessionRecord>();
+
+/**
+ * 会话 idle 过期时长（毫秒），30 分钟。
+ */
+const SESSION_IDLE_TTL_MS = 30 * 60 * 1000;
+
+/**
+ * 单会话最大保留消息条数，超过时按 FIFO 截断以控制上下文体积。
+ */
+const SESSION_MAX_MESSAGES = 100;
+
+/**
+ * 清理过期会话。在每次 startOrchestratorSession 入口调用，
+ * 顺带清理所有 lastUsedAt 超过 TTL 的条目。
+ */
+function sweepExpiredSessions(): void {
+  const now = Date.now();
+  for (const [id, record] of sessionStore) {
+    if (now - record.lastUsedAt > SESSION_IDLE_TTL_MS) {
+      sessionStore.delete(id);
+    }
+  }
+}
 
 /**
  * 编排运行凭证。
@@ -119,6 +167,7 @@ export interface OrchestratorSession {
  * - 辅 probe Agent 触发决策（4 条件）
  * - 辅 Agent 装配 + 事件订阅 + aux_* 事件下发
  * - 主+辅 abort 统一管理
+ * - 跨轮上下文累积：通过 sessionId 复用历史 messages
  *
  * 不负责（保留在 api 薄路由层）：
  * - HTTP 参数解析 / SSE header
@@ -129,14 +178,27 @@ export interface OrchestratorSession {
  *
  * @param ctx - 编排运行上下文
  * @param callbacks - 编排运行回调
+ * @param sessionId - 可选会话 id；传入且 workspaceId 匹配时复用历史 messages，
+ *                    实现多轮上下文累积；省略时生成新 id 并从空对话开始
  * @returns 编排会话句柄；调用方应保存引用用于 abort，并 await session.done
  * @author fxbin
  */
 export function startOrchestratorSession(
   ctx: OrchestratorRunContext,
   callbacks: OrchestratorRunCallbacks,
+  sessionId?: string,
 ): OrchestratorSession {
   const { workspaceId, message, intent, decision, credentials } = ctx;
+
+  sweepExpiredSessions();
+  const sessionKey = sessionId ?? randomUUID();
+  const existing = sessionStore.get(sessionKey);
+  const priorMessages = existing && existing.workspaceId === workspaceId
+    ? existing.messages
+    : [];
+  if (existing) {
+    existing.lastUsedAt = Date.now();
+  }
 
   let mainAgent: Agent | null = null;
   let probeAgent: Agent | null = null;
@@ -166,12 +228,15 @@ export function startOrchestratorSession(
 
   /**
    * 主 Agent 编排：装配、订阅转发、prompt、流中拦截，完成后触发辅 probe。
+   * 装配时注入 priorMessages 实现跨轮上下文累积；
+   * 结束时把 agent.state.messages 存回 sessionStore 供下一轮复用。
    */
   async function runMainAgent() {
     const agentOptions: WorkspaceAgentOptions = {
       provider: credentials.provider,
       modelId: credentials.model,
       apiKey: credentials.apiKey,
+      messages: priorMessages,
     };
 
     const supportsRoleOverride = credentials.provider === 'deepseek';
@@ -237,7 +302,30 @@ export function startOrchestratorSession(
     } catch (error) {
       callbacks.onEvent({ type: 'error', message: error instanceof Error ? error.message : 'Agent run failed.' });
     } finally {
+      persistSessionMessages();
       unsubscribe();
+    }
+  }
+
+  /**
+   * 从主 Agent 提取最新 messages 存回 sessionStore。
+   * 仅在主 Agent 完整结束时持久化；abort / 异常路径不写回，保留上一轮快照。
+   * 超过 SESSION_MAX_MESSAGES 时按 FIFO 截断。
+   */
+  function persistSessionMessages() {
+    if (!mainAgent || aborted) return;
+    try {
+      const nextMessages = mainAgent.state.messages;
+      const trimmed = nextMessages.length > SESSION_MAX_MESSAGES
+        ? nextMessages.slice(nextMessages.length - SESSION_MAX_MESSAGES)
+        : nextMessages;
+      sessionStore.set(sessionKey, {
+        workspaceId,
+        messages: trimmed,
+        lastUsedAt: Date.now(),
+      });
+    } catch {
+      // state 读取失败不阻断流程，下一轮从空对话开始
     }
   }
 
@@ -303,4 +391,54 @@ export function startOrchestratorSession(
       probeAgent = null;
     }
   }
+}
+
+/**
+ * 会话基本信息（用于列表展示）。
+ */
+export interface AgentSessionInfo {
+  /** 会话 id */
+  sessionId: string;
+  /** 工作区 id */
+  workspaceId: string;
+  /** 当前累积的消息条数 */
+  messageCount: number;
+  /** 最近一次访问时间（ISO 字符串） */
+  lastUsedAt: string;
+}
+
+/**
+ * 清除指定会话的上下文累积。
+ * 已 abort / 不存在的 sessionId 静默处理，不抛错。
+ *
+ * @param sessionId - 会话 id
+ * @author fxbin
+ */
+export function clearAgentSession(sessionId: string): void {
+  if (!sessionId) return;
+  sessionStore.delete(sessionId);
+}
+
+/**
+ * 列出当前缓存的会话信息。
+ * 可选 workspaceId 过滤；返回按 lastUsedAt 倒序。
+ *
+ * @param workspaceId - 可选工作区 id 过滤
+ * @returns 会话信息列表
+ * @author fxbin
+ */
+export function listAgentSessions(workspaceId?: string): AgentSessionInfo[] {
+  sweepExpiredSessions();
+  const list: AgentSessionInfo[] = [];
+  for (const [sessionId, record] of sessionStore) {
+    if (workspaceId && record.workspaceId !== workspaceId) continue;
+    list.push({
+      sessionId,
+      workspaceId: record.workspaceId,
+      messageCount: record.messages.length,
+      lastUsedAt: new Date(record.lastUsedAt).toISOString(),
+    });
+  }
+  list.sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt));
+  return list;
 }
