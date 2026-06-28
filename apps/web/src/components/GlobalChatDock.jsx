@@ -51,6 +51,7 @@ const DOCK_STORAGE_KEY = 'zhijing-chat-dock';
  * @param {(userId: string) => void} [props.onRetryMessage] - 重试上一条流式对话回调
  * @param {(sessionId: string) => void} [props.onSwitchSession] - 切换会话回调
  * @param {string} [props.currentSessionId] - 当前会话 id；用于历史面板高亮
+ * @param {object} [props.proposalBatchState] - 流式 apply diff 交互状态（useProposalBatch 返回值）
  * @param {() => void} [props.onAbortStream] - 中断当前流式对话回调
  * @param {string} [props.orchestratorMode=''] - 当前编排模式英文标识（mirror/catalyst/navigator）
  * @param {(artifact: object, meta?: object) => void} props.onOpenArtifact - 打开产物回调
@@ -79,6 +80,7 @@ export default function GlobalChatDock({
   onRetryMessage,
   onSwitchSession,
   currentSessionId,
+  proposalBatchState,
   onAbortStream,
   onOpenArtifact,
   onSelectWorkspace,
@@ -241,6 +243,7 @@ export default function GlobalChatDock({
                 cards={cards}
                 materials={materials}
                 proposedCardsState={proposedCardsState}
+                proposalBatchState={proposalBatchState}
                 onOpenArtifact={onOpenArtifact}
                 onRetry={onRetryMessage}
                 isStreaming={isStreaming}

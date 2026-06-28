@@ -13,11 +13,46 @@
  * @author fxbin
  */
 
-import { Loader2, RotateCcw, Sparkles, SquareArrowOutUpRight, Wrench } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  CheckCircle2,
+  Loader2,
+  RotateCcw,
+  Sparkles,
+  SquareArrowOutUpRight,
+  Wrench,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCardTypeLabel } from '../utils/i18nLabels';
 import { renderMarkdown } from '../utils/markdown';
 import SourceCitation from './SourceCitation';
+
+/**
+ * 提议操作类型常量。
+ * 与 packages/shared 中 ProposedOperation 联合类型保持一致。
+ */
+const PROPOSAL_OP_CREATE_CARD = 'create_card';
+const PROPOSAL_OP_EDIT_CARD = 'edit_card';
+const PROPOSAL_OP_ARCHIVE_CARD = 'archive_card';
+const PROPOSAL_OP_UNARCHIVE_CARD = 'unarchive_card';
+const PROPOSAL_OP_ARCHIVE_MATERIAL = 'archive_material';
+
+/**
+ * 提议操作类型 → i18n key 映射表。
+ * 渲染时按 op 取对应文案，避免魔法字符串散落在 JSX 中。
+ */
+const PROPOSAL_OP_LABEL_KEYS = Object.freeze({
+  [PROPOSAL_OP_CREATE_CARD]: 'chat.proposalOp.create_card',
+  [PROPOSAL_OP_EDIT_CARD]: 'chat.proposalOp.edit_card',
+  [PROPOSAL_OP_ARCHIVE_CARD]: 'chat.proposalOp.archive_card',
+  [PROPOSAL_OP_UNARCHIVE_CARD]: 'chat.proposalOp.unarchive_card',
+  [PROPOSAL_OP_ARCHIVE_MATERIAL]: 'chat.proposalOp.archive_material',
+});
+
+/**
+ * 兜底 i18n key，当 proposal.op 不在白名单内时使用。
+ */
+const PROPOSAL_OP_FALLBACK_KEY = 'chat.proposalOp.create_card';
 
 /**
  * 安全地把任意值格式化为 JSON 字符串，用于工具入参折叠展示。
@@ -135,6 +170,7 @@ function ToolResultDetails({ toolName, details, t }) {
  * @param {Array<object>} [props.cards=[]] - 工作区卡片列表（引用渲染查找）
  * @param {Array<object>} [props.materials=[]] - 工作区资料列表（引用渲染查找）
  * @param {object} [props.proposedCardsState] - 提议卡片交互状态（useProposedCards 返回值）
+ * @param {object} [props.proposalBatchState] - 流式 apply diff 交互状态（useProposalBatch 返回值）
  * @param {(artifact: object, meta?: object) => void} [props.onOpenArtifact] - 打开产物回调
  * @param {(userId: string) => void} [props.onRetry] - 重试该 user 消息回调
  * @param {boolean} [props.isStreaming=false] - 当前流式对话运行态；运行中隐藏重试按钮
@@ -146,6 +182,7 @@ export default function ChatMessageItem({
   cards = [],
   materials = [],
   proposedCardsState,
+  proposalBatchState,
   onOpenArtifact,
   onRetry,
   isStreaming = false,
@@ -178,6 +215,10 @@ export default function ChatMessageItem({
   const hasText = Boolean(item.text);
   const hasCitations = item.citations.length > 0;
   const hasProposedCards = item.proposedCards.length > 0 && proposedCardsState;
+  const hasProposalBatch = Boolean(item.proposalBatch)
+    && Array.isArray(item.proposalBatch.proposals)
+    && item.proposalBatch.proposals.length > 0
+    && proposalBatchState;
   const hasArtifact = Boolean(item.artifact);
   const hasError = Boolean(item.error);
   const hasAuxContent = Boolean(item.auxContent);
@@ -275,6 +316,14 @@ export default function ChatMessageItem({
           />
         )}
 
+        {hasProposalBatch && (
+          <ProposalBatchBlock
+            item={item}
+            state={proposalBatchState}
+            t={t}
+          />
+        )}
+
         {hasAuxContent && (
           <details className="chat-message-aux">
             <summary>{t('chat.auxProbeTitle')}</summary>
@@ -361,6 +410,164 @@ function ProposedCardsBlock({ proposedCards, state, cardTypeLabel, t }) {
       </div>
       {acceptError && (
         <p className="proposed-cards-error" role="alert">{acceptError}</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 根据 proposal batch 构造默认全选索引集合。
+ * 默认勾选所有提议，方便用户直接采纳；可在 UI 中取消勾选。
+ *
+ * @param {object|null} batch - proposal batch 对象
+ * @returns {Set<number>} 默认全选的索引集合；batch 为空时返回空集合
+ * @author fxbin
+ */
+function buildDefaultSelectedIndices(batch) {
+  if (!batch || !Array.isArray(batch.proposals) || batch.proposals.length === 0) {
+    return new Set();
+  }
+  return new Set(batch.proposals.map((_, index) => index));
+}
+
+/**
+ * 流式 apply diff 提议变更区块（assistant 消息内嵌）。
+ *
+ * 与 useProposalBatch hook 协同：
+ * - acceptingMessageIds：采纳进行态的 message id 集合
+ * - appliedBatches：已处理（采纳或拒绝）的 message id 集合
+ * - errorByMessageId：采纳失败文案映射
+ * - acceptBatch(messageId, batch, selectedIndices)：采纳选中
+ * - dismissBatch(messageId)：拒绝全部（仅前端标记已处理）
+ *
+ * 选中态由本组件按 message 粒度维护，初始为「全选」；
+ * 当 item.proposalBatch 引用变化时（同一 message 多次下发）重置选中集合。
+ *
+ * @param {object} props - 组件属性
+ * @param {object} props.item - ChatThreadItem，需含 proposalBatch 字段
+ * @param {object} props.state - useProposalBatch 返回值
+ * @param {function} props.t - i18n 翻译函数
+ * @returns {JSX.Element} apply diff 提议区块
+ * @author fxbin
+ */
+function ProposalBatchBlock({ item, state, t }) {
+  const batch = item.proposalBatch;
+  const messageId = item.id;
+  const {
+    acceptingMessageIds,
+    appliedBatches,
+    errorByMessageId,
+    acceptBatch,
+    dismissBatch,
+  } = state;
+
+  const [selectedIndices, setSelectedIndices] = useState(() => buildDefaultSelectedIndices(batch));
+
+  useEffect(() => {
+    setSelectedIndices(buildDefaultSelectedIndices(batch));
+  }, [batch]);
+
+  const isAccepting = acceptingMessageIds.has(messageId);
+  const isApplied = appliedBatches.has(messageId);
+  const errorMessage = errorByMessageId[messageId] ?? '';
+
+  if (isApplied) {
+    return (
+      <div className="chat-proposal-batch applied">
+        <CheckCircle2 size={14} />
+        <span>{t('chat.proposalApplied')}</span>
+      </div>
+    );
+  }
+
+  /**
+   * 切换指定索引的勾选状态。
+   * @param {number} index - 提议在 batch.proposals 中的下标
+   * @returns {void}
+   * @author fxbin
+   */
+  function toggleIndex(index) {
+    setSelectedIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  }
+
+  return (
+    <div className="chat-proposal-batch">
+      <div className="chat-proposal-head">
+        <strong>{t('chat.proposalTitle')}</strong>
+        <span className="chat-proposal-hint">{t('chat.proposalHint')}</span>
+      </div>
+      <ul className="chat-proposal-list">
+        {batch.proposals.map((proposal, index) => {
+          const opLabelKey = PROPOSAL_OP_LABEL_KEYS[proposal.op] ?? PROPOSAL_OP_FALLBACK_KEY;
+          const isSelected = selectedIndices.has(index);
+          return (
+            <li
+              key={`${proposal.op}-${index}`}
+              className={`chat-proposal-item ${isSelected ? 'selected' : ''}`}
+            >
+              <label>
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => toggleIndex(index)}
+                  disabled={isAccepting}
+                />
+                <span className={`chat-proposal-op-badge op-${proposal.op}`}>
+                  {t(opLabelKey)}
+                </span>
+                <div className="chat-proposal-body">
+                  {proposal.title && <strong>{proposal.title}</strong>}
+                  {proposal.body && <p>{proposal.body}</p>}
+                  {proposal.cardId && (
+                    <p className="chat-proposal-meta">
+                      <span className="chat-proposal-meta-label">{t('chat.proposalMetaCardId')}</span>
+                      <code>{proposal.cardId}</code>
+                    </p>
+                  )}
+                  {proposal.materialId && (
+                    <p className="chat-proposal-meta">
+                      <span className="chat-proposal-meta-label">{t('chat.proposalMetaMaterialId')}</span>
+                      <code>{proposal.materialId}</code>
+                    </p>
+                  )}
+                  {proposal.rationale && (
+                    <p className="chat-proposal-rationale">{proposal.rationale}</p>
+                  )}
+                </div>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="chat-proposal-actions">
+        <button
+          type="button"
+          className="chat-proposal-accept"
+          disabled={isAccepting || selectedIndices.size === 0}
+          onClick={() => void acceptBatch(messageId, batch, selectedIndices)}
+        >
+          {isAccepting && <Loader2 size={13} className="chat-message-tool-spinner" />}
+          {isAccepting ? t('chat.proposalAccepting') : t('chat.proposalAcceptSelected')}
+        </button>
+        <button
+          type="button"
+          className="chat-proposal-dismiss"
+          disabled={isAccepting}
+          onClick={() => dismissBatch(messageId)}
+        >
+          {t('chat.proposalReject')}
+        </button>
+      </div>
+      {errorMessage && (
+        <p className="chat-proposal-error" role="alert">{errorMessage}</p>
       )}
     </div>
   );

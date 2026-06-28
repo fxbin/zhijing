@@ -24,6 +24,11 @@ import {
   type AgentProposalReport,
   type WorkspaceEmergenceCluster,
   type ProposedCard,
+  type ProposedOperation,
+  type ProposedOperationType,
+  type ProposedOperationResult,
+  type AcceptProposalBatchRequest,
+  type AcceptProposalBatchResponse,
   type AssignMaterialRequest,
   type ArtifactRecord,
   type ArtifactRevision,
@@ -5926,6 +5931,191 @@ export function acceptProposedCards(messageId: string, selectedIndices?: number[
     throw new KnowledgeCoreError('Message update failed.', 500);
   }
   return { cards, message: updatedMessage };
+}
+
+/**
+ * 批量执行 Agent 提议的结构化操作。
+ *
+ * 与 acceptProposedCards 的区别：本函数面向流式路径下发的 proposal_batch，
+ * 直接以前端重传的 operations 数组为输入，不依赖 messages 表中的
+ * proposedCards 持久化字段。
+ *
+ * 按 op 类型分发到既有原子函数（editCardContent / archiveCard /
+ * archiveMaterial / unarchiveCard）落库；create_card 直接构造
+ * KnowledgeCard 并 insertCards。每个 op 独立 try/catch，失败不影响
+ * 其他 op 执行。整体写入 agent_action_log 审计。
+ *
+ * @param workspaceId - 工作区 ID；操作的目标卡片/资料应属于该工作区
+ * @param operations - Agent 提议的操作数组（由前端重传）
+ * @param selectedIndices - 采纳的下标集合；空或省略时采纳全部
+ * @returns AcceptProposalBatchResponse - batchId 与每个 op 的执行结果
+ * @author fxbin
+ */
+export function applyProposedOperations(
+  workspaceId: string,
+  operations: ProposedOperation[],
+  selectedIndices?: number[],
+): AcceptProposalBatchResponse {
+  if (!Array.isArray(operations) || operations.length === 0) {
+    throw new KnowledgeCoreError('No proposed operations to apply.', 400);
+  }
+  const base = repository.findWorkspace(workspaceId);
+  if (!base) {
+    throw new KnowledgeCoreError('Knowledge base not found.', 404);
+  }
+  const indices = Array.isArray(selectedIndices) && selectedIndices.length > 0
+    ? selectedIndices.filter((index) => index >= 0 && index < operations.length)
+    : operations.map((_, index) => index);
+  if (indices.length === 0) {
+    throw new KnowledgeCoreError('No valid operations selected.', 400);
+  }
+  const timestamp = now();
+  const results: ProposedOperationResult[] = [];
+  const createdCards: KnowledgeCard[] = [];
+  for (const index of indices) {
+    const operation = operations[index];
+    if (!operation) {
+      results.push({ index, op: 'create_card', ok: false, error: 'Invalid operation index.' });
+      continue;
+    }
+    try {
+      const opResult = executeProposedOperation(operation, base.id, timestamp);
+      if (opResult.op === 'create_card' && opResult.card) {
+        createdCards.push(opResult.card);
+      }
+      results.push({
+        index,
+        op: opResult.op,
+        ok: true,
+        cardId: opResult.cardId,
+        materialId: opResult.materialId,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Operation failed.';
+      results.push({ index, op: operation.op, ok: false, error: message });
+    }
+  }
+  if (createdCards.length > 0) {
+    base.cardCount += createdCards.length;
+    const existingCards = repository.listCards(base.id);
+    const sourcedCount = [...existingCards, ...createdCards].filter((card) => card.claimStatus === 'sourced').length;
+    base.sourcedRatio = base.cardCount > 0 ? sourcedCount / base.cardCount : 0;
+    base.updatedAt = timestamp;
+    repository.updateWorkspace(base);
+  }
+  logAgentAction(EVIDENCE_ACTION_ACCEPT_PROPOSED_CARDS, {
+    workspaceId: base.id,
+    input: {
+      totalOperations: operations.length,
+      selectedCount: indices.length,
+    },
+    output: {
+      results: results.map((result) => ({
+        op: result.op,
+        ok: result.ok,
+        error: result.error,
+        cardId: result.cardId,
+        materialId: result.materialId,
+      })),
+    },
+  });
+  return {
+    batchId: `batch_${timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+    results,
+  };
+}
+
+/**
+ * 执行单条 ProposedOperation，按 op 类型分发到既有原子函数。
+ *
+ * @param operation - 单条提议操作
+ * @param workspaceId - 工作区 ID
+ * @param timestamp - 统一时间戳，便于审计对齐
+ * @returns 包含 op / cardId? / materialId? / card? 的执行结果
+ * @author fxbin
+ */
+function executeProposedOperation(
+  operation: ProposedOperation,
+  workspaceId: string,
+  timestamp: string,
+): { op: ProposedOperationType; cardId?: string; materialId?: string; card?: KnowledgeCard } {
+  switch (operation.op) {
+    case 'create_card': {
+      const card: KnowledgeCard = {
+        id: id('card'),
+        workspaceId,
+        materialId: operation.materialId,
+        type: normalizeCardType(operation.type),
+        title: compactTitle(operation.title),
+        body: operation.body.trim() || '这张知识卡片还需要补充内容。',
+        claimStatus: 'ai_skeleton',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      repository.insertCards([card]);
+      return { op: 'create_card', cardId: card.id, card };
+    }
+    case 'edit_card': {
+      const existing = repository.findCard(operation.cardId);
+      if (!existing) {
+        throw new KnowledgeCoreError('Card not found.', 404);
+      }
+      if (existing.workspaceId && existing.workspaceId !== workspaceId) {
+        throw new KnowledgeCoreError('Card does not belong to the current workspace.', 403);
+      }
+      const changes: CardContentEdit = {};
+      if (typeof operation.title === 'string' && operation.title.trim().length > 0) {
+        changes.title = operation.title.trim();
+      }
+      if (typeof operation.body === 'string') {
+        changes.body = operation.body;
+      }
+      if (operation.type) {
+        changes.type = normalizeCardType(operation.type);
+      }
+      const result = editCardContent(operation.cardId, changes);
+      if (!result) {
+        throw new KnowledgeCoreError('Card update failed.', 500);
+      }
+      return { op: 'edit_card', cardId: result.card.id, card: result.card };
+    }
+    case 'archive_card': {
+      const existing = repository.findCard(operation.cardId);
+      if (!existing) {
+        throw new KnowledgeCoreError('Card not found.', 404);
+      }
+      if (existing.workspaceId && existing.workspaceId !== workspaceId) {
+        throw new KnowledgeCoreError('Card does not belong to the current workspace.', 403);
+      }
+      archiveCard(operation.cardId);
+      return { op: 'archive_card', cardId: operation.cardId };
+    }
+    case 'unarchive_card': {
+      const existing = repository.findCard(operation.cardId);
+      if (!existing) {
+        throw new KnowledgeCoreError('Card not found.', 404);
+      }
+      if (existing.workspaceId && existing.workspaceId !== workspaceId) {
+        throw new KnowledgeCoreError('Card does not belong to the current workspace.', 403);
+      }
+      unarchiveCard(operation.cardId);
+      return { op: 'unarchive_card', cardId: operation.cardId };
+    }
+    case 'archive_material': {
+      const existing = repository.findMaterial(operation.materialId);
+      if (!existing) {
+        throw new KnowledgeCoreError('Material not found.', 404);
+      }
+      if (existing.workspaceId && existing.workspaceId !== workspaceId) {
+        throw new KnowledgeCoreError('Material does not belong to the current workspace.', 403);
+      }
+      archiveMaterial(operation.materialId);
+      return { op: 'archive_material', materialId: operation.materialId };
+    }
+    default: {
+      throw new KnowledgeCoreError(`Unsupported operation: ${(operation as { op: string }).op}`, 400);
+    }
+  }
 }
 
 export async function runKnowledgeKit(

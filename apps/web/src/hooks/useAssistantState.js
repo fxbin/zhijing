@@ -12,6 +12,7 @@ import api from '../utils/api';
 import { API_STATUS_ONLINE } from './useUiState';
 import { TASKS_MAX_COUNT } from './useWorkspaceState';
 import { useStreamChat } from './useStreamChat';
+import { useProposalBatch } from './useProposalBatch';
 
 /**
  * 工作区接口路径前缀。
@@ -71,6 +72,8 @@ function prependTask(tasks, task) {
  * @param {function} params.setLatestTask - 设置最新任务对象
  * @param {function} params.setSelectedArtifact - 设置当前选中的产物
  * @param {function} params.t - i18n 翻译函数
+ * @param {(result: object, batch: object) => void} [params.onProposalsApplied] - 流式 apply diff 采纳成功回调；
+ *                                                                            由 main.jsx 提供，用于在采纳提议后刷新工作区详情
  * @returns {object} 助手域 state、setter 与 askWorkspace 业务函数
  * @author fxbin
  */
@@ -84,6 +87,7 @@ export function useAssistantState({
   setLatestTaskId,
   setLatestTask,
   setSelectedArtifact,
+  onProposalsApplied,
   t,
 }) {
   const [assistantQuestion, setAssistantQuestion] = useState(INITIAL_ASSISTANT_QUESTION);
@@ -104,6 +108,12 @@ export function useAssistantState({
     switchSession,
     currentSessionId,
   } = useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t });
+
+  const proposalBatchState = useProposalBatch({
+    selectedWorkspaceId,
+    onProposalsApplied,
+    t,
+  });
 
   /**
    * 流式对话提交包装：发送后清空输入框。
@@ -226,5 +236,6 @@ export function useAssistantState({
     retryLastMessage,
     switchSession,
     currentSessionId,
+    proposalBatchState,
   };
 }

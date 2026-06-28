@@ -80,6 +80,7 @@ import {
   classifyUserIntent,
   recordSuggestionSent,
   acceptProposedCards,
+  applyProposedOperations,
   listAgentActionLogs,
   listAgentUsageRecords,
   summarizeAgentUsageRecords,
@@ -167,6 +168,7 @@ import type {
   ReadingSessionRequest,
   CannotAnswerFeedbackRequest,
   AcceptProposedCardsRequest,
+  AcceptProposalBatchRequest,
   UpdateModelProviderProfileRequest,
   KnowledgeCard,
   MaterialRecord,
@@ -791,6 +793,25 @@ export function buildApi() {
         }
         request.log.error({ error, messageId }, 'accept proposed cards failed');
         return reply.code(500).send({ error: 'Accept proposed cards failed.' });
+      }
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: AcceptProposalBatchRequest }>(
+    '/api/workspaces/:id/proposal-batches/accept',
+    async (request, reply) => {
+      const workspaceId = request.params.id;
+      const operations = Array.isArray(request.body?.operations) ? request.body.operations : [];
+      const selectedIndices = request.body?.selectedIndices;
+      try {
+        const result = applyProposedOperations(workspaceId, operations, selectedIndices);
+        return result;
+      } catch (error) {
+        if (error instanceof KnowledgeCoreError) {
+          return reply.code(error.statusCode).send({ error: error.message });
+        }
+        request.log.error({ error, workspaceId }, 'apply proposed operations failed');
+        return reply.code(500).send({ error: 'Apply proposed operations failed.' });
       }
     },
   );

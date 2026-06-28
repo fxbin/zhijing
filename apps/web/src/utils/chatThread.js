@@ -71,6 +71,9 @@ export const EMPTY_PROPOSED_CARDS = [];
  * @param {object} [fields.artifact=null] - 关联产物
  * @param {Array} [fields.cardIds=[]] - 关联卡片 id 列表（历史消息）
  * @param {number} [fields.timestamp=0] - 消息时间戳，用于排序
+ * @param {object|null} [fields.proposalBatch=null] - 流式 proposal_batch 事件下发的提议操作集合，
+ *                                                    结构为 { batchId: string, proposals: ProposedOperation[] }；
+ *                                                    仅流式路径会写入，由 ChatMessageItem 渲染为 apply diff 面板
  * @returns {object} 规范化的 ChatThreadItem
  * @author fxbin
  */
@@ -92,6 +95,7 @@ export function createChatThreadItem(fields) {
     artifact = null,
     cardIds = [],
     timestamp = 0,
+    proposalBatch = null,
   } = fields;
 
   if (!id || !role || !source) {
@@ -115,6 +119,7 @@ export function createChatThreadItem(fields) {
     artifact,
     cardIds,
     timestamp,
+    proposalBatch,
   };
 }
 
@@ -150,6 +155,7 @@ export function fromStreamMessage(message) {
     isStreaming: Boolean(message.isStreaming),
     auxContent: message.auxContent ?? '',
     error: message.error ?? '',
+    proposalBatch: message.proposalBatch ?? null,
     timestamp: extractTimestampFromId(message.id),
   });
 }

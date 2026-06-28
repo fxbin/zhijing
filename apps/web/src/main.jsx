@@ -258,6 +258,7 @@ function App() {
     retryLastMessage,
     switchSession,
     currentSessionId,
+    proposalBatchState,
   } = useAssistantState({
     selectedWorkspaceId,
     apiStatus,
@@ -268,6 +269,11 @@ function App() {
     setLatestTaskId,
     setLatestTask,
     setSelectedArtifact,
+    onProposalsApplied: () => {
+      if (selectedWorkspaceId) {
+        loadDetail(selectedWorkspaceId, () => false);
+      }
+    },
     t,
   });
 
@@ -842,6 +848,7 @@ function App() {
         onRetryMessage={retryLastMessage}
         onSwitchSession={switchSession}
         currentSessionId={currentSessionId}
+        proposalBatchState={proposalBatchState}
         onOpenArtifact={openArtifact}
         onSelectWorkspace={(id) => {
           if (id) {

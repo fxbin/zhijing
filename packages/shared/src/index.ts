@@ -423,6 +423,110 @@ export interface AcceptProposedCardsRequest {
   selectedIndices?: number[];
 }
 
+/**
+ * Agent 提议的操作类型枚举。
+ * 与 ProposedOperation 联合类型中的 op 字段保持同步。
+ * @author fxbin
+ */
+export type ProposedOperationType =
+  | 'create_card'
+  | 'edit_card'
+  | 'archive_card'
+  | 'unarchive_card'
+  | 'archive_material';
+
+/**
+ * Agent 提议的结构化操作。
+ *
+ * 与 ProposedCard 的区别：ProposedCard 仅支持「新建卡片」一种操作；
+ * ProposedOperation 覆盖创建、编辑、归档、取消归档等多种原子变更，
+ * 用于流式路径下的 apply diff 能力。
+ *
+ * 守提议权不写入权：Agent 只产生提议，需用户在前端确认后才会调用
+ * 既有原子端点（acceptProposedCards / editCardContent / archiveCard /
+ * archiveMaterial / unarchiveCard）落库。
+ *
+ * @author fxbin
+ */
+export type ProposedOperation =
+  | {
+      op: 'create_card';
+      type: CardType;
+      title: string;
+      body: string;
+      materialId?: string;
+      rationale?: string;
+    }
+  | {
+      op: 'edit_card';
+      cardId: string;
+      title?: string;
+      body?: string;
+      type?: CardType;
+      rationale?: string;
+    }
+  | {
+      op: 'archive_card';
+      cardId: string;
+      rationale?: string;
+    }
+  | {
+      op: 'unarchive_card';
+      cardId: string;
+      rationale?: string;
+    }
+  | {
+      op: 'archive_material';
+      materialId: string;
+      rationale?: string;
+    };
+
+/**
+ * 一批 Agent 提议操作，承载于流式 proposal_batch 事件下发到前端。
+ * batchId 仅作为审计标识使用，服务端不持久化 batch 状态，
+ * 前端在 accept 请求中需重新提交 operations 原文。
+ * @author fxbin
+ */
+export interface ProposalBatch {
+  batchId: string;
+  proposals: ProposedOperation[];
+}
+
+/**
+ * 采纳提议操作请求。
+ * selectedIndices 为空或省略时采纳全部提议；否则只采纳指定下标的操作。
+ * @author fxbin
+ */
+export interface AcceptProposalBatchRequest {
+  operations: ProposedOperation[];
+  selectedIndices?: number[];
+}
+
+/**
+ * 单条提议操作的执行结果。
+ * ok=false 时 error 字段承载失败原因；ok=true 时 cardId/materialId
+ * 字段承载新建或更新的资源 id，便于前端刷新对应数据。
+ * @author fxbin
+ */
+export interface ProposedOperationResult {
+  index: number;
+  op: ProposedOperationType;
+  ok: boolean;
+  error?: string;
+  cardId?: string;
+  materialId?: string;
+}
+
+/**
+ * 采纳提议操作的整体响应。
+ * results 与请求 operations 数组顺序一致，前端可逐条展示成功/失败状态。
+ * @author fxbin
+ */
+export interface AcceptProposalBatchResponse {
+  batchId: string;
+  results: ProposedOperationResult[];
+}
+
 export interface AgentTask {
   id: string;
   workflow: 'create_workspace' | 'ingest_material' | 'answer_question' | 'parse_material' | 'run_kit';
@@ -1596,6 +1700,8 @@ export interface OrchestratorDecision {
  * - tool 保留 id/name/args/isError + result 文本摘要，前端可展开查看
  * - mode_update 在 agent_start 后立即下发，前端显示当前编排模式与理由
  * - aux_* 系列承载辅 Agent（probe）输出，前端渲染为「可能还想知道」折叠区
+ * - proposal_batch 承载 Agent 提议的结构化操作（create/edit/archive 等），
+ *   前端渲染为 apply diff 卡片，用户确认后调用既有原子端点落库
  *
  * @author fxbin
  */
@@ -1614,6 +1720,7 @@ export type AgentStreamEvent =
   | { type: 'aux_start' }
   | { type: 'aux_delta'; delta: string }
   | { type: 'aux_end'; text: string }
+  | { type: 'proposal_batch'; batchId: string; proposals: ProposedOperation[] }
   | { type: 'error'; message: string };
 
 /**

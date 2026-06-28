@@ -81,6 +81,7 @@ const STREAM_EVENT = Object.freeze({
   AUX_START: 'aux_start',
   AUX_DELTA: 'aux_delta',
   AUX_END: 'aux_end',
+  PROPOSAL_BATCH: 'proposal_batch',
   ERROR: 'error',
 });
 
@@ -623,6 +624,16 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
                 syncAuxContent(auxText);
               }
               break;
+            case STREAM_EVENT.PROPOSAL_BATCH: {
+              const proposals = Array.isArray(event.proposals) ? event.proposals : [];
+              if (proposals.length > 0) {
+                const batchId = typeof event.batchId === 'string' ? event.batchId : '';
+                setChatMessages((prev) => prev.map((message) => (message.id === assistantId
+                  ? { ...message, proposalBatch: { batchId, proposals } }
+                  : message)));
+              }
+              break;
+            }
             case STREAM_EVENT.ERROR:
               if (isStreamActive()) {
                 setChatMessages((prev) => prev.map((message) => (message.id === assistantId
