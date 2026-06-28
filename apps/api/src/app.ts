@@ -155,6 +155,16 @@ import {
   getCurrentProxy,
   detectSystemProxy,
   setManualProxy,
+  getHiddenInterestHint,
+  setHiddenInterestPermanentlyDismissed,
+  dismissHiddenInterestBook,
+  markHiddenInterestHintShown,
+  exportDataPortability,
+  listDataPortabilityRecords,
+  revokeDataPortabilityExport,
+  getReaderModeProfile,
+  startReaderModeRollback,
+  cancelReaderModeRollback,
 } from '@zhijing/core';
 import {
   startOrchestratorSession,
@@ -206,6 +216,8 @@ import type {
   EvidenceFeedback,
   RejectedCardFeature,
   RouteAdvisorResult,
+  DataPortabilityFormat,
+  AudienceTier,
 } from '@zhijing/shared';
 import {
   INTAKE_AUDIENCE_VALUES,
@@ -215,6 +227,8 @@ import {
   USER_MEMORY_SCOPE_VALUES,
   USER_MEMORY_SOURCE_VALUES,
   DECISION_LOG_KIND_VALUES,
+  DATA_PORTABILITY_FORMAT_VALUES,
+  AUDIENCE_TIER_VALUES,
 } from '@zhijing/shared';
 
 const DEFAULT_ALLOWED_ORIGINS = [
@@ -2276,6 +2290,96 @@ export function buildApi() {
       request.log.error({ error }, 'save minimal mode failed');
       return reply.code(500).send({ error: 'Save minimal mode failed.' });
     }
+  });
+
+  app.get('/api/weread/hidden-interest/hint', async () => {
+    return { hint: getHiddenInterestHint() };
+  });
+
+  app.post<{ Body: { permanentlyDismissed?: boolean } }>('/api/weread/hidden-interest/toggle', async (request, reply) => {
+    if (typeof request.body?.permanentlyDismissed !== 'boolean') {
+      return reply.code(400).send({ error: 'permanentlyDismissed boolean is required.' });
+    }
+    setHiddenInterestPermanentlyDismissed(request.body.permanentlyDismissed);
+    return { ok: true };
+  });
+
+  app.post<{ Params: { bookId: string } }>('/api/weread/hidden-interest/dismiss/:bookId', async (request, reply) => {
+    const { bookId } = request.params;
+    if (!bookId) {
+      return reply.code(400).send({ error: 'bookId is required.' });
+    }
+    dismissHiddenInterestBook(bookId);
+    return { ok: true };
+  });
+
+  app.post('/api/weread/hidden-interest/shown', async () => {
+    markHiddenInterestHintShown();
+    return { ok: true };
+  });
+
+  app.post<{ Body: { format?: string } }>('/api/weread/data-portability/export', async (request, reply) => {
+    const format = request.body?.format;
+    if (!format || !DATA_PORTABILITY_FORMAT_VALUES.includes(format as DataPortabilityFormat)) {
+      return reply.code(400).send({ error: `format must be one of: ${DATA_PORTABILITY_FORMAT_VALUES.join(', ')}.` });
+    }
+    try {
+      const record = exportDataPortability(format as DataPortabilityFormat);
+      return { record };
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'export data portability failed');
+      return reply.code(500).send({ error: 'Failed to export data portability.' });
+    }
+  });
+
+  app.get('/api/weread/data-portability/records', async () => {
+    return { records: listDataPortabilityRecords() };
+  });
+
+  app.post<{ Params: { id: string } }>('/api/weread/data-portability/revoke/:id', async (request, reply) => {
+    const { id } = request.params;
+    if (!id) {
+      return reply.code(400).send({ error: 'id is required.' });
+    }
+    try {
+      revokeDataPortabilityExport(id);
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'revoke data portability failed');
+      return reply.code(500).send({ error: 'Failed to revoke data portability.' });
+    }
+  });
+
+  app.get('/api/weread/reader-mode/profile', async () => {
+    return { profile: getReaderModeProfile() };
+  });
+
+  app.post<{ Body: { targetTier?: string } }>('/api/weread/reader-mode/rollback', async (request, reply) => {
+    const targetTier = request.body?.targetTier;
+    if (!targetTier || !AUDIENCE_TIER_VALUES.includes(targetTier as AudienceTier)) {
+      return reply.code(400).send({ error: `targetTier must be one of: ${AUDIENCE_TIER_VALUES.join(', ')}.` });
+    }
+    try {
+      startReaderModeRollback(targetTier as AudienceTier);
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'start reader mode rollback failed');
+      return reply.code(500).send({ error: 'Failed to start reader mode rollback.' });
+    }
+  });
+
+  app.post('/api/weread/reader-mode/cancel-rollback', async () => {
+    cancelReaderModeRollback();
+    return { ok: true };
   });
 
   app.get<{ Params: { bookId: string } }>('/api/verification/coverage/:bookId', async (request, reply) => {
