@@ -463,6 +463,56 @@ const VERIFICATION_SUBMIT_PATH = '/api/verification/submit';
  */
 const VERIFICATION_COVERAGE_PATH_PREFIX = '/api/verification/coverage';
 
+/**
+ * 隐性真兴趣提示查询路径（NS-8）。
+ */
+const HIDDEN_INTEREST_HINT_PATH = '/api/weread/hidden-interest/hint';
+
+/**
+ * 隐性真兴趣永久关闭切换路径（NS-8）。
+ */
+const HIDDEN_INTEREST_TOGGLE_PATH = '/api/weread/hidden-interest/toggle';
+
+/**
+ * 隐性真兴趣单本忽略路径前缀（NS-8）。
+ */
+const HIDDEN_INTEREST_DISMISS_PATH_PREFIX = '/api/weread/hidden-interest/dismiss';
+
+/**
+ * 隐性真兴趣标记已展示路径（NS-8）。
+ */
+const HIDDEN_INTEREST_SHOWN_PATH = '/api/weread/hidden-interest/shown';
+
+/**
+ * 数据可携导出路径（NS-8）。
+ */
+const DATA_PORTABILITY_EXPORT_PATH = '/api/weread/data-portability/export';
+
+/**
+ * 数据可携导出记录列表路径（NS-8）。
+ */
+const DATA_PORTABILITY_RECORDS_PATH = '/api/weread/data-portability/records';
+
+/**
+ * 数据可携撤回路径前缀（NS-8）。
+ */
+const DATA_PORTABILITY_REVOKE_PATH_PREFIX = '/api/weread/data-portability/revoke';
+
+/**
+ * 阅读模式档案查询路径（NS-8）。
+ */
+const READER_MODE_PROFILE_PATH = '/api/weread/reader-mode/profile';
+
+/**
+ * 阅读模式临时回退路径（NS-8）。
+ */
+const READER_MODE_ROLLBACK_PATH = '/api/weread/reader-mode/rollback';
+
+/**
+ * 阅读模式取消临时回退路径（NS-8）。
+ */
+const READER_MODE_CANCEL_ROLLBACK_PATH = '/api/weread/reader-mode/cancel-rollback';
+
 export {
   TAB_BOOKS,
   TAB_ALBUMS,
@@ -553,4 +603,14 @@ export {
   VERIFICATION_QUESTIONS_PATH,
   VERIFICATION_SUBMIT_PATH,
   VERIFICATION_COVERAGE_PATH_PREFIX,
+  HIDDEN_INTEREST_HINT_PATH,
+  HIDDEN_INTEREST_TOGGLE_PATH,
+  HIDDEN_INTEREST_DISMISS_PATH_PREFIX,
+  HIDDEN_INTEREST_SHOWN_PATH,
+  DATA_PORTABILITY_EXPORT_PATH,
+  DATA_PORTABILITY_RECORDS_PATH,
+  DATA_PORTABILITY_REVOKE_PATH_PREFIX,
+  READER_MODE_PROFILE_PATH,
+  READER_MODE_ROLLBACK_PATH,
+  READER_MODE_CANCEL_ROLLBACK_PATH,
 };
