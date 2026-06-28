@@ -5216,7 +5216,13 @@ async function generateKnowledge(
   context: Record<string, unknown>,
 ) {
   const schema = structuredSchemas[task] as TSchema;
-  return piRuntime.completeStructured<GeneratedKnowledgeOutput, TSchema>({
+  const workspaceId = typeof context.workspaceId === 'string' ? context.workspaceId : undefined;
+  const runtime = createInstrumentedPiRuntime(piRuntime, {
+    taskType: task,
+    workspaceId,
+    recorder: recordAgentUsage,
+  });
+  return runtime.completeStructured<GeneratedKnowledgeOutput, TSchema>({
     task,
     prompt,
     schema,
