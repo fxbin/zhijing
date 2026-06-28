@@ -31,6 +31,7 @@ import { useBookSignals } from '../hooks/useBookSignals';
 import { useHiddenInterest } from '../hooks/useHiddenInterest';
 import HiddenInterestBanner from '../components/HiddenInterestBanner';
 import { useTopicSpectrum } from '../hooks/useTopicSpectrum';
+import { useRecommendation } from '../hooks/useRecommendation';
 import {
   TAB_BOOKS,
   TAB_ALBUMS,
@@ -77,7 +78,6 @@ import {
   WEREAD_WEB_READER_PATH,
   WEREAD_WEB_SEARCH_PATH,
   WEREAD_PREVIEW_PATH,
-  WEREAD_RECOMMENDATIONS_PATH,
   CARD_STATE_IDLE,
   CARD_STATE_IMPORTING,
   CARD_STATE_DONE,
@@ -903,33 +903,34 @@ function WeReadPreviewDrawer({ book, mode, batchCount, onClose, onImport, t }) {
  * @param {Function} props.t - i18n 翻译函数
  */
 function WeReadRecommendPanel({ workspaceId, onImport, t, forceExpanded }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { recommendations, total, loading } = useRecommendation(workspaceId);
   const [collapsed, setCollapsed] = useState(false);
   const isCollapsed = forceExpanded ? false : collapsed;
 
-  useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    (async () => {
-      try {
-        const url = workspaceId
-          ? `${WEREAD_RECOMMENDATIONS_PATH}?workspaceId=${encodeURIComponent(workspaceId)}`
-          : WEREAD_RECOMMENDATIONS_PATH;
-        const result = await api.get(url);
-        if (!alive) return;
-        setData(result);
-        setLoading(false);
-      } catch {
-        if (!alive) return;
-        setData(null);
-        setLoading(false);
-      }
-    })();
-    return () => { alive = false; };
-  }, [workspaceId]);
+  const recommendGate = useStatisticsGate('weReadRecommendPanel', {
+    dependsOnBehaviorTrace: true,
+    sharedAcrossUsers: false,
+    hasRankingOrComparison: false,
+    emphasizesQuantity: false,
+    exposesRawData: false,
+    allowsUserChallenge: false,
+    isLinearlyOptimizable: false,
+  });
 
-  if (loading || !data || data.recommendations.length === 0) return null;
+  if (!recommendGate.isAllowed) {
+    return (
+      <div className="weread-recommend-band weread-recommend-band--gated">
+        <p>{t('weread.stats.gateBlocked') ?? '本视图未通过反虚荣门禁'}</p>
+        {recommendGate.failedKeys && recommendGate.failedKeys.length > 0 && (
+          <p className="weread-stats-gate-detail">
+            {recommendGate.failedKeys.join('、')}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (loading || total === 0) return null;
 
   const reasonLabel = (reason) => {
     if (reason === REASON_COVERAGE_GAP) return t('weread.recommendCoverageGap');
@@ -952,7 +953,7 @@ function WeReadRecommendPanel({ workspaceId, onImport, t, forceExpanded }) {
       </div>
       {!isCollapsed && (
         <div className="weread-recommend-list">
-          {data.recommendations.map((rec) => {
+          {recommendations.map((rec) => {
             const theme = CATEGORY_THEME_MAP[rec.theme] || CATEGORY_THEME_MAP.general;
             return (
               <div className="weread-recommend-item" key={rec.bookId}>

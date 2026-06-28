@@ -439,6 +439,21 @@ const WEREAD_SIGNALS_REFRESH_PATH = '/api/weread/signals/refresh';
 const WEREAD_RECOMMENDATIONS_PATH = '/api/weread/recommendations';
 
 /**
+ * 推荐实验桶本地覆盖存储键（NS-5）：用于灰度期间手动指定 control/treatment。
+ */
+const RECOMMEND_BUCKET_STORAGE_KEY = 'weread.recommend.bucket';
+
+/**
+ * 推荐实验桶可选值（NS-5）：与 shared RECOMMENDATION_BUCKET_VALUES 对齐。
+ */
+const RECOMMEND_BUCKET_VALUES = ['control', 'treatment'];
+
+/**
+ * 推荐实验桶默认值（NS-5）：未命中分流时回落到现有逻辑。
+ */
+const RECOMMEND_BUCKET_DEFAULT = 'control';
+
+/**
  * 数据账本查询路径（NS-4 / NS-7）。
  */
 const DATA_ACCOUNT_SETTINGS_PATH = '/api/settings/data-account';
@@ -598,6 +613,9 @@ export {
   WEREAD_PREVIEW_PATH,
   WEREAD_SIGNALS_REFRESH_PATH,
   WEREAD_RECOMMENDATIONS_PATH,
+  RECOMMEND_BUCKET_STORAGE_KEY,
+  RECOMMEND_BUCKET_VALUES,
+  RECOMMEND_BUCKET_DEFAULT,
   DATA_ACCOUNT_SETTINGS_PATH,
   MINIMAL_MODE_PATH,
   VERIFICATION_QUESTIONS_PATH,
