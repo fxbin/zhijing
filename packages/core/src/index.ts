@@ -187,6 +187,22 @@ import {
 import type { BookSignalInputs, QuadrantSummary } from '@zhijing/shared';
 import { DEGRADE_MATRIX_REGISTRY } from './statistics/degrade-matrix.js';
 import { computeQuadrantSummary } from './statistics/quadrant.js';
+import {
+  initZvecSearch,
+  isZvecSearchReady,
+  isZvecIndexInitialized,
+  markZvecIndexInitialized,
+  upsertCardInZvec,
+  upsertMaterialInZvec,
+  deleteCardFromZvec,
+  deleteMaterialFromZvec,
+  searchCardsInZvec,
+  searchMaterialsInZvec,
+  rebuildCardZvecIndex,
+  rebuildMaterialZvecIndex,
+  type CardIndexInput,
+  type MaterialIndexInput,
+} from './search-zvec.js';
 export { initProxyDispatcher, getCurrentProxy } from './fetch-dispatcher.js';
 export { detectSystemProxy, setManualProxy, resetProxyCache } from './proxy-detector.js';
 import {
@@ -1899,10 +1915,14 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
   archiveMaterial(id: string) {
     this.db.prepare('UPDATE materials SET archived = 1 WHERE id = ?').run(id);
+    const material = this.findMaterial(id);
+    if (material) upsertMaterialInZvec(toMaterialIndexInput(material));
   }
 
   unarchiveMaterial(id: string) {
     this.db.prepare('UPDATE materials SET archived = 0 WHERE id = ?').run(id);
+    const material = this.findMaterial(id);
+    if (material) upsertMaterialInZvec(toMaterialIndexInput(material));
   }
 
   listArchivedMaterials(workspaceId?: string) {
@@ -1918,6 +1938,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       this.db.prepare('UPDATE cards SET material_id = NULL WHERE material_id = ?').run(id);
       this.db.prepare('DELETE FROM materials WHERE id = ?').run(id);
       this.deleteMaterialFts(id);
+      deleteMaterialFromZvec(id);
       this.db.exec('COMMIT');
     } catch (error) {
       this.db.exec('ROLLBACK');
@@ -2225,6 +2246,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       card.title,
       card.body,
     );
+    upsertCardInZvec(toCardIndexInput(card));
   }
 
   /**
@@ -2284,6 +2306,27 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
    * @returns {MaterialRecord[]} 按相关性排序的资料数组
    */
   searchMaterialsByRelevance(workspaceId: string, query: string, limit: number): MaterialRecord[] {
+    if (!query.trim()) return [];
+
+    if (isZvecSearchReady()) {
+      try {
+        const hits = searchMaterialsInZvec(workspaceId, query, limit);
+        if (hits.length > 0) {
+          const ids = hits.map((h) => h.id);
+          const placeholders = ids.map(() => '?').join(',');
+          const rows = this.db.prepare(`SELECT * FROM materials WHERE id IN (${placeholders}) AND archived = 0`)
+            .all(...ids) as MaterialRow[];
+          const scoreMap = new Map(hits.map((h) => [h.id, h.score]));
+          return rows
+            .map(mapMaterial)
+            .sort((a, b) => (scoreMap.get(b.id) ?? 0) - (scoreMap.get(a.id) ?? 0));
+        }
+        if (isZvecIndexInitialized()) return [];
+      } catch (error) {
+        console.warn('[searchMaterialsByRelevance] zvec query failed, fallback to sqlite fts5', error);
+      }
+    }
+
     const sanitized = sanitizeFtsQuery(query);
     if (!sanitized) return [];
     try {
@@ -4987,7 +5030,49 @@ export function createMemoryKnowledgeRepository(): KnowledgeRepository {
 }
 
 export function createSqliteKnowledgeRepository(path = defaultSqlitePath()): KnowledgeRepository {
-  return new SqliteKnowledgeRepository(path);
+  const repo = new SqliteKnowledgeRepository(path);
+  initializeZvecIndex(repo);
+  return repo;
+}
+
+function toCardIndexInput(card: KnowledgeCard): CardIndexInput {
+  return {
+    id: card.id,
+    workspaceId: card.workspaceId,
+    type: card.type,
+    title: card.title,
+    body: card.body,
+    archived: card.archived ?? false,
+  };
+}
+
+function toMaterialIndexInput(material: MaterialRecord): MaterialIndexInput {
+  return {
+    id: material.id,
+    workspaceId: material.workspaceId,
+    type: material.type,
+    title: material.title,
+    contentText: material.contentText,
+    rawInput: material.rawInput,
+    platform: material.platform,
+    archived: material.archived ?? false,
+  };
+}
+
+function initializeZvecIndex(repo: SqliteKnowledgeRepository): void {
+  try {
+    initZvecSearch();
+    if (isZvecIndexInitialized()) return;
+    const activeCards = repo.listCards();
+    const archivedCards = repo.listArchivedCards();
+    const activeMaterials = repo.listMaterials();
+    const archivedMaterials = repo.listArchivedMaterials();
+    rebuildCardZvecIndex([...activeCards, ...archivedCards].map(toCardIndexInput));
+    rebuildMaterialZvecIndex([...activeMaterials, ...archivedMaterials].map(toMaterialIndexInput));
+    markZvecIndexInitialized();
+  } catch (error) {
+    console.warn('[zvec] initialize failed, fallback to sqlite fts5', error);
+  }
 }
 
 let repository: KnowledgeRepository = process.env.ZHIJING_STORAGE === 'memory'
