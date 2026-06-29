@@ -156,6 +156,7 @@ import {
   detectSystemProxy,
   setManualProxy,
   getHiddenInterestHint,
+  computeWeReadQuadrantSummary,
   setHiddenInterestPermanentlyDismissed,
   dismissHiddenInterestBook,
   markHiddenInterestHintShown,
@@ -2306,6 +2307,10 @@ export function buildApi() {
 
   app.get('/api/weread/hidden-interest/hint', async () => {
     return { hint: getHiddenInterestHint() };
+  });
+
+  app.get('/api/weread/quadrant', async () => {
+    return computeWeReadQuadrantSummary();
   });
 
   app.post<{ Body: { permanentlyDismissed?: boolean } }>('/api/weread/hidden-interest/toggle', async (request, reply) => {

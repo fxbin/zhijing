@@ -327,6 +327,13 @@ const STATISTICS_GATE_STORAGE_PREFIX = 'weread.stats.gate.';
 const STATISTICS_QUADRANT_PATH = '/api/statistics/quadrant';
 
 /**
+ * 微信读书全量四象限接口路径（NS-8）。
+ * 后端使用全量书架（含下架）+ 已刷新 signals 的书计算，
+ * 保证展示层与推荐种子、隐性真兴趣 hint 数据源一致。
+ */
+const WEREAD_QUADRANT_PATH = '/api/weread/quadrant';
+
+/**
  * 主题演变谱查询路径（NS-2）：POST 提交划线文本，返回聚类堆叠面积图数据。
  */
 const TOPIC_SPECTRUM_PATH = '/api/statistics/topic-spectrum';
@@ -593,6 +600,7 @@ export {
   STATISTICS_GATE_EVALUATE_PATH,
   STATISTICS_GATE_STORAGE_PREFIX,
   STATISTICS_QUADRANT_PATH,
+  WEREAD_QUADRANT_PATH,
   TOPIC_SPECTRUM_PATH,
   TOPIC_SPECTRUM_VIEW_WIDTH,
   TOPIC_SPECTRUM_VIEW_HEIGHT,

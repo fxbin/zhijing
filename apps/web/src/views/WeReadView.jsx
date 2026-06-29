@@ -22,7 +22,7 @@ import {
 import api from '../utils/api';
 import { useWeReadShelfState } from '../hooks/useWeReadShelfState';
 import { useStatisticsGate } from '../hooks/useStatisticsGate';
-import { useQuadrantSummary } from '../hooks/useQuadrantSummary';
+import { useWeReadQuadrant } from '../hooks/useWeReadQuadrant';
 import { QuadrantGrid } from '../components/QuadrantCard';
 import TopicSpectrumChart from '../components/TopicSpectrumChart';
 import { useWeReadCatalogState } from '../hooks/useWeReadCatalogState';
@@ -78,6 +78,7 @@ import {
   WEREAD_WEB_READER_PATH,
   WEREAD_WEB_SEARCH_PATH,
   WEREAD_PREVIEW_PATH,
+  WEREAD_SIGNALS_REFRESH_PATH,
   CARD_STATE_IDLE,
   CARD_STATE_IMPORTING,
   CARD_STATE_DONE,
@@ -1074,35 +1075,18 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
     refreshSignals,
   } = useBookSignals(allShelfBookIds);
 
-  const quadrantBooks = useMemo(() => {
-    if (!Array.isArray(shelfBooks)) return [];
-    return shelfBooks.map((book) => {
-      const id = String(book.bookId);
-      const hasBackendSignals = Boolean(book.signalsSyncedAt);
-      const imported = importResults[id];
-      const bookmarkCount = hasBackendSignals
-        ? book.bookmarkCount ?? 0
-        : imported && imported.ok ? imported.bookmarkCount ?? 0 : 0;
-      const reviewCount = hasBackendSignals
-        ? book.reviewCount ?? 0
-        : imported && imported.ok ? imported.reviewCount ?? 0 : 0;
-      const longReviewCount = hasBackendSignals ? book.longReviewCount ?? 0 : 0;
-      return {
-        bookId: id,
-        title: book.title,
-        onShelf: true,
-        finishReading: book.finishReading === 1,
-        hasReadActivity: book.readUpdateTime != null,
-        highlightCount: bookmarkCount,
-        noteCharCount: reviewCount * 80,
-        chapterCount: Math.max(1, book.chapterCount ?? 1),
-        hasLongReview: longReviewCount > 0 || reviewCount > 0,
-      };
-    });
-  }, [shelfBooks, importResults]);
-  const quadrantState = useQuadrantSummary(quadrantBooks);
+  const signalsCoverage = useMemo(() => {
+    if (!Array.isArray(shelfBooks) || shelfBooks.length === 0) return 0;
+    const withSignals = shelfBooks.filter((book) => Boolean(book.signalsSyncedAt)).length;
+    return withSignals / shelfBooks.length;
+  }, [shelfBooks]);
+
+  const signalsCoverageLow = signalsCoverage > 0 && signalsCoverage < 0.5;
+  const quadrantState = useWeReadQuadrant(activeTab === TAB_STATS);
 
   const [signalsToast, setSignalsToast] = useState(null);
+  const [signalsProgress, setSignalsProgress] = useState(null);
+  const signalsAbortRef = useRef(null);
 
   const hiddenInterest = useHiddenInterest();
 
@@ -1133,15 +1117,66 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
 
   const handleRefreshSignals = useCallback(async () => {
     if (!Array.isArray(shelfBooks) || shelfBooks.length === 0) return;
-    const ids = shelfBooks.map((book) => String(book.bookId));
-    const next = await refreshSignals(ids);
-    if (next && next.failed > 0) {
-      setSignalsToast({ type: 'warning', text: `信号刷新完成：${next.synced}/${next.total} 成功，${next.failed} 失败` });
-    } else if (next) {
-      setSignalsToast({ type: 'success', text: `信号刷新完成：${next.synced}/${next.total} 本已更新` });
+    const now = Date.now();
+    const ttlMs = 7 * 24 * 60 * 60 * 1000;
+    const ids = shelfBooks
+      .filter((book) => {
+        if (!book.signalsSyncedAt) return true;
+        const syncedAt = new Date(book.signalsSyncedAt).getTime();
+        return Number.isNaN(syncedAt) || now - syncedAt > ttlMs;
+      })
+      .map((book) => String(book.bookId));
+    if (ids.length === 0) {
+      setSignalsToast({ type: 'success', text: '所有书籍笔记信号均在7天内已刷新，无需重复拉取' });
+      return;
+    }
+
+    const controller = new AbortController();
+    signalsAbortRef.current = controller;
+    const batchSize = 10;
+    let synced = 0;
+    let failed = 0;
+    const failures = [];
+
+    for (let i = 0; i < ids.length; i += batchSize) {
+      if (controller.signal.aborted) break;
+      const batch = ids.slice(i, i + batchSize);
+      setSignalsProgress({ done: i, total: ids.length });
+      try {
+        const response = await api.post(WEREAD_SIGNALS_REFRESH_PATH, { bookIds: batch });
+        const result = response?.result ?? response;
+        synced += result?.synced ?? 0;
+        failed += result?.failed ?? 0;
+        if (Array.isArray(result?.failures)) {
+          failures.push(...result.failures);
+        }
+      } catch {
+        failed += batch.length;
+        for (const id of batch) {
+          failures.push({ bookId: id, reason: '批次请求失败' });
+        }
+      }
+    }
+
+    signalsAbortRef.current = null;
+    setSignalsProgress(null);
+
+    if (controller.signal.aborted) {
+      setSignalsToast({ type: 'warning', text: `信号刷新已取消：已完成 ${synced}/${ids.length} 本` });
+    } else if (failed > 0) {
+      setSignalsToast({ type: 'warning', text: `信号刷新完成：${synced}/${ids.length} 成功，${failed} 失败` });
+    } else {
+      setSignalsToast({ type: 'success', text: `信号刷新完成：${synced}/${ids.length} 本已更新` });
     }
     await loadMeta();
-  }, [shelfBooks, refreshSignals, loadMeta]);
+    quadrantState.refresh();
+  }, [shelfBooks, loadMeta, quadrantState]);
+
+  const handleCancelSignalsRefresh = useCallback(() => {
+    if (signalsAbortRef.current) {
+      signalsAbortRef.current.abort();
+    }
+  }, []);
 
   const archiveGroups = useMemo(() => {
     const groups = new Map();
@@ -1656,15 +1691,55 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
               <section className="weread-quadrant-section" aria-label="书架×笔记四象限">
                 <div className="weread-quadrant-head">
                   <h2>书架 × 笔记 四象限</h2>
-                  <button
-                    type="button"
-                    className="weread-signals-refresh-btn"
-                    onClick={handleRefreshSignals}
-                    disabled={signalsRefreshing || !Array.isArray(shelfBooks) || shelfBooks.length === 0}
-                  >
-                    {signalsRefreshing ? '刷新中…' : '刷新笔记信号'}
-                  </button>
+                  <div className="weread-signals-actions">
+                    {signalsProgress && (
+                      <button
+                        type="button"
+                        className="weread-signals-cancel-btn"
+                        onClick={handleCancelSignalsRefresh}
+                      >
+                        取消
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="weread-signals-refresh-btn"
+                      onClick={handleRefreshSignals}
+                      disabled={signalsRefreshing || Boolean(signalsProgress) || !Array.isArray(shelfBooks) || shelfBooks.length === 0}
+                    >
+                      {signalsProgress ? `刷新中… ${signalsProgress.done}/${signalsProgress.total}` : signalsRefreshing ? '刷新中…' : '刷新笔记信号'}
+                    </button>
+                  </div>
                 </div>
+                {signalsProgress && (
+                  <div className="weread-signals-progress">
+                    <div
+                      className="weread-signals-progress-fill"
+                      style={{ width: `${signalsProgress.total > 0 ? Math.round((signalsProgress.done / signalsProgress.total) * 100) : 0}%` }}
+                    />
+                  </div>
+                )}
+                {Array.isArray(shelfBooks) && shelfBooks.length > 0 && (
+                  <div className={`weread-data-health${signalsCoverageLow ? ' is-warning' : ''}`}>
+                    <div className="weread-data-health-row">
+                      <span className="weread-data-health-label">数据健康度</span>
+                      <span className="weread-data-health-value">
+                        {shelfBooks.filter((b) => Boolean(b.signalsSyncedAt)).length}/{shelfBooks.length} 本已刷新
+                      </span>
+                    </div>
+                    <div className="weread-data-health-bar">
+                      <div
+                        className="weread-data-health-bar-fill"
+                        style={{ width: `${Math.round(signalsCoverage * 100)}%` }}
+                      />
+                    </div>
+                    {signalsCoverageLow && (
+                      <p className="weread-data-health-hint">
+                        覆盖率低于 50%，四象限分类可能不准确，建议先刷新笔记信号补齐数据。
+                      </p>
+                    )}
+                  </div>
+                )}
                 {signalsToast && (
                   <p className={`weread-signals-toast weread-signals-toast--${signalsToast.type}`}>
                     {signalsToast.text}

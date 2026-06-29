@@ -184,7 +184,7 @@ import {
   cancelTempRollback,
   resolveEffectiveTier,
 } from './statistics/audience-adapter.js';
-import type { BookSignalInputs } from '@zhijing/shared';
+import type { BookSignalInputs, QuadrantSummary } from '@zhijing/shared';
 import { DEGRADE_MATRIX_REGISTRY } from './statistics/degrade-matrix.js';
 import { computeQuadrantSummary } from './statistics/quadrant.js';
 export { initProxyDispatcher, getCurrentProxy } from './fetch-dispatcher.js';
@@ -3580,6 +3580,10 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         last_sync_error TEXT
       );
     `);
+    const columns = this.db.prepare('PRAGMA table_info(weread_sync_state)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'last_probe_at')) {
+      this.db.exec('ALTER TABLE weread_sync_state ADD COLUMN last_probe_at TEXT;');
+    }
   }
 
   private ensureWeReadHiddenInterestStateTable() {
@@ -3721,7 +3725,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   readWeReadSyncState(): WeReadSyncStateRow | null {
     const row = this.db.prepare(`
       SELECT shelf_update_time AS shelfUpdateTime, total_books AS totalBooks,
-             last_full_sync_at AS lastFullSyncAt, last_sync_error AS lastSyncError
+             last_full_sync_at AS lastFullSyncAt, last_probe_at AS lastProbeAt,
+             last_sync_error AS lastSyncError
       FROM weread_sync_state WHERE id = 'default'
     `).get() as WeReadSyncStateRow | undefined;
     return row ?? null;
@@ -3729,17 +3734,19 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
   writeWeReadSyncState(state: WeReadSyncStateRow): void {
     this.db.prepare(`
-      INSERT INTO weread_sync_state (id, shelf_update_time, total_books, last_full_sync_at, last_sync_error)
-      VALUES ('default', @shelfUpdateTime, @totalBooks, @lastFullSyncAt, @lastSyncError)
+      INSERT INTO weread_sync_state (id, shelf_update_time, total_books, last_full_sync_at, last_probe_at, last_sync_error)
+      VALUES ('default', @shelfUpdateTime, @totalBooks, @lastFullSyncAt, @lastProbeAt, @lastSyncError)
       ON CONFLICT(id) DO UPDATE SET
         shelf_update_time = @shelfUpdateTime,
         total_books = @totalBooks,
         last_full_sync_at = @lastFullSyncAt,
+        last_probe_at = @lastProbeAt,
         last_sync_error = @lastSyncError
     `).run({
       shelfUpdateTime: state.shelfUpdateTime,
       totalBooks: state.totalBooks,
       lastFullSyncAt: state.lastFullSyncAt,
+      lastProbeAt: state.lastProbeAt,
       lastSyncError: state.lastSyncError,
     });
   }
@@ -11714,9 +11721,13 @@ const WEREAD_SYNC_STALE_MS = 10 * 60 * 1000;
  * 同步微信读书书架到本地缓存（SWR 模式 + updateTime 增量短路）。
  *
  * 同步策略（按优先级）：
- * 1. 时间窗节流：非 force 模式下，距上次同步不足 10 分钟则跳过远端请求
+ * 1. 时间窗节流：非 force 模式下，距上次探活不足 10 分钟则跳过远端请求
  * 2. updateTime 短路：拉取远端 shelf 后，若 shelf.updateTime 与本地一致则跳过全量 upsert
  * 3. 全量 upsert + 软删除：updateTime 变化时对所有书做 upsert，不在 shelf 中的书标记下架
+ *
+ * 语义拆分：
+ * - last_probe_at：最近一次调 getShelf 探活的时间（节流依据）
+ * - last_full_sync_at：最近一次真正 upsert 的时间（仅全量同步成功时更新）
  *
  * @param force - true 时强制全量同步，忽略时间窗与 updateTime 短路
  * @returns 同步结果摘要
@@ -11736,9 +11747,9 @@ export async function syncWeReadShelf(force = false): Promise<{
   const existingState = repository.readWeReadSyncState();
   const nowMs = Date.now();
 
-  if (!force && existingState?.lastFullSyncAt) {
-    const lastSyncMs = new Date(existingState.lastFullSyncAt).getTime();
-    if (nowMs - lastSyncMs < WEREAD_SYNC_STALE_MS) {
+  if (!force && existingState?.lastProbeAt) {
+    const lastProbeMs = new Date(existingState.lastProbeAt).getTime();
+    if (nowMs - lastProbeMs < WEREAD_SYNC_STALE_MS) {
       return {
         synced: false,
         totalBooks: existingState.totalBooks,
@@ -11765,7 +11776,8 @@ export async function syncWeReadShelf(force = false): Promise<{
       repository.writeWeReadSyncState({
         shelfUpdateTime: localUpdateTime,
         totalBooks: existingState?.totalBooks ?? shelf.books?.length ?? 0,
-        lastFullSyncAt: now(),
+        lastFullSyncAt: existingState?.lastFullSyncAt ?? null,
+        lastProbeAt: now(),
         lastSyncError: null,
       });
       return {
@@ -11790,6 +11802,7 @@ export async function syncWeReadShelf(force = false): Promise<{
       shelfUpdateTime: remoteUpdateTime,
       totalBooks,
       lastFullSyncAt: now(),
+      lastProbeAt: now(),
       lastSyncError: null,
     });
 
@@ -11799,7 +11812,8 @@ export async function syncWeReadShelf(force = false): Promise<{
     repository.writeWeReadSyncState({
       shelfUpdateTime: existingState?.shelfUpdateTime ?? null,
       totalBooks: existingState?.totalBooks ?? 0,
-      lastFullSyncAt: existingState?.lastFullSyncAt ?? now(),
+      lastFullSyncAt: existingState?.lastFullSyncAt ?? null,
+      lastProbeAt: existingState?.lastProbeAt ?? now(),
       lastSyncError: errorMsg,
     });
     throw error;
@@ -12198,19 +12212,25 @@ function sumBookmarkCounts(rows: WeReadBookMetaRow[]): number {
 
 /**
  * 从微信读书 meta 列表构造四象限输入（NS-8）。
+ *
+ * 数据完整度门禁：只参与已刷新过 signals 的书（signals_synced_at 非空）。
+ * 未刷新 signals 的书所有 signals 字段为 null，用 0 兜底会污染四象限分类，
+ * 因此直接过滤，避免「未刷新=零笔记=掉进 Q4」的稀疏陷阱。
  */
 function buildQuadrantInputsFromMeta(rows: WeReadBookMetaRow[]): BookSignalInputs[] {
-  return rows.map((row) => ({
-    bookId: row.bookId,
-    title: row.title,
-    onShelf: row.presentOnShelf === 1,
-    finishReading: row.finishReading === 1,
-    hasReadActivity: row.readUpdateTime != null,
-    highlightCount: row.bookmarkCount ?? 0,
-    noteCharCount: (row.reviewCount ?? 0) * NOTE_CHARS_PER_REVIEW,
-    chapterCount: Math.max(MIN_CHAPTER_COUNT, row.chapterCount ?? MIN_CHAPTER_COUNT),
-    hasLongReview: (row.longReviewCount ?? 0) > 0,
-  }));
+  return rows
+    .filter((row) => row.signalsSyncedAt != null)
+    .map((row) => ({
+      bookId: row.bookId,
+      title: row.title,
+      onShelf: row.presentOnShelf === 1,
+      finishReading: row.finishReading === 1,
+      hasReadActivity: row.readUpdateTime != null,
+      highlightCount: row.bookmarkCount ?? 0,
+      noteCharCount: (row.reviewCount ?? 0) * NOTE_CHARS_PER_REVIEW,
+      chapterCount: Math.max(MIN_CHAPTER_COUNT, row.chapterCount ?? MIN_CHAPTER_COUNT),
+      hasLongReview: (row.longReviewCount ?? 0) > 0,
+    }));
 }
 
 /**
@@ -12225,6 +12245,20 @@ function listDataAccountEntries(): DataAccountEntry[] {
  */
 function collectDerivedMetricKeys(): string[] {
   return DEGRADE_MATRIX_REGISTRY.map((entry) => entry.key);
+}
+
+/**
+ * 计算微信读书全量书架的四象限汇总（NS-8）。
+ *
+ * 统一数据源：使用 readAllWeReadBookMetaList（含下架书）+ buildQuadrantInputsFromMeta
+ * （已过滤未刷新 signals 的书），保证展示层与推荐种子、隐性真兴趣 hint 用同一份数据。
+ *
+ * @returns 四象限汇总
+ */
+export function computeWeReadQuadrantSummary(): QuadrantSummary {
+  const metaRows = repository.readAllWeReadBookMetaList();
+  const inputs = buildQuadrantInputsFromMeta(metaRows);
+  return computeQuadrantSummary(inputs);
 }
 
 /**

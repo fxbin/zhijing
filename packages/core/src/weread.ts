@@ -83,6 +83,7 @@ export type WeReadSyncStateRow = {
   shelfUpdateTime: number | null;
   totalBooks: number;
   lastFullSyncAt: string | null;
+  lastProbeAt: string | null;
   lastSyncError: string | null;
 };
 

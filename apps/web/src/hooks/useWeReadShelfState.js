@@ -110,11 +110,12 @@ export function useWeReadShelfState({ t }) {
   /**
    * 调用后端同步书架。同步成功后刷新本地缓存。
    * @param {boolean} [force=false] - 是否强制同步
+   * @param {boolean} [silent=false] - 是否静默同步（不触发 isSyncing，避免视觉闪烁）
    * @returns {Promise<object|null>} 同步结果，失败时返回 null
    * @author fxbin
    */
-  const syncShelf = useCallback(async (force = false) => {
-    setIsSyncing(true);
+  const syncShelf = useCallback(async (force = false, silent = false) => {
+    if (!silent) setIsSyncing(true);
     setSyncError(null);
     try {
       const data = await api.post(WEREAD_SYNC_PATH, { force });
@@ -127,12 +128,13 @@ export function useWeReadShelfState({ t }) {
       setSyncError(t('weread.syncFailed'));
       return null;
     } finally {
-      setIsSyncing(false);
+      if (!silent) setIsSyncing(false);
     }
   }, [loadMeta, t]);
 
   /**
-   * 初始化副作用：读取 settings，若已配置则加载缓存并触发后台同步。
+   * 初始化副作用：读取 settings，若已配置则加载缓存并静默触发后台同步。
+   * 静默同步不触发 isSyncing，避免 mount 时的视觉闪烁。
    * 依赖 loadMeta、syncShelf，二者引用稳定时仅运行一次。
    * @author fxbin
    */
@@ -146,7 +148,7 @@ export function useWeReadShelfState({ t }) {
         if (data.configured) {
           await loadMeta();
           setLoading(false);
-          syncShelf(false);
+          syncShelf(false, true);
         } else {
           setLoading(false);
         }
