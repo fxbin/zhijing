@@ -75,6 +75,7 @@ export type WeReadBookMetaRow = {
   chapterCount: number | null;
   longReviewCount: number | null;
   signalsSyncedAt: string | null;
+  signalsHash: string | null;
   firstSeenAt: string;
   lastSyncedAt: string;
 };
@@ -231,13 +232,15 @@ export type WeReadImportResult = {
  * 批量信号刷新结果。
  *
  * - total: 本次处理的书籍总数
- * - synced: 成功写入信号的书籍数
+ * - synced: 实际写入信号的书籍数（数据有变化）
+ * - unchanged: 已检查但数据无变化的书籍数（跳过写入）
  * - failed: 失败书籍数（等于 failures.length）
  * - failures: 失败明细，含 bookId 与失败原因
  */
 export type WeReadSignalsRefreshResult = {
   total: number;
   synced: number;
+  unchanged: number;
   failed: number;
   failures: Array<{ bookId: string; reason: string }>;
 };

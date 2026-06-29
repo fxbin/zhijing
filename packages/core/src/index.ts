@@ -581,7 +581,8 @@ type KnowledgeRepository = {
     chapterCount: number;
     longReviewCount: number;
     signalsSyncedAt: string;
-  }): void;
+    signalsHash: string;
+  }): boolean;
   readHiddenInterestState(): HiddenInterestState | null;
   saveHiddenInterestState(state: HiddenInterestState): void;
   recordDataPortability(record: DataPortabilityRecord): void;
@@ -1167,6 +1168,7 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
           chapterCount: null,
           longReviewCount: null,
           signalsSyncedAt: null,
+          signalsHash: null,
           firstSeenAt: nowIso,
           lastSyncedAt: nowIso,
         });
@@ -1210,15 +1212,22 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     chapterCount: number;
     longReviewCount: number;
     signalsSyncedAt: string;
-  }): void {
+    signalsHash: string;
+  }): boolean {
     const row = this.wereadBookMeta.find((row) => row.bookId === input.bookId);
     if (row) {
+      if (row.signalsHash === input.signalsHash) {
+        return false;
+      }
       row.bookmarkCount = input.bookmarkCount;
       row.reviewCount = input.reviewCount;
       row.chapterCount = input.chapterCount;
       row.longReviewCount = input.longReviewCount;
       row.signalsSyncedAt = input.signalsSyncedAt;
+      row.signalsHash = input.signalsHash;
+      return true;
     }
+    return false;
   }
 
   private hiddenInterestState: HiddenInterestState | null = null;
@@ -3568,6 +3577,9 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     if (!columns.some((column) => column.name === 'signals_synced_at')) {
       this.db.exec('ALTER TABLE weread_book_meta ADD COLUMN signals_synced_at TEXT;');
     }
+    if (!columns.some((column) => column.name === 'signals_hash')) {
+      this.db.exec('ALTER TABLE weread_book_meta ADD COLUMN signals_hash TEXT;');
+    }
   }
 
   private ensureWeReadSyncStateTable() {
@@ -3702,6 +3714,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
              material_id AS materialId, bookmark_count AS bookmarkCount,
              review_count AS reviewCount, chapter_count AS chapterCount,
              long_review_count AS longReviewCount, signals_synced_at AS signalsSyncedAt,
+             signals_hash AS signalsHash,
              first_seen_at AS firstSeenAt, last_synced_at AS lastSyncedAt
       FROM weread_book_meta WHERE present_on_shelf = 1
       ORDER BY read_update_time DESC
@@ -3716,6 +3729,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
              material_id AS materialId, bookmark_count AS bookmarkCount,
              review_count AS reviewCount, chapter_count AS chapterCount,
              long_review_count AS longReviewCount, signals_synced_at AS signalsSyncedAt,
+             signals_hash AS signalsHash,
              first_seen_at AS firstSeenAt, last_synced_at AS lastSyncedAt
       FROM weread_book_meta
       ORDER BY read_update_time DESC
@@ -3765,16 +3779,23 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     chapterCount: number;
     longReviewCount: number;
     signalsSyncedAt: string;
-  }): void {
+    signalsHash: string;
+  }): boolean {
+    const existing = this.db.prepare('SELECT signals_hash AS signalsHash FROM weread_book_meta WHERE book_id = ?').get(input.bookId) as { signalsHash: string | null } | undefined;
+    if (existing && existing.signalsHash === input.signalsHash) {
+      return false;
+    }
     this.db.prepare(`
       UPDATE weread_book_meta SET
         bookmark_count = @bookmarkCount,
         review_count = @reviewCount,
         chapter_count = @chapterCount,
         long_review_count = @longReviewCount,
-        signals_synced_at = @signalsSyncedAt
+        signals_synced_at = @signalsSyncedAt,
+        signals_hash = @signalsHash
       WHERE book_id = @bookId
     `).run(input);
+    return true;
   }
 
   /**
@@ -12098,10 +12119,13 @@ export async function previewWeReadBook(bookId: string): Promise<WeReadPreviewRe
  * 作为四象限等派生统计的真实信号数据源。采用分批并发限流避免冲击微信读书网关，
  * 单本失败不中断整体刷新，返回明细供前端展示进度与错误。
  *
+ * 数据指纹优化：每本书计算 signals_hash，与本地相同时跳过写入，
+ * 避免无变化时的无谓 DB UPDATE。
+ *
  * @author fxbin
  * @param bookIds - 待刷新的书籍 ID 列表
  * @param concurrency - 并发数上限，默认 5
- * @returns 同步结果统计（total/synced/failed）与失败明细列表
+ * @returns 同步结果统计（total/synced/unchanged/failed）与失败明细列表
  */
 export async function refreshWeReadBookSignals(
   bookIds: string[],
@@ -12116,6 +12140,7 @@ export async function refreshWeReadBookSignals(
   const total = bookIds.length;
   const failures: Array<{ bookId: string; reason: string }> = [];
   let synced = 0;
+  let unchanged = 0;
   const nowIso = new Date().toISOString();
 
   for (let i = 0; i < bookIds.length; i += concurrency) {
@@ -12133,24 +12158,35 @@ export async function refreshWeReadBookSignals(
         const longReviewCount = reviewList.filter(
           (entry) => (entry.review?.content?.length ?? 0) >= LONG_REVIEW_CHAR_THRESHOLD,
         ).length;
+        const signalsHash = computeWeReadSignalsHash({
+          bookmarkCount,
+          reviewCount,
+          chapterCount,
+          longReviewCount,
+        });
 
-        repository.updateWeReadBookMetaSignals({
+        const written = repository.updateWeReadBookMetaSignals({
           bookId,
           bookmarkCount,
           reviewCount,
           chapterCount,
           longReviewCount,
           signalsSyncedAt: nowIso,
+          signalsHash,
         });
 
-        return bookId;
+        return written;
       }),
     );
 
     for (let j = 0; j < results.length; j += 1) {
       const result = results[j];
       if (result.status === 'fulfilled') {
-        synced += 1;
+        if (result.value) {
+          synced += 1;
+        } else {
+          unchanged += 1;
+        }
       } else {
         const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
         failures.push({ bookId: batch[j], reason });
@@ -12161,6 +12197,7 @@ export async function refreshWeReadBookSignals(
   return {
     total,
     synced,
+    unchanged,
     failed: failures.length,
     failures,
   };
@@ -12170,6 +12207,23 @@ export async function refreshWeReadBookSignals(
  * 笔记字数估算系数：每条原创笔记按平均字数折算为 noteCharCount。
  */
 const NOTE_CHARS_PER_REVIEW = 80;
+
+/**
+ * 计算微信读书 signals 指纹哈希。
+ *
+ * 输入四个 signals 维度，输出稳定字符串指纹。
+ * 用于 refreshWeReadBookSignals 跳过无变化的写入，避免无谓 DB 操作。
+ *
+ * @author fxbin
+ */
+function computeWeReadSignalsHash(input: {
+  bookmarkCount: number;
+  reviewCount: number;
+  chapterCount: number;
+  longReviewCount: number;
+}): string {
+  return `b${input.bookmarkCount}|r${input.reviewCount}|c${input.chapterCount}|l${input.longReviewCount}`;
+}
 
 /**
  * 数据可携导出内容预览的截取长度。

@@ -1162,11 +1162,13 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
     setSignalsProgress(null);
 
     if (controller.signal.aborted) {
-      setSignalsToast({ type: 'warning', text: `信号刷新已取消：已完成 ${synced}/${ids.length} 本` });
+      setSignalsToast({ type: 'warning', text: `信号刷新已取消：已完成 ${synced + (ids.length - synced - failed)} /${ids.length} 本` });
     } else if (failed > 0) {
-      setSignalsToast({ type: 'warning', text: `信号刷新完成：${synced}/${ids.length} 成功，${failed} 失败` });
+      setSignalsToast({ type: 'warning', text: `信号刷新完成：${synced} 本更新，${ids.length - synced - failed} 本无变化，${failed} 失败` });
+    } else if (synced === 0) {
+      setSignalsToast({ type: 'success', text: `信号刷新完成：${ids.length} 本均已检查，数据无变化` });
     } else {
-      setSignalsToast({ type: 'success', text: `信号刷新完成：${synced}/${ids.length} 本已更新` });
+      setSignalsToast({ type: 'success', text: `信号刷新完成：${synced} 本更新，${ids.length - synced} 本无变化` });
     }
     await loadMeta();
     quadrantState.refresh();
