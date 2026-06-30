@@ -2227,6 +2227,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       material.title,
       material.contentText ?? material.rawInput,
     );
+    upsertMaterialInZvec(toMaterialIndexInput(material));
   }
 
   /**
