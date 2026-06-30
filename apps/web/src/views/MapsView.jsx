@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CircleX, RefreshCw, Search, X } from 'lucide-react';
+import { CircleX, Info, RefreshCw, Search, X } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { formatTime } from '../utils/material';
 import api, { ApiError } from '../utils/api';
@@ -584,6 +584,11 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                   ))}
                 </div>
                 <div className="map-legend-stack">
+                  <button className="map-legend-trigger" type="button" aria-label={t('maps.legendToggle')}>
+                    <Info size={14} />
+                    <span>{t('maps.legendToggle')}</span>
+                  </button>
+                  <div className="map-legend-content">
                   <div className="map-claim-legend" aria-label={t('maps.claimLegend')}>
                     <span className="map-claim-legend-title">{t('maps.claimStatus')}</span>
                     <div className="map-claim-legend-items">
@@ -624,6 +629,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                         <span>{t('maps.edgeLegend.custom')}</span>
                       </span>
                     </div>
+                  </div>
                   </div>
                 </div>
                 <div className="map-floating-controls" aria-label={t('maps.zoomControls')}>

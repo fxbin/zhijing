@@ -853,6 +853,7 @@
   "maps.skeleton": "骨架",
   "maps.tension": "张力",
   "maps.claimLegend": "认知状态图例",
+  "maps.legendToggle": "图例",
   "maps.claimStatus": "认知状态",
   "maps.status.apiOffline": "API 未连接，暂时无法生成知识地图。",
   "maps.status.loadFailed": "知识地图读取失败，请确认 API 正在运行。",

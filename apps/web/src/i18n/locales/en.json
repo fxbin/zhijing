@@ -852,6 +852,7 @@
   "maps.skeleton": "skeleton",
   "maps.tension": "tension",
   "maps.claimLegend": "Claim status legend",
+  "maps.legendToggle": "Legend",
   "maps.claimStatus": "Claim Status",
   "maps.status.apiOffline": "API offline. Unable to generate knowledge map for now.",
   "maps.status.loadFailed": "Failed to load knowledge map. Please confirm the API is running.",
