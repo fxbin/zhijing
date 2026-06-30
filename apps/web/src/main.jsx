@@ -116,8 +116,6 @@ function App() {
     setActivity,
     navOpen,
     setNavOpen,
-    topSearchQuery,
-    setTopSearchQuery,
     settingsSection,
     setSettingsSection,
     apiStatus,
@@ -595,22 +593,10 @@ function App() {
               type="button"
               className="search-pill"
               onClick={() => openSearchCommand('')}
+              title={t('common.search')}
               aria-label={t('common.search')}
             >
               <Search size={18} />
-              <input
-                placeholder={t('common.search')}
-                value={topSearchQuery}
-                onChange={(event) => setTopSearchQuery(event.target.value)}
-                onClick={(event) => event.stopPropagation()}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    const value = topSearchQuery.trim();
-                    openSearchCommand(value);
-                    setTopSearchQuery('');
-                  }
-                }}
-              />
             </button>
             <NotificationDropdown tasks={tasks} />
             <div className="avatar">U</div>
