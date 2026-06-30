@@ -7637,12 +7637,15 @@ button { cursor: pointer; }
 .knowledge-map-board {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 392px;
-  min-height: calc(100vh - 232px);
+  grid-template-rows: minmax(0, 1fr);
+  height: calc(100vh - 232px);
+  overflow: hidden;
 }
 
 .knowledge-map-canvas {
   position: relative;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
   background:
     linear-gradient(rgba(203, 219, 245, 0.34) 1px, transparent 1px),
@@ -7711,7 +7714,6 @@ button { cursor: pointer; }
 .map-graph-svg {
   width: 100%;
   height: 100%;
-  min-height: 640px;
 }
 
 .map-edge {
@@ -7761,6 +7763,18 @@ button { cursor: pointer; }
 .map-stat-tension {
   color: #d4584a;
   font-weight: 600;
+}
+
+.map-legend-stack {
+  position: absolute;
+  left: 22px;
+  bottom: 83px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 520px;
+  pointer-events: none;
 }
 
 .map-claim-legend {
@@ -8013,6 +8027,8 @@ button { cursor: pointer; }
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
   border-left: 1px solid var(--line-soft);
   background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(12px);
@@ -12785,6 +12801,9 @@ button { cursor: pointer; }
   }
   .knowledge-map-board {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    height: auto;
+    overflow: visible;
   }
   .map-detail-drawer {
     border-left: 0;
@@ -13099,9 +13118,6 @@ button { cursor: pointer; }
   }
   .map-filter-bar button {
     flex: 0 0 auto;
-  }
-  .knowledge-map-board {
-    min-height: auto;
   }
   .knowledge-map-canvas {
     min-height: 620px;

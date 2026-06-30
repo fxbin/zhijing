@@ -583,45 +583,47 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                     </button>
                   ))}
                 </div>
-                <div className="map-claim-legend" aria-label={t('maps.claimLegend')}>
-                  <span className="map-claim-legend-title">{t('maps.claimStatus')}</span>
-                  <div className="map-claim-legend-items">
-                    {getClaimStatusLegend().map((item) => (
-                      <span className={`map-claim-chip ${item.tone}`} key={item.key}>
-                        <i className="map-claim-dot" />
-                        {item.label}
-                      </span>
-                    ))}
+                <div className="map-legend-stack">
+                  <div className="map-claim-legend" aria-label={t('maps.claimLegend')}>
+                    <span className="map-claim-legend-title">{t('maps.claimStatus')}</span>
+                    <div className="map-claim-legend-items">
+                      {getClaimStatusLegend().map((item) => (
+                        <span className={`map-claim-chip ${item.tone}`} key={item.key}>
+                          <i className="map-claim-dot" />
+                          {item.label}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div className="map-edge-legend" aria-label={t('maps.edgeLegend')}>
-                  <span className="map-claim-legend-title">{t('maps.edgeLegend')}</span>
-                  <div className="map-claim-legend-items">
-                    <span className="map-edge-chip">
-                      <svg className="map-edge-sample" height="8" width="28">
-                        <line stroke="#bcc7de" strokeWidth="1.5" x1="0" x2="28" y1="4" y2="4" />
-                      </svg>
-                      <span>{t('maps.edgeLegend.structural')}</span>
-                      <small>{t('maps.edgeLegend.structuralHint')}</small>
-                    </span>
-                    <span className="map-edge-chip">
-                      <svg className="map-edge-sample" height="8" width="28">
-                        <line stroke="#8b6fb0" strokeDasharray="3 3" strokeWidth="1.5" x1="0" x2="28" y1="4" y2="4" />
-                      </svg>
-                      <span>{t('maps.edgeLegend.relatedTo')}</span>
-                    </span>
-                    <span className="map-edge-chip">
-                      <svg className="map-edge-sample" height="8" width="28">
-                        <line stroke="#d4584a" strokeDasharray="6 4" strokeWidth="2" x1="0" x2="28" y1="4" y2="4" />
-                      </svg>
-                      <span>{t('maps.edgeLegend.contradicts')}</span>
-                    </span>
-                    <span className="map-edge-chip">
-                      <svg className="map-edge-sample" height="8" width="28">
-                        <line stroke="#6b8e7f" strokeWidth="1.8" x1="0" x2="28" y1="4" y2="4" />
-                      </svg>
-                      <span>{t('maps.edgeLegend.custom')}</span>
-                    </span>
+                  <div className="map-edge-legend" aria-label={t('maps.edgeLegend')}>
+                    <span className="map-claim-legend-title">{t('maps.edgeLegend')}</span>
+                    <div className="map-claim-legend-items">
+                      <span className="map-edge-chip">
+                        <svg className="map-edge-sample" height="8" width="28">
+                          <line stroke="#bcc7de" strokeWidth="1.5" x1="0" x2="28" y1="4" y2="4" />
+                        </svg>
+                        <span>{t('maps.edgeLegend.structural')}</span>
+                        <small>{t('maps.edgeLegend.structuralHint')}</small>
+                      </span>
+                      <span className="map-edge-chip">
+                        <svg className="map-edge-sample" height="8" width="28">
+                          <line stroke="#8b6fb0" strokeDasharray="3 3" strokeWidth="1.5" x1="0" x2="28" y1="4" y2="4" />
+                        </svg>
+                        <span>{t('maps.edgeLegend.relatedTo')}</span>
+                      </span>
+                      <span className="map-edge-chip">
+                        <svg className="map-edge-sample" height="8" width="28">
+                          <line stroke="#d4584a" strokeDasharray="6 4" strokeWidth="2" x1="0" x2="28" y1="4" y2="4" />
+                        </svg>
+                        <span>{t('maps.edgeLegend.contradicts')}</span>
+                      </span>
+                      <span className="map-edge-chip">
+                        <svg className="map-edge-sample" height="8" width="28">
+                          <line stroke="#6b8e7f" strokeWidth="1.8" x1="0" x2="28" y1="4" y2="4" />
+                        </svg>
+                        <span>{t('maps.edgeLegend.custom')}</span>
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <div className="map-floating-controls" aria-label={t('maps.zoomControls')}>
