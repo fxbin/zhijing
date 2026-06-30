@@ -15,8 +15,9 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Check, Loader2, MessageSquareText, Pencil, Trash2, X } from 'lucide-react';
+import { Check, Loader2, MessageSquareText, Pencil, Plus, Trash2, X } from 'lucide-react';
 import api from '../utils/api';
 
 /**
@@ -39,6 +40,8 @@ export default function ChatHistoryPanel({
   workspaceId,
   currentSessionId,
   onSwitch,
+  onNewChat,
+  isStreaming = false,
   onClose,
 }) {
   const { t } = useTranslation();
@@ -140,130 +143,151 @@ export default function ChatHistoryPanel({
     }
   }
 
-  return (
-    <div className="chat-history-panel">
-      <div className="chat-history-head">
-        <strong>
-          <MessageSquareText size={14} />
-          {t('chat.historyTitle')}
-        </strong>
-        <button type="button" className="chat-history-close" onClick={onClose} aria-label={t('chat.historyClose')}>
-          <X size={14} />
-        </button>
-      </div>
+  /**
+   * 新建对话：调用上层清空当前对话并生成新 sessionId，然后关闭面板。
+   * 流式进行中时静默返回，避免上下文丢失。
+   */
+  function handleNewChat() {
+    if (isStreaming || typeof onNewChat !== 'function') return;
+    onNewChat();
+    if (typeof onClose === 'function') onClose();
+  }
 
-      {loading && (
-        <div className="chat-history-empty">
-          <Loader2 size={16} className="chat-history-spinner" />
-          <span>{t('chat.historyLoading')}</span>
+  return createPortal(
+    <div className="chat-history-modal-overlay" onClick={onClose} role="presentation">
+      <div
+        className="chat-history-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('chat.historyTitle')}
+      >
+        <div className="chat-history-head">
+          <strong>
+            <MessageSquareText size={14} />
+            {t('chat.historyTitle')}
+          </strong>
+          <div className="chat-history-head-actions">
+            <button type="button" className="chat-history-close" onClick={onClose} aria-label={t('chat.historyClose')}>
+              <X size={14} />
+            </button>
+          </div>
         </div>
-      )}
 
-      {!loading && error && (
-        <div className="chat-history-error" role="alert">{error}</div>
-      )}
+        {loading && (
+          <div className="chat-history-empty">
+            <Loader2 size={16} className="chat-history-spinner" />
+            <span>{t('chat.historyLoading')}</span>
+          </div>
+        )}
 
-      {!loading && !error && sessions.length === 0 && (
-        <div className="chat-history-empty">{t('chat.historyEmpty')}</div>
-      )}
+        {!loading && error && (
+          <div className="chat-history-error" role="alert">{error}</div>
+        )}
 
-      {!loading && !error && sessions.length > 0 && (
-        <ul className="chat-history-list">
-          {sessions.map((session) => {
-            const isCurrent = session.sessionId === currentSessionId;
-            const isEditing = editingId === session.sessionId;
-            const isBusy = busyId === session.sessionId;
-            return (
-              <li
-                key={session.sessionId}
-                className={`chat-history-item ${isCurrent ? 'current' : ''}`}
-              >
-                <div className="chat-history-item-main">
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      className="chat-history-rename-input"
-                      value={editingTitle}
-                      onChange={(e) => setEditingTitle(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') void submitRename(session.sessionId);
-                        if (e.key === 'Escape') cancelRename();
-                      }}
-                      autoFocus
-                      maxLength={80}
-                    />
-                  ) : (
-                    <>
-                      <span className="chat-history-item-title" title={session.title}>{session.title}</span>
-                      <span className="chat-history-item-meta">
-                        {t('chat.historyMessageCount', { count: session.messageCount })}
-                        {' · '}
-                        {formatRelativeTime(session.lastUsedAt, t)}
-                      </span>
-                    </>
-                  )}
-                </div>
+        {!loading && !error && sessions.length === 0 && (
+          <div className="chat-history-empty">{t('chat.historyEmpty')}</div>
+        )}
 
-                <div className="chat-history-item-actions">
-                  {isEditing ? (
-                    <>
-                      <button
-                        type="button"
-                        className="chat-history-action confirm"
-                        onClick={() => void submitRename(session.sessionId)}
-                        disabled={isBusy || !editingTitle.trim()}
-                        title={t('chat.historyRenameConfirm')}
-                      >
-                        <Check size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        className="chat-history-action cancel"
-                        onClick={cancelRename}
-                        disabled={isBusy}
-                        title={t('chat.historyRenameCancel')}
-                      >
-                        <X size={13} />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        className="chat-history-action"
-                        onClick={() => handleSwitch(session.sessionId)}
-                        disabled={isBusy || isCurrent}
-                        title={isCurrent ? t('chat.historyCurrent') : t('chat.historySwitch')}
-                      >
-                        {isBusy ? <Loader2 size={13} className="chat-history-spinner" /> : t('chat.historySwitch')}
-                      </button>
-                      <button
-                        type="button"
-                        className="chat-history-action icon"
-                        onClick={() => startRename(session)}
-                        disabled={isBusy}
-                        title={t('chat.historyRename')}
-                      >
-                        <Pencil size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        className="chat-history-action icon danger"
-                        onClick={() => void deleteSession(session.sessionId)}
-                        disabled={isBusy || isCurrent}
-                        title={isCurrent ? t('chat.historyCurrentCannotDelete') : t('chat.historyDelete')}
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
+        {!loading && !error && sessions.length > 0 && (
+          <ul className="chat-history-list">
+            {sessions.map((session) => {
+              const isCurrent = session.sessionId === currentSessionId;
+              const isEditing = editingId === session.sessionId;
+              const isBusy = busyId === session.sessionId;
+              return (
+                <li
+                  key={session.sessionId}
+                  className={`chat-history-item ${isCurrent ? 'current' : ''}`}
+                >
+                  <div className="chat-history-item-main">
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        className="chat-history-rename-input"
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') void submitRename(session.sessionId);
+                          if (e.key === 'Escape') cancelRename();
+                        }}
+                        autoFocus
+                        maxLength={80}
+                      />
+                    ) : (
+                      <>
+                        <span className="chat-history-item-title" title={session.title}>{session.title}</span>
+                        <span className="chat-history-item-meta">
+                          {t('chat.historyMessageCount', { count: session.messageCount })}
+                          {' · '}
+                          {formatRelativeTime(session.lastUsedAt, t)}
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="chat-history-item-actions">
+                    {isEditing ? (
+                      <>
+                        <button
+                          type="button"
+                          className="chat-history-action confirm"
+                          onClick={() => void submitRename(session.sessionId)}
+                          disabled={isBusy || !editingTitle.trim()}
+                          title={t('chat.historyRenameConfirm')}
+                        >
+                          <Check size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          className="chat-history-action cancel"
+                          onClick={cancelRename}
+                          disabled={isBusy}
+                          title={t('chat.historyRenameCancel')}
+                        >
+                          <X size={13} />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="chat-history-action"
+                          onClick={() => handleSwitch(session.sessionId)}
+                          disabled={isBusy || isCurrent}
+                          title={isCurrent ? t('chat.historyCurrent') : t('chat.historySwitch')}
+                        >
+                          {isBusy ? <Loader2 size={13} className="chat-history-spinner" /> : t('chat.historySwitch')}
+                        </button>
+                        <button
+                          type="button"
+                          className="chat-history-action icon"
+                          onClick={() => startRename(session)}
+                          disabled={isBusy}
+                          title={t('chat.historyRename')}
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          className="chat-history-action icon danger"
+                          onClick={() => void deleteSession(session.sessionId)}
+                          disabled={isBusy || isCurrent}
+                          title={isCurrent ? t('chat.historyCurrentCannotDelete') : t('chat.historyDelete')}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>,
+    document.body,
   );
 }
 

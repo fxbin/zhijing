@@ -18,6 +18,7 @@ import {
   HelpCircle,
   History,
   Loader2,
+  Plus,
   Send,
   Sparkles,
   Square,
@@ -209,17 +210,29 @@ export default function GlobalChatDock({
               )}
               {t('chat.metric.sources')} {materials.length} · {t('chat.metric.cards')} {cards.length}
             </span>
-            <button
-              type="button"
-              className={`global-chat-dock-history-btn ${historyPanelOpen ? 'active' : ''}`}
-              onClick={() => setHistoryPanelOpen((prev) => !prev)}
-              title={t('chat.historyToggle')}
-              aria-label={t('chat.historyToggle')}
-              aria-expanded={historyPanelOpen}
-              disabled={isStreaming}
-            >
-              <History size={14} />
-            </button>
+            <div className="global-chat-dock-context-actions">
+              <button
+                type="button"
+                className="global-chat-dock-new-chat-btn"
+                onClick={onClearChat}
+                title={t('chat.historyNewChat')}
+                aria-label={t('chat.historyNewChat')}
+                disabled={isStreaming || threadItems.length === 0}
+              >
+                <Plus size={14} />
+              </button>
+              <button
+                type="button"
+                className={`global-chat-dock-history-btn ${historyPanelOpen ? 'active' : ''}`}
+                onClick={() => setHistoryPanelOpen((prev) => !prev)}
+                title={t('chat.historyToggle')}
+                aria-label={t('chat.historyToggle')}
+                aria-expanded={historyPanelOpen}
+                disabled={isStreaming}
+              >
+                <History size={14} />
+              </button>
+            </div>
           </div>
 
           {historyPanelOpen && (
@@ -227,6 +240,8 @@ export default function GlobalChatDock({
               workspaceId={selectedWorkspaceId}
               currentSessionId={currentSessionId}
               onSwitch={onSwitchSession}
+              onNewChat={onClearChat}
+              isStreaming={isStreaming}
               onClose={() => setHistoryPanelOpen(false)}
             />
           )}

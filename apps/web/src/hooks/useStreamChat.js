@@ -691,6 +691,7 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     setIsStreaming(INITIAL_IS_STREAMING);
     setOrchestratorMode(DEFAULT_ORCHESTRATOR_MODE);
     setOrchestratorReason('');
+    currentSessionId.current = null;
     const targetWorkspaceId = streamWorkspaceId.current ?? selectedWorkspaceId;
     removeChatFromStorage(targetWorkspaceId);
     removeSessionId(targetWorkspaceId);

@@ -96,14 +96,6 @@ export default function WorkspaceView({ activity, apiStatus, isSubmitting, mater
             <button disabled={isSubmitting || offline} onClick={submit} type="button"><SquareArrowOutUpRight size={25} /></button>
           </div>
         </div>
-        <div className="chip-row">
-          <button type="button" disabled={offline} onClick={() => submit(`#${t('workspace.quickTagProjectResearch')}`)}>
-            # {t('workspace.quickTagProjectResearch')}
-          </button>
-          <button type="button" disabled={offline} onClick={() => submit(`#${t('workspace.quickTagDailyNotes')}`)}>
-            # {t('workspace.quickTagDailyNotes')}
-          </button>
-        </div>
         {isSubmitting && (
           <div className="workspace-loading" aria-live="polite">
             <div className="workspace-skeleton-bar" />

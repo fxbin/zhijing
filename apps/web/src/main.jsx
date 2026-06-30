@@ -613,7 +613,6 @@ function App() {
               />
             </button>
             <NotificationDropdown tasks={tasks} />
-            <button className="node-button" onClick={() => go('workflow')} type="button">{t('topBar.createNode')}</button>
             <div className="avatar">U</div>
           </div>
         </header>
