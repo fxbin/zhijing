@@ -2284,6 +2284,27 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
    * @returns {KnowledgeCard[]} 按相关性排序的卡片数组
    */
   searchCardsByRelevance(workspaceId: string, query: string, limit: number): KnowledgeCard[] {
+    if (!query.trim()) return [];
+
+    if (isZvecSearchReady()) {
+      try {
+        const hits = searchCardsInZvec(workspaceId, query, limit);
+        if (hits.length > 0) {
+          const ids = hits.map((h) => h.id);
+          const placeholders = ids.map(() => '?').join(',');
+          const rows = this.db.prepare(`SELECT * FROM cards WHERE id IN (${placeholders}) AND archived = 0`)
+            .all(...ids) as CardRow[];
+          const scoreMap = new Map(hits.map((h) => [h.id, h.score]));
+          return rows
+            .map(mapCard)
+            .sort((a, b) => (scoreMap.get(b.id) ?? 0) - (scoreMap.get(a.id) ?? 0));
+        }
+        if (isZvecIndexInitialized()) return [];
+      } catch (error) {
+        console.warn('[searchCardsByRelevance] zvec query failed, fallback to sqlite fts5', error);
+      }
+    }
+
     const sanitized = sanitizeFtsQuery(query);
     if (!sanitized) return [];
     try {
