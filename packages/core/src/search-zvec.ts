@@ -22,6 +22,7 @@ import {
   ZVecCreateAndOpen,
   ZVecDataType,
   ZVecIndexType,
+  ZVecOpen,
   type ZVecDoc,
 } from '@zvec/zvec';
 import { mkdirSync, existsSync, writeFileSync, rmSync } from 'node:fs';
@@ -221,7 +222,7 @@ function buildMaterialSchema(): ZVecCollectionSchema {
 
 /**
  * 初始化 Zvec 检索引擎（幂等）。
- * 创建/打开 cards 与 materials 集合，目录不存在时自动创建。
+ * 集合目录不存在时创建并打开，已存在时直接打开，避免 path exists 错误。
  *
  * @param dataDir - 可选数据目录；省略时用 defaultZvecDataDir()
  * @author fxbin
@@ -230,8 +231,15 @@ export function initZvecSearch(dataDir?: string): void {
   const dir = dataDir ?? defaultZvecDataDir();
   zvecDir = dir;
   mkdirSync(dir, { recursive: true });
-  cardsCollection = ZVecCreateAndOpen(join(dir, CARDS_COLLECTION_NAME), buildCardSchema());
-  materialsCollection = ZVecCreateAndOpen(join(dir, MATERIALS_COLLECTION_NAME), buildMaterialSchema());
+  cardsCollection = openOrCreateCollection(join(dir, CARDS_COLLECTION_NAME), buildCardSchema());
+  materialsCollection = openOrCreateCollection(join(dir, MATERIALS_COLLECTION_NAME), buildMaterialSchema());
+}
+
+function openOrCreateCollection(path: string, schema: ZVecCollectionSchema): ZVecCollection {
+  if (existsSync(path)) {
+    return ZVecOpen(path);
+  }
+  return ZVecCreateAndOpen(path, schema);
 }
 
 /**
