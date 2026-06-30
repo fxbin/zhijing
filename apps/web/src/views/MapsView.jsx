@@ -54,6 +54,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   const [panState, setPanState] = useState(null);
   const [pendingSave, setPendingSave] = useState(false);
   const [hoveredNodeId, setHoveredNodeId] = useState(null);
+  const [legendOpen, setLegendOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -583,8 +584,14 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                     </button>
                   ))}
                 </div>
-                <div className="map-legend-stack">
-                  <button className="map-legend-trigger" type="button" aria-label={t('maps.legendToggle')}>
+                <div className={`map-legend-stack${legendOpen ? ' open' : ''}`}>
+                  <button
+                    className="map-legend-trigger"
+                    type="button"
+                    aria-label={t('maps.legendToggle')}
+                    aria-expanded={legendOpen}
+                    onClick={() => setLegendOpen((value) => !value)}
+                  >
                     <Info size={14} />
                     <span>{t('maps.legendToggle')}</span>
                   </button>

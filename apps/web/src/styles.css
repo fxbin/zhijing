@@ -7790,7 +7790,7 @@ button { cursor: pointer; }
   font-size: 11px;
   font-weight: 600;
   color: var(--primary);
-  cursor: help;
+  cursor: pointer;
   backdrop-filter: blur(8px);
   transition: background 0.2s ease;
 }
@@ -7805,7 +7805,7 @@ button { cursor: pointer; }
   gap: 8px;
 }
 
-.map-legend-stack:hover .map-legend-content {
+.map-legend-stack.open .map-legend-content {
   display: flex;
 }
 
