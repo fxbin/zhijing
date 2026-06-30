@@ -1092,7 +1092,7 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
 
   useEffect(() => {
     hiddenInterest.fetchHint();
-  }, [hiddenInterest]);
+  }, [hiddenInterest.fetchHint]);
 
   const handleHiddenInterestShown = useCallback(async () => {
     const ok = await hiddenInterest.markShown();
