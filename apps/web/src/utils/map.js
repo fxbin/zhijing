@@ -5,16 +5,39 @@
 
 import i18n from '../i18n';
 
+/**
+ * 地图布局常量：中心点、各类型节点的扇形配置与半径。
+ * 动态扇形布局会根据节点数量自动扩展半径，保证最小弧长避免重叠。
+ */
 const MAP_LAYOUT = {
   centerX: 500,
   centerY: 400,
   rings: {
-    material: { startAngle: 100, endAngle: 260, radius: 210 },
-    card: { startAngle: 280, endAngle: 440, radius: 320 },
-    other: { startAngle: 260, endAngle: 280, radius: 260 },
+    material: { startAngle: 100, endAngle: 260, baseRadius: 210 },
+    card: { startAngle: 280, endAngle: 440, baseRadius: 320 },
+    other: { startAngle: 260, endAngle: 280, baseRadius: 260 },
   },
   nodeRadius: { workspace: 34, material: 22, card: 18, other: 16 },
 };
+
+/**
+ * 最小弧长：节点直径 + 间距，用于动态计算防重叠半径。
+ */
+const MIN_ARC_LENGTH = 64;
+
+/**
+ * 根据节点数量与可用角度，动态计算防重叠半径。
+ * 当节点较多时自动扩大半径，保证每个节点的弧长不小于 MIN_ARC_LENGTH。
+ * @param {number} count - 节点数量
+ * @param {number} baseRadius - 基础半径
+ * @param {number} angleSpan - 可用角度范围（度）
+ * @returns {number} 动态半径
+ */
+function computeDynamicRadius(count, baseRadius, angleSpan) {
+  if (count <= 1) return baseRadius;
+  const minRadius = (MIN_ARC_LENGTH * count * 360) / (2 * Math.PI * angleSpan);
+  return Math.max(baseRadius, minRadius);
+}
 
 const NODE_METADATA_SPECS = {
   material: [
@@ -72,6 +95,7 @@ export function mapNodeMatches(node, filter, query) {
 
 /**
  * 根据节点类型构建环形布局坐标，并应用已保存的拖拽位置。
+ * 动态扇形布局：根据节点数量自动扩展半径，保证最小弧长避免重叠。
  * @param {Array<object>} nodes - 节点数组
  * @param {Record<string, {x: number; y: number}>} nodePositions - 已保存的节点位置映射
  * @returns {Array<object>} 带坐标的节点数组
@@ -116,21 +140,23 @@ export function buildMapLayout(nodes, nodePositions = {}) {
 }
 
 /**
- * 将节点数组按环形布局分配坐标。
+ * 将节点数组按环形布局分配坐标，动态计算半径防止重叠。
  * @param {Array<object>} nodes - 节点数组
- * @param {object} ring - 环形配置（startAngle/endAngle/radius）
+ * @param {object} ring - 环形配置（startAngle/endAngle/baseRadius）
  * @returns {Array<object>} 带坐标的节点数组
  */
 export function positionRing(nodes, ring) {
   const total = Math.max(nodes.length, 1);
+  const angleSpan = ring.endAngle - ring.startAngle;
+  const radius = computeDynamicRadius(total, ring.baseRadius, angleSpan);
   return nodes.map((node, index) => {
     const angle =
       total === 1
         ? (ring.startAngle + ring.endAngle) / 2
-        : ring.startAngle + ((ring.endAngle - ring.startAngle) * index) / (total - 1);
+        : ring.startAngle + (angleSpan * index) / (total - 1);
     const radian = (angle * Math.PI) / 180;
-    const x = MAP_LAYOUT.centerX + Math.cos(radian) * ring.radius;
-    const y = MAP_LAYOUT.centerY + Math.sin(radian) * ring.radius;
+    const x = MAP_LAYOUT.centerX + Math.cos(radian) * radius;
+    const y = MAP_LAYOUT.centerY + Math.sin(radian) * radius;
     return {
       ...node,
       x,

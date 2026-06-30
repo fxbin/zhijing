@@ -30,8 +30,11 @@ import {
  */
 export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   const { t } = useTranslation();
-  const STORAGE_KEY_ZOOM = 'zhijing_map_zoom';
   const STORAGE_KEY_FILTER = 'zhijing_map_filter';
+  const MAP_BASE_WIDTH = 1000;
+  const MAP_BASE_HEIGHT = 800;
+  const MAP_MIN_ZOOM = 0.3;
+  const MAP_MAX_ZOOM = 3;
   const [map, setMap] = useState(null);
   const [status, setStatus] = useState(t('maps.status.selectWorkspace'));
   const [query, setQuery] = useState('');
@@ -43,27 +46,14 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
     }
   });
   const [selectedNodeId, setSelectedNodeId] = useState(null);
-  const [zoom, setZoom] = useState(() => {
-    try {
-      const saved = parseFloat(localStorage.getItem('zhijing_map_zoom'));
-      return Number.isFinite(saved) ? saved : 1;
-    } catch {
-      return 1;
-    }
-  });
+  const [viewState, setViewState] = useState({ x: 0, y: 0, zoom: 1 });
   const [relationFilter, setRelationFilter] = useState('all');
   const [relationEditor, setRelationEditor] = useState(null);
   const [nodePositions, setNodePositions] = useState({});
   const [dragState, setDragState] = useState(null);
+  const [panState, setPanState] = useState(null);
   const [pendingSave, setPendingSave] = useState(false);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('zhijing_map_zoom', String(zoom));
-    } catch {
-      // localStorage 不可用时静默忽略
-    }
-  }, [zoom]);
+  const [hoveredNodeId, setHoveredNodeId] = useState(null);
 
   useEffect(() => {
     try {
@@ -94,7 +84,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
             }, {}),
           );
           setStatus(result.nodes?.length ? t('maps.status.synced') : t('maps.status.noNodes'));
-          setSelectedNodeId(result.nodes?.[0]?.id ?? null);
+          setSelectedNodeId(null);
         }
       } catch {
         if (!ignore) {
@@ -187,35 +177,102 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   }
 
   /**
-   * 拖拽中实时更新节点位置。
+   * 指针移动处理：节点拖拽时更新节点位置，画布平移时更新 viewBox 偏移。
    * @param {PointerEvent} event - 指针事件
    */
   function handlePointerMove(event) {
-    if (!dragState) return;
-    const svgPoint = pointerToSvg(event);
-    if (!svgPoint) return;
-    const dx = svgPoint.x - dragState.startX;
-    const dy = svgPoint.y - dragState.startY;
-    setNodePositions((current) => ({
-      ...current,
-      [dragState.nodeId]: {
-        x: dragState.nodeStartX + dx,
-        y: dragState.nodeStartY + dy,
-      },
-    }));
+    if (dragState) {
+      const svgPoint = pointerToSvg(event);
+      if (!svgPoint) return;
+      const dx = svgPoint.x - dragState.startX;
+      const dy = svgPoint.y - dragState.startY;
+      setNodePositions((current) => ({
+        ...current,
+        [dragState.nodeId]: {
+          x: dragState.nodeStartX + dx,
+          y: dragState.nodeStartY + dy,
+        },
+      }));
+      return;
+    }
+    if (panState) {
+      const svg = event.currentTarget;
+      const rect = svg.getBoundingClientRect();
+      const scaleX = (MAP_BASE_WIDTH / viewState.zoom) / rect.width;
+      const scaleY = (MAP_BASE_HEIGHT / viewState.zoom) / rect.height;
+      const dx = (event.clientX - panState.startX) * scaleX;
+      const dy = (event.clientY - panState.startY) * scaleY;
+      setViewState((current) => ({
+        ...current,
+        x: panState.viewX - dx,
+        y: panState.viewY - dy,
+      }));
+    }
   }
 
   /**
    * 结束拖拽，若位置发生变化则触发后端保存。
    */
   function handlePointerUp() {
-    if (!dragState) return;
-    const current = nodePositions[dragState.nodeId];
-    const hasMoved = !current || current.x !== dragState.nodeStartX || current.y !== dragState.nodeStartY;
-    setDragState(null);
-    if (hasMoved) {
-      setPendingSave(true);
+    if (dragState) {
+      const current = nodePositions[dragState.nodeId];
+      const hasMoved = !current || current.x !== dragState.nodeStartX || current.y !== dragState.nodeStartY;
+      setDragState(null);
+      if (hasMoved) {
+        setPendingSave(true);
+      }
+      return;
     }
+    if (panState) {
+      setPanState(null);
+    }
+  }
+
+  /**
+   * 滚轮缩放：围绕鼠标点缩放 viewBox，保持鼠标下的内容不动。
+   * @param {WheelEvent} event - 滚轮事件
+   */
+  function handleWheel(event) {
+    event.preventDefault();
+    const svg = event.currentTarget;
+    const point = svg.createSVGPoint();
+    point.x = event.clientX;
+    point.y = event.clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return;
+    const svgPoint = point.matrixTransform(ctm.inverse());
+    const delta = event.deltaY > 0 ? 0.88 : 1.12;
+    setViewState((current) => {
+      const nextZoom = Math.min(Math.max(current.zoom * delta, MAP_MIN_ZOOM), MAP_MAX_ZOOM);
+      if (nextZoom === current.zoom) return current;
+      const scale = nextZoom / current.zoom;
+      const nextX = svgPoint.x - (svgPoint.x - current.x) / scale;
+      const nextY = svgPoint.y - (svgPoint.y - current.y) / scale;
+      return { x: nextX, y: nextY, zoom: nextZoom };
+    });
+  }
+
+  /**
+   * 开始画布平移：在空白处按下指针时记录起始位置。
+   * @param {PointerEvent} event - 指针事件
+   */
+  function handleCanvasPointerDown(event) {
+    if (event.target.tagName === 'circle' || event.target.tagName === 'text' || event.target.closest('.map-svg-node')) {
+      return;
+    }
+    setPanState({
+      startX: event.clientX,
+      startY: event.clientY,
+      viewX: viewState.x,
+      viewY: viewState.y,
+    });
+  }
+
+  /**
+   * 重置视图到初始状态。
+   */
+  function resetView() {
+    setViewState({ x: 0, y: 0, zoom: 1 });
   }
 
   /**
@@ -382,56 +439,128 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                   <svg
                     aria-label={t('maps.graph')}
                     className="map-graph-svg"
-                    viewBox="0 0 1000 800"
+                    viewBox={`${viewState.x} ${viewState.y} ${MAP_BASE_WIDTH / viewState.zoom} ${MAP_BASE_HEIGHT / viewState.zoom}`}
                     role="img"
+                    onWheel={handleWheel}
+                    onPointerDown={handleCanvasPointerDown}
                     onPointerMove={handlePointerMove}
                     onPointerUp={handlePointerUp}
+                    onPointerLeave={handlePointerUp}
                     onPointerCancel={handlePointerUp}
-                    style={{ cursor: dragState ? 'grabbing' : 'default' }}
+                    style={{ cursor: panState ? 'grabbing' : dragState ? 'grabbing' : 'default', touchAction: 'none' }}
                   >
-                    <g style={{ transform: `scale(${zoom})`, transformOrigin: '500px 400px' }}>
-                      {visibleEdges.map((edge) => {
-                        const source = layoutNodes.find((node) => node.id === edge.sourceId);
-                        const target = layoutNodes.find((node) => node.id === edge.targetId);
-                        if (!source || !target) return null;
-                        const isActive = selectedNode && (edge.sourceId === selectedNode.id || edge.targetId === selectedNode.id);
-                        const edgeClass = describeEdgeClass(edge.relation, edge.custom);
-                        return (
-                          <line
-                            className={`${edgeClass}${isActive ? ' active' : ''}`}
-                            key={edge.id}
-                            x1={source.x}
-                            y1={source.y}
-                            x2={target.x}
-                            y2={target.y}
+                    <defs>
+                      <marker
+                        id="map-arrow"
+                        markerWidth="8"
+                        markerHeight="8"
+                        refX="7"
+                        refY="3"
+                        orient="auto"
+                      >
+                        <path d="M0,0 L7,3 L0,6 Z" fill="currentColor" />
+                      </marker>
+                      <marker
+                        id="map-arrow-contradicts"
+                        markerWidth="8"
+                        markerHeight="8"
+                        refX="7"
+                        refY="3"
+                        orient="auto"
+                      >
+                        <path d="M0,0 L7,3 L0,6 Z" fill="#d4584a" />
+                      </marker>
+                    </defs>
+                    {visibleEdges.map((edge) => {
+                      const source = layoutNodes.find((node) => node.id === edge.sourceId);
+                      const target = layoutNodes.find((node) => node.id === edge.targetId);
+                      if (!source || !target) return null;
+                      const focusedId = hoveredNodeId ?? selectedNode?.id;
+                      const isActive = focusedId && (edge.sourceId === focusedId || edge.targetId === focusedId);
+                      const isDimmed = focusedId && !isActive;
+                      const edgeClass = describeEdgeClass(edge.relation, edge.custom);
+                      const markerId = edge.relation === 'contradicts' ? 'map-arrow-contradicts' : 'map-arrow';
+                      const dx = target.x - source.x;
+                      const dy = target.y - source.y;
+                      const dist = Math.sqrt(dx * dx + dy * dy);
+                      const offset = (target.radius ?? 18) + 4;
+                      const endX = dist > 0 ? target.x - (dx / dist) * offset : target.x;
+                      const endY = dist > 0 ? target.y - (dy / dist) * offset : target.y;
+                      return (
+                        <path
+                          className={`${edgeClass}${isActive ? ' active' : ''}${isDimmed ? ' dimmed' : ''}`}
+                          key={edge.id}
+                          d={`M ${source.x} ${source.y} L ${endX} ${endY}`}
+                          markerEnd={`url(#${markerId})`}
+                        />
+                      );
+                    })}
+                    {layoutNodes.map((node) => {
+                      const isActive = node.id === selectedNode?.id;
+                      const isMatched = searchMatches.includes(node.id);
+                      const isHovered = node.id === hoveredNodeId;
+                      const focusedId = hoveredNodeId ?? selectedNode?.id;
+                      const isRelated = focusedId && edges.some(
+                        (edge) =>
+                          (edge.sourceId === focusedId && edge.targetId === node.id) ||
+                          (edge.targetId === focusedId && edge.sourceId === node.id),
+                      );
+                      const isDimmed = focusedId && !isActive && !isHovered && !isRelated && node.id !== focusedId;
+                      const className = `map-svg-node ${node.kind}${isActive ? ' active' : ''}${isMatched ? ' matched' : ''}${isHovered ? ' hovered' : ''}${isDimmed ? ' dimmed' : ''}`;
+                      return (
+                        <g
+                          className={className}
+                          key={node.id}
+                          onClick={() => setSelectedNodeId(node.id)}
+                          onPointerDown={(event) => handleNodePointerDown(event, node.id)}
+                          onMouseEnter={() => setHoveredNodeId(node.id)}
+                          onMouseLeave={() => setHoveredNodeId(null)}
+                          role="button"
+                          tabIndex={0}
+                          transform={`translate(${node.x}, ${node.y})`}
+                          data-status={node.status}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') setSelectedNodeId(node.id);
+                          }}
+                          style={{ cursor: dragState?.nodeId === node.id ? 'grabbing' : 'grab' }}
+                        >
+                          <circle r={node.radius} />
+                          <text y={node.radius + 18}>{truncateNodeLabel(node.label)}</text>
+                        </g>
+                      );
+                    })}
+                    {hoveredNodeId && (() => {
+                      const hoveredNode = layoutNodes.find((item) => item.id === hoveredNodeId);
+                      if (!hoveredNode) return null;
+                      const tooltipWidth = 240;
+                      const tooltipHeight = 76;
+                      const tooltipX = hoveredNode.x - tooltipWidth / 2;
+                      const tooltipY = hoveredNode.y - (hoveredNode.radius ?? 18) - tooltipHeight - 12;
+                      const connectionCount = edges.filter(
+                        (edge) => edge.sourceId === hoveredNode.id || edge.targetId === hoveredNode.id,
+                      ).length;
+                      const hoveredStatus = describeNodeStatus(hoveredNode.status);
+                      return (
+                        <g className="map-tooltip" pointerEvents="none">
+                          <rect
+                            height={tooltipHeight}
+                            rx="8"
+                            width={tooltipWidth}
+                            x={tooltipX}
+                            y={tooltipY}
                           />
-                        );
-                      })}
-                      {layoutNodes.map((node) => {
-                        const isActive = node.id === selectedNode?.id;
-                        const isMatched = searchMatches.includes(node.id);
-                        const className = `map-svg-node ${node.kind}${isActive ? ' active' : ''}${isMatched ? ' matched' : ''}`;
-                        return (
-                          <g
-                            className={className}
-                            key={node.id}
-                            onClick={() => setSelectedNodeId(node.id)}
-                            onPointerDown={(event) => handleNodePointerDown(event, node.id)}
-                            role="button"
-                            tabIndex={0}
-                            transform={`translate(${node.x}, ${node.y})`}
-                            data-status={node.status}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter' || event.key === ' ') setSelectedNodeId(node.id);
-                            }}
-                            style={{ cursor: dragState?.nodeId === node.id ? 'grabbing' : 'grab' }}
-                          >
-                            <circle r={node.radius} />
-                            <text y={node.radius + 18}>{truncateNodeLabel(node.label)}</text>
-                          </g>
-                        );
-                      })}
-                    </g>
+                          <text className="map-tooltip-title" x={tooltipX + 14} y={tooltipY + 24}>
+                            {truncateNodeLabel(hoveredNode.label)}
+                          </text>
+                          <text className="map-tooltip-meta" x={tooltipX + 14} y={tooltipY + 44}>
+                            {mapKindLabel(hoveredNode.kind)} · {hoveredStatus.label}
+                          </text>
+                          <text className="map-tooltip-meta" x={tooltipX + 14} y={tooltipY + 62}>
+                            {t('maps.tooltip.connections')}: {connectionCount} · {t('maps.tooltip.hint')}
+                          </text>
+                        </g>
+                      );
+                    })()}
                   </svg>
                   {layoutNodes.length === 0 && (
                     <div className="map-no-match">
@@ -465,10 +594,40 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                     ))}
                   </div>
                 </div>
+                <div className="map-edge-legend" aria-label={t('maps.edgeLegend')}>
+                  <span className="map-claim-legend-title">{t('maps.edgeLegend')}</span>
+                  <div className="map-claim-legend-items">
+                    <span className="map-edge-chip">
+                      <svg className="map-edge-sample" height="8" width="28">
+                        <line stroke="#bcc7de" strokeWidth="1.5" x1="0" x2="28" y1="4" y2="4" />
+                      </svg>
+                      <span>{t('maps.edgeLegend.structural')}</span>
+                      <small>{t('maps.edgeLegend.structuralHint')}</small>
+                    </span>
+                    <span className="map-edge-chip">
+                      <svg className="map-edge-sample" height="8" width="28">
+                        <line stroke="#8b6fb0" strokeDasharray="3 3" strokeWidth="1.5" x1="0" x2="28" y1="4" y2="4" />
+                      </svg>
+                      <span>{t('maps.edgeLegend.relatedTo')}</span>
+                    </span>
+                    <span className="map-edge-chip">
+                      <svg className="map-edge-sample" height="8" width="28">
+                        <line stroke="#d4584a" strokeDasharray="6 4" strokeWidth="2" x1="0" x2="28" y1="4" y2="4" />
+                      </svg>
+                      <span>{t('maps.edgeLegend.contradicts')}</span>
+                    </span>
+                    <span className="map-edge-chip">
+                      <svg className="map-edge-sample" height="8" width="28">
+                        <line stroke="#6b8e7f" strokeWidth="1.8" x1="0" x2="28" y1="4" y2="4" />
+                      </svg>
+                      <span>{t('maps.edgeLegend.custom')}</span>
+                    </span>
+                  </div>
+                </div>
                 <div className="map-floating-controls" aria-label={t('maps.zoomControls')}>
-                  <button aria-label={t('common.zoomIn')} onClick={() => setZoom((value) => Math.min(value + 0.12, 1.36))} type="button">+</button>
-                  <button aria-label={t('common.resetView')} onClick={() => setZoom(1)} type="button"><RefreshCw size={16} /></button>
-                  <button aria-label={t('common.zoomOut')} onClick={() => setZoom((value) => Math.max(value - 0.12, 0.76))} type="button">−</button>
+                  <button aria-label={t('common.zoomIn')} onClick={() => setViewState((current) => ({ ...current, zoom: Math.min(current.zoom * 1.2, MAP_MAX_ZOOM) }))} type="button">+</button>
+                  <button aria-label={t('common.resetView')} onClick={resetView} type="button"><RefreshCw size={16} /></button>
+                  <button aria-label={t('common.zoomOut')} onClick={() => setViewState((current) => ({ ...current, zoom: Math.max(current.zoom / 1.2, MAP_MIN_ZOOM) }))} type="button">−</button>
                 </div>
               </>
             )}
