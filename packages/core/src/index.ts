@@ -2073,10 +2073,14 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
 
   archiveCard(id: string) {
     this.db.prepare('UPDATE cards SET archived = 1 WHERE id = ?').run(id);
+    const card = this.findCard(id);
+    if (card) upsertCardInZvec(toCardIndexInput(card));
   }
 
   unarchiveCard(id: string) {
     this.db.prepare('UPDATE cards SET archived = 0 WHERE id = ?').run(id);
+    const card = this.findCard(id);
+    if (card) upsertCardInZvec(toCardIndexInput(card));
   }
 
   listArchivedCards(workspaceId?: string) {
@@ -2208,6 +2212,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   deleteCard(id: string) {
     this.db.prepare('DELETE FROM cards WHERE id = ?').run(id);
     this.deleteCardFts(id);
+    deleteCardFromZvec(id);
   }
 
   /**
