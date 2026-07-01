@@ -56,6 +56,9 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   const [pendingSave, setPendingSave] = useState(false);
   const [hoveredNodeId, setHoveredNodeId] = useState(null);
   const [isLegendOpen, setIsLegendOpen] = useState(false);
+  // 批量选择：Shift+Drag 框选节点
+  const [selectionBox, setSelectionBox] = useState(null); // {startX, startY, endX, endY} SVG 坐标
+  const [selectedNodeIds, setSelectedNodeIds] = useState(() => new Set()); // 批量选中的节点 ID
 
   useEffect(() => {
     try {
@@ -64,6 +67,23 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
       // localStorage 不可用时静默忽略
     }
   }, [nodeFilter]);
+
+  // Esc 清空批量选择；点空白（无 selectionBox/drag/pan 时）也清空
+  useEffect(() => {
+    function onKeyDown(event) {
+      if (event.key === 'Escape') {
+        setSelectedNodeIds(new Set());
+        setSelectionBox(null);
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  function clearBatchSelection() {
+    setSelectedNodeIds(new Set());
+    setSelectionBox(null);
+  }
 
   useEffect(() => {
     if (!selectedWorkspaceId || apiStatus !== 'online') {
@@ -203,6 +223,12 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
       }));
       return;
     }
+    if (selectionBox) {
+      const svgPoint = pointerToSvg(event);
+      if (!svgPoint) return;
+      setSelectionBox((current) => (current ? { ...current, endX: svgPoint.x, endY: svgPoint.y } : current));
+      return;
+    }
     if (panState) {
       const svg = event.currentTarget;
       const rect = svg.getBoundingClientRect();
@@ -228,6 +254,26 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
       setDragState(null);
       if (hasMoved) {
         setPendingSave(true);
+      }
+      return;
+    }
+    if (selectionBox) {
+      // 计算选区命中的节点
+      const left = Math.min(selectionBox.startX, selectionBox.endX);
+      const right = Math.max(selectionBox.startX, selectionBox.endX);
+      const top = Math.min(selectionBox.startY, selectionBox.endY);
+      const bottom = Math.max(selectionBox.startY, selectionBox.endY);
+      const threshold = 6; // 拖拽距离阈值，小于此视为点击，不清空选择
+      const isClick = Math.abs(selectionBox.endX - selectionBox.startX) < threshold
+        && Math.abs(selectionBox.endY - selectionBox.startY) < threshold;
+      setSelectionBox(null);
+      if (!isClick) {
+        const hits = layoutNodes.filter((node) => {
+          const r = node.radius ?? 18;
+          return node.x + r >= left && node.x - r <= right
+            && node.y + r >= top && node.y - r <= bottom;
+        });
+        setSelectedNodeIds(new Set(hits.map((node) => node.id)));
       }
       return;
     }
@@ -261,12 +307,24 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   }
 
   /**
-   * 开始画布平移：在空白处按下指针时记录起始位置。
+   * 开始画布平移或框选：在空白处按下指针时，按住 Shift 走框选分支，否则走平移。
    * @param {PointerEvent} event - 指针事件
    */
   function handleCanvasPointerDown(event) {
     if (event.target.tagName === 'circle' || event.target.tagName === 'text' || event.target.closest('.map-svg-node')) {
       return;
+    }
+    const svgPoint = pointerToSvg(event);
+    if (!svgPoint) return;
+    // Shift+Drag 启动框选
+    if (event.shiftKey) {
+      setSelectedNodeId(null);
+      setSelectionBox({ startX: svgPoint.x, startY: svgPoint.y, endX: svgPoint.x, endY: svgPoint.y });
+      return;
+    }
+    // 非 Shift 点空白：清空已有的批量选择
+    if (selectedNodeIds.size > 0) {
+      setSelectedNodeIds(new Set());
     }
     setPanState({
       startX: event.clientX,
@@ -455,7 +513,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                     onPointerUp={handlePointerUp}
                     onPointerLeave={handlePointerUp}
                     onPointerCancel={handlePointerUp}
-                    style={{ cursor: panState ? 'grabbing' : dragState ? 'grabbing' : 'default', touchAction: 'none' }}
+                    style={{ cursor: selectionBox ? 'crosshair' : panState ? 'grabbing' : dragState ? 'grabbing' : 'default', touchAction: 'none' }}
                   >
                     <defs>
                       <marker
@@ -514,7 +572,8 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                           (edge.targetId === focusedId && edge.sourceId === node.id),
                       );
                       const isDimmed = focusedId && !isActive && !isHovered && !isRelated && node.id !== focusedId;
-                      const className = `map-svg-node ${node.kind}${isActive ? ' active' : ''}${isMatched ? ' matched' : ''}${isHovered ? ' hovered' : ''}${isDimmed ? ' dimmed' : ''}`;
+                      const isBatchSelected = selectedNodeIds.has(node.id);
+                      const className = `map-svg-node ${node.kind}${isActive ? ' active' : ''}${isMatched ? ' matched' : ''}${isHovered ? ' hovered' : ''}${isDimmed ? ' dimmed' : ''}${isBatchSelected ? ' batch-selected' : ''}`;
                       return (
                         <g
                           className={className}
@@ -586,6 +645,22 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                             {t('maps.tooltip.connections')}: {connectionCount} · {t('maps.tooltip.hint')}
                           </text>
                         </g>
+                      );
+                    })()}
+                    {selectionBox && (() => {
+                      const left = Math.min(selectionBox.startX, selectionBox.endX);
+                      const top = Math.min(selectionBox.startY, selectionBox.endY);
+                      const width = Math.abs(selectionBox.endX - selectionBox.startX);
+                      const height = Math.abs(selectionBox.endY - selectionBox.startY);
+                      return (
+                        <rect
+                          className="map-selection-box"
+                          x={left}
+                          y={top}
+                          width={width}
+                          height={height}
+                          pointerEvents="none"
+                        />
                       );
                     })()}
                   </svg>
@@ -675,6 +750,51 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                   <button aria-label={t('common.resetView')} onClick={resetView} type="button"><RefreshCw size={16} /></button>
                   <button aria-label={t('common.zoomOut')} onClick={() => setViewState((current) => ({ ...current, zoom: Math.max(current.zoom / 1.2, MAP_MIN_ZOOM) }))} type="button">−</button>
                 </div>
+                {selectedNodeIds.size > 0 && (
+                  <div className="map-batch-toolbar" role="toolbar" aria-label={t('maps.batchActions')}>
+                    <span className="map-batch-count">{t('maps.nodesSelected', { count: selectedNodeIds.size })}</span>
+                    <button
+                      type="button"
+                      className="map-batch-btn primary"
+                      onClick={() => {
+                        // Batch 2 接入目标选择 + 关系类型选择
+                        // 当前先清空选择，后续接入完整流程
+                        clearBatchSelection();
+                      }}
+                    >
+                      {t('maps.connectToTarget')}
+                    </button>
+                    <button
+                      type="button"
+                      className="map-batch-btn"
+                      disabled
+                      title={t('maps.comingSoon')}
+                    >
+                      {t('maps.groupSelected')}
+                    </button>
+                    <button
+                      type="button"
+                      className="map-batch-btn"
+                      disabled
+                      title={t('maps.comingSoon')}
+                    >
+                      {t('maps.applyTag')}
+                    </button>
+                    <button
+                      type="button"
+                      className="map-batch-close"
+                      onClick={clearBatchSelection}
+                      aria-label={t('common.cancel')}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                )}
+                {(selectionBox || selectedNodeIds.size > 0) && (
+                  <div className="map-batch-hint" role="status">
+                    {t('maps.batchHint')}
+                  </div>
+                )}
               </>
             )}
           </section>

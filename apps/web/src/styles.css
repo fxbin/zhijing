@@ -8036,6 +8036,126 @@ button { cursor: pointer; }
   border-bottom: 0;
 }
 
+/* 批量选择：节点选中态 */
+.map-svg-node.batch-selected circle {
+  stroke: var(--primary);
+  stroke-width: 4;
+  animation: map-batch-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes map-batch-pulse {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(9, 20, 38, 0.35)); }
+  50% { filter: drop-shadow(0 0 16px rgba(9, 20, 38, 0.55)); }
+}
+
+/* 选区矩形 */
+.map-selection-box {
+  fill: rgba(9, 20, 38, 0.06);
+  stroke: var(--primary);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  rx: 4;
+}
+
+/* 浮动批量操作工具栏 */
+.map-batch-toolbar {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(9, 20, 38, 0.1);
+}
+
+.map-batch-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  padding: 0 6px 0 4px;
+  border-right: 1px solid var(--line-soft);
+  margin-right: 2px;
+  white-space: nowrap;
+}
+
+.map-batch-btn {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.map-batch-btn:hover:not(:disabled) {
+  background: var(--surface-low);
+  border-color: var(--primary);
+}
+
+.map-batch-btn.primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+.map-batch-btn.primary:hover:not(:disabled) {
+  background: rgba(9, 20, 38, 0.9);
+}
+
+.map-batch-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.map-batch-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.map-batch-close:hover {
+  background: var(--surface-low);
+  color: var(--text);
+}
+
+/* 底部胶囊提示 */
+.map-batch-hint {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: 6px 14px;
+  background: var(--surface-container-highest, #e8eef7);
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  box-shadow: 0 4px 12px rgba(9, 20, 38, 0.06);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 .map-legend {
   position: absolute;
   left: 18px;
