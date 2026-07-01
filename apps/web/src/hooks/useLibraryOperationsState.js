@@ -9,7 +9,7 @@
  * @author fxbin
  */
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import api, { ApiError } from '../utils/api';
 import {
   canParseMaterial,
@@ -105,6 +105,34 @@ export function useLibraryOperationsState({
   const [isCapturing, setIsCapturing] = useState(false);
   const [isImportingFile, setIsImportingFile] = useState(false);
 
+  const isProcessing = isCapturing || isImportingFile;
+  const processingStageRef = useRef(0);
+  const processingTimerRef = useRef(null);
+  const processingStages = [
+    t('library.status.processingStage1'),
+    t('library.status.processingStage2'),
+    t('library.status.processingStage3'),
+  ];
+
+  useEffect(() => {
+    if (!isProcessing) {
+      if (processingTimerRef.current) {
+        clearInterval(processingTimerRef.current);
+        processingTimerRef.current = null;
+      }
+      processingStageRef.current = 0;
+      return undefined;
+    }
+    setStatus(processingStages[0]);
+    processingTimerRef.current = setInterval(() => {
+      processingStageRef.current = (processingStageRef.current + 1) % processingStages.length;
+      setStatus(processingStages[processingStageRef.current]);
+    }, 3500);
+    return () => {
+      if (processingTimerRef.current) clearInterval(processingTimerRef.current);
+    };
+  }, [isProcessing]);
+
   const [selectedIds, setSelectedIds] = useState(createEmptySelectedSet);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchProgress, setBatchProgress] = useState(null);
@@ -190,7 +218,6 @@ export function useLibraryOperationsState({
     if (!value || isCapturing || apiStatus !== 'online') return;
     setIsCapturing(true);
     const batchItems = captureMode === 'batch' ? splitBatchCaptureInput(value) : [];
-    setStatus(captureMode === 'batch' ? t('library.status.capturingBatch') : t('library.status.capturingMaterial'));
     try {
       if (captureMode === 'batch') {
         if (batchItems.length === 0) throw new Error('Empty batch.');
@@ -249,7 +276,6 @@ export function useLibraryOperationsState({
       return;
     }
     setIsImportingFile(true);
-    setStatus(t('library.status.importingFile'));
     try {
       const text = (await file.text()).trim();
       if (!text) throw new Error('Empty file.');
@@ -277,17 +303,26 @@ export function useLibraryOperationsState({
   }
 
   /**
-   * 开启或关闭复核面板：切换复核 ID 并根据资料初始化复核草稿。
+   * 开启复核抽屉：设置复核资料 ID 并根据资料初始化复核草稿。
+   * 关闭动作统一由 closeReview 负责，避免与抽屉 onClose 行为冲突。
    * @param {object} item - 资料对象
    * @author fxbin
    */
   function openReview(item) {
-    setReviewingId((current) => current === item.id ? null : item.id);
+    setReviewingId(item.id);
     setReviewDraft({
       title: item.title ?? '',
       contentText: item.contentText ?? '',
       mediaUrls: (materialMediaUrls(item) ?? []).join('\n'),
     });
+  }
+
+  /**
+   * 关闭复核抽屉：清空复核资料 ID。草稿不主动重置，下次 openReview 会重新初始化。
+   * @author fxbin
+   */
+  function closeReview() {
+    setReviewingId(null);
   }
 
   /**
@@ -523,6 +558,7 @@ export function useLibraryOperationsState({
     importTextFile,
     parseFromLibrary,
     openReview,
+    closeReview,
     saveReview,
     assignMaterial,
     suggestAssignment,

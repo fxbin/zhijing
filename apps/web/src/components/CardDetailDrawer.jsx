@@ -168,14 +168,15 @@ export default function CardDetailDrawer({ card, onClose, workspaceTitle }) {
           )}
 
           <footer className="card-detail-meta">
+            <span className="card-detail-meta-title">{t("cardDetail.metaTitle")}</span>
+            {card.workspaceId && (
+              <span className="card-detail-meta-item">
+                {t('cardDetail.workspaceId')}: {card.workspaceId}
+              </span>
+            )}
             {workspaceTitle && (
               <span className="card-detail-meta-item">
                 {t('cardDetail.workspace')}: {workspaceTitle}
-              </span>
-            )}
-            {card.workspaceId && !workspaceTitle && (
-              <span className="card-detail-meta-item">
-                {t('cardDetail.workspace')}: {card.workspaceId}
               </span>
             )}
             {card.updatedAt && (

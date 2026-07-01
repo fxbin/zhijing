@@ -6,9 +6,9 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react';
-import { X } from 'lucide-react';
+import { SquareArrowOutUpRight, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { getIntakeKindLabel, getParseStatusLabel } from '../utils/i18nLabels';
+import { getIntakeKindLabel, getParseStatusLabel, getPlatformLabel } from '../utils/i18nLabels';
 import { formatMaterialTime, materialMediaUrls, materialSourceUrl } from '../utils/material';
 import { workspaceTitle } from '../utils/knowledge';
 import { renderMarkdown } from '../utils/markdown';
@@ -79,6 +79,8 @@ export default function MaterialDetailDrawer({ material, onClose, workspaces }) 
   const rawText = material.contentText || material.rawInput || '';
   const sourceUrl = materialSourceUrl(material);
   const mediaUrls = materialMediaUrls(material);
+  const resolvedWorkspaceTitle = workspaceTitle(workspaces, material.workspaceId);
+  const isUnassigned = resolvedWorkspaceTitle === 'Unassigned';
 
   return (
     <div className="card-detail-overlay" onClick={onClose} role="presentation">
@@ -139,11 +141,19 @@ export default function MaterialDetailDrawer({ material, onClose, workspaces }) 
           {mediaUrls.length > 0 && <MediaPreview urls={mediaUrls} />}
 
           <footer className="card-detail-meta">
+            <span className="card-detail-meta-title">{t("cardDetail.metaTitle")}</span>
+            {material.workspaceId && (
+              <span className="card-detail-meta-item">
+                {t('cardDetail.workspaceId')}: {material.workspaceId}
+              </span>
+            )}
+            {!isUnassigned && (
+              <span className="card-detail-meta-item">
+                {t('cardDetail.workspace')}: {resolvedWorkspaceTitle}
+              </span>
+            )}
             <span className="card-detail-meta-item">
-              {t('cardDetail.workspace')}: {workspaceTitle(workspaces, material.workspaceId)}
-            </span>
-            <span className="card-detail-meta-item">
-              {material.platform ?? t('library.localPlatform')}
+              {t('cardDetail.platform')}: {getPlatformLabel(t, material.platform)}
             </span>
             <span className="card-detail-meta-item">
               {t('cardDetail.created')}: {formatMaterialTime(material.createdAt)}
@@ -156,6 +166,7 @@ export default function MaterialDetailDrawer({ material, onClose, workspaces }) 
                 rel="noreferrer"
               >
                 {t('library.open')}
+                <SquareArrowOutUpRight size={14} />
               </a>
             )}
           </footer>

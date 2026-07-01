@@ -14,6 +14,7 @@ import {
   Clock3,
   FileText,
   FolderOpen,
+  Loader2,
   RefreshCw,
   Search,
   Send,
@@ -43,6 +44,7 @@ import ImportLifecyclePanel from '../components/ImportLifecyclePanel';
 import MaterialDetailDrawer from '../components/MaterialDetailDrawer';
 import MediaPreview from '../components/MediaPreview';
 import ParseTimeline from '../components/ParseTimeline';
+import ReviewDrawer from '../components/ReviewDrawer';
 import { useLibraryDataState } from '../hooks/useLibraryDataState';
 import {
   FILE_INPUT_ACCEPT,
@@ -123,6 +125,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
     importTextFile,
     parseFromLibrary,
     openReview,
+    closeReview,
     saveReview,
     assignMaterial,
     suggestAssignment,
@@ -147,6 +150,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
   const selectedVisibleCount = visibleIds.filter((id) => selectedIds.has(id)).length;
   const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
   const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected;
+  const reviewingMaterial = reviewingId ? items.find((item) => item.id === reviewingId) ?? null : null;
 
   return (
     <>
@@ -216,11 +220,11 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
           />
           <div className="capture-actions">
             <button disabled={apiStatus !== 'online' || isCapturing || !captureValue.trim()} onClick={capture} type="button">
-              {isCapturing ? <Clock3 size={18} /> : <Send size={18} />}
+              {isCapturing ? <Loader2 size={18} className="spin" /> : <Send size={18} />}
               {t('library.capture')}
             </button>
             <label className={`file-import-button ${apiStatus !== 'online' || isImportingFile ? 'disabled' : ''}`}>
-              {isImportingFile ? <Clock3 size={18} /> : <Upload size={18} />}
+              {isImportingFile ? <Loader2 size={18} className="spin" /> : <Upload size={18} />}
               {t('library.import')}
               <input
                 accept={FILE_INPUT_ACCEPT}
@@ -250,7 +254,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
             </button>
           </div>
         </div>
-        <p>{status}</p>
+        <p className={isCapturing || isImportingFile ? 'capture-status processing' : 'capture-status'}>{status}</p>
       </section>
 
       <ImportLifecyclePanel apiStatus={apiStatus} stats={lifecycleStats} onReviewItem={openReview} />
@@ -395,32 +399,6 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
               </button>
             </div>
             {assignmentHints[item.id] && <p className="assignment-hint">{assignmentHints[item.id]}</p>}
-            {reviewingId === item.id && (
-              <div className="review-box" onClick={(e) => e.stopPropagation()}>
-                <input
-                  aria-label={t('library.materialTitle')}
-                  value={reviewDraft.title}
-                  onChange={(event) => setReviewDraft((current) => ({ ...current, title: event.target.value }))}
-                  placeholder={t('library.materialTitlePlaceholder')}
-                />
-                <textarea
-                  aria-label={t('library.materialBody')}
-                  value={reviewDraft.contentText}
-                  onChange={(event) => setReviewDraft((current) => ({ ...current, contentText: event.target.value }))}
-                  placeholder={t('library.bodyPlaceholder')}
-                />
-                <textarea
-                  aria-label={t('library.mediaLinks')}
-                  value={reviewDraft.mediaUrls}
-                  onChange={(event) => setReviewDraft((current) => ({ ...current, mediaUrls: event.target.value }))}
-                  placeholder={t('library.mediaPlaceholder')}
-                />
-                <div className="review-actions">
-                  <button disabled={mutatingMaterialId === item.id} onClick={() => saveReview(item, false)} type="button">{t('library.saveDraft')}</button>
-                  <button disabled={mutatingMaterialId === item.id} onClick={() => saveReview(item, true)} type="button">{t('library.complete')}</button>
-                </div>
-              </div>
-            )}
             <div className="library-card-actions" onClick={(e) => e.stopPropagation()}>
               {materialSourceUrl(item) && (
                 <a href={materialSourceUrl(item)} target="_blank" rel="noreferrer">
@@ -436,7 +414,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
               )}
               <button disabled={apiStatus !== 'online'} onClick={() => openReview(item)} type="button">
                 <FileText size={14} />
-                {reviewingId === item.id ? t('library.closeReview') : t('library.review')}
+                {t('library.review')}
               </button>
             </div>
           </article>
@@ -506,6 +484,16 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
     <MaterialDetailDrawer
       material={drawerMaterial}
       onClose={() => setDrawerMaterial(null)}
+      workspaces={workspaces}
+    />
+    <ReviewDrawer
+      material={reviewingMaterial}
+      draft={reviewDraft}
+      onChangeDraft={setReviewDraft}
+      saving={reviewingId !== null && mutatingMaterialId === reviewingId}
+      onSaveDraft={() => reviewingMaterial && saveReview(reviewingMaterial, false)}
+      onComplete={() => reviewingMaterial && saveReview(reviewingMaterial, true)}
+      onClose={closeReview}
       workspaces={workspaces}
     />
     </>
