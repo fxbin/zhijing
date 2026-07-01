@@ -49,7 +49,6 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [viewState, setViewState] = useState({ x: 0, y: 0, zoom: 1 });
   const [relationFilter, setRelationFilter] = useState('all');
-  const [relationEditor, setRelationEditor] = useState(null);
   const [nodePositions, setNodePositions] = useState({});
   const [dragState, setDragState] = useState(null);
   const [panState, setPanState] = useState(null);
@@ -59,6 +58,9 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   // 批量选择：Shift+Drag 框选节点
   const [selectionBox, setSelectionBox] = useState(null); // {startX, startY, endX, endY} SVG 坐标
   const [selectedNodeIds, setSelectedNodeIds] = useState(() => new Set()); // 批量选中的节点 ID
+  // Connect to Target 流程：选目标 → 选关系类型 → 批量创建
+  const [connectTargetMode, setConnectTargetMode] = useState(false);
+  const [relationTypePicker, setRelationTypePicker] = useState(null); // { targetId }
 
   useEffect(() => {
     try {
@@ -68,12 +70,14 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
     }
   }, [nodeFilter]);
 
-  // Esc 清空批量选择；点空白（无 selectionBox/drag/pan 时）也清空
+  // Esc 清空批量选择 + 退出目标选择模式；点空白（无 selectionBox/drag/pan 时）也清空
   useEffect(() => {
     function onKeyDown(event) {
       if (event.key === 'Escape') {
         setSelectedNodeIds(new Set());
         setSelectionBox(null);
+        setConnectTargetMode(false);
+        setRelationTypePicker(null);
       }
     }
     window.addEventListener('keydown', onKeyDown);
@@ -83,6 +87,39 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   function clearBatchSelection() {
     setSelectedNodeIds(new Set());
     setSelectionBox(null);
+    setConnectTargetMode(false);
+    setRelationTypePicker(null);
+  }
+
+  /**
+   * 批量创建关系：将 selectedNodeIds 中的每个节点连接到 targetId。
+   * @param {string} targetId - 目标节点 ID
+   * @param {string} relation - 关系类型
+   */
+  async function saveBatchRelations(targetId, relation) {
+    if (!selectedWorkspaceId || selectedNodeIds.size === 0 || !targetId) return;
+    const sourceIds = Array.from(selectedNodeIds).filter((id) => id !== targetId);
+    if (sourceIds.length === 0) {
+      clearBatchSelection();
+      return;
+    }
+    try {
+      setStatus(t('maps.status.batchSaving', { defaultValue: '正在批量创建关系…' }));
+      await Promise.all(
+        sourceIds.map((sourceId) =>
+          api.post(`/api/workspaces/${selectedWorkspaceId}/map/edges`, {
+            sourceNodeId: sourceId,
+            targetNodeId: targetId,
+            relation,
+          }),
+        ),
+      );
+      setStatus(t('maps.status.batchSaved', { count: sourceIds.length, defaultValue: `已创建 ${sourceIds.length} 条关系` }));
+      clearBatchSelection();
+      await reloadMap();
+    } catch {
+      setStatus(t('maps.status.saveFailed'));
+    }
   }
 
   useEffect(() => {
@@ -387,25 +424,6 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   }
 
   /**
-   * 保存自定义关系到后端。
-   */
-  async function saveCustomRelation() {
-    if (!selectedWorkspaceId || !relationEditor?.targetId || !selectedNode) return;
-    try {
-      await api.post(`/api/workspaces/${selectedWorkspaceId}/map/edges`, {
-        sourceNodeId: selectedNode.id,
-        targetNodeId: relationEditor.targetId,
-        relation: relationEditor.relation,
-      });
-      setStatus(t('maps.status.relationAdded'));
-      setRelationEditor(null);
-      await reloadMap();
-    } catch {
-      setStatus(t('maps.status.saveFailed'));
-    }
-  }
-
-  /**
    * 删除自定义边。
    * @param {string} edgeId - 边 ID
    */
@@ -578,7 +596,14 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                         <g
                           className={className}
                           key={node.id}
-                          onClick={() => setSelectedNodeId(node.id)}
+                          onClick={() => {
+                            if (connectTargetMode) {
+                              setRelationTypePicker({ targetId: node.id });
+                              setConnectTargetMode(false);
+                            } else {
+                              setSelectedNodeId(node.id);
+                            }
+                          }}
                           onPointerDown={(event) => handleNodePointerDown(event, node.id)}
                           onMouseEnter={() => setHoveredNodeId(node.id)}
                           onMouseLeave={() => setHoveredNodeId(null)}
@@ -587,9 +612,16 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                           transform={`translate(${node.x}, ${node.y})`}
                           data-status={node.status}
                           onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') setSelectedNodeId(node.id);
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              if (connectTargetMode) {
+                                setRelationTypePicker({ targetId: node.id });
+                                setConnectTargetMode(false);
+                              } else {
+                                setSelectedNodeId(node.id);
+                              }
+                            }
                           }}
-                          style={{ cursor: dragState?.nodeId === node.id ? 'grabbing' : 'grab' }}
+                          style={{ cursor: connectTargetMode ? 'pointer' : dragState?.nodeId === node.id ? 'grabbing' : 'grab' }}
                         >
                           <circle r={node.radius} />
                           {node.status && node.kind === 'card' && (
@@ -756,11 +788,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                     <button
                       type="button"
                       className="map-batch-btn primary"
-                      onClick={() => {
-                        // Batch 2 接入目标选择 + 关系类型选择
-                        // 当前先清空选择，后续接入完整流程
-                        clearBatchSelection();
-                      }}
+                      onClick={() => setConnectTargetMode(true)}
                     >
                       {t('maps.connectToTarget')}
                     </button>
@@ -790,9 +818,9 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                     </button>
                   </div>
                 )}
-                {(selectionBox || selectedNodeIds.size > 0) && (
+                {(selectionBox || selectedNodeIds.size > 0 || connectTargetMode) && (
                   <div className="map-batch-hint" role="status">
-                    {t('maps.batchHint')}
+                    {connectTargetMode ? t('maps.pickTargetHint') : t('maps.batchHint')}
                   </div>
                 )}
               </>
@@ -800,7 +828,69 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
           </section>
 
           <aside className="map-detail-drawer" aria-label={t('maps.nodeDetails')}>
-            {!map || !selectedNode ? (
+            {!map ? (
+              <EmptyState title={t('maps.selectNode')} body={t('maps.selectNodeHint')} />
+            ) : selectedNodeIds.size > 0 ? (
+              <div className="map-batch-panel">
+                <div className="map-batch-panel-head">
+                  <div className="map-batch-panel-title">
+                    <h3>{t('maps.batchSelection')}</h3>
+                    <span className="map-batch-panel-count">
+                      {t('maps.nodesSelected', { count: selectedNodeIds.size })}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="map-detail-close"
+                    onClick={clearBatchSelection}
+                    aria-label={t('common.close')}
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="map-batch-panel-body">
+                  <h4 className="map-batch-section-title">{t('maps.selectedItems')}</h4>
+                  <ul className="map-batch-items">
+                    {layoutNodes
+                      .filter((node) => selectedNodeIds.has(node.id))
+                      .map((node) => (
+                        <li key={node.id} className="map-batch-item">
+                          <span className={`map-batch-item-kind ${node.kind}`} />
+                          <span className="map-batch-item-label">{node.label}</span>
+                          <button
+                            type="button"
+                            className="map-batch-item-remove"
+                            onClick={() => {
+                              const next = new Set(selectedNodeIds);
+                              next.delete(node.id);
+                              setSelectedNodeIds(next);
+                            }}
+                            aria-label={t('common.remove')}
+                          >
+                            <X size={14} />
+                          </button>
+                        </li>
+                      ))}
+                  </ul>
+                  <h4 className="map-batch-section-title">{t('maps.batchActions')}</h4>
+                  <div className="map-batch-panel-actions">
+                    <button
+                      type="button"
+                      className="map-batch-action-btn primary"
+                      onClick={() => setConnectTargetMode(true)}
+                    >
+                      <span>{t('maps.connectToTarget')}</span>
+                    </button>
+                    <button type="button" className="map-batch-action-btn" disabled title={t('maps.comingSoon')}>
+                      <span>{t('maps.groupSelected')}</span>
+                    </button>
+                    <button type="button" className="map-batch-action-btn" disabled title={t('maps.comingSoon')}>
+                      <span>{t('maps.applyTag')}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : !selectedNode ? (
               <EmptyState title={t('maps.selectNode')} body={t('maps.selectNodeHint')} />
             ) : (
               <>
@@ -821,7 +911,17 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                 </div>
                 <div className="map-drawer-actions">
                   <button onClick={() => setView(selectedNode.kind === 'material' ? 'library' : 'detail')} type="button">{t('maps.openContext')}</button>
-                  <button type="button" onClick={() => setRelationEditor({ targetId: '', relation: 'related_to' })}>{t('maps.addRelation')}</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // 单条添加也走统一流程：加入批量选择 → 选目标 → 关系类型
+                      setSelectedNodeIds(new Set([selectedNode.id]));
+                      setSelectedNodeId(null);
+                      setConnectTargetMode(true);
+                    }}
+                  >
+                    {t('maps.addRelation')}
+                  </button>
                 </div>
                 <div className="map-node-confidence">
                   <div>
@@ -932,50 +1032,44 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                     )}
                   </div>
                 </section>
-                {relationEditor && createPortal(
-                  <div className="map-relation-editor-overlay" onClick={() => setRelationEditor(null)} role="presentation">
+                {relationTypePicker && createPortal(
+                  <div className="map-relation-editor-overlay" onClick={() => setRelationTypePicker(null)} role="presentation">
                     <div
                       className="map-relation-editor"
                       onClick={(event) => event.stopPropagation()}
                       role="dialog"
                       aria-modal="true"
-                      aria-label={t('maps.addRelationTitle')}
+                      aria-label={t('maps.pickRelationType')}
                     >
-                      <h4>{t('maps.addRelationTitle')}</h4>
-                      <label>
-                        <span>{t('maps.targetNode')}</span>
-                        <select
-                          value={relationEditor.targetId}
-                          onChange={(event) => setRelationEditor((current) => ({ ...current, targetId: event.target.value }))}
-                        >
-                          <option value="">{t('maps.selectTargetNode')}</option>
-                          {nodes.filter((node) => node.id !== selectedNode.id).map((node) => (
-                            <option key={node.id} value={node.id}>{node.label}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        <span>{t('maps.relationType')}</span>
-                        <select
-                          value={relationEditor.relation}
-                          onChange={(event) => setRelationEditor((current) => ({ ...current, relation: event.target.value }))}
-                        >
-                          <option value="related_to">{t('maps.relationType.relatedTo')}</option>
-                          <option value="derived_from">{t('maps.relationType.derivedFrom')}</option>
-                          <option value="supports">{t('maps.relationType.supports')}</option>
-                          <option value="contradicts">{t('maps.relationType.contradicts')}</option>
-                          <option value="contains">{t('maps.relationType.contains')}</option>
-                        </select>
-                      </label>
+                      <h4>{t('maps.pickRelationType')}</h4>
+                      {(() => {
+                        const target = layoutNodes.find((node) => node.id === relationTypePicker.targetId);
+                        return target ? (
+                          <p className="map-relation-target">
+                            {t('maps.targetNode')}: <strong>{target.label}</strong>
+                          </p>
+                        ) : null;
+                      })()}
+                      <div className="map-relation-type-grid">
+                        {[
+                          { value: 'related_to', label: t('maps.relationType.relatedTo') },
+                          { value: 'derived_from', label: t('maps.relationType.derivedFrom') },
+                          { value: 'supports', label: t('maps.relationType.supports') },
+                          { value: 'contradicts', label: t('maps.relationType.contradicts') },
+                          { value: 'contains', label: t('maps.relationType.contains') },
+                        ].map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className="map-relation-type-btn"
+                            onClick={() => saveBatchRelations(relationTypePicker.targetId, option.value)}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
                       <div className="map-relation-editor-actions">
-                        <button type="button" onClick={() => setRelationEditor(null)}>{t('common.cancel')}</button>
-                        <button
-                          type="button"
-                          disabled={!relationEditor.targetId}
-                          onClick={saveCustomRelation}
-                        >
-                          {t('common.save')}
-                        </button>
+                        <button type="button" onClick={() => setRelationTypePicker(null)}>{t('common.cancel')}</button>
                       </div>
                     </div>
                   </div>,
