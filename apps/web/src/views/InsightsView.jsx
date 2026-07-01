@@ -18,7 +18,7 @@ import {
 import AgentProposalsPanel from '../components/AgentProposalsPanel';
 import EmptyState from '../components/EmptyState';
 import api from '../utils/api';
-import { useCardTypeLabel, useClaimStatusLabel } from '../utils/i18nLabels';
+import { useCardTypeLabel, useClaimStatusLabel, getPlatformLabel } from '../utils/i18nLabels';
 import { formatDate } from '../utils/material';
 
 /**
@@ -33,6 +33,15 @@ function sparseLabels(labels) {
     }
     return '';
   });
+}
+
+/**
+ * 判断数据是否全部为零或空。
+ * @param {number[]} data - 每日卡片数
+ * @returns {boolean} 全部为零时返回 true
+ */
+function isAllZero(data) {
+  return !data?.length || data.every((value) => !value);
 }
 
 /**
@@ -177,18 +186,39 @@ export default function InsightsView({ setView, onCreateWorkspace, onSelectWorks
             </div>
             <span className="period-badge">30D</span>
           </div>
-          <div className="growth-chart">
-            {insights.growth.data.map((value, index) => (
-              <div key={insights.growth.labels[index]} className="growth-bar-wrapper">
-                <div
-                  className="growth-bar"
-                  style={{ height: `${(value / maxGrowth) * 100}%` }}
-                  title={`${insights.growth.labels[index]}: ${value}`}
-                />
-                <span className="growth-label">{growthLabels[index]}</span>
-              </div>
-            ))}
-          </div>
+          {isAllZero(insights.growth.data) ? (
+            <EmptyState
+              icon={TrendingUp}
+              title={t('insights.noGrowthData')}
+              body={t('insights.noGrowthDataHint')}
+              compact
+            />
+          ) : (
+            <div className="growth-chart">
+              {insights.growth.data.map((value, index) => {
+                const hasValue = value > 0;
+                const heightPercent = hasValue ? (value / maxGrowth) * 100 : 0;
+                const showLabel = index === 0 || index === insights.growth.data.length - 1
+                  || index % 7 === 0 || hasValue;
+                return (
+                  <div
+                    key={insights.growth.labels[index]}
+                    className={`growth-bar-wrapper${hasValue ? ' has-value' : ''}`}
+                  >
+                    {hasValue && (
+                      <span className="growth-value">{value}</span>
+                    )}
+                    <div
+                      className={`growth-bar${hasValue ? '' : ' empty'}`}
+                      style={{ height: hasValue ? `${heightPercent}%` : undefined }}
+                      title={`${insights.growth.labels[index]}: ${value}`}
+                    />
+                    <span className="growth-label">{showLabel ? insights.growth.labels[index].slice(5) : ''}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         <section className="bento-card source-card">
@@ -205,7 +235,7 @@ export default function InsightsView({ setView, onCreateWorkspace, onSelectWorks
               {insights.sourceDistribution.map((item, index) => (
                 <div key={item.name} className="source-item">
                   <div className="source-info">
-                    <span className="source-name">{item.name}</span>
+                    <span className="source-name">{getPlatformLabel(t, item.name)}</span>
                     <span className="source-value">{Math.round(item.ratio * 100)}%</span>
                   </div>
                   <div className="source-track">

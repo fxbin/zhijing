@@ -806,7 +806,16 @@ function mockOutputFor(request: StructuredGenerationRequest) {
         },
       ],
       artifactTitle: `${title} 摘要`,
-      artifactBody: `已创建「${title}」主题骨架，下一步可以继续导入来源资料。`,
+      artifactBody: [
+        '## 摘要',
+        `已创建「${title}」主题骨架，下一步可以继续导入来源资料。`,
+        '## 来源边界',
+        '当前产物为主题骨架，尚未绑定具体来源资料，可在编辑模式下补充。',
+        '## 下一步行动',
+        '- 补充更多可追溯来源',
+        '- 将核心卡片整理成问题与方法',
+        '- 对低置信内容进行人工复核',
+      ].join('\n'),
     };
   }
 
@@ -821,7 +830,16 @@ function mockOutputFor(request: StructuredGenerationRequest) {
         },
       ],
       artifactTitle: `${title} 问答线索`,
-      artifactBody: '已保存问题，等待后续基于来源资料回答。',
+      artifactBody: [
+        '## 摘要',
+        '已保存问题，等待后续基于来源资料回答。',
+        '## 来源边界',
+        '当前产物为问答线索，尚未绑定具体来源资料，可在编辑模式下补充。',
+        '## 下一步行动',
+        '- 补充与问题相关的可追溯来源',
+        '- 基于来源资料生成有引用的回答',
+        '- 对回答中的低置信内容进行人工复核',
+      ].join('\n'),
     };
   }
 
@@ -871,7 +889,16 @@ function mockOutputFor(request: StructuredGenerationRequest) {
       },
     ],
     artifactTitle: `${title} 摘要`,
-    artifactBody: `已保存资料「${title}」，并生成可继续整理的摘要占位。`,
+    artifactBody: [
+      '## 摘要',
+      `已保存资料「${title}」，并生成可继续整理的摘要占位。`,
+      '## 来源边界',
+      `当前产物基于资料「${title}」生成，可在编辑模式下补充更多可追溯来源。`,
+      '## 下一步行动',
+      '- 补充更多可追溯来源',
+      '- 将核心卡片整理成问题与方法',
+      '- 对低置信内容进行人工复核',
+    ].join('\n'),
   };
 }
 

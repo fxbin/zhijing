@@ -50,9 +50,16 @@ export default function WorkspaceView({ activity, apiStatus, isSubmitting, mater
         if (!ignore && Array.isArray(payload)) {
           const sorted = payload
             .slice()
-            .sort((a, b) => (b.updatedAt ?? b.createdAt ?? '').localeCompare(a.updatedAt ?? a.createdAt ?? ''))
-            .slice(0, 8);
-          setRecentCards(sorted);
+            .sort((a, b) => (b.updatedAt ?? b.createdAt ?? '').localeCompare(a.updatedAt ?? a.createdAt ?? ''));
+          const seenTitles = new Set();
+          const deduped = sorted.filter((card) => {
+            const title = (card.title ?? '').trim().toLowerCase();
+            if (!title) return true;
+            if (seenTitles.has(title)) return false;
+            seenTitles.add(title);
+            return true;
+          });
+          setRecentCards(deduped.slice(0, 8));
         }
       } catch {
         if (!ignore) setRecentCards([]);

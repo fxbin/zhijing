@@ -81,12 +81,50 @@ export function artifactBodyBlocks(artifact) {
 }
 
 /**
- * 将正文块按分区数循环分发。
+ * 将正文块按分区数分发。
+ *
+ * 分发策略：
+ * 1. 若正文包含 2 个及以上 `## ` Markdown 标题，按标题语义分组，每个标题下的内容归入对应分区；
+ * 2. 否则采用连续分块（contiguous chunking），将正文按顺序均分到各分区，保证语义连贯；
+ * 3. 分区数多于内容组时，多余分区返回空数组（由调用方填充占位文案）。
+ *
  * @param {string[]} blocks - 正文块数组
  * @param {number} sectionCount - 分区数
  * @returns {string[][]} 每个分区对应的块数组
  */
 export function distributeArtifactBlocks(blocks, sectionCount) {
   const normalized = blocks.length ? blocks : ['这个产物暂时没有正文。'];
-  return Array.from({ length: sectionCount }, (_, index) => normalized.filter((_, itemIndex) => itemIndex % sectionCount === index));
+  const headerCount = normalized.filter((block) => block.startsWith('## ')).length;
+
+  if (headerCount >= 2) {
+    const groups = [];
+    let preHeader = [];
+    let currentGroup = null;
+    for (const block of normalized) {
+      if (block.startsWith('## ')) {
+        if (currentGroup !== null) groups.push(currentGroup);
+        currentGroup = [];
+      } else if (currentGroup !== null) {
+        currentGroup.push(block);
+      } else {
+        preHeader.push(block);
+      }
+    }
+    if (currentGroup !== null) groups.push(currentGroup);
+    if (preHeader.length > 0) {
+      groups[0] = [...preHeader, ...(groups[0] ?? [])];
+    }
+
+    return Array.from({ length: sectionCount }, (_, index) => {
+      if (index < sectionCount - 1) return groups[index] ?? [];
+      return groups.slice(index).flat();
+    });
+  }
+
+  const chunkSize = Math.ceil(normalized.length / sectionCount);
+  return Array.from({ length: sectionCount }, (_, index) => {
+    const start = index * chunkSize;
+    const end = Math.min(start + chunkSize, normalized.length);
+    return normalized.slice(start, end);
+  });
 }

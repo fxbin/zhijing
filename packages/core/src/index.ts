@@ -2299,7 +2299,6 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
             .map(mapCard)
             .sort((a, b) => (scoreMap.get(b.id) ?? 0) - (scoreMap.get(a.id) ?? 0));
         }
-        if (isZvecIndexInitialized()) return [];
       } catch (error) {
         console.warn('[searchCardsByRelevance] zvec query failed, fallback to sqlite fts5', error);
       }
@@ -2348,7 +2347,6 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
             .map(mapMaterial)
             .sort((a, b) => (scoreMap.get(b.id) ?? 0) - (scoreMap.get(a.id) ?? 0));
         }
-        if (isZvecIndexInitialized()) return [];
       } catch (error) {
         console.warn('[searchMaterialsByRelevance] zvec query failed, fallback to sqlite fts5', error);
       }
@@ -5862,14 +5860,45 @@ function createArtifact(
     artifactType: 'summary',
     subtype: 'summary',
     title: compactTitle(generated.artifactTitle ?? `${compactTitle(seed)} 摘要`),
-    body: generated.artifactBody ?? generated.summary ?? (material
-      ? `已保存资料「${material.title}」，并生成可继续整理的摘要占位。`
-      : `已创建「${base.title}」主题骨架，下一步可以继续导入来源资料。`),
+    body: buildSummaryArtifactBody(base, material, generated),
     sourceMaterialIds,
     createdAt: timestamp,
   };
   repository.insertArtifact(artifact);
   return artifact;
+}
+
+/**
+ * 构建 summary 类型产物的结构化正文。
+ *
+ * 当 LLM 已生成 artifactBody 时直接使用；否则基于 summary 或占位文案，
+ * 拼装为包含「摘要 / 来源边界 / 下一步行动」三个 `## ` 标题分区的 Markdown 正文，
+ * 确保前端 distributeArtifactBlocks 能按标题正确分发到 3 个分区。
+ *
+ * @author fxbin
+ */
+function buildSummaryArtifactBody(
+  base: WorkspaceSummary,
+  material: MaterialRecord | undefined,
+  generated: GeneratedKnowledgeOutput,
+): string {
+  if (generated.artifactBody) return generated.artifactBody;
+  const summary = generated.summary ?? (material
+    ? `已保存资料「${material.title}」，并生成可继续整理的摘要占位。`
+    : `已创建「${base.title}」主题骨架，下一步可以继续导入来源资料。`);
+  const boundary = material
+    ? `当前产物基于资料「${material.title}」生成，可在编辑模式下补充更多可追溯来源。`
+    : '当前产物为主题骨架，尚未绑定具体来源资料，可在编辑模式下补充。';
+  return [
+    '## 摘要',
+    summary,
+    '## 来源边界',
+    boundary,
+    '## 下一步行动',
+    '- 补充更多可追溯来源',
+    '- 将核心卡片整理成问题与方法',
+    '- 对低置信内容进行人工复核',
+  ].join('\n');
 }
 
 function createKitArtifact(
