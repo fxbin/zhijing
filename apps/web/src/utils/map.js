@@ -17,7 +17,7 @@ const MAP_LAYOUT = {
     card: { startAngle: 280, endAngle: 440, baseRadius: 320 },
     other: { startAngle: 260, endAngle: 280, baseRadius: 260 },
   },
-  nodeRadius: { workspace: 34, material: 22, card: 18, other: 16 },
+  nodeRadius: { workspace: 34, material: 22, card: 22, other: 18 },
 };
 
 /**
@@ -41,36 +41,40 @@ function computeDynamicRadius(count, baseRadius, angleSpan) {
 
 const NODE_METADATA_SPECS = {
   material: [
-    { key: 'platform', label: '平台' },
-    { key: 'type', label: '类型' },
-    { key: 'mediaCount', label: '媒体数' },
+    { key: 'platform', labelKey: 'maps.metadata.platform' },
+    { key: 'type', labelKey: 'maps.metadata.kind' },
+    { key: 'mediaCount', labelKey: 'maps.metadata.mediaCount' },
   ],
   card: [
-    { key: 'type', label: '卡片类型' },
-    { key: 'materialId', label: '来源资料' },
+    { key: 'type', labelKey: 'maps.metadata.cardType' },
+    { key: 'materialId', labelKey: 'maps.metadata.sourceMaterial' },
   ],
   workspace: [
-    { key: 'sourceCount', label: '资料数' },
-    { key: 'cardCount', label: '卡片数' },
+    { key: 'sourceCount', labelKey: 'maps.metadata.sourceCount' },
+    { key: 'cardCount', labelKey: 'maps.metadata.cardCount' },
   ],
 };
 
 const NODE_STATUS_META = {
-  ready: { tone: 'positive', label: '就绪' },
-  active: { tone: 'positive', label: '活跃' },
-  seeded: { tone: 'positive', label: '已初始化' },
-  pending: { tone: 'pending', label: '待处理' },
-  queued: { tone: 'pending', label: '排队中' },
-  draft: { tone: 'pending', label: '草稿' },
-  parsing: { tone: 'pending', label: '解析中' },
-  failed: { tone: 'negative', label: '失败' },
-  error: { tone: 'negative', label: '异常' },
-  ai_skeleton: { tone: 'skeleton', label: 'AI 骨架' },
-  sourced: { tone: 'sourced', label: '已溯源' },
-  user_confirmed: { tone: 'confirmed', label: '已确认' },
-  unsupported: { tone: 'negative', label: '无支撑' },
-  grounded: { tone: 'positive', label: '已落地' },
-  organizing: { tone: 'pending', label: '建构中' },
+  ready: { tone: 'positive', labelKey: 'maps.nodeStatus.ready' },
+  active: { tone: 'positive', labelKey: 'maps.nodeStatus.active' },
+  seeded: { tone: 'positive', labelKey: 'maps.nodeStatus.seeded' },
+  pending: { tone: 'pending', labelKey: 'maps.nodeStatus.pending' },
+  queued: { tone: 'pending', labelKey: 'maps.nodeStatus.queued' },
+  draft: { tone: 'pending', labelKey: 'maps.nodeStatus.draft' },
+  parsing: { tone: 'pending', labelKey: 'maps.nodeStatus.parsing' },
+  failed: { tone: 'negative', labelKey: 'maps.nodeStatus.failed' },
+  error: { tone: 'negative', labelKey: 'maps.nodeStatus.error' },
+  ai_skeleton: { tone: 'skeleton', labelKey: 'maps.nodeStatus.ai_skeleton' },
+  sourced: { tone: 'sourced', labelKey: 'maps.nodeStatus.sourced' },
+  user_confirmed: { tone: 'confirmed', labelKey: 'maps.nodeStatus.user_confirmed' },
+  unsupported: { tone: 'negative', labelKey: 'maps.nodeStatus.unsupported' },
+  grounded: { tone: 'positive', labelKey: 'maps.nodeStatus.grounded' },
+  organizing: { tone: 'pending', labelKey: 'maps.nodeStatus.organizing' },
+  saved: { tone: 'pending', labelKey: 'parseStatus.saved' },
+  ingested: { tone: 'positive', labelKey: 'parseStatus.ingested' },
+  needs_review: { tone: 'pending', labelKey: 'parseStatus.needs_review' },
+  review: { tone: 'pending', labelKey: 'parseStatus.needs_review' },
 };
 
 const CLAIM_STATUS_ORDER = ['ai_skeleton', 'organizing', 'sourced', 'user_confirmed', 'grounded', 'unsupported'];
@@ -169,13 +173,13 @@ export function positionRing(nodes, ring) {
 }
 
 /**
- * 截断节点标签到 22 字符。
+ * 截断节点标签到 30 字符。
  * @param {string} label - 原始标签
  * @returns {string} 截断后的标签
  */
 export function truncateNodeLabel(label) {
   const value = label ?? i18n.t('material.untitled');
-  return value.length > 22 ? `${value.slice(0, 20)}...` : value;
+  return value.length > 30 ? `${value.slice(0, 28)}...` : value;
 }
 
 /**
@@ -192,10 +196,16 @@ export function mapKindLabel(kind) {
 /**
  * 返回节点状态的色调和标签。
  * @param {string} status - 状态标识
+ * @param {(key: string, options?: object) => string} [t] - i18n 翻译函数，可选
  * @returns {object} 状态元信息（tone/label）
  */
-export function describeNodeStatus(status) {
-  return NODE_STATUS_META[status] ?? { tone: 'neutral', label: status ?? '未知' };
+export function describeNodeStatus(status, t) {
+  const meta = NODE_STATUS_META[status];
+  const translate = t ?? ((key) => key);
+  if (meta) {
+    return { tone: meta.tone, label: translate(meta.labelKey, { defaultValue: status ?? '未知' }) };
+  }
+  return { tone: 'neutral', label: status ?? translate('maps.nodeStatus.unknown') };
 }
 
 /**
@@ -223,29 +233,59 @@ export function getClaimStatusLegend() {
 
 /**
  * 根据节点类型返回可展示的元数据键值对。
+ * 支持可选 context 参数，用于本地化标签、解析资料标题、标记可点击项。
  * @param {object} node - 地图节点
- * @returns {Array<{label: string, value: string}>} 元数据数组
+ * @param {object} [context] - 上下文
+ * @param {Function} [context.t] - i18n 翻译函数
+ * @param {Array<{id: string; title: string}>} [context.materials] - 资料列表，用于将 materialId 解析为标题
+ * @returns {Array<{label: string; value: string; kind?: string; materialId?: string}>} 元数据数组
  */
-export function describeNodeMetadata(node) {
+export function describeNodeMetadata(node, context = {}) {
   const specs = NODE_METADATA_SPECS[node.kind] ?? [];
+  const t = context.t ?? ((key) => key);
+  const materials = context.materials ?? [];
   return specs
     .filter((spec) => node.metadata?.[spec.key] !== undefined && node.metadata?.[spec.key] !== null)
-    .map((spec) => ({
-      label: spec.label,
-      value: formatMetadataValue(spec.key, node.metadata[spec.key]),
-    }));
+    .map((spec) => {
+      const rawValue = node.metadata[spec.key];
+      if (spec.key === 'materialId') {
+        const matched = materials.find((material) => material.id === rawValue);
+        const displayTitle = matched?.title ?? rawValue;
+        return {
+          label: t(spec.labelKey),
+          value: displayTitle,
+          kind: 'materialLink',
+          materialId: rawValue,
+        };
+      }
+      if (spec.key === 'type' && node.kind === 'card') {
+        return {
+          label: t(spec.labelKey),
+          value: t(`cardType.${rawValue}`, { defaultValue: rawValue }),
+          kind: 'cardType',
+        };
+      }
+      if (spec.key === 'platform') {
+        return {
+          label: t(spec.labelKey),
+          value: t(`platform.${rawValue}`, { defaultValue: rawValue ?? t('platform.unknown') }),
+          kind: 'platform',
+        };
+      }
+      return {
+        label: t(spec.labelKey),
+        value: formatMetadataValue(spec.key, rawValue),
+      };
+    });
 }
 
 /**
- * 格式化元数据值（数字转字符串，materialId 截断）。
+ * 格式化元数据值（数字转字符串，长字符串截断）。
  * @param {string} key - 元数据键
  * @param {*} value - 元数据值
  * @returns {string} 格式化后的字符串
  */
 export function formatMetadataValue(key, value) {
   if (typeof value === 'number') return String(value);
-  if (key === 'materialId' && typeof value === 'string') {
-    return value.length > 12 ? `${value.slice(0, 10)}…` : value;
-  }
   return String(value ?? '-');
 }

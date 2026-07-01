@@ -41,6 +41,18 @@ export function getIntakeKindLabel(t, kind) {
 }
 
 /**
+ * 使用 react-i18next 的 t 函数，获取资料来源平台的本地化显示名称。
+ * 当 platform 为空时返回 library.localPlatform；未命中 platform.* 时回退到 platform.unknown。
+ * @param {Function} t - react-i18next 的 t 函数
+ * @param {string|undefined} platform - 平台标识，如 weread / xiaohongshu / web
+ * @returns {string} 本地化后的平台名称
+ */
+export function getPlatformLabel(t, platform) {
+  if (!platform) return t('library.localPlatform');
+  return t(`platform.${platform}`, { defaultValue: t('platform.unknown') });
+}
+
+/**
  * 错误关键词 → i18n key 映射表。
  * 顺序敏感：靠前的先匹配，命中即返回。
  * 每条规则包含 pattern（正则，忽略大小写）与 key（i18n 路径）。

@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { CircleX, RefreshCw, Search, X } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
@@ -54,6 +55,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   const [panState, setPanState] = useState(null);
   const [pendingSave, setPendingSave] = useState(false);
   const [hoveredNodeId, setHoveredNodeId] = useState(null);
+  const [isLegendOpen, setIsLegendOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -113,8 +115,13 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
     ? edges.filter((edge) => edge.sourceId === selectedNode.id || edge.targetId === selectedNode.id)
     : [];
   const connectedNodeCount = selectedRelations.length;
-  const statusMeta = describeNodeStatus(selectedNode?.status);
-  const nodeMetadataItems = selectedNode ? describeNodeMetadata(selectedNode) : [];
+  const statusMeta = describeNodeStatus(selectedNode?.status, t);
+  const materialLookup = nodes
+    .filter((node) => node.kind === 'material')
+    .map((node) => ({ id: node.id.replace(/^material:/, ''), title: node.label }));
+  const nodeMetadataItems = selectedNode
+    ? describeNodeMetadata(selectedNode, { t, materials: materialLookup })
+    : [];
   const relationTypes = ['all', ...new Set(selectedRelations.map((edge) => edge.relation))];
   const visibleRelations = selectedRelations
     .filter((edge) => relationFilter === 'all' || edge.relation === relationFilter)
@@ -136,6 +143,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
     supports: t('maps.relationType.supports'),
     contradicts: t('maps.relationType.contradicts'),
     contains: t('maps.relationType.contains'),
+    source: t('maps.relationType.source'),
   };
 
   /**
@@ -525,6 +533,9 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                           style={{ cursor: dragState?.nodeId === node.id ? 'grabbing' : 'grab' }}
                         >
                           <circle r={node.radius} />
+                          {node.status && node.kind === 'card' && (
+                            <circle className="map-status-ring" r={node.radius + 5} />
+                          )}
                           <text y={node.radius + 18}>{truncateNodeLabel(node.label)}</text>
                         </g>
                       );
@@ -534,12 +545,27 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                       if (!hoveredNode) return null;
                       const tooltipWidth = 240;
                       const tooltipHeight = 76;
-                      const tooltipX = hoveredNode.x - tooltipWidth / 2;
-                      const tooltipY = hoveredNode.y - (hoveredNode.radius ?? 18) - tooltipHeight - 12;
+                      const viewLeft = viewState.x;
+                      const viewRight = viewState.x + MAP_BASE_WIDTH / viewState.zoom;
+                      const viewTop = viewState.y;
+                      const viewBottom = viewState.y + MAP_BASE_HEIGHT / viewState.zoom;
+                      const nodeRadius = hoveredNode.radius ?? 18;
+                      let tooltipX = hoveredNode.x - tooltipWidth / 2;
+                      tooltipX = Math.max(viewLeft + 8, Math.min(tooltipX, viewRight - tooltipWidth - 8));
+                      let tooltipY = hoveredNode.y - nodeRadius - tooltipHeight - 12;
+                      const flipBelow = tooltipY < viewTop + 8;
+                      if (flipBelow) {
+                        tooltipY = hoveredNode.y + nodeRadius + 12;
+                      }
+                      tooltipY = Math.max(viewTop + 8, Math.min(tooltipY, viewBottom - tooltipHeight - 8));
+                      const arrowX = hoveredNode.x;
+                      const arrowPoints = flipBelow
+                        ? `${arrowX - 6},${tooltipY} ${arrowX + 6},${tooltipY} ${arrowX},${tooltipY - 6}`
+                        : `${arrowX - 6},${tooltipY + tooltipHeight} ${arrowX + 6},${tooltipY + tooltipHeight} ${arrowX},${tooltipY + tooltipHeight + 6}`;
                       const connectionCount = edges.filter(
                         (edge) => edge.sourceId === hoveredNode.id || edge.targetId === hoveredNode.id,
                       ).length;
-                      const hoveredStatus = describeNodeStatus(hoveredNode.status);
+                      const hoveredStatus = describeNodeStatus(hoveredNode.status, t);
                       return (
                         <g className="map-tooltip" pointerEvents="none">
                           <rect
@@ -549,6 +575,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                             x={tooltipX}
                             y={tooltipY}
                           />
+                          <polygon className="map-tooltip-arrow" points={arrowPoints} />
                           <text className="map-tooltip-title" x={tooltipX + 14} y={tooltipY + 24}>
                             {truncateNodeLabel(hoveredNode.label)}
                           </text>
@@ -567,50 +594,80 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                       <EmptyState title={t('maps.noMatchingNodes')} body={t('maps.noMatchingNodesHint')} />
                     </div>
                   )}
-                  <div className="map-legend">
-                    <div className="map-legend-guide" aria-label={t('maps.legendToggle')}>
-                      <div className="map-claim-legend" aria-label={t('maps.claimLegend')}>
-                        <span className="map-claim-legend-title">{t('maps.claimStatus')}</span>
-                        <div className="map-claim-legend-items">
-                          {getClaimStatusLegend().map((item) => (
-                            <span className={`map-claim-chip ${item.tone}`} key={item.key}>
-                              <i className="map-claim-dot" />
-                              {item.label}
+                  <div className={`map-legend${isLegendOpen ? ' open' : ''}`}>
+                    <button
+                      className="map-legend-toggle"
+                      onClick={() => setIsLegendOpen((current) => !current)}
+                      type="button"
+                      aria-expanded={isLegendOpen}
+                      aria-label={t('maps.legendToggle')}
+                    >
+                      {t('maps.legendToggle')}
+                      <span className="map-legend-toggle-icon">{isLegendOpen ? '−' : '+'}</span>
+                    </button>
+                    {isLegendOpen && (
+                      <div className="map-legend-guide">
+                        <div className="map-node-kind-legend" aria-label={t('maps.nodeKindLegend')}>
+                          <span className="map-claim-legend-title">{t('maps.nodeKindLegend')}</span>
+                          <div className="map-claim-legend-items">
+                            <span className="map-claim-chip">
+                              <i className="map-kind-dot workspace" />
+                              {t('maps.nodeKind.workspace')}
                             </span>
-                          ))}
+                            <span className="map-claim-chip">
+                              <i className="map-kind-dot material" />
+                              {t('maps.nodeKind.material')}
+                            </span>
+                            <span className="map-claim-chip">
+                              <i className="map-kind-dot card" />
+                              {t('maps.nodeKind.card')}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="map-claim-legend" aria-label={t('maps.claimLegend')}>
+                          <span className="map-claim-legend-title">{t('maps.claimStatus')}</span>
+                          <div className="map-claim-legend-items">
+                            {getClaimStatusLegend().map((item) => (
+                              <span className={`map-claim-chip ${item.tone}`} key={item.key}>
+                                <i className="map-claim-dot" />
+                                {item.label}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="map-edge-legend" aria-label={t('maps.edgeLegend')}>
+                          <span className="map-claim-legend-title">{t('maps.edgeLegend')}</span>
+                          <div className="map-claim-legend-items">
+                            <span className="map-edge-chip">
+                              <svg className="map-edge-sample" height="8" width="44">
+                                <line stroke="#bcc7de" strokeWidth="1.5" x1="0" x2="44" y1="4" y2="4" />
+                              </svg>
+                              <span>{t('maps.edgeLegend.structural')}</span>
+                              <small>{t('maps.edgeLegend.structuralHint')}</small>
+                            </span>
+                            <span className="map-edge-chip">
+                              <svg className="map-edge-sample" height="8" width="44">
+                                <line stroke="#8b6fb0" strokeDasharray="3 3" strokeWidth="1.5" x1="0" x2="44" y1="4" y2="4" />
+                              </svg>
+                              <span>{t('maps.edgeLegend.relatedTo')}</span>
+                              <small>{t('maps.edgeLegend.relatedToHint')}</small>
+                            </span>
+                            <span className="map-edge-chip">
+                              <svg className="map-edge-sample" height="8" width="44">
+                                <line stroke="#d4584a" strokeDasharray="6 4" strokeWidth="2" x1="0" x2="44" y1="4" y2="4" />
+                              </svg>
+                              <span>{t('maps.edgeLegend.contradicts')}</span>
+                            </span>
+                            <span className="map-edge-chip">
+                              <svg className="map-edge-sample" height="8" width="44">
+                                <line stroke="#6b8e7f" strokeWidth="1.8" x1="0" x2="44" y1="4" y2="4" />
+                              </svg>
+                              <span>{t('maps.edgeLegend.custom')}</span>
+                            </span>
+                          </div>
                         </div>
                       </div>
-                      <div className="map-edge-legend" aria-label={t('maps.edgeLegend')}>
-                        <span className="map-claim-legend-title">{t('maps.edgeLegend')}</span>
-                        <div className="map-claim-legend-items">
-                          <span className="map-edge-chip">
-                            <svg className="map-edge-sample" height="8" width="28">
-                              <line stroke="#bcc7de" strokeWidth="1.5" x1="0" x2="28" y1="4" y2="4" />
-                            </svg>
-                            <span>{t('maps.edgeLegend.structural')}</span>
-                            <small>{t('maps.edgeLegend.structuralHint')}</small>
-                          </span>
-                          <span className="map-edge-chip">
-                            <svg className="map-edge-sample" height="8" width="28">
-                              <line stroke="#8b6fb0" strokeDasharray="3 3" strokeWidth="1.5" x1="0" x2="28" y1="4" y2="4" />
-                            </svg>
-                            <span>{t('maps.edgeLegend.relatedTo')}</span>
-                          </span>
-                          <span className="map-edge-chip">
-                            <svg className="map-edge-sample" height="8" width="28">
-                              <line stroke="#d4584a" strokeDasharray="6 4" strokeWidth="2" x1="0" x2="28" y1="4" y2="4" />
-                            </svg>
-                            <span>{t('maps.edgeLegend.contradicts')}</span>
-                          </span>
-                          <span className="map-edge-chip">
-                            <svg className="map-edge-sample" height="8" width="28">
-                              <line stroke="#6b8e7f" strokeWidth="1.8" x1="0" x2="28" y1="4" y2="4" />
-                            </svg>
-                            <span>{t('maps.edgeLegend.custom')}</span>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </div>
                 <div className="map-floating-controls" aria-label={t('maps.zoomControls')}>
@@ -628,9 +685,23 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
             ) : (
               <>
                 <div className="map-node-detail-head">
-                  <span>{mapKindLabel(selectedNode.kind)}</span>
+                  <div className="map-detail-head-row">
+                    <span>{mapKindLabel(selectedNode.kind)}</span>
+                    <button
+                      className="map-detail-close"
+                      onClick={() => setSelectedNodeId(null)}
+                      type="button"
+                      aria-label={t('common.close')}
+                    >
+                      ×
+                    </button>
+                  </div>
                   <h3>{selectedNode.label}</h3>
                   <p>{selectedNode.summary || t('maps.noSummary')}</p>
+                </div>
+                <div className="map-drawer-actions">
+                  <button onClick={() => setView(selectedNode.kind === 'material' ? 'library' : 'detail')} type="button">{t('maps.openContext')}</button>
+                  <button type="button" onClick={() => setRelationEditor({ targetId: '', relation: 'related_to' })}>{t('maps.addRelation')}</button>
                 </div>
                 <div className="map-node-confidence">
                   <div>
@@ -644,12 +715,40 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                 </div>
                 {nodeMetadataItems.length > 0 && (
                   <div className="map-node-metadata">
-                    {nodeMetadataItems.map((item) => (
-                      <div key={item.label}>
-                        <span>{item.label}</span>
-                        <strong>{item.value}</strong>
-                      </div>
-                    ))}
+                    {nodeMetadataItems.map((item) => {
+                      if (item.kind === 'materialLink') {
+                        const targetNodeId = `material:${item.materialId}`;
+                        const exists = nodes.some((node) => node.id === targetNodeId);
+                        return (
+                          <div key={item.label} className={exists ? 'map-node-metadata-link' : ''}>
+                            <span>{item.label}</span>
+                            <strong
+                              role={exists ? 'button' : undefined}
+                              tabIndex={exists ? 0 : undefined}
+                              onClick={exists ? () => {
+                                setNodeFilter('all');
+                                setSelectedNodeId(targetNodeId);
+                              } : undefined}
+                              onKeyDown={exists ? (e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  setNodeFilter('all');
+                                  setSelectedNodeId(targetNodeId);
+                                }
+                              } : undefined}
+                            >
+                              {item.value}
+                            </strong>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={item.label}>
+                          <span>{item.label}</span>
+                          <strong>{item.value}</strong>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 <section className="map-relation-panel">
@@ -713,49 +812,54 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                     )}
                   </div>
                 </section>
-                <div className="map-drawer-actions">
-                  <button onClick={() => setView(selectedNode.kind === 'material' ? 'library' : 'detail')} type="button">{t('maps.openContext')}</button>
-                  <button type="button" onClick={() => setRelationEditor({ targetId: '', relation: 'related_to' })}>{t('maps.addRelation')}</button>
-                </div>
-                {relationEditor && (
-                  <div className="map-relation-editor">
-                    <h4>{t('maps.addRelationTitle')}</h4>
-                    <label>
-                      <span>{t('maps.targetNode')}</span>
-                      <select
-                        value={relationEditor.targetId}
-                        onChange={(event) => setRelationEditor((current) => ({ ...current, targetId: event.target.value }))}
-                      >
-                        <option value="">{t('maps.selectTargetNode')}</option>
-                        {nodes.filter((node) => node.id !== selectedNode.id).map((node) => (
-                          <option key={node.id} value={node.id}>{node.label}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>{t('maps.relationType')}</span>
-                      <select
-                        value={relationEditor.relation}
-                        onChange={(event) => setRelationEditor((current) => ({ ...current, relation: event.target.value }))}
-                      >
-                        <option value="related_to">{t('maps.relationType.relatedTo')}</option>
-                        <option value="derived_from">{t('maps.relationType.derivedFrom')}</option>
-                        <option value="supports">{t('maps.relationType.supports')}</option>
-                        <option value="contradicts">{t('maps.relationType.contradicts')}</option>
-                        <option value="contains">{t('maps.relationType.contains')}</option>
-                      </select>
-                    </label>
-                    <div className="map-relation-editor-actions">
-                      <button type="button" onClick={() => setRelationEditor(null)}>{t('common.cancel')}</button>
-                      <button
-                        type="button"
-                        disabled={!relationEditor.targetId}
-                        onClick={saveCustomRelation}
-                      >
-                        {t('common.save')}
-                      </button>
+                {relationEditor && createPortal(
+                  <div className="map-relation-editor-overlay" onClick={() => setRelationEditor(null)} role="presentation">
+                    <div
+                      className="map-relation-editor"
+                      onClick={(event) => event.stopPropagation()}
+                      role="dialog"
+                      aria-modal="true"
+                      aria-label={t('maps.addRelationTitle')}
+                    >
+                      <h4>{t('maps.addRelationTitle')}</h4>
+                      <label>
+                        <span>{t('maps.targetNode')}</span>
+                        <select
+                          value={relationEditor.targetId}
+                          onChange={(event) => setRelationEditor((current) => ({ ...current, targetId: event.target.value }))}
+                        >
+                          <option value="">{t('maps.selectTargetNode')}</option>
+                          {nodes.filter((node) => node.id !== selectedNode.id).map((node) => (
+                            <option key={node.id} value={node.id}>{node.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>{t('maps.relationType')}</span>
+                        <select
+                          value={relationEditor.relation}
+                          onChange={(event) => setRelationEditor((current) => ({ ...current, relation: event.target.value }))}
+                        >
+                          <option value="related_to">{t('maps.relationType.relatedTo')}</option>
+                          <option value="derived_from">{t('maps.relationType.derivedFrom')}</option>
+                          <option value="supports">{t('maps.relationType.supports')}</option>
+                          <option value="contradicts">{t('maps.relationType.contradicts')}</option>
+                          <option value="contains">{t('maps.relationType.contains')}</option>
+                        </select>
+                      </label>
+                      <div className="map-relation-editor-actions">
+                        <button type="button" onClick={() => setRelationEditor(null)}>{t('common.cancel')}</button>
+                        <button
+                          type="button"
+                          disabled={!relationEditor.targetId}
+                          onClick={saveCustomRelation}
+                        >
+                          {t('common.save')}
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </>
             )}
