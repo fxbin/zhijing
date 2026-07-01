@@ -56,6 +56,58 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   const [hoveredNodeId, setHoveredNodeId] = useState(null);
   const [legendOpen, setLegendOpen] = useState(false);
 
+  /**
+   * 图例内容：认知状态与关系图例说明。
+   * @returns {JSX.Element} 图例面板内容
+   */
+  function LegendContent() {
+    return (
+      <div className="map-legend-content-body">
+        <div className="map-claim-legend" aria-label={t('maps.claimLegend')}>
+          <span className="map-claim-legend-title">{t('maps.claimStatus')}</span>
+          <div className="map-claim-legend-items">
+            {getClaimStatusLegend().map((item) => (
+              <span className={`map-claim-chip ${item.tone}`} key={item.key}>
+                <i className="map-claim-dot" />
+                {item.label}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="map-edge-legend" aria-label={t('maps.edgeLegend')}>
+          <span className="map-claim-legend-title">{t('maps.edgeLegend')}</span>
+          <div className="map-claim-legend-items">
+            <span className="map-edge-chip">
+              <svg className="map-edge-sample" height="8" width="28">
+                <line stroke="#bcc7de" strokeWidth="1.5" x1="0" x2="28" y1="4" y2="4" />
+              </svg>
+              <span>{t('maps.edgeLegend.structural')}</span>
+              <small>{t('maps.edgeLegend.structuralHint')}</small>
+            </span>
+            <span className="map-edge-chip">
+              <svg className="map-edge-sample" height="8" width="28">
+                <line stroke="#8b6fb0" strokeDasharray="3 3" strokeWidth="1.5" x1="0" x2="28" y1="4" y2="4" />
+              </svg>
+              <span>{t('maps.edgeLegend.relatedTo')}</span>
+            </span>
+            <span className="map-edge-chip">
+              <svg className="map-edge-sample" height="8" width="28">
+                <line stroke="#d4584a" strokeDasharray="6 4" strokeWidth="2" x1="0" x2="28" y1="4" y2="4" />
+              </svg>
+              <span>{t('maps.edgeLegend.contradicts')}</span>
+            </span>
+            <span className="map-edge-chip">
+              <svg className="map-edge-sample" height="8" width="28">
+                <line stroke="#6b8e7f" strokeWidth="1.8" x1="0" x2="28" y1="4" y2="4" />
+              </svg>
+              <span>{t('maps.edgeLegend.custom')}</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   useEffect(() => {
     try {
       localStorage.setItem('zhijing_map_filter', nodeFilter);
@@ -393,20 +445,32 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
               </button>
             ))}
           </div>
-          <label className="map-search">
-            <Search size={17} />
-            <input aria-label={t('maps.searchNodes')} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('maps.searchPlaceholder')} />
-            {query && (
-              <button
-                aria-label={t('maps.clearSearch')}
-                className="map-search-clear"
-                onClick={() => setQuery('')}
-                type="button"
-              >
-                <X size={15} />
-              </button>
-            )}
-          </label>
+          <div className="map-topbar-tools">
+            <label className="map-search">
+              <Search size={17} />
+              <input aria-label={t('maps.searchNodes')} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('maps.searchPlaceholder')} />
+              {query && (
+                <button
+                  aria-label={t('maps.clearSearch')}
+                  className="map-search-clear"
+                  onClick={() => setQuery('')}
+                  type="button"
+                >
+                  <X size={15} />
+                </button>
+              )}
+            </label>
+            <button
+              className="map-topbar-legend-toggle"
+              type="button"
+              aria-label={t('maps.legendToggle')}
+              aria-expanded={legendOpen}
+              onClick={() => setLegendOpen((value) => !value)}
+            >
+              <Info size={14} />
+              <span>{t('maps.legendToggle')}</span>
+            </button>
+          </div>
         </header>
 
         <div className="knowledge-map-board">
@@ -512,7 +576,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                         <g
                           className={className}
                           key={node.id}
-                          onClick={() => setSelectedNodeId(node.id)}
+                          onClick={() => { setSelectedNodeId(node.id); setLegendOpen(false); }}
                           onPointerDown={(event) => handleNodePointerDown(event, node.id)}
                           onMouseEnter={() => setHoveredNodeId(node.id)}
                           onMouseLeave={() => setHoveredNodeId(null)}
@@ -521,7 +585,10 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                           transform={`translate(${node.x}, ${node.y})`}
                           data-status={node.status}
                           onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') setSelectedNodeId(node.id);
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              setSelectedNodeId(node.id);
+                              setLegendOpen(false);
+                            }
                           }}
                           style={{ cursor: dragState?.nodeId === node.id ? 'grabbing' : 'grab' }}
                         >
@@ -584,61 +651,6 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                     </button>
                   ))}
                 </div>
-                <div className={`map-legend-stack${legendOpen ? ' open' : ''}`}>
-                  <button
-                    className="map-legend-trigger"
-                    type="button"
-                    aria-label={t('maps.legendToggle')}
-                    aria-expanded={legendOpen}
-                    onClick={() => setLegendOpen((value) => !value)}
-                  >
-                    <Info size={14} />
-                    <span>{t('maps.legendToggle')}</span>
-                  </button>
-                  <div className="map-legend-content">
-                  <div className="map-claim-legend" aria-label={t('maps.claimLegend')}>
-                    <span className="map-claim-legend-title">{t('maps.claimStatus')}</span>
-                    <div className="map-claim-legend-items">
-                      {getClaimStatusLegend().map((item) => (
-                        <span className={`map-claim-chip ${item.tone}`} key={item.key}>
-                          <i className="map-claim-dot" />
-                          {item.label}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="map-edge-legend" aria-label={t('maps.edgeLegend')}>
-                    <span className="map-claim-legend-title">{t('maps.edgeLegend')}</span>
-                    <div className="map-claim-legend-items">
-                      <span className="map-edge-chip">
-                        <svg className="map-edge-sample" height="8" width="28">
-                          <line stroke="#bcc7de" strokeWidth="1.5" x1="0" x2="28" y1="4" y2="4" />
-                        </svg>
-                        <span>{t('maps.edgeLegend.structural')}</span>
-                        <small>{t('maps.edgeLegend.structuralHint')}</small>
-                      </span>
-                      <span className="map-edge-chip">
-                        <svg className="map-edge-sample" height="8" width="28">
-                          <line stroke="#8b6fb0" strokeDasharray="3 3" strokeWidth="1.5" x1="0" x2="28" y1="4" y2="4" />
-                        </svg>
-                        <span>{t('maps.edgeLegend.relatedTo')}</span>
-                      </span>
-                      <span className="map-edge-chip">
-                        <svg className="map-edge-sample" height="8" width="28">
-                          <line stroke="#d4584a" strokeDasharray="6 4" strokeWidth="2" x1="0" x2="28" y1="4" y2="4" />
-                        </svg>
-                        <span>{t('maps.edgeLegend.contradicts')}</span>
-                      </span>
-                      <span className="map-edge-chip">
-                        <svg className="map-edge-sample" height="8" width="28">
-                          <line stroke="#6b8e7f" strokeWidth="1.8" x1="0" x2="28" y1="4" y2="4" />
-                        </svg>
-                        <span>{t('maps.edgeLegend.custom')}</span>
-                      </span>
-                    </div>
-                  </div>
-                  </div>
-                </div>
                 <div className="map-floating-controls" aria-label={t('maps.zoomControls')}>
                   <button aria-label={t('common.zoomIn')} onClick={() => setViewState((current) => ({ ...current, zoom: Math.min(current.zoom * 1.2, MAP_MAX_ZOOM) }))} type="button">+</button>
                   <button aria-label={t('common.resetView')} onClick={resetView} type="button"><RefreshCw size={16} /></button>
@@ -649,7 +661,22 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
           </section>
 
           <aside className="map-detail-drawer" aria-label={t('maps.nodeDetails')}>
-            {!map || !selectedNode ? (
+            {legendOpen ? (
+              <div className="map-legend-drawer-view">
+                <div className="map-legend-drawer-header">
+                  <h3>{t('maps.legendToggle')}</h3>
+                  <button
+                    aria-label={t('common.close')}
+                    className="map-legend-drawer-close"
+                    onClick={() => setLegendOpen(false)}
+                    type="button"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <LegendContent />
+              </div>
+            ) : !map || !selectedNode ? (
               <EmptyState title={t('maps.selectNode')} body={t('maps.selectNodeHint')} />
             ) : (
               <>
@@ -707,11 +734,14 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                         <article
                           className={`relation-item${edge.custom ? ' custom' : ''}`}
                           key={edge.id}
-                          onClick={() => other && setSelectedNodeId(other.id)}
+                          onClick={() => { if (other) { setSelectedNodeId(other.id); setLegendOpen(false); } }}
                           role="button"
                           tabIndex={0}
                           onKeyDown={(event) => {
-                            if ((event.key === 'Enter' || event.key === ' ') && other) setSelectedNodeId(other.id);
+                            if ((event.key === 'Enter' || event.key === ' ') && other) {
+                              setSelectedNodeId(other.id);
+                              setLegendOpen(false);
+                            }
                           }}
                         >
                           <span>{relationTypeLabelMap[edge.relation] ?? edge.relation}</span>
