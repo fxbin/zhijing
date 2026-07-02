@@ -18,6 +18,7 @@ import type { KnownProvider } from '@earendil-works/pi-ai';
 import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
 import type { AgentStreamEvent, OrchestratorDecision, ProposedOperation } from '@zhijing/shared';
 import type { ToolCallSummary } from '@zhijing/core';
+import { getDefaultPiProvider } from '@zhijing/pi-runtime';
 import { interceptInStream } from '@zhijing/core';
 import { serializeAgentEvent } from './agent-event-serializer.js';
 import { createWorkspaceAgent, type WorkspaceAgentOptions } from './agent-factory.js';
@@ -310,7 +311,7 @@ export function startOrchestratorSession(
       messages: priorMessages,
     };
 
-    const supportsRoleOverride = credentials.provider === 'deepseek';
+    const supportsRoleOverride = credentials.provider === getDefaultPiProvider();
     const selectedRole = selectAgentRole(intent);
     const role = supportsRoleOverride ? selectedRole : undefined;
     if (selectedRole && !supportsRoleOverride) {
@@ -429,12 +430,16 @@ export function startOrchestratorSession(
     if (!shouldRunProbe) return;
 
     try {
-      probeAgent = createRoleBasedAgent(workspaceId, {
+      const supportsProbeRoleOverride = credentials.provider === getDefaultPiProvider();
+      const probeOptions: Parameters<typeof createRoleBasedAgent>[1] = {
         role: 'probe',
-        provider: credentials.provider,
-        modelId: credentials.model,
         apiKey: credentials.apiKey,
-      });
+      };
+      if (!supportsProbeRoleOverride) {
+        probeOptions.provider = credentials.provider;
+        probeOptions.modelId = credentials.model;
+      }
+      probeAgent = createRoleBasedAgent(workspaceId, probeOptions);
       const probePrompt = buildAuxiliaryProbePrompt(message, mainAssistantText);
       let probeText = '';
 

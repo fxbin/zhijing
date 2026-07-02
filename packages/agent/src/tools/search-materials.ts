@@ -1,6 +1,7 @@
 import { Type } from '@zhijing/pi-runtime';
 import { searchWorkspaceMaterials, type WorkspaceMaterialSearchResult } from '@zhijing/core';
 import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core';
+import { sanitizeForLlmContext } from './sanitize.js';
 
 /**
  * search_materials 工具的入参 schema。
@@ -31,17 +32,22 @@ const MATERIAL_PREVIEW_MAX_LENGTH = 320;
 /**
  * 将单条资料渲染为文本摘要片段，截断超长预览以保证上下文可控。
  *
+ * 标题与预览均经过 sanitizeForLlmContext 清洗，移除围栏、模型控制 token
+ * 与 prompt 注入字符，避免工具输出被 LLM 误解析为指令或事件。
+ *
  * @param material - 资料检索结果
  * @returns 文本摘要片段
  * @author fxbin
  */
 function formatMaterialLine(material: WorkspaceMaterialSearchResult): string {
-  const trimmedPreview = material.preview.length > MATERIAL_PREVIEW_MAX_LENGTH
-    ? `${material.preview.slice(0, MATERIAL_PREVIEW_MAX_LENGTH)}…`
-    : material.preview;
+  const safeTitle = sanitizeForLlmContext(material.title);
+  const safePreview = sanitizeForLlmContext(material.preview);
+  const trimmedPreview = safePreview.length > MATERIAL_PREVIEW_MAX_LENGTH
+    ? `${safePreview.slice(0, MATERIAL_PREVIEW_MAX_LENGTH)}…`
+    : safePreview;
   const platformSuffix = material.platform ? `[${material.platform}]` : '';
   const parseSuffix = material.parseStatus ? `[${material.parseStatus}]` : '';
-  return `- ${material.title} ${platformSuffix}${parseSuffix} (id=${material.id})\n  ${trimmedPreview}`;
+  return `- ${safeTitle} ${platformSuffix}${parseSuffix} (id=${material.id})\n  ${trimmedPreview}`;
 }
 
 /**

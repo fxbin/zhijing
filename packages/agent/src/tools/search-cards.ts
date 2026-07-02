@@ -1,6 +1,7 @@
 import { Type } from '@zhijing/pi-runtime';
 import { searchWorkspaceCards, type WorkspaceCardSearchResult } from '@zhijing/core';
 import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core';
+import { sanitizeForLlmContext } from './sanitize.js';
 
 /**
  * search_cards 工具的入参 schema。
@@ -31,16 +32,21 @@ const CARD_BODY_PREVIEW_MAX_LENGTH = 240;
 /**
  * 将单张卡片渲染为文本摘要片段，截断超长正文以保证上下文可控。
  *
+ * 标题与正文均经过 sanitizeForLlmContext 清洗，移除围栏、模型控制 token
+ * 与 prompt 注入字符，避免工具输出被 LLM 误解析为指令或事件。
+ *
  * @param card - 卡片检索结果
  * @returns 文本摘要片段
  * @author fxbin
  */
 function formatCardLine(card: WorkspaceCardSearchResult): string {
-  const trimmedBody = card.body.length > CARD_BODY_PREVIEW_MAX_LENGTH
-    ? `${card.body.slice(0, CARD_BODY_PREVIEW_MAX_LENGTH)}…`
-    : card.body;
+  const safeTitle = sanitizeForLlmContext(card.title);
+  const safeBody = sanitizeForLlmContext(card.body);
+  const trimmedBody = safeBody.length > CARD_BODY_PREVIEW_MAX_LENGTH
+    ? `${safeBody.slice(0, CARD_BODY_PREVIEW_MAX_LENGTH)}…`
+    : safeBody;
   const claimSuffix = card.claimStatus ? `[${card.claimStatus}]` : '';
-  return `- (${card.type}) ${card.title} ${claimSuffix}\n  ${trimmedBody} (id=${card.id})`;
+  return `- (${card.type}) ${safeTitle} ${claimSuffix}\n  ${trimmedBody} (id=${card.id})`;
 }
 
 /**
