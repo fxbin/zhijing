@@ -6020,6 +6020,43 @@ const FOLDER_INTAKE_MAX_FILE_SIZE = 2 * 1024 * 1024;
 const FOLDER_INTAKE_MAX_FILES = 500;
 
 /**
+ * 文件夹导入允许的根目录列表。
+ * 通过环境变量 ZHIJING_INTAKE_ROOT_DIRS 配置（逗号分隔的绝对路径）。
+ * 默认为用户主目录（os.homedir()）。
+ * 导入路径必须位于某个允许的根目录下，避免任意路径文件读取。
+ * @author fxbin
+ */
+const INTAKE_ALLOWED_ROOTS: readonly string[] = (() => {
+  const raw = process.env.ZHIJING_INTAKE_ROOT_DIRS;
+  if (raw) {
+    const parsed = raw.split(',').map((item) => item.trim()).filter(Boolean).map((item) => resolve(item));
+    if (parsed.length > 0) return parsed;
+  }
+  return [resolve(os.homedir())];
+})();
+
+/**
+ * 校验导入路径是否位于允许的根目录内。
+ *
+ * 检查策略：用 path.relative 计算相对路径，若结果不以 `..` 开头且非绝对路径，
+ * 则说明 targetPath 在 root 内。任一 root 通过即视为合法。
+ *
+ * @param targetPath - 待校验的绝对路径
+ * @returns 通过返回 true，否则返回 false
+ * @author fxbin
+ */
+function isPathWithinAllowedRoots(targetPath: string): boolean {
+  const normalized = resolve(targetPath);
+  for (const root of INTAKE_ALLOWED_ROOTS) {
+    const rel = relative(root, normalized);
+    if (!rel.startsWith('..')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * 递归扫描目录，返回所有支持扩展名的文件绝对路径。
  * 跳过隐藏目录（如 .git、.zhijing）和隐藏文件。
  * @param rootPath 根目录
@@ -6069,14 +6106,17 @@ export async function intakeFolderFromPath(
   }
 
   const absolutePath = resolve(targetPath);
+  if (!isPathWithinAllowedRoots(absolutePath)) {
+    throw new Error('Path is outside of allowed intake roots.');
+  }
   let pathStat;
   try {
     pathStat = await stat(absolutePath);
   } catch {
-    throw new Error(`Path not found: ${absolutePath}`);
+    throw new Error('Path not found or inaccessible.');
   }
   if (!pathStat.isDirectory()) {
-    throw new Error(`Path is not a directory: ${absolutePath}`);
+    throw new Error('Path is not a directory.');
   }
 
   const workspaceId = resolveWorkspaceId(request.workspaceId);
