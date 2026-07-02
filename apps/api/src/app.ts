@@ -166,6 +166,8 @@ import {
   getReaderModeProfile,
   startReaderModeRollback,
   cancelReaderModeRollback,
+  checkUrlForSsrf,
+  createSsrfSafeFetch,
 } from '@zhijing/core';
 import {
   startOrchestratorSession,
@@ -262,6 +264,20 @@ const AGENT_USAGE_MAX_LIMIT = 500;
  * @author fxbin
  */
 const INSPECT_TOKEN = process.env.ZHIJING_INSPECT_TOKEN ?? '';
+
+/**
+ * proxy-image / proxy-video 单次响应最大字节数（50MB）。
+ * 防止 OOM 攻击与带宽放大。
+ * @author fxbin
+ */
+const PROXY_MAX_BYTES = 50 * 1024 * 1024;
+
+/**
+ * SSRF 安全 fetch 单例：用于 proxy-image / proxy-video。
+ * 每次重定向后会重新校验目标 URL，避免外部 302 重定向到内网地址。
+ * @author fxbin
+ */
+const ssrfSafeFetch = createSsrfSafeFetch();
 
 function resolveAllowedOrigins(): string[] {
   const raw = process.env.ZHIJING_ALLOWED_ORIGINS;
@@ -530,9 +546,13 @@ export function buildApi() {
     if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
       return reply.code(400).send({ error: 'Invalid image URL.' });
     }
+    const ssrfCheck = checkUrlForSsrf(imageUrl);
+    if (!ssrfCheck.ok) {
+      return reply.code(400).send({ error: 'Blocked image URL.' });
+    }
     try {
       const isDouyinImage = imageUrl.includes('douyinpic.com') || imageUrl.includes('byteimg.com');
-      const response = await fetch(imageUrl, {
+      const response = await ssrfSafeFetch(imageUrl, {
         headers: {
           Referer: isDouyinImage ? 'https://www.douyin.com/' : '',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -542,13 +562,19 @@ export function buildApi() {
         return reply.code(response.status).send({ error: 'Image fetch failed.' });
       }
       const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
+      if (!contentType.startsWith('image/')) {
+        return reply.code(400).send({ error: 'URL did not return an image.' });
+      }
       const arrayBuffer = await response.arrayBuffer();
+      if (arrayBuffer.byteLength > PROXY_MAX_BYTES) {
+        return reply.code(413).send({ error: 'Image too large to proxy.' });
+      }
       return reply
         .header('Content-Type', contentType)
         .header('Cache-Control', 'public, max-age=3600')
         .send(Buffer.from(arrayBuffer));
     } catch (error) {
-      request.log.error({ error, imageUrl }, 'proxy image failed');
+      request.log.error({ error }, 'proxy image failed');
       return reply.code(502).send({ error: 'Image proxy failed.' });
     }
   });
@@ -557,6 +583,10 @@ export function buildApi() {
     const videoUrl = request.query.url;
     if (!videoUrl || !/^https?:\/\//i.test(videoUrl)) {
       return reply.code(400).send({ error: 'Invalid video URL.' });
+    }
+    const ssrfCheck = checkUrlForSsrf(videoUrl);
+    if (!ssrfCheck.ok) {
+      return reply.code(400).send({ error: 'Blocked video URL.' });
     }
     try {
       const isDouyinVideo = videoUrl.includes('douyinvod') || videoUrl.includes('bytecdn');
@@ -570,12 +600,18 @@ export function buildApi() {
       if (range) {
         headers['Range'] = range;
       }
-      const response = await fetch(videoUrl, { headers });
+      const response = await ssrfSafeFetch(videoUrl, { headers });
       if (!response.ok && response.status !== 206) {
         return reply.code(response.status).send({ error: 'Video fetch failed.' });
       }
       const contentType = response.headers.get('content-type') ?? 'video/mp4';
+      if (!contentType.startsWith('video/') && !contentType.startsWith('application/')) {
+        return reply.code(400).send({ error: 'URL did not return a video.' });
+      }
       const arrayBuffer = await response.arrayBuffer();
+      if (arrayBuffer.byteLength > PROXY_MAX_BYTES) {
+        return reply.code(413).send({ error: 'Video too large to proxy.' });
+      }
       const replyHeaders: Record<string, string> = {
         'Content-Type': contentType,
         'Cache-Control': 'public, max-age=3600',
@@ -594,7 +630,7 @@ export function buildApi() {
         .headers(replyHeaders)
         .send(Buffer.from(arrayBuffer));
     } catch (error) {
-      request.log.error({ error, videoUrl }, 'proxy video failed');
+      request.log.error({ error }, 'proxy video failed');
       return reply.code(502).send({ error: 'Video proxy failed.' });
     }
   });

@@ -225,10 +225,15 @@ export function describeEdgeClass(relation, isCustom) {
  * 返回 claim status 的图例列表，用于地图画布上展示认知状态分布。
  * @returns {Array<{key: string; label: string; tone: string}>} 图例项数组
  */
-export function getClaimStatusLegend() {
+export function getClaimStatusLegend(t) {
+  const translate = t ?? ((key) => key);
   return CLAIM_STATUS_ORDER
     .filter((key) => NODE_STATUS_META[key])
-    .map((key) => ({ key, label: NODE_STATUS_META[key].label, tone: NODE_STATUS_META[key].tone }));
+    .map((key) => ({
+      key,
+      label: translate(NODE_STATUS_META[key].labelKey, { defaultValue: key }),
+      tone: NODE_STATUS_META[key].tone,
+    }));
 }
 
 /**

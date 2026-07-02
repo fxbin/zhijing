@@ -6,10 +6,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { CircleX, RefreshCw, Search, X } from 'lucide-react';
+import { BookOpen, CircleX, Link2, MessageCircle, PencilLine, RefreshCw, Search, X } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { formatTime } from '../utils/material';
-import api, { ApiError } from '../utils/api';
+import api from '../utils/api';
 import {
   mapNodeMatches,
   buildMapLayout,
@@ -36,6 +36,8 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   const MAP_BASE_HEIGHT = 800;
   const MAP_MIN_ZOOM = 0.3;
   const MAP_MAX_ZOOM = 3;
+  const MAP_CLICK_DRAG_THRESHOLD = 6;
+  const MAP_RELATION_TARGET_PADDING = 14;
   const [map, setMap] = useState(null);
   const [status, setStatus] = useState(t('maps.status.selectWorkspace'));
   const [query, setQuery] = useState('');
@@ -55,13 +57,12 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   const [pendingSave, setPendingSave] = useState(false);
   const [hoveredNodeId, setHoveredNodeId] = useState(null);
   const [isLegendOpen, setIsLegendOpen] = useState(false);
-  // 批量选择：Shift+Drag 框选节点
-  const [selectionBox, setSelectionBox] = useState(null); // {startX, startY, endX, endY} SVG 坐标
-  const [selectedNodeIds, setSelectedNodeIds] = useState(() => new Set()); // 批量选中的节点 ID
-  // Connect to Target 流程：选目标 → 选关系类型 → 批量创建
+  const [isDetailOpen, setIsDetailOpen] = useState(true);
+  const [selectionBox, setSelectionBox] = useState(null);
+  const [selectedNodeIds, setSelectedNodeIds] = useState(() => new Set());
   const [connectTargetMode, setConnectTargetMode] = useState(false);
-  const [relationTypePicker, setRelationTypePicker] = useState(null); // { targetId }
-  // 防止 saveBatchRelations 在 await 期间被重复触发，避免后端创建重复 map_custom_edges
+  const [relationTypePicker, setRelationTypePicker] = useState(null);
+  const [relationDragState, setRelationDragState] = useState(null);
   const savingRelationsRef = useRef(false);
 
   useEffect(() => {
@@ -80,6 +81,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
         setSelectionBox(null);
         setConnectTargetMode(false);
         setRelationTypePicker(null);
+        setRelationDragState(null);
       }
     }
     window.addEventListener('keydown', onKeyDown);
@@ -91,27 +93,16 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
     setSelectionBox(null);
     setConnectTargetMode(false);
     setRelationTypePicker(null);
+    setRelationDragState(null);
   }
 
-  /**
-   * 批量创建关系：将 selectedNodeIds 中的每个节点连接到 targetId。
-   *
-   * 防并发保护：
-   * - 进入时立即置 savingRelationsRef 为 true 并关闭 relationTypePicker，
-   *   使关系类型按钮随之卸载，避免在 await 期间被重复点击；
-   * - 通过 savingRelationsRef 拦截任何路径（含重新进入 Connect to Target）触发的重入；
-   * - finally 中复位标志，保证失败后用户仍可重试。
-   *
-   * @param {string} targetId - 目标节点 ID
-   * @param {string} relation - 关系类型
-   */
-  async function saveBatchRelations(targetId, relation) {
+  async function saveRelations(sourceIds, targetId, relation) {
     if (savingRelationsRef.current) return;
-    if (!selectedWorkspaceId || selectedNodeIds.size === 0 || !targetId) return;
+    if (!selectedWorkspaceId || sourceIds.length === 0 || !targetId) return;
     savingRelationsRef.current = true;
     setRelationTypePicker(null);
-    const sourceIds = Array.from(selectedNodeIds).filter((id) => id !== targetId);
-    if (sourceIds.length === 0) {
+    const validSourceIds = sourceIds.filter((id) => id !== targetId);
+    if (validSourceIds.length === 0) {
       clearBatchSelection();
       savingRelationsRef.current = false;
       return;
@@ -119,7 +110,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
     try {
       setStatus(t('maps.status.batchSaving', { defaultValue: '正在批量创建关系…' }));
       await Promise.all(
-        sourceIds.map((sourceId) =>
+        validSourceIds.map((sourceId) =>
           api.post(`/api/workspaces/${selectedWorkspaceId}/map/edges`, {
             sourceNodeId: sourceId,
             targetNodeId: targetId,
@@ -127,7 +118,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
           }),
         ),
       );
-      setStatus(t('maps.status.batchSaved', { count: sourceIds.length, defaultValue: `已创建 ${sourceIds.length} 条关系` }));
+      setStatus(t('maps.status.batchSaved', { count: validSourceIds.length, defaultValue: `已创建 ${validSourceIds.length} 条关系` }));
       clearBatchSelection();
       await reloadMap();
     } catch {
@@ -135,6 +126,11 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
     } finally {
       savingRelationsRef.current = false;
     }
+  }
+
+  function saveBatchRelations(targetId, relation) {
+    const sourceIds = relationTypePicker?.sourceIds ?? Array.from(selectedNodeIds);
+    return saveRelations(sourceIds, targetId, relation);
   }
 
   useEffect(() => {
@@ -159,6 +155,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
           );
           setStatus(result.nodes?.length ? t('maps.status.synced') : t('maps.status.noNodes'));
           setSelectedNodeId(null);
+          setIsDetailOpen(Boolean(result.nodes?.length));
         }
       } catch {
         if (!ignore) {
@@ -211,12 +208,27 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   ];
   const relationTypeLabelMap = {
     related_to: t('maps.relationType.relatedTo'),
-    derived_from: t('maps.relationType.derivedFrom'),
     supports: t('maps.relationType.supports'),
     contradicts: t('maps.relationType.contradicts'),
     contains: t('maps.relationType.contains'),
     source: t('maps.relationType.source'),
   };
+  const editableRelationOptions = [
+    { value: 'related_to', label: t('maps.relationType.relatedTo') },
+    { value: 'supports', label: t('maps.relationType.supports') },
+    { value: 'contradicts', label: t('maps.relationType.contradicts') },
+  ];
+  const totalNodeCount = (map?.stats?.materials ?? typeCounts.material ?? 0)
+    + (map?.stats?.cards ?? typeCounts.card ?? 0)
+    + (typeCounts.workspace ?? 0);
+  const hiddenNodeCount = (map?.stats?.hiddenMaterials ?? 0) + (map?.stats?.hiddenCards ?? 0);
+  const visibleNodeCopy = hiddenNodeCount > 0
+    ? t('maps.visibleNodes', { visible: nodes.length, total: totalNodeCount })
+    : `${nodes.length} ${t('maps.nodes')}`;
+  const sourceMaterialId = selectedNode?.kind === 'card' && typeof selectedNode.metadata?.materialId === 'string'
+    ? `material:${selectedNode.metadata.materialId}`
+    : null;
+  const hasVisibleSourceMaterial = sourceMaterialId ? nodes.some((node) => node.id === sourceMaterialId) : false;
 
   /**
    * 将屏幕坐标转换为 SVG 内部坐标。
@@ -235,6 +247,43 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
     return { x: transformed.x, y: transformed.y };
   }
 
+  function findRelationTarget(svgPoint, sourceId) {
+    return layoutNodes.find((node) => {
+      if (node.id === sourceId) return false;
+      const dx = node.x - svgPoint.x;
+      const dy = node.y - svgPoint.y;
+      const radius = (node.radius ?? 18) + MAP_RELATION_TARGET_PADDING;
+      return Math.sqrt(dx * dx + dy * dy) <= radius;
+    });
+  }
+
+  function startConnectTargetMode(sourceId) {
+    setSelectedNodeIds(new Set([sourceId]));
+    setConnectTargetMode(true);
+    setRelationTypePicker(null);
+    setIsDetailOpen(false);
+  }
+
+  function handleConnectHandlePointerDown(event, node) {
+    event.stopPropagation();
+    const target = event.currentTarget;
+    target.setPointerCapture(event.pointerId);
+    const svgPoint = pointerToSvg(event);
+    if (!svgPoint) return;
+    setRelationDragState({
+      sourceId: node.id,
+      sourceX: node.x,
+      sourceY: node.y,
+      currentX: svgPoint.x,
+      currentY: svgPoint.y,
+      targetId: null,
+    });
+    setSelectedNodeIds(new Set([node.id]));
+    setConnectTargetMode(false);
+    setRelationTypePicker(null);
+    setIsDetailOpen(false);
+  }
+
   /**
    * 开始拖拽节点。
    * @param {PointerEvent} event - 指针事件
@@ -242,8 +291,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
    */
   function handleNodePointerDown(event, nodeId) {
     event.stopPropagation();
-    // 目标选择模式下不启动节点拖拽，让 onClick 正常触发
-    if (connectTargetMode) return;
+    if (connectTargetMode || relationDragState) return;
     const target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
     const svgPoint = pointerToSvg(event);
@@ -263,6 +311,19 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
    * @param {PointerEvent} event - 指针事件
    */
   function handlePointerMove(event) {
+    if (relationDragState) {
+      const svgPoint = pointerToSvg(event);
+      if (!svgPoint) return;
+      const target = findRelationTarget(svgPoint, relationDragState.sourceId);
+      setRelationDragState((current) => current ? {
+        ...current,
+        currentX: svgPoint.x,
+        currentY: svgPoint.y,
+        targetId: target?.id ?? null,
+      } : current);
+      setHoveredNodeId(target?.id ?? null);
+      return;
+    }
     if (dragState) {
       const svgPoint = pointerToSvg(event);
       if (!svgPoint) return;
@@ -302,6 +363,16 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
    * 结束拖拽，若位置发生变化则触发后端保存。
    */
   function handlePointerUp() {
+    if (relationDragState) {
+      const targetId = relationDragState.targetId;
+      const sourceId = relationDragState.sourceId;
+      setRelationDragState(null);
+      setHoveredNodeId(null);
+      if (targetId) {
+        setRelationTypePicker({ targetId, sourceIds: [sourceId] });
+      }
+      return;
+    }
     if (dragState) {
       const current = nodePositions[dragState.nodeId];
       const hasMoved = !current || current.x !== dragState.nodeStartX || current.y !== dragState.nodeStartY;
@@ -317,9 +388,8 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
       const right = Math.max(selectionBox.startX, selectionBox.endX);
       const top = Math.min(selectionBox.startY, selectionBox.endY);
       const bottom = Math.max(selectionBox.startY, selectionBox.endY);
-      const threshold = 6; // 拖拽距离阈值，小于此视为点击，不清空选择
-      const isClick = Math.abs(selectionBox.endX - selectionBox.startX) < threshold
-        && Math.abs(selectionBox.endY - selectionBox.startY) < threshold;
+      const isClick = Math.abs(selectionBox.endX - selectionBox.startX) < MAP_CLICK_DRAG_THRESHOLD
+        && Math.abs(selectionBox.endY - selectionBox.startY) < MAP_CLICK_DRAG_THRESHOLD;
       setSelectionBox(null);
       if (!isClick) {
         const hits = layoutNodes.filter((node) => {
@@ -509,7 +579,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
           </label>
         </header>
 
-        <div className="knowledge-map-board">
+        <div className={`knowledge-map-board${isDetailOpen ? ' detail-open' : ''}`}>
           <section className="knowledge-map-canvas" aria-label={t('maps.canvas')}>
             {!map ? (
               <div className="map-empty-state">
@@ -524,9 +594,12 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                     <p>{t('maps.updatedAt', { time: map.generatedAt ? formatTime(map.generatedAt) : t('maps.now') })}</p>
                   </div>
                   <div className="map-stats-strip">
-                    <span>{nodes.length} {t('maps.nodes')}</span>
+                    <span>{visibleNodeCopy}</span>
                     <span>{edges.length} {t('maps.edges')}</span>
                     <span>{map.stats?.sourcedCards ?? 0} {t('maps.sourced')}</span>
+                    {hiddenNodeCount > 0 && (
+                      <span className="map-stat-hidden">{t('maps.hiddenNodes', { count: hiddenNodeCount })}</span>
+                    )}
                     {map.stats?.skeletonCards > 0 && (
                       <span className="map-stat-skeleton">{map.stats.skeletonCards} {t('maps.skeleton')}</span>
                     )}
@@ -576,7 +649,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                       const source = layoutNodes.find((node) => node.id === edge.sourceId);
                       const target = layoutNodes.find((node) => node.id === edge.targetId);
                       if (!source || !target) return null;
-                      const focusedId = hoveredNodeId ?? selectedNode?.id;
+                      const focusedId = relationDragState?.sourceId ?? hoveredNodeId ?? selectedNode?.id;
                       const isActive = focusedId && (edge.sourceId === focusedId || edge.targetId === focusedId);
                       const isDimmed = focusedId && !isActive;
                       const edgeClass = describeEdgeClass(edge.relation, edge.custom);
@@ -600,28 +673,32 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                       const isActive = node.id === selectedNode?.id;
                       const isMatched = searchMatches.includes(node.id);
                       const isHovered = node.id === hoveredNodeId;
-                      const focusedId = hoveredNodeId ?? selectedNode?.id;
+                      const focusedId = relationDragState?.sourceId ?? hoveredNodeId ?? selectedNode?.id;
                       const isRelated = focusedId && edges.some(
                         (edge) =>
                           (edge.sourceId === focusedId && edge.targetId === node.id) ||
                           (edge.targetId === focusedId && edge.sourceId === node.id),
                       );
-                      const isDimmed = focusedId && !isActive && !isHovered && !isRelated && node.id !== focusedId;
+                      const isDimmed = !relationDragState && focusedId && !isActive && !isHovered && !isRelated && node.id !== focusedId;
                       const isBatchSelected = selectedNodeIds.has(node.id);
                       // 目标选择模式下：已选 source 节点变暗，可选目标节点高亮
                       const isConnectSource = connectTargetMode && isBatchSelected;
                       const isConnectCandidate = connectTargetMode && !isBatchSelected;
-                      const className = `map-svg-node ${node.kind}${isActive ? ' active' : ''}${isMatched ? ' matched' : ''}${isHovered ? ' hovered' : ''}${isDimmed ? ' dimmed' : ''}${isBatchSelected ? ' batch-selected' : ''}${isConnectSource ? ' connect-source' : ''}${isConnectCandidate ? ' connect-candidate' : ''}`;
+                      const isRelationDragSource = relationDragState?.sourceId === node.id;
+                      const isRelationDropTarget = relationDragState?.targetId === node.id;
+                      const className = `map-svg-node ${node.kind}${isActive ? ' active' : ''}${isMatched ? ' matched' : ''}${isHovered ? ' hovered' : ''}${isDimmed ? ' dimmed' : ''}${isBatchSelected ? ' batch-selected' : ''}${isConnectSource ? ' connect-source' : ''}${isConnectCandidate ? ' connect-candidate' : ''}${isRelationDragSource ? ' relation-source' : ''}${isRelationDropTarget ? ' relation-target' : ''}`;
                       return (
                         <g
                           className={className}
                           key={node.id}
                           onClick={() => {
                             if (connectTargetMode) {
-                              setRelationTypePicker({ targetId: node.id });
+                              if (selectedNodeIds.has(node.id)) return;
+                              setRelationTypePicker({ targetId: node.id, sourceIds: Array.from(selectedNodeIds) });
                               setConnectTargetMode(false);
                             } else {
                               setSelectedNodeId(node.id);
+                              setIsDetailOpen(true);
                             }
                           }}
                           onPointerDown={(event) => handleNodePointerDown(event, node.id)}
@@ -634,10 +711,12 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                           onKeyDown={(event) => {
                             if (event.key === 'Enter' || event.key === ' ') {
                               if (connectTargetMode) {
-                                setRelationTypePicker({ targetId: node.id });
+                                if (selectedNodeIds.has(node.id)) return;
+                                setRelationTypePicker({ targetId: node.id, sourceIds: Array.from(selectedNodeIds) });
                                 setConnectTargetMode(false);
                               } else {
                                 setSelectedNodeId(node.id);
+                                setIsDetailOpen(true);
                               }
                             }
                           }}
@@ -648,9 +727,25 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                             <circle className="map-status-ring" r={node.radius + 5} />
                           )}
                           <text y={node.radius + 18}>{truncateNodeLabel(node.label)}</text>
+                          <g
+                            className="map-node-connect-handle"
+                            onPointerDown={(event) => handleConnectHandlePointerDown(event, node)}
+                            transform={`translate(${node.radius + 13}, ${-node.radius - 8})`}
+                          >
+                            <circle r="9" />
+                            <path d="M-4,0 H4 M0,-4 V4" />
+                          </g>
                         </g>
                       );
                     })}
+                    {relationDragState && (
+                      <g className="map-relation-drag-preview" pointerEvents="none">
+                        <path
+                          d={`M ${relationDragState.sourceX} ${relationDragState.sourceY} L ${relationDragState.currentX} ${relationDragState.currentY}`}
+                        />
+                        <circle cx={relationDragState.currentX} cy={relationDragState.currentY} r="7" />
+                      </g>
+                    )}
                     {hoveredNodeId && (() => {
                       const hoveredNode = layoutNodes.find((item) => item.id === hoveredNodeId);
                       if (!hoveredNode) return null;
@@ -754,7 +849,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                         <div className="map-claim-legend" aria-label={t('maps.claimLegend')}>
                           <span className="map-claim-legend-title">{t('maps.claimStatus')}</span>
                           <div className="map-claim-legend-items">
-                            {getClaimStatusLegend().map((item) => (
+                            {getClaimStatusLegend(t).map((item) => (
                               <span className={`map-claim-chip ${item.tone}`} key={item.key}>
                                 <i className="map-claim-dot" />
                                 {item.label}
@@ -814,22 +909,6 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                     </button>
                     <button
                       type="button"
-                      className="map-batch-btn"
-                      disabled
-                      title={t('maps.comingSoon')}
-                    >
-                      {t('maps.groupSelected')}
-                    </button>
-                    <button
-                      type="button"
-                      className="map-batch-btn"
-                      disabled
-                      title={t('maps.comingSoon')}
-                    >
-                      {t('maps.applyTag')}
-                    </button>
-                    <button
-                      type="button"
                       className="map-batch-close"
                       onClick={clearBatchSelection}
                       aria-label={t('common.cancel')}
@@ -838,16 +917,25 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                     </button>
                   </div>
                 )}
-                {(selectionBox || selectedNodeIds.size > 0 || connectTargetMode) && (
+                {(selectionBox || selectedNodeIds.size > 0 || connectTargetMode || relationDragState) && (
                   <div className="map-batch-hint" role="status">
-                    {connectTargetMode ? t('maps.pickTargetHint') : t('maps.batchHint')}
+                    {relationDragState
+                      ? t(relationDragState.targetId ? 'maps.releaseToConnectHint' : 'maps.dragToConnectHint')
+                      : connectTargetMode ? t('maps.pickTargetHint') : t('maps.batchHint')}
                   </div>
                 )}
               </>
             )}
           </section>
 
-          <aside className="map-detail-drawer" aria-label={t('maps.nodeDetails')}>
+          {map && !isDetailOpen && (
+            <button className="map-detail-toggle" onClick={() => setIsDetailOpen(true)} type="button">
+              <span>{t('maps.nodeDetails')}</span>
+              <strong>{selectedNode?.label ?? t('maps.selectNode')}</strong>
+            </button>
+          )}
+
+          <aside className={`map-detail-drawer${isDetailOpen ? ' open' : ''}`} aria-label={t('maps.nodeDetails')} aria-hidden={!isDetailOpen}>
             {!map ? (
               <EmptyState title={t('maps.selectNode')} body={t('maps.selectNodeHint')} />
             ) : selectedNodeIds.size > 0 ? (
@@ -901,12 +989,6 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                     >
                       <span>{t('maps.connectToTarget')}</span>
                     </button>
-                    <button type="button" className="map-batch-action-btn" disabled title={t('maps.comingSoon')}>
-                      <span>{t('maps.groupSelected')}</span>
-                    </button>
-                    <button type="button" className="map-batch-action-btn" disabled title={t('maps.comingSoon')}>
-                      <span>{t('maps.applyTag')}</span>
-                    </button>
                   </div>
                 </div>
               </div>
@@ -919,7 +1001,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                     <span>{mapKindLabel(selectedNode.kind)}</span>
                     <button
                       className="map-detail-close"
-                      onClick={() => setSelectedNodeId(null)}
+                      onClick={() => setIsDetailOpen(false)}
                       type="button"
                       aria-label={t('common.close')}
                     >
@@ -930,19 +1012,40 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                   <p>{selectedNode.summary || t('maps.noSummary')}</p>
                 </div>
                 <div className="map-drawer-actions">
-                  <button onClick={() => setView(selectedNode.kind === 'material' ? 'library' : 'detail')} type="button">{t('maps.openContext')}</button>
+                  <button onClick={() => setView(selectedNode.kind === 'material' ? 'library' : 'detail')} type="button">
+                    <BookOpen size={16} />
+                    {t('maps.openContext')}
+                  </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      // 单条添加也走统一流程：加入批量选择 → 选目标 → 关系类型
-                      setSelectedNodeIds(new Set([selectedNode.id]));
-                      setSelectedNodeId(null);
-                      setConnectTargetMode(true);
-                    }}
+                    onClick={() => startConnectTargetMode(selectedNode.id)}
                   >
+                    <Link2 size={16} />
                     {t('maps.addRelation')}
                   </button>
+                  <button onClick={() => setView('chat')} type="button">
+                    <MessageCircle size={16} />
+                    {t('maps.continueConversation')}
+                  </button>
+                  <button onClick={() => setView(selectedNode.kind === 'card' ? 'recall' : 'detail')} type="button">
+                    <PencilLine size={16} />
+                    {selectedNode.kind === 'card' ? t('maps.reviewOrEdit') : t('maps.editContext')}
+                  </button>
                 </div>
+                {hasVisibleSourceMaterial && (
+                  <button
+                    className="map-source-jump"
+                    onClick={() => {
+                      setNodeFilter('all');
+                      setSelectedNodeId(sourceMaterialId);
+                      setIsDetailOpen(true);
+                    }}
+                    type="button"
+                  >
+                    <span>{t('maps.sourceEvidence')}</span>
+                    <strong>{t('maps.openSourceNode')}</strong>
+                  </button>
+                )}
                 <div className="map-node-confidence">
                   <div>
                     <span>{t('maps.statusLabel')}</span>
@@ -1071,13 +1174,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                         ) : null;
                       })()}
                       <div className="map-relation-type-grid">
-                        {[
-                          { value: 'related_to', label: t('maps.relationType.relatedTo') },
-                          { value: 'derived_from', label: t('maps.relationType.derivedFrom') },
-                          { value: 'supports', label: t('maps.relationType.supports') },
-                          { value: 'contradicts', label: t('maps.relationType.contradicts') },
-                          { value: 'contains', label: t('maps.relationType.contains') },
-                        ].map((option) => (
+                        {editableRelationOptions.map((option) => (
                           <button
                             key={option.value}
                             type="button"

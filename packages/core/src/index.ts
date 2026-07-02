@@ -158,6 +158,8 @@ import {
   type RecommendationBucket,
 } from '@zhijing/shared';
 import { fetchUrlAsMarkdown, parseRawHtml } from './web-fetch.js';
+import * as ssrfGuard from './ssrf-guard.js';
+import { createSsrfSafeFetch as createSafeFetch } from './ssrf-guard.js';
 import {
   createDefaultDataAccount,
   setMinimalMode,
@@ -205,6 +207,7 @@ import {
 } from './search-zvec.js';
 export { initProxyDispatcher, getCurrentProxy } from './fetch-dispatcher.js';
 export { detectSystemProxy, setManualProxy, resetProxyCache } from './proxy-detector.js';
+export { checkUrlForSsrf, assertUrlSafeForSsrf, createSsrfSafeFetch } from './ssrf-guard.js';
 import {
   persistGeneratedProposals,
   getActiveProposals,
@@ -7757,6 +7760,13 @@ const DOUYIN_VIDEO_CDN_INDICATOR = 'douyinvod';
 const DOUYIN_REFERER = 'https://www.douyin.com/';
 
 /**
+ * SSRF 安全 fetch 单例：用于 index.ts 内所有外部抓取路径（Jina Reader 等）。
+ * 每次重定向后会重新校验目标 URL，避免外部 302 重定向到内网地址。
+ * @author fxbin
+ */
+const ssrfSafeFetch = createSafeFetch();
+
+/**
  * 抖音提取脚本返回的 JSON 结构
  * @author fxbin
  */
@@ -8257,7 +8267,9 @@ function uniqueStrings(values: string[]) {
 }
 
 async function tryParseWithJinaReader(sourceUrl: string) {
+  if (!ssrfGuard.checkUrlForSsrf(sourceUrl).ok) return undefined;
   const readerUrl = `${jinaReaderBaseUrl()}${sourceUrl}`;
+  if (!ssrfGuard.checkUrlForSsrf(readerUrl).ok) return undefined;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15_000);
   try {
@@ -8268,7 +8280,7 @@ async function tryParseWithJinaReader(sourceUrl: string) {
       headers.authorization = `Bearer ${process.env.JINA_API_KEY}`;
     }
 
-    const response = await fetch(readerUrl, {
+    const response = await ssrfSafeFetch(readerUrl, {
       signal: controller.signal,
       redirect: 'follow',
       headers,

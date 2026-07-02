@@ -19,6 +19,7 @@ import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
 import TurndownService from 'turndown';
 import { extractText, getDocumentProxy } from 'unpdf';
+import { assertUrlSafeForSsrf, createSsrfSafeFetch } from './ssrf-guard.js';
 
 /**
  * 抓取超时时间（毫秒），与 parseOrdinaryWebMaterial 保持一致。
@@ -44,6 +45,12 @@ const MIN_VALID_LENGTH = 120;
  * 知径爬虫 UA 标识，与 parseOrdinaryWebMaterial 保持一致。
  */
 const USER_AGENT = 'ZhijingBot/0.1 (+https://local.zhijing.app)';
+
+/**
+ * SSRF 安全 fetch 单例。
+ * 每次重定向后会重新校验目标 URL，避免外部 302 重定向到内网地址。
+ */
+const safeFetch = createSsrfSafeFetch();
 
 /**
  * TurndownService 单例，配置 markdown 输出风格。
@@ -106,11 +113,12 @@ export async function fetchUrlAsMarkdown(sourceUrl: string): Promise<FetchedCont
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error('Only http and https URLs can be parsed.');
   }
+  assertUrlSafeForSsrf(sourceUrl);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
       signal: controller.signal,
       redirect: 'follow',
       headers: {

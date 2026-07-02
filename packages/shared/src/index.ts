@@ -842,6 +842,10 @@ export interface KnowledgeMapResult {
   stats: {
     materials: number;
     cards: number;
+    visibleMaterials?: number;
+    visibleCards?: number;
+    hiddenMaterials?: number;
+    hiddenCards?: number;
     sourcedCards: number;
     skeletonCards: number;
     tensionEdges: number;
