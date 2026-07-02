@@ -254,11 +254,32 @@ const DECISION_LOG_KIND_SET = new Set<string>(DECISION_LOG_KIND_VALUES);
 const AGENT_USAGE_DEFAULT_LIMIT = 100;
 const AGENT_USAGE_MAX_LIMIT = 500;
 
+/**
+ * inspect 调试路由访问令牌。
+ * 仅当环境变量 ZHIJING_INSPECT_TOKEN 被设置时，inspect 路由才可用；
+ * 客户端必须通过 x-inspect-token 请求头传入相同令牌。
+ * 未设置时 inspect 路由返回 404，避免任意客户端拖库。
+ * @author fxbin
+ */
+const INSPECT_TOKEN = process.env.ZHIJING_INSPECT_TOKEN ?? '';
+
 function resolveAllowedOrigins(): string[] {
   const raw = process.env.ZHIJING_ALLOWED_ORIGINS;
   if (!raw) return DEFAULT_ALLOWED_ORIGINS;
   const origins = raw.split(',').map((item) => item.trim()).filter(Boolean);
   return origins.length > 0 ? origins : DEFAULT_ALLOWED_ORIGINS;
+}
+
+/**
+ * 校验 inspect 调试路由的访问令牌。
+ * 未配置令牌或令牌不匹配时返回 false，调用方应返回 404 或 403。
+ * @author fxbin
+ */
+function isInspectAllowed(request: { headers: Record<string, string | string[] | undefined> }): boolean {
+  if (!INSPECT_TOKEN) return false;
+  const headerValue = request.headers['x-inspect-token'];
+  const provided = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  return typeof provided === 'string' && provided.length > 0 && provided === INSPECT_TOKEN;
 }
 
 export function buildApi() {
@@ -476,9 +497,17 @@ export function buildApi() {
     },
   );
 
-  app.get('/api/inspect/tables', async () => ({ tables: listInspectTables() }));
+  app.get('/api/inspect/tables', async (request, reply) => {
+    if (!isInspectAllowed(request)) {
+      return reply.code(404).send({ error: 'Not Found' });
+    }
+    return { tables: listInspectTables() };
+  });
 
   app.post<{ Body: { sql?: string; limit?: number } }>('/api/inspect/query', async (request, reply) => {
+    if (!isInspectAllowed(request)) {
+      return reply.code(404).send({ error: 'Not Found' });
+    }
     const sql = typeof request.body?.sql === 'string' ? request.body.sql.trim() : '';
     if (!sql) {
       return reply.code(400).send({ error: 'sql 为必填。' });

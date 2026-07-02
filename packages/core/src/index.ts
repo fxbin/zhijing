@@ -371,6 +371,8 @@ const MAP_EDGE_ALLOWED_RELATIONS: ReadonlySet<string> = new Set([
   MAP_EDGE_RELATION_RELATED_TO,
 ]);
 const MAP_TENSION_EDGE_LIMIT = 20;
+const MAP_VISIBLE_MATERIAL_LIMIT = 80;
+const MAP_VISIBLE_CARD_LIMIT = 140;
 
 /**
  * 证据审计与假设检验相关常量（P13）。
@@ -481,6 +483,21 @@ const RELATED_SUGGESTION_REASON_DIRECT = '基于标题精确匹配';
  */
 const AGENT_ACTION_LOG_DEFAULT_LIMIT = 50;
 const AGENT_ACTION_LOG_MAX_LIMIT = 200;
+
+/**
+ * inspect 调试查询禁止访问的敏感表名（小写匹配）。
+ * 包含凭证、用户记忆、决策日志等隐私数据，避免拖库泄漏。
+ * @author fxbin
+ */
+const INSPECT_FORBIDDEN_TABLES: readonly string[] = [
+  'model_provider_settings',
+  'model_provider_profiles',
+  'weread_settings',
+  'user_memory',
+  'decision_log',
+  'agent_usage',
+  'messages',
+];
 const AGENT_ACTION_LOG_TABLE_NAME = 'agent_action_log';
 const AGENT_ACTION_LOG_ID_PREFIX = 'alog';
 const AGENT_ACTION_SUCCESS_TRUE = 1;
@@ -4301,8 +4318,11 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   /**
    * 执行 inspect SQL 查询（SQLite 实现，只读）。
    *
-   * 安全限制：仅允许 SELECT 语句，禁止任何写操作。
-   * 结果行数受 limit 参数限制，默认 50 行。
+   * 安全限制：
+   * 1. 仅允许 SELECT 语句，禁止任何写操作；
+   * 2. 禁止查询含凭证的敏感表（model_provider_settings、model_provider_profiles、weread_settings）；
+   * 3. 禁止查询用户记忆与决策日志等隐私表（user_memory、decision_log）；
+   * 4. limit 参数强制整数化并限定上限，避免 DoS。
    *
    * @param sql - SQL 语句（必须是 SELECT）
    * @param limit - 最大返回行数
@@ -4310,10 +4330,17 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
    */
   executeInspectQuery(sql: string, limit?: number): Array<Record<string, unknown>> {
     const trimmedSql = sql.trim();
-    if (!trimmedSql.toLowerCase().startsWith('select')) {
+    const lowered = trimmedSql.toLowerCase();
+    if (!lowered.startsWith('select')) {
       throw new KnowledgeCoreError('inspect 仅支持 SELECT 语句。', 400);
     }
-    const maxRows = Math.min(limit ?? AGENT_ACTION_LOG_DEFAULT_LIMIT, AGENT_ACTION_LOG_MAX_LIMIT);
+    for (const forbidden of INSPECT_FORBIDDEN_TABLES) {
+      if (lowered.includes(forbidden)) {
+        throw new KnowledgeCoreError(`inspect 禁止查询敏感表：${forbidden}`, 403);
+      }
+    }
+    const rawLimit = Number.isFinite(limit as number) ? Math.floor(limit as number) : AGENT_ACTION_LOG_DEFAULT_LIMIT;
+    const maxRows = Math.min(rawLimit, AGENT_ACTION_LOG_MAX_LIMIT);
     const stmt = this.db.prepare(`${trimmedSql} LIMIT ${maxRows}`);
     return stmt.all() as Array<Record<string, unknown>>;
   }
@@ -9798,7 +9825,8 @@ export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {
 
   const materials = repository.listMaterials(id);
   const cards = repository.listCards(id);
-  const materialNodes = materials.slice(0, 18).map((material) => ({
+  const visibleMaterials = materials.slice(0, MAP_VISIBLE_MATERIAL_LIMIT);
+  const materialNodes = visibleMaterials.map((material) => ({
     id: `material:${material.id}`,
     kind: 'material' as const,
     label: material.title,
@@ -9815,7 +9843,8 @@ export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {
     const rankB = b.claimStatus === 'sourced' ? 0 : b.claimStatus === 'user_confirmed' ? 1 : 2;
     return rankA - rankB;
   });
-  const cardNodes = sortedCards.slice(0, 28).map((card) => ({
+  const visibleCards = sortedCards.slice(0, MAP_VISIBLE_CARD_LIMIT);
+  const cardNodes = visibleCards.map((card) => ({
     id: `card:${card.id}`,
     kind: 'card' as const,
     label: card.title,
@@ -9884,6 +9913,10 @@ export function getKnowledgeMap(id: string): KnowledgeMapResult | undefined {
     stats: {
       materials: materials.length,
       cards: cards.length,
+      visibleMaterials: materialNodes.length,
+      visibleCards: cardNodes.length,
+      hiddenMaterials: Math.max(materials.length - materialNodes.length, 0),
+      hiddenCards: Math.max(cards.length - cardNodes.length, 0),
       sourcedCards: cards.filter((card) => card.claimStatus === 'sourced').length,
       skeletonCards: cards.filter((card) => card.claimStatus === 'ai_skeleton').length,
       tensionEdges: tensionEdges.length,
