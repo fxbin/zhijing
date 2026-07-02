@@ -15,7 +15,7 @@
  * @author fxbin
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import api from '../utils/api';
 import { DATA_ACCOUNT_SETTINGS_PATH, MINIMAL_MODE_PATH } from '../constants/weread';
 
@@ -74,12 +74,12 @@ export function useMinimalMode() {
     }
   }, []);
 
-  return {
+  return useMemo(() => ({
     enabled,
     featureState,
     loading,
     error,
     fetchMinimalMode,
     toggleMinimalMode,
-  };
+  }), [enabled, featureState, loading, error, fetchMinimalMode, toggleMinimalMode]);
 }

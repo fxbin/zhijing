@@ -29,6 +29,7 @@ import { useAssistantState } from './hooks/useAssistantState';
 import { useKitState } from './hooks/useKitState';
 import { useMaterialParseState } from './hooks/useMaterialParseState';
 import { useModalState } from './hooks/useModalState';
+import ErrorBoundary from './components/ErrorBoundary';
 import SystemNotice from './components/SystemNotice';
 import NotificationDropdown from './components/NotificationDropdown';
 import CreateKbModal from './components/CreateKbModal';
@@ -864,4 +865,8 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+createRoot(document.getElementById('root')).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>,
+);

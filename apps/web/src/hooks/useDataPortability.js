@@ -12,7 +12,7 @@
  * @author fxbin
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import api from '../utils/api';
 import {
   DATA_PORTABILITY_EXPORT_PATH,
@@ -96,12 +96,12 @@ export function useDataPortability() {
     }
   }, []);
 
-  return {
+  return useMemo(() => ({
     records,
     loading,
     error,
     fetchRecords,
     exportProfile,
     revokeRecord,
-  };
+  }), [records, loading, error, fetchRecords, exportProfile, revokeRecord]);
 }

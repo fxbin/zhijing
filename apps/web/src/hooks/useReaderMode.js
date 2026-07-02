@@ -12,7 +12,7 @@
  * @author fxbin
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import api from '../utils/api';
 import {
   READER_MODE_PROFILE_PATH,
@@ -87,12 +87,12 @@ export function useReaderMode() {
     }
   }, []);
 
-  return {
+  return useMemo(() => ({
     profile,
     loading,
     error,
     fetchProfile,
     startRollback,
     cancelRollback,
-  };
+  }), [profile, loading, error, fetchProfile, startRollback, cancelRollback]);
 }
