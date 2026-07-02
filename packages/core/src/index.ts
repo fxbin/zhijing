@@ -3018,7 +3018,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     }
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const limit = query.limit ?? DEFAULT_USER_MEMORY_QUERY_LIMIT;
-    const rows = this.db.prepare(`SELECT * FROM user_memory ${whereClause} ORDER BY updated_at DESC LIMIT ${limit}`).all(params) as UserMemoryRow[];
+    const rows = this.db.prepare(`SELECT * FROM user_memory ${whereClause} ORDER BY updated_at DESC LIMIT @limit`).all({ ...params, limit }) as UserMemoryRow[];
     return rows.map(mapUserMemory);
   }
 
@@ -5028,8 +5028,36 @@ function mapModelProviderProfileRow(row: ModelProviderProfileRow): ModelProvider
   };
 }
 
+/**
+ * core 包模块目录到 monorepo 根目录的上溯层级。
+ * packages/core/dist/ 或 packages/core/src/ 到根目录均为 3 级。
+ */
+const MONOREPO_ROOT_ASCENT = 3;
+
+/**
+ * 推导 monorepo 根目录绝对路径。
+ * 基于 import.meta.url 解析，避免 process.cwd() 在子目录启动时指向错误位置。
+ * @returns monorepo 根目录绝对路径
+ * @author fxbin
+ */
+function resolveProjectRoot(): string {
+  const moduleDir = dirname(fileURLToPath(import.meta.url));
+  let dir = moduleDir;
+  for (let i = 0; i < MONOREPO_ROOT_ASCENT; i += 1) {
+    dir = dirname(dir);
+  }
+  return dir;
+}
+
+/**
+ * monorepo 根目录缓存，模块加载时计算一次。
+ * 必须在 defaultSqlitePath / createSqliteKnowledgeRepository 等模块加载期
+ * 调用的代码之前定义，否则会触发 const TDZ。
+ */
+const PROJECT_ROOT = resolveProjectRoot();
+
 function defaultSqlitePath() {
-  return process.env.ZHIJING_DB_PATH ?? join(process.cwd(), '.data', 'zhijing.sqlite');
+  return process.env.ZHIJING_DB_PATH ?? join(PROJECT_ROOT, '.data', 'zhijing.sqlite');
 }
 
 /**
@@ -7792,7 +7820,6 @@ async function parseOrdinaryWebMaterial(material: MaterialRecord): Promise<Parse
   };
 }
 
-const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const DOUYIN_SCRIPT_PATH = join(PROJECT_ROOT, 'scripts', 'douyin_extract.py');
 const DOUYIN_EXTRACT_TIMEOUT_MS = 90_000;
 const DOUYIN_EXTRACT_MAX_BUFFER = 2 * 1024 * 1024;

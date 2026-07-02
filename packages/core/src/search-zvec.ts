@@ -26,12 +26,39 @@ import {
   type ZVecDoc,
 } from '@zvec/zvec';
 import { mkdirSync, existsSync, writeFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Zvec 数据目录环境变量名。
  */
 const ZVEC_DATA_DIR_ENV = 'ZHIJING_ZVEC_DIR';
+
+/**
+ * core 包模块目录到 monorepo 根目录的上溯层级。
+ * packages/core/dist/ 或 packages/core/src/ 到根目录均为 3 级。
+ */
+const MONOREPO_ROOT_ASCENT = 3;
+
+/**
+ * 推导 monorepo 根目录绝对路径。
+ * 基于 import.meta.url 解析，避免 process.cwd() 在子目录启动时指向错误位置。
+ * @returns monorepo 根目录绝对路径
+ * @author fxbin
+ */
+function resolveProjectRoot(): string {
+  const moduleDir = dirname(fileURLToPath(import.meta.url));
+  let dir = moduleDir;
+  for (let i = 0; i < MONOREPO_ROOT_ASCENT; i += 1) {
+    dir = dirname(dir);
+  }
+  return dir;
+}
+
+/**
+ * monorepo 根目录缓存，模块加载时计算一次。
+ */
+const PROJECT_ROOT = resolveProjectRoot();
 
 /**
  * 默认 Zvec 数据目录名（相对 .data）。
@@ -162,7 +189,7 @@ let zvecDir = '';
  * @author fxbin
  */
 function defaultZvecDataDir(): string {
-  return process.env[ZVEC_DATA_DIR_ENV] ?? join(process.cwd(), '.data', ZVEC_DEFAULT_DIR_NAME);
+  return process.env[ZVEC_DATA_DIR_ENV] ?? join(PROJECT_ROOT, '.data', ZVEC_DEFAULT_DIR_NAME);
 }
 
 /**
