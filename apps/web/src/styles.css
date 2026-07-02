@@ -8048,6 +8048,35 @@ button { cursor: pointer; }
   50% { filter: drop-shadow(0 0 16px rgba(9, 20, 38, 0.55)); }
 }
 
+/* 目标选择模式：source 节点变暗 */
+.map-svg-node.connect-source {
+  opacity: 0.35;
+}
+
+.map-svg-node.connect-source circle {
+  animation: none;
+}
+
+/* 目标选择模式：可选目标节点高亮 */
+.map-svg-node.connect-candidate circle {
+  stroke: #e8a54a;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 10px rgba(232, 165, 74, 0.5));
+  animation: map-candidate-pulse 1.4s ease-in-out infinite;
+  cursor: pointer;
+}
+
+@keyframes map-candidate-pulse {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(232, 165, 74, 0.4)); }
+  50% { filter: drop-shadow(0 0 14px rgba(232, 165, 74, 0.7)); }
+}
+
+.map-svg-node.connect-candidate:hover circle {
+  stroke: #d4902a;
+  stroke-width: 5;
+  filter: drop-shadow(0 0 18px rgba(232, 165, 74, 0.8));
+}
+
 /* 选区矩形 */
 .map-selection-box {
   fill: rgba(9, 20, 38, 0.06);

@@ -3,7 +3,7 @@
  * 知识地图视图：以 SVG 关系图展示工作区节点与边，并支持节点筛选、搜索与详情查看。
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { CircleX, RefreshCw, Search, X } from 'lucide-react';
@@ -61,6 +61,8 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
   // Connect to Target 流程：选目标 → 选关系类型 → 批量创建
   const [connectTargetMode, setConnectTargetMode] = useState(false);
   const [relationTypePicker, setRelationTypePicker] = useState(null); // { targetId }
+  // 防止 saveBatchRelations 在 await 期间被重复触发，避免后端创建重复 map_custom_edges
+  const savingRelationsRef = useRef(false);
 
   useEffect(() => {
     try {
@@ -93,14 +95,25 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
 
   /**
    * 批量创建关系：将 selectedNodeIds 中的每个节点连接到 targetId。
+   *
+   * 防并发保护：
+   * - 进入时立即置 savingRelationsRef 为 true 并关闭 relationTypePicker，
+   *   使关系类型按钮随之卸载，避免在 await 期间被重复点击；
+   * - 通过 savingRelationsRef 拦截任何路径（含重新进入 Connect to Target）触发的重入；
+   * - finally 中复位标志，保证失败后用户仍可重试。
+   *
    * @param {string} targetId - 目标节点 ID
    * @param {string} relation - 关系类型
    */
   async function saveBatchRelations(targetId, relation) {
+    if (savingRelationsRef.current) return;
     if (!selectedWorkspaceId || selectedNodeIds.size === 0 || !targetId) return;
+    savingRelationsRef.current = true;
+    setRelationTypePicker(null);
     const sourceIds = Array.from(selectedNodeIds).filter((id) => id !== targetId);
     if (sourceIds.length === 0) {
       clearBatchSelection();
+      savingRelationsRef.current = false;
       return;
     }
     try {
@@ -119,6 +132,8 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
       await reloadMap();
     } catch {
       setStatus(t('maps.status.saveFailed'));
+    } finally {
+      savingRelationsRef.current = false;
     }
   }
 
@@ -227,6 +242,8 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
    */
   function handleNodePointerDown(event, nodeId) {
     event.stopPropagation();
+    // 目标选择模式下不启动节点拖拽，让 onClick 正常触发
+    if (connectTargetMode) return;
     const target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
     const svgPoint = pointerToSvg(event);
@@ -591,7 +608,10 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                       );
                       const isDimmed = focusedId && !isActive && !isHovered && !isRelated && node.id !== focusedId;
                       const isBatchSelected = selectedNodeIds.has(node.id);
-                      const className = `map-svg-node ${node.kind}${isActive ? ' active' : ''}${isMatched ? ' matched' : ''}${isHovered ? ' hovered' : ''}${isDimmed ? ' dimmed' : ''}${isBatchSelected ? ' batch-selected' : ''}`;
+                      // 目标选择模式下：已选 source 节点变暗，可选目标节点高亮
+                      const isConnectSource = connectTargetMode && isBatchSelected;
+                      const isConnectCandidate = connectTargetMode && !isBatchSelected;
+                      const className = `map-svg-node ${node.kind}${isActive ? ' active' : ''}${isMatched ? ' matched' : ''}${isHovered ? ' hovered' : ''}${isDimmed ? ' dimmed' : ''}${isBatchSelected ? ' batch-selected' : ''}${isConnectSource ? ' connect-source' : ''}${isConnectCandidate ? ' connect-candidate' : ''}`;
                       return (
                         <g
                           className={className}
