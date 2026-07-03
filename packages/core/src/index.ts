@@ -8102,9 +8102,14 @@ function extractXiaohongshuShareTitle(input: string | undefined) {
   return beforeUrl ? compactTitle(beforeUrl.replace(/^\d+\s*/, '')) : undefined;
 }
 
+/**
+ * 小红书公开页面抓取超时（毫秒）。
+ */
+const XIAOHONGSHU_FETCH_TIMEOUT_MS = 12_000;
+
 async function tryParseXiaohongshuPublicPage(sourceUrl: string) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12_000);
+  const timer = setTimeout(() => controller.abort(), XIAOHONGSHU_FETCH_TIMEOUT_MS);
   try {
     const response = await fetch(sourceUrl, {
       signal: controller.signal,
@@ -8447,12 +8452,17 @@ function uniqueStrings(values: string[]) {
   return result;
 }
 
+/**
+ * Jina Reader 抓取超时（毫秒）。
+ */
+const JINA_READER_FETCH_TIMEOUT_MS = 15_000;
+
 async function tryParseWithJinaReader(sourceUrl: string) {
   if (!ssrfGuard.checkUrlForSsrf(sourceUrl).ok) return undefined;
   const readerUrl = `${jinaReaderBaseUrl()}${sourceUrl}`;
   if (!ssrfGuard.checkUrlForSsrf(readerUrl).ok) return undefined;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15_000);
+  const timer = setTimeout(() => controller.abort(), JINA_READER_FETCH_TIMEOUT_MS);
   try {
     const headers: Record<string, string> = {
       accept: 'text/plain;charset=utf-8',
