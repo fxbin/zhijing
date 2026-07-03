@@ -14,6 +14,7 @@
     "build": "npm run build -w @zhijing/shared && npm run build -w @zhijing/core && npm run build -w @zhijing/pi-runtime && npm run build -w @zhijing/agent && npm run build -w @zhijing/api && npm run build -w @zhijing/web",
     "typecheck": "npm run typecheck -w @zhijing/shared && npm run typecheck -w @zhijing/core && npm run typecheck -w @zhijing/pi-runtime && npm run typecheck -w @zhijing/agent && npm run typecheck -w @zhijing/api",
     "test": "npm run test -w @zhijing/core",
+    "check:web-routes": "node scripts/check-web-view-routes.mjs",
     "preview": "npm run preview -w @zhijing/web"
   },
   "devDependencies": {
