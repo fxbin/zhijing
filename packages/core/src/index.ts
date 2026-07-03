@@ -6900,11 +6900,86 @@ export function applyProposedOperations(
  * @returns 包含 op / cardId? / materialId? / card? 的执行结果
  * @author fxbin
  */
+const PROPOSAL_OP_CREATE_CARD = 'create_card';
+const PROPOSAL_OP_EDIT_CARD = 'edit_card';
+const PROPOSAL_OP_ARCHIVE_CARD = 'archive_card';
+const PROPOSAL_OP_UNARCHIVE_CARD = 'unarchive_card';
+const PROPOSAL_OP_ARCHIVE_MATERIAL = 'archive_material';
+const PROPOSAL_OP_ALLOWED: ReadonlySet<string> = new Set([
+  PROPOSAL_OP_CREATE_CARD,
+  PROPOSAL_OP_EDIT_CARD,
+  PROPOSAL_OP_ARCHIVE_CARD,
+  PROPOSAL_OP_UNARCHIVE_CARD,
+  PROPOSAL_OP_ARCHIVE_MATERIAL,
+]);
+
+/**
+ * 校验单条提议操作的字段类型，防止前端伪造字段类型导致后续逻辑异常。
+ * 仅做类型与基础非空校验，业务校验（如卡片存在性、工作区归属）由各分支处理。
+ *
+ * @param operation - 待校验的提议操作
+ * @throws KnowledgeCoreError 当字段类型不合规时
+ * @author fxbin
+ */
+function assertProposedOperationShape(operation: unknown): asserts operation is ProposedOperation {
+  if (!operation || typeof operation !== 'object' || Array.isArray(operation)) {
+    throw new KnowledgeCoreError('Invalid proposed operation: must be a JSON object.', 400);
+  }
+  const op = (operation as { op?: unknown }).op;
+  if (typeof op !== 'string' || !PROPOSAL_OP_ALLOWED.has(op)) {
+    throw new KnowledgeCoreError(`Invalid proposed operation: unsupported op "${String(op)}".`, 400);
+  }
+  const rec = operation as Record<string, unknown>;
+  if (op === PROPOSAL_OP_CREATE_CARD) {
+    if (typeof rec.title !== 'string' || rec.title.trim().length === 0) {
+      throw new KnowledgeCoreError('Invalid create_card operation: title must be a non-empty string.', 400);
+    }
+    if (typeof rec.body !== 'string') {
+      throw new KnowledgeCoreError('Invalid create_card operation: body must be a string.', 400);
+    }
+    if (typeof rec.type !== 'string') {
+      throw new KnowledgeCoreError('Invalid create_card operation: type must be a string.', 400);
+    }
+    if (rec.materialId !== undefined && (typeof rec.materialId !== 'string' || rec.materialId.trim().length === 0)) {
+      throw new KnowledgeCoreError('Invalid create_card operation: materialId must be a non-empty string when present.', 400);
+    }
+    return;
+  }
+  if (op === PROPOSAL_OP_EDIT_CARD) {
+    if (typeof rec.cardId !== 'string' || rec.cardId.trim().length === 0) {
+      throw new KnowledgeCoreError('Invalid edit_card operation: cardId must be a non-empty string.', 400);
+    }
+    if (rec.title !== undefined && typeof rec.title !== 'string') {
+      throw new KnowledgeCoreError('Invalid edit_card operation: title must be a string when present.', 400);
+    }
+    if (rec.body !== undefined && typeof rec.body !== 'string') {
+      throw new KnowledgeCoreError('Invalid edit_card operation: body must be a string when present.', 400);
+    }
+    if (rec.type !== undefined && typeof rec.type !== 'string') {
+      throw new KnowledgeCoreError('Invalid edit_card operation: type must be a string when present.', 400);
+    }
+    return;
+  }
+  if (op === PROPOSAL_OP_ARCHIVE_CARD || op === PROPOSAL_OP_UNARCHIVE_CARD) {
+    if (typeof rec.cardId !== 'string' || rec.cardId.trim().length === 0) {
+      throw new KnowledgeCoreError(`Invalid ${op} operation: cardId must be a non-empty string.`, 400);
+    }
+    return;
+  }
+  if (op === PROPOSAL_OP_ARCHIVE_MATERIAL) {
+    if (typeof rec.materialId !== 'string' || rec.materialId.trim().length === 0) {
+      throw new KnowledgeCoreError('Invalid archive_material operation: materialId must be a non-empty string.', 400);
+    }
+    return;
+  }
+}
+
 function executeProposedOperation(
   operation: ProposedOperation,
   workspaceId: string,
   timestamp: string,
 ): { op: ProposedOperationType; cardId?: string; materialId?: string; card?: KnowledgeCard } {
+  assertProposedOperationShape(operation);
   switch (operation.op) {
     case 'create_card': {
       const card: KnowledgeCard = {
