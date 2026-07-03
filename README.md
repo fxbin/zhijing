@@ -81,6 +81,20 @@ export ZHIJING_PI_ENABLED=1
 
 未配置 API Key 时自动回退到 mock 模式，保证开发闭环不断。
 
+#### 接入商汤 SenseNova Token Plan（免费公测）
+
+公测期完全免费，每模型 1500 次调用 / 5 小时刷新。直接复用 `deepseek-v4-flash` 模型：
+
+```bash
+export ZHIJING_PI_PROVIDER=deepseek
+export ZHIJING_PI_MODEL=deepseek-v4-flash
+export ZHIJING_PI_BASE_URL=https://token.sensenova.cn/v1
+export ZHIJING_PI_API_KEY=你的 SenseNova API Key
+export ZHIJING_PI_ENABLED=1
+```
+
+申请地址：https://platform.sensenova.cn/console/keys
+
 ### 验证门禁
 
 ```bash

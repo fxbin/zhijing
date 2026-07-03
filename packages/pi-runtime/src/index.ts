@@ -226,6 +226,14 @@ export interface PiAiRuntimeConfig {
 const defaultProvider: KnownProvider = 'deepseek';
 const defaultModel = 'deepseek-v4-flash';
 
+/**
+ * 自定义 base URL 环境变量名。
+ * 设置时覆盖 SDK 内置 provider 的默认 base URL，
+ * 用于接入 OpenAI 兼容的第三方端点（如商汤 SenseNova Token Plan）。
+ * @author fxbin
+ */
+const PI_BASE_URL_ENV = 'ZHIJING_PI_BASE_URL';
+
 export function getDefaultPiProvider() {
   return defaultProvider;
 }
@@ -449,7 +457,32 @@ export {
 } from './instrumented.js';
 
 function getConfiguredModel(provider: KnownProvider, modelId: string): Model<Api> {
-  return getModel(provider, modelId as never) as Model<Api>;
+  return resolveConfiguredModel(provider, modelId);
+}
+
+/**
+ * 解析最终生效的 Model 实例。
+ *
+ * 解析顺序：
+ * 1. 通过 SDK `getModel(provider, modelId)` 获取内置 Model 模板
+ * 2. 若环境变量 `ZHIJING_PI_BASE_URL` 设置，覆盖 Model.baseUrl
+ *    用于接入 OpenAI 兼容的第三方端点（如商汤 SenseNova Token Plan：
+ *    `https://token.sensenova.cn/v1`，model id 直接复用 `deepseek-v4-flash`）
+ *
+ * 该函数被 pi-runtime 与 agent-factory 共用，保证两条 LLM 入口的 base URL 一致。
+ *
+ * @param provider - LLM provider，如 'deepseek' / 'openai'
+ * @param modelId - 模型 id，如 'deepseek-v4-flash'
+ * @returns 最终生效的 Model 实例，baseUrl 可能被环境变量覆盖
+ * @author fxbin
+ */
+export function resolveConfiguredModel(provider: KnownProvider, modelId: string): Model<Api> {
+  const baseModel = getModel(provider, modelId as never) as Model<Api>;
+  const overrideBaseUrl = process.env[PI_BASE_URL_ENV];
+  if (!overrideBaseUrl || overrideBaseUrl.trim().length === 0) {
+    return baseModel;
+  }
+  return { ...baseModel, baseUrl: overrideBaseUrl.trim() };
 }
 
 function buildContext(request: StructuredGenerationRequest): Context {

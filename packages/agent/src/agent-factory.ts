@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import {
-  getModel,
   getEnvApiKey,
   streamSimple,
   createAssistantMessageEventStream,
@@ -12,7 +11,7 @@ import {
   type Model,
 } from '@earendil-works/pi-ai';
 import { Agent, type AgentMessage, type AgentOptions, type ThinkingLevel } from '@earendil-works/pi-agent-core';
-import { routeProvider, type AgentTaskType } from '@zhijing/pi-runtime';
+import { routeProvider, resolveConfiguredModel, type AgentTaskType } from '@zhijing/pi-runtime';
 import { recordAgentUsage } from '@zhijing/core';
 import type { ProviderRole } from '@zhijing/shared';
 import { createWorkspaceTools, getToolCapabilityDeclaration } from './tools/index.js';
@@ -229,7 +228,7 @@ export function createWorkspaceAgent(workspaceId: string, options: WorkspaceAgen
     throw new Error(`createWorkspaceAgent: no API key resolved for provider "${provider}". Set ZHIJING_PI_API_KEY or pass options.apiKey.`);
   }
 
-  const model = getModel(provider, modelId as never) as Model<Api>;
+  const model = resolveConfiguredModel(provider, modelId);
   const tools = createGuardedWorkspaceTools(workspaceId, options.auditSink);
 
   return new Agent({
