@@ -511,6 +511,10 @@ function createByteLimitStream(maxBytes: number) {
   });
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
 function resolveAllowedOrigins(): string[] {
   const raw = process.env.ZHIJING_ALLOWED_ORIGINS;
   if (!raw) return DEFAULT_ALLOWED_ORIGINS;
@@ -1002,7 +1006,11 @@ export function buildApi() {
       }
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), PROXY_VIDEO_FETCH_TIMEOUT_MS);
-      request.raw.on('close', () => controller.abort());
+      reply.raw.on('close', () => {
+        if (!reply.raw.writableEnded) {
+          controller.abort();
+        }
+      });
       let response: Awaited<ReturnType<typeof ssrfSafeFetch>>;
       try {
         response = await ssrfSafeFetch(videoUrl, { headers, signal: controller.signal });
@@ -1038,9 +1046,26 @@ export function buildApi() {
       if (!upstreamBody) {
         return reply.code(502).send({ error: 'Video stream unavailable.' });
       }
-      const nodeStream = Readable.fromWeb(
+      const sourceStream = Readable.fromWeb(
         upstreamBody as Parameters<typeof Readable.fromWeb>[0],
-      ).pipe(createByteLimitStream(maxBytes));
+      );
+      const limitStream = createByteLimitStream(maxBytes);
+      let streamErrorHandled = false;
+      const handleStreamError = (error: Error) => {
+        if (streamErrorHandled) return;
+        streamErrorHandled = true;
+        if (isAbortError(error) || reply.raw.destroyed) {
+          request.log.debug({ error }, 'proxy video stream closed');
+        } else {
+          request.log.error({ error }, 'proxy video stream failed');
+        }
+        if (!reply.raw.destroyed) {
+          reply.raw.destroy(isAbortError(error) ? undefined : error);
+        }
+      };
+      sourceStream.on('error', handleStreamError);
+      limitStream.on('error', handleStreamError);
+      const nodeStream = sourceStream.pipe(limitStream);
       return reply
         .code(response.status === 206 ? 206 : 200)
         .headers(replyHeaders)
