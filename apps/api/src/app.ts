@@ -1,8 +1,11 @@
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
 import cron from 'node-cron';
 import Fastify from 'fastify';
 import { Readable, Transform } from 'node:stream';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   archiveCard,
   archiveMaterial,
@@ -641,7 +644,7 @@ function isLlmQuotaExceeded(ip: string): boolean {
   return bucket.count > LLM_DAILY_LIMIT;
 }
 
-export function buildApi() {
+export async function buildApi() {
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? 'info',
@@ -3146,6 +3149,33 @@ export function buildApi() {
     );
     return { score, verification, degradeAssessment: degradeAssessment ?? null };
   });
+
+  /**
+   * 生产模式：注册前端静态文件服务。
+   * 当 NODE_ENV=production 且前端构建产物存在时，API 同时 serve 前端 SPA。
+   * 所有非 /api、/agent、/health 开头的请求回退到 index.html（SPA 路由）。
+   * 本地开发时由 Vite dev server 处理前端，不启用此插件。
+   */
+  if (process.env.NODE_ENV === 'production') {
+    const apiDir = dirname(fileURLToPath(import.meta.url));
+    const webDistDir = join(apiDir, '..', '..', 'web', 'dist');
+    try {
+      await app.register(fastifyStatic, {
+        root: webDistDir,
+        prefix: '/',
+        wildcard: false,
+      });
+      app.setNotFoundHandler((request, reply) => {
+        const url = request.url;
+        if (url.startsWith('/api') || url.startsWith('/agent') || url.startsWith('/health')) {
+          return reply.code(404).send({ error: 'Not found.' });
+        }
+        return reply.sendFile('index.html');
+      });
+    } catch (error) {
+      app.log.error({ error }, 'failed to register static file server');
+    }
+  }
 
   return app;
 }
