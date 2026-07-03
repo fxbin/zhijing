@@ -261,6 +261,7 @@ import {
   structuredSchemas,
   type KnownProvider,
   type PiRuntime,
+  setActiveProfile,
   type TSchema,
 } from '@zhijing/pi-runtime';
 import { DuckDBConnection } from '@duckdb/node-api';
@@ -5342,6 +5343,11 @@ function createRuntimeFromModelProviderConfig(config: RuntimeModelProviderConfig
 
 function applyModelProviderConfig() {
   piRuntime = createRuntimeFromModelProviderConfig(modelProviderConfig);
+  setActiveProfile({
+    provider: modelProviderConfig.provider,
+    model: modelProviderConfig.model,
+    apiKey: currentApiKey() || undefined,
+  });
 }
 
 function modelSettingsSnapshot(): ModelProviderSettings {

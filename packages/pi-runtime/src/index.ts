@@ -424,6 +424,7 @@ export {
   routeProvider,
   createRoutedPiRuntime,
   getActiveRoutes,
+  setActiveProfile,
   isRoutesOverriddenByEnv,
   DEFAULT_ROUTES,
 } from './router.js';

@@ -97,6 +97,34 @@ function parseEnvRoutes(): ProviderRoute[] | null {
 const ACTIVE_ROUTES: ProviderRoute[] = parseEnvRoutes() ?? DEFAULT_ROUTES;
 
 /**
+ * Settings 配置的激活 Profile 快照。
+ * 由 core 层在 applyModelProviderConfig 时推送，优先级高于环境变量。
+ */
+interface ActiveProfileSnapshot {
+  provider: string;
+  model: string;
+  apiKey?: string;
+}
+
+/**
+ * 当前激活的 Profile 快照；null 表示未配置，回退到环境变量。
+ */
+let activeProfile: ActiveProfileSnapshot | null = null;
+
+/**
+ * 设置当前激活的 Profile 快照。
+ *
+ * core 层在 Settings Profile 变更或初始化时调用，使 routeProvider
+ * 与 createRoutedPiRuntime 优先读取 Settings 配置而非环境变量。
+ *
+ * @param profile - Profile 快照；传 null 清除并回退到环境变量
+ * @author fxbin
+ */
+export function setActiveProfile(profile: ActiveProfileSnapshot | null): void {
+  activeProfile = profile;
+}
+
+/**
  * 判断指定 Provider 是否有可用的 API key。
  *
  * 主力 Provider（DeepSeek）检查 ZHIJING_PI_API_KEY 或 provider 默认 env key；
@@ -143,8 +171,8 @@ export function routeProvider(
 ): RouteResolution {
   const matched = routes.find((route) => route.taskTypes.includes(taskType));
   if (!matched) {
-    const fallbackProvider = process.env.ZHIJING_PI_PROVIDER ?? getDefaultPiProvider();
-    const fallbackModel = process.env.ZHIJING_PI_MODEL ?? getDefaultPiModel();
+    const fallbackProvider = activeProfile?.provider ?? process.env.ZHIJING_PI_PROVIDER ?? getDefaultPiProvider();
+    const fallbackModel = activeProfile?.model ?? process.env.ZHIJING_PI_MODEL ?? getDefaultPiModel();
     return {
       route: {
         provider: getDefaultPiProvider(),
@@ -164,8 +192,8 @@ export function routeProvider(
     const envModel = process.env.ZHIJING_PI_MODEL;
     return {
       route: matched,
-      resolvedProvider: envProvider ?? matched.provider,
-      resolvedModel: envModel ?? matched.model,
+      resolvedProvider: activeProfile?.provider ?? envProvider ?? matched.provider,
+      resolvedModel: activeProfile?.model ?? envModel ?? matched.model,
       fellBack: false,
     };
   }
@@ -207,9 +235,10 @@ export function createRoutedPiRuntime(
   const resolution = routeProvider(taskType, options.routesOverride ?? ACTIVE_ROUTES);
   const provider = resolution.resolvedProvider as KnownProvider;
   const model = resolution.resolvedModel;
-  const apiKey = resolution.resolvedProvider === getDefaultPiProvider()
-    ? (process.env.ZHIJING_PI_API_KEY ?? getEnvApiKey(provider))
-    : getEnvApiKey(provider);
+  const apiKey = activeProfile?.apiKey
+    ?? (resolution.resolvedProvider === getDefaultPiProvider()
+      ? (process.env.ZHIJING_PI_API_KEY ?? getEnvApiKey(provider))
+      : getEnvApiKey(provider));
 
   return createPiAiRuntime({
     provider,
