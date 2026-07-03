@@ -91,7 +91,7 @@ export default function FolderImportDialog({ open, onClose, workspaceId, workspa
     setError('');
     setResult(null);
     try {
-      const items = await Promise.all(
+      const settled = await Promise.allSettled(
         pickedFiles.map(async (file) => {
           const content = await file.text();
           return {
@@ -101,6 +101,13 @@ export default function FolderImportDialog({ open, onClose, workspaceId, workspa
           };
         }),
       );
+      const items = settled
+        .filter((r) => r.status === 'fulfilled')
+        .map((r) => r.value);
+      if (items.length === 0) {
+        setError(t('folderImport.defaultError'));
+        return;
+      }
       const payload = await api.post('/api/intake/files', {
         items,
         workspaceId,

@@ -89,18 +89,19 @@ export function useAgentUsage(options = {}) {
         recordsParams.set('workspaceId', workspaceId);
       }
       const compareParams = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
-      const [summaryResult, recordsResult, routesResult, compareResult, advisorResult] = await Promise.all([
+      const results = await Promise.allSettled([
         api.get(`${USAGE_SUMMARY_PATH}${summaryParams}`),
         api.get(`${USAGE_RECORDS_PATH}?${recordsParams.toString()}`),
         api.get(USAGE_ROUTES_PATH),
         api.get(`${USAGE_COMPARE_PATH}${compareParams}`),
         api.get(`${USAGE_ADVISOR_PATH}${compareParams}`),
       ]);
-      setSummary(summaryResult.summary ?? null);
-      setRecords(recordsResult.records ?? []);
-      setRoutes(routesResult ?? null);
-      setComparison(compareResult.comparison ?? null);
-      setAdvisor(advisorResult ?? null);
+      const [summaryResult, recordsResult, routesResult, compareResult, advisorResult] = results;
+      setSummary(summaryResult.status === 'fulfilled' ? summaryResult.value.summary ?? null : null);
+      setRecords(recordsResult.status === 'fulfilled' ? recordsResult.value.records ?? [] : []);
+      setRoutes(routesResult.status === 'fulfilled' ? routesResult.value ?? null : null);
+      setComparison(compareResult.status === 'fulfilled' ? compareResult.value.comparison ?? null : null);
+      setAdvisor(advisorResult.status === 'fulfilled' ? advisorResult.value ?? null : null);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载 Agent 成本数据失败');
     } finally {

@@ -33,15 +33,17 @@ export default function KnowledgeConflictResolverView({ data, setView }) {
       setLoading(true);
       setError('');
       try {
-        const [groupsData, auditData] = await Promise.all([
+        const [groupsSettled, auditSettled] = await Promise.allSettled([
           api.get('/api/conflicts/groups'),
           api.get('/api/conflicts/audit'),
         ]);
         if (cancelled) return;
-        setGroups(groupsData.groups ?? []);
-        setAuditEntries(auditData.entries ?? []);
+        const groupsData = groupsSettled.status === 'fulfilled' ? groupsSettled.value : null;
+        const auditData = auditSettled.status === 'fulfilled' ? auditSettled.value : null;
+        setGroups(groupsData?.groups ?? []);
+        setAuditEntries(auditData?.entries ?? []);
         const initialKeep = {};
-        for (const group of groupsData.groups ?? []) {
+        for (const group of groupsData?.groups ?? []) {
           if (group.items.length > 0) initialKeep[group.key] = group.items[0].id;
         }
         setKeepMap(initialKeep);

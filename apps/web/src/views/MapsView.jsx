@@ -109,7 +109,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
     }
     try {
       setStatus(t('maps.status.batchSaving', { defaultValue: '正在批量创建关系…' }));
-      await Promise.all(
+      const edgeResults = await Promise.allSettled(
         validSourceIds.map((sourceId) =>
           api.post(`/api/workspaces/${selectedWorkspaceId}/map/edges`, {
             sourceNodeId: sourceId,
@@ -118,7 +118,13 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
           }),
         ),
       );
-      setStatus(t('maps.status.batchSaved', { count: validSourceIds.length, defaultValue: `已创建 ${validSourceIds.length} 条关系` }));
+      const successCount = edgeResults.filter((r) => r.status === 'fulfilled').length;
+      const failedCount = edgeResults.length - successCount;
+      if (successCount > 0) {
+        setStatus(t('maps.status.batchSaved', { count: successCount, defaultValue: `已创建 ${successCount} 条关系` }));
+      } else {
+        setStatus(t('maps.status.saveFailed'));
+      }
       clearBatchSelection();
       await reloadMap();
     } catch {

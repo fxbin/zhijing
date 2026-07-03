@@ -121,6 +121,21 @@ const LOWERCASE_FILTER = 'lowercase';
 const DEFAULT_SEARCH_LIMIT = 8;
 
 /**
+ * 检索关键词最大长度，超过则截断，避免超长输入导致 FTS 性能问题。
+ */
+const ZVEC_QUERY_MAX_LENGTH = 256;
+
+/**
+ * Zvec FTS 查询特殊字符正则，匹配后替换为空格，避免查询语法注入。
+ */
+const ZVEC_SPECIAL_CHARS_PATTERN = /["*:(\-+)^]/g;
+
+/**
+ * 多个空白字符合并为单个空格的正则。
+ */
+const ZVEC_WHITESPACE_PATTERN = /\s+/g;
+
+/**
  * search_text 字段中 title 与 body 的分隔符。
  */
 const SEARCH_TEXT_SEPARATOR = '\n';
@@ -395,6 +410,23 @@ export function deleteMaterialFromZvec(materialId: string): void {
 }
 
 /**
+ * 清洗 Zvec FTS 检索关键词。
+ * 移除 FTS 查询语法特殊字符，合并多余空白，并截断超长输入。
+ * 清洗后为空字符串时表示该查询不应用于检索。
+ *
+ * @param query - 原始查询字符串
+ * @returns 清洗后的查询字符串，可能为空字符串
+ * @author fxbin
+ */
+function sanitizeZvecQuery(query: string): string {
+  return query
+    .slice(0, ZVEC_QUERY_MAX_LENGTH)
+    .replace(ZVEC_SPECIAL_CHARS_PATTERN, ' ')
+    .replace(ZVEC_WHITESPACE_PATTERN, ' ')
+    .trim();
+}
+
+/**
  * 构造工作区 + 未归档的标量过滤表达式。
  * workspaceId 中的单引号会被转义，避免 SQL 注入。
  *
@@ -422,11 +454,13 @@ export function searchCardsInZvec(
   query: string,
   limit: number = DEFAULT_SEARCH_LIMIT,
 ): ZvecSearchHit[] {
-  if (!cardsCollection || !query.trim()) return [];
+  if (!cardsCollection) return [];
+  const sanitizedQuery = sanitizeZvecQuery(query);
+  if (!sanitizedQuery) return [];
   try {
     const results = cardsCollection.querySync({
       fieldName: SEARCH_TEXT_FIELD,
-      fts: { matchString: query },
+      fts: { matchString: sanitizedQuery },
       filter: buildWorkspaceFilter(workspaceId),
       topk: limit,
     });
@@ -452,11 +486,13 @@ export function searchMaterialsInZvec(
   query: string,
   limit: number = DEFAULT_SEARCH_LIMIT,
 ): ZvecSearchHit[] {
-  if (!materialsCollection || !query.trim()) return [];
+  if (!materialsCollection) return [];
+  const sanitizedQuery = sanitizeZvecQuery(query);
+  if (!sanitizedQuery) return [];
   try {
     const results = materialsCollection.querySync({
       fieldName: SEARCH_TEXT_FIELD,
-      fts: { matchString: query },
+      fts: { matchString: sanitizedQuery },
       filter: buildWorkspaceFilter(workspaceId),
       topk: limit,
     });
