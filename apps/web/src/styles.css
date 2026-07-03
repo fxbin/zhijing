@@ -4542,22 +4542,21 @@ button { cursor: pointer; }
 .settings-drawer {
   position: fixed;
   top: 0;
-  right: 0;
+  right: -100vw;
   bottom: 0;
   width: 480px;
   max-width: 90vw;
   background: var(--surface, #ffffff);
   box-shadow: -4px 0 24px rgba(9, 20, 38, 0.12);
   z-index: 201;
-  transform: translateX(100%);
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: right 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
 }
 
 .settings-drawer.open {
-  transform: translateX(0);
+  right: 0;
 }
 
 .settings-drawer-head {
