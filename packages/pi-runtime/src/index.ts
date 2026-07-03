@@ -216,6 +216,7 @@ export interface PiRuntime {
 export interface PiAiRuntimeConfig {
   provider?: KnownProvider;
   model?: string;
+  baseUrl?: string;
   apiKey?: string;
   enabled?: boolean;
   fallbackToMock?: boolean;
@@ -321,7 +322,7 @@ export function createPiAiRuntime(config: PiAiRuntimeConfig = {}): PiRuntime {
       }
 
       try {
-        const model = getConfiguredModel(provider, modelId);
+        const model = getConfiguredModel(provider, modelId, config.baseUrl);
         const response = await complete(model, buildContext(request), {
           apiKey,
           temperature: config.temperature ?? 0.2,
@@ -356,7 +357,7 @@ export function createPiAiRuntime(config: PiAiRuntimeConfig = {}): PiRuntime {
       }
 
       try {
-        const model = getConfiguredModel(provider, modelId);
+        const model = getConfiguredModel(provider, modelId, config.baseUrl);
         const context = buildTextContext(request);
         const eventStream = stream(model, context, {
           apiKey,
@@ -396,7 +397,7 @@ export function createPiAiRuntime(config: PiAiRuntimeConfig = {}): PiRuntime {
       }
 
       try {
-        const model = getConfiguredModel(provider, modelId);
+        const model = getConfiguredModel(provider, modelId, config.baseUrl);
         const response = await complete(model, buildToolContext(request), {
           apiKey,
           temperature: config.temperature ?? 0.2,
@@ -456,33 +457,38 @@ export {
   type InstrumentedRuntimeOptions,
 } from './instrumented.js';
 
-function getConfiguredModel(provider: KnownProvider, modelId: string): Model<Api> {
-  return resolveConfiguredModel(provider, modelId);
+function getConfiguredModel(provider: KnownProvider, modelId: string, baseUrl?: string): Model<Api> {
+  return resolveConfiguredModel(provider, modelId, baseUrl);
 }
 
 /**
  * 解析最终生效的 Model 实例。
  *
- * 解析顺序：
- * 1. 通过 SDK `getModel(provider, modelId)` 获取内置 Model 模板
- * 2. 若环境变量 `ZHIJING_PI_BASE_URL` 设置，覆盖 Model.baseUrl
- *    用于接入 OpenAI 兼容的第三方端点（如商汤 SenseNova Token Plan：
- *    `https://token.sensenova.cn/v1`，model id 直接复用 `deepseek-v4-flash`）
+ * baseUrl 优先级：
+ * 1. 显式传入的 baseUrl 参数（来自 PiAiRuntimeConfig / agent-factory options）
+ * 2. 环境变量 ZHIJING_PI_BASE_URL
+ * 3. SDK 内置 provider 的默认 base URL
+ *
+ * 用于接入 OpenAI 兼容的第三方端点（如商汤 SenseNova Token Plan：
+ * `https://token.sensenova.cn/v1`，model id 直接复用 `deepseek-v4-flash`）
  *
  * 该函数被 pi-runtime 与 agent-factory 共用，保证两条 LLM 入口的 base URL 一致。
  *
  * @param provider - LLM provider，如 'deepseek' / 'openai'
  * @param modelId - 模型 id，如 'deepseek-v4-flash'
- * @returns 最终生效的 Model 实例，baseUrl 可能被环境变量覆盖
+ * @param baseUrl - 可选 base URL 覆盖，优先级高于环境变量
+ * @returns 最终生效的 Model 实例，baseUrl 可能被覆盖
  * @author fxbin
  */
-export function resolveConfiguredModel(provider: KnownProvider, modelId: string): Model<Api> {
+export function resolveConfiguredModel(provider: KnownProvider, modelId: string, baseUrl?: string): Model<Api> {
   const baseModel = getModel(provider, modelId as never) as Model<Api>;
-  const overrideBaseUrl = process.env[PI_BASE_URL_ENV];
-  if (!overrideBaseUrl || overrideBaseUrl.trim().length === 0) {
+  const effectiveBaseUrl = baseUrl && baseUrl.trim().length > 0
+    ? baseUrl.trim()
+    : process.env[PI_BASE_URL_ENV];
+  if (!effectiveBaseUrl || effectiveBaseUrl.trim().length === 0) {
     return baseModel;
   }
-  return { ...baseModel, baseUrl: overrideBaseUrl.trim() };
+  return { ...baseModel, baseUrl: effectiveBaseUrl.trim() };
 }
 
 function buildContext(request: StructuredGenerationRequest): Context {

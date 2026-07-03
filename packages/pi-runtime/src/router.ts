@@ -103,6 +103,7 @@ const ACTIVE_ROUTES: ProviderRoute[] = parseEnvRoutes() ?? DEFAULT_ROUTES;
 interface ActiveProfileSnapshot {
   provider: string;
   model: string;
+  baseUrl?: string;
   apiKey?: string;
 }
 
@@ -169,10 +170,12 @@ export function routeProvider(
   taskType: AgentTaskType,
   routes: ProviderRoute[] = ACTIVE_ROUTES,
 ): RouteResolution {
+  const envBaseUrl = process.env.ZHIJING_PI_BASE_URL;
   const matched = routes.find((route) => route.taskTypes.includes(taskType));
   if (!matched) {
     const fallbackProvider = activeProfile?.provider ?? process.env.ZHIJING_PI_PROVIDER ?? getDefaultPiProvider();
     const fallbackModel = activeProfile?.model ?? process.env.ZHIJING_PI_MODEL ?? getDefaultPiModel();
+    const fallbackBaseUrl = activeProfile?.baseUrl ?? envBaseUrl;
     return {
       route: {
         provider: getDefaultPiProvider(),
@@ -183,6 +186,7 @@ export function routeProvider(
       },
       resolvedProvider: fallbackProvider,
       resolvedModel: fallbackModel,
+      resolvedBaseUrl: fallbackBaseUrl,
       fellBack: false,
     };
   }
@@ -194,6 +198,7 @@ export function routeProvider(
       route: matched,
       resolvedProvider: activeProfile?.provider ?? envProvider ?? matched.provider,
       resolvedModel: activeProfile?.model ?? envModel ?? matched.model,
+      resolvedBaseUrl: activeProfile?.baseUrl ?? envBaseUrl,
       fellBack: false,
     };
   }
@@ -203,6 +208,7 @@ export function routeProvider(
       route: matched,
       resolvedProvider: matched.provider,
       resolvedModel: matched.model,
+      resolvedBaseUrl: activeProfile?.baseUrl ?? envBaseUrl,
       fellBack: false,
     };
   }
@@ -213,6 +219,7 @@ export function routeProvider(
     route: matched,
     resolvedProvider: fallbackProvider,
     resolvedModel: fallbackModel,
+    resolvedBaseUrl: activeProfile?.baseUrl ?? envBaseUrl,
     fellBack: true,
   };
 }

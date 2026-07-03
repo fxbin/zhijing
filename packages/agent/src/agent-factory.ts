@@ -145,6 +145,7 @@ function defaultConvertToLlm(messages: AgentMessage[]): Message[] {
 export interface WorkspaceAgentOptions {
   provider?: KnownProvider;
   modelId?: string;
+  baseUrl?: string;
   apiKey?: string;
   thinkingLevel?: ThinkingLevel;
   toolExecution?: AgentOptions['toolExecution'];
@@ -222,13 +223,14 @@ export function createWorkspaceAgent(workspaceId: string, options: WorkspaceAgen
   const resolution = routeProvider(taskType);
   const provider = (options.provider ?? resolution.resolvedProvider) as KnownProvider;
   const modelId = options.modelId ?? resolution.resolvedModel;
+  const baseUrl = options.baseUrl ?? resolution.resolvedBaseUrl;
   const apiKey = resolveApiKey(provider, options.apiKey);
 
   if (!apiKey) {
     throw new Error(`createWorkspaceAgent: no API key resolved for provider "${provider}". Set ZHIJING_PI_API_KEY or pass options.apiKey.`);
   }
 
-  const model = resolveConfiguredModel(provider, modelId);
+  const model = resolveConfiguredModel(provider, modelId, baseUrl);
   const tools = createGuardedWorkspaceTools(workspaceId, options.auditSink);
 
   return new Agent({

@@ -1093,9 +1093,11 @@ export async function buildApi() {
         provider,
         model,
         apiKey: typeof request.body?.apiKey === 'string' ? request.body.apiKey : undefined,
+        baseUrl: typeof request.body?.baseUrl === 'string' ? request.body.baseUrl : undefined,
         enabled: typeof request.body?.enabled === 'boolean' ? request.body.enabled : undefined,
         fallbackToMock: typeof request.body?.fallbackToMock === 'boolean' ? request.body.fallbackToMock : undefined,
         clearApiKey: request.body?.clearApiKey === true,
+        clearBaseUrl: request.body?.clearBaseUrl === true,
       });
     } catch (error) {
       request.log.error({ error }, 'model provider settings save failed');
@@ -1107,6 +1109,7 @@ export async function buildApi() {
     provider: typeof request.body?.provider === 'string' ? request.body.provider.trim() : undefined,
     model: typeof request.body?.model === 'string' ? request.body.model.trim() : undefined,
     apiKey: typeof request.body?.apiKey === 'string' ? request.body.apiKey : undefined,
+    baseUrl: typeof request.body?.baseUrl === 'string' ? request.body.baseUrl.trim() : undefined,
   }));
 
   app.get('/api/settings/model-provider/v2', async () => getModelProviderSettingsV2());
@@ -1128,6 +1131,7 @@ export async function buildApi() {
         provider,
         model,
         apiKey: typeof request.body?.apiKey === 'string' ? request.body.apiKey : undefined,
+        baseUrl: typeof request.body?.baseUrl === 'string' ? request.body.baseUrl : undefined,
         enabled: typeof request.body?.enabled === 'boolean' ? request.body.enabled : undefined,
         fallbackToMock: typeof request.body?.fallbackToMock === 'boolean' ? request.body.fallbackToMock : undefined,
         isDefault: request.body?.isDefault === true,
@@ -1149,10 +1153,12 @@ export async function buildApi() {
         provider: typeof request.body?.provider === 'string' ? request.body.provider : undefined,
         model: typeof request.body?.model === 'string' ? request.body.model : undefined,
         apiKey: typeof request.body?.apiKey === 'string' ? request.body.apiKey : undefined,
+        baseUrl: typeof request.body?.baseUrl === 'string' ? request.body.baseUrl : undefined,
         enabled: typeof request.body?.enabled === 'boolean' ? request.body.enabled : undefined,
         fallbackToMock: typeof request.body?.fallbackToMock === 'boolean' ? request.body.fallbackToMock : undefined,
         isDefault: typeof request.body?.isDefault === 'boolean' ? request.body.isDefault : undefined,
         clearApiKey: request.body?.clearApiKey === true,
+        clearBaseUrl: request.body?.clearBaseUrl === true,
       });
       return { profile };
     } catch (error) {

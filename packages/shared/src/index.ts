@@ -167,6 +167,7 @@ export interface ModelProviderOption {
 export interface ModelProviderSettings {
   provider: string;
   model: string;
+  baseUrl?: string;
   enabled: boolean;
   fallbackToMock: boolean;
   hasApiKey: boolean;
@@ -179,9 +180,11 @@ export interface SaveModelProviderSettingsRequest {
   provider: string;
   model: string;
   apiKey?: string;
+  baseUrl?: string;
   enabled?: boolean;
   fallbackToMock?: boolean;
   clearApiKey?: boolean;
+  clearBaseUrl?: boolean;
 }
 
 /**
@@ -194,6 +197,7 @@ export interface ModelProviderProfile {
   name: string;
   provider: string;
   model: string;
+  baseUrl?: string;
   enabled: boolean;
   fallbackToMock: boolean;
   hasApiKey: boolean;
@@ -222,6 +226,7 @@ export interface CreateModelProviderProfileRequest {
   provider: string;
   model: string;
   apiKey?: string;
+  baseUrl?: string;
   enabled?: boolean;
   fallbackToMock?: boolean;
   isDefault?: boolean;
@@ -236,16 +241,19 @@ export interface UpdateModelProviderProfileRequest {
   provider?: string;
   model?: string;
   apiKey?: string;
+  baseUrl?: string;
   enabled?: boolean;
   fallbackToMock?: boolean;
   isDefault?: boolean;
   clearApiKey?: boolean;
+  clearBaseUrl?: boolean;
 }
 
 export interface TestModelProviderSettingsRequest {
   provider?: string;
   model?: string;
   apiKey?: string;
+  baseUrl?: string;
 }
 
 export interface AssignMaterialRequest {
@@ -1819,6 +1827,7 @@ export interface RouteResolution {
   route: ProviderRoute;
   resolvedProvider: string;
   resolvedModel: string;
+  resolvedBaseUrl?: string;
   fellBack: boolean;
 }
 

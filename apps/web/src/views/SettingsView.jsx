@@ -76,6 +76,8 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     setProvider,
     model,
     setModel,
+    baseUrl,
+    setBaseUrl,
     apiKey,
     setApiKey,
     enabled,
@@ -369,6 +371,16 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                   </select>
                 </label>
                 <label className="field-row">
+                  <span>{t('settings.baseUrl')}</span>
+                  <input
+                    autoComplete="off"
+                    placeholder={t('settings.baseUrlPlaceholder')}
+                    type="text"
+                    value={newProfile.baseUrl ?? ''}
+                    onChange={(event) => setNewProfile((prev) => ({ ...prev, baseUrl: event.target.value }))}
+                  />
+                </label>
+                <label className="field-row">
                   <span>{t('settings.apiKey')}</span>
                   <div className="secret-input">
                     <KeyRound size={18} />
@@ -468,6 +480,21 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                             {modelOptions.map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
                           </select>
                         </label>
+                      </div>
+
+                      <div className="settings-form-section">
+                        <strong>{t('settings.endpoint')}</strong>
+                        <label className="field-row">
+                          <span>{t('settings.baseUrl')}</span>
+                          <input
+                            autoComplete="off"
+                            placeholder={t('settings.baseUrlPlaceholder')}
+                            type="text"
+                            value={baseUrl}
+                            onChange={(event) => setBaseUrl(event.target.value)}
+                          />
+                        </label>
+                        <p className="settings-security-note">{t('settings.baseUrlHint')}</p>
                       </div>
 
                       <div className="settings-form-section">

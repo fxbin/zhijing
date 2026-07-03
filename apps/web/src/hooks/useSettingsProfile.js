@@ -42,6 +42,7 @@ const EMPTY_PROFILE_FORM = {
   name: '',
   provider: '',
   model: '',
+  baseUrl: '',
   apiKey: '',
 };
 
@@ -149,6 +150,7 @@ export function useSettingsProfile({ setStatus, t }) {
   const [profileName, setProfileName] = useState(INITIAL_FORM_TEXT);
   const [provider, setProvider] = useState(INITIAL_FORM_TEXT);
   const [model, setModel] = useState(INITIAL_FORM_TEXT);
+  const [baseUrl, setBaseUrl] = useState(INITIAL_FORM_TEXT);
   const [apiKey, setApiKey] = useState(INITIAL_FORM_TEXT);
   const [enabled, setEnabled] = useState(INITIAL_ENABLED);
   const [fallbackToMock, setFallbackToMock] = useState(INITIAL_FALLBACK_TO_MOCK);
@@ -223,6 +225,7 @@ export function useSettingsProfile({ setStatus, t }) {
       setKeySource(INITIAL_KEY_SOURCE);
       setUpdatedAt(INITIAL_UPDATED_AT);
       setApiKey(INITIAL_FORM_TEXT);
+      setBaseUrl(INITIAL_FORM_TEXT);
       return;
     }
     setProfileName(target.name);
@@ -234,6 +237,7 @@ export function useSettingsProfile({ setStatus, t }) {
     setKeySource(target.keySource);
     setUpdatedAt(target.updatedAt);
     setApiKey(INITIAL_FORM_TEXT);
+    setBaseUrl(target.baseUrl ?? INITIAL_FORM_TEXT);
   }
 
   /**
@@ -338,6 +342,7 @@ export function useSettingsProfile({ setStatus, t }) {
         name: profileName.trim(),
         provider,
         model,
+        baseUrl: baseUrl.trim() || undefined,
         apiKey: apiKey.trim() || undefined,
         enabled,
         fallbackToMock,
@@ -369,6 +374,7 @@ export function useSettingsProfile({ setStatus, t }) {
         provider,
         model,
         apiKey: apiKey.trim() || undefined,
+        baseUrl: baseUrl.trim() || undefined,
       });
       setTestResult(result);
       setStatus(result.ok ? t('settings.testPass') : t('settings.testFail'));
@@ -391,6 +397,7 @@ export function useSettingsProfile({ setStatus, t }) {
       const result = await api.patch(`${PROFILES_PATH}/${selectedProfileId}`, {
         provider,
         model,
+        baseUrl: baseUrl.trim() || undefined,
         enabled,
         fallbackToMock,
         clearApiKey: true,
@@ -446,6 +453,7 @@ export function useSettingsProfile({ setStatus, t }) {
         name,
         provider: providerValue,
         model: modelValue,
+        baseUrl: newProfile.baseUrl?.trim() || undefined,
         apiKey: newProfile.apiKey.trim() || undefined,
       });
       setShowCreateForm(false);
@@ -469,6 +477,8 @@ export function useSettingsProfile({ setStatus, t }) {
     setProvider,
     model,
     setModel,
+    baseUrl,
+    setBaseUrl,
     apiKey,
     setApiKey,
     enabled,

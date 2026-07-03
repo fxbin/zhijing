@@ -303,6 +303,7 @@ import {
 type PersistedModelProviderConfig = Partial<{
   provider: string;
   model: string;
+  baseUrl: string;
   apiKey: string;
   enabled: boolean;
   fallbackToMock: boolean;
@@ -318,6 +319,7 @@ type ModelProviderProfileRecord = {
   name: string;
   provider: string;
   model: string;
+  baseUrl?: string;
   apiKey?: string;
   enabled: boolean;
   fallbackToMock: boolean;
@@ -1709,6 +1711,7 @@ type ModelProviderSettingsRow = {
   id: string;
   provider: string;
   model: string;
+  base_url: string | null;
   api_key: string | null;
   enabled: number;
   fallback_to_mock: number;
@@ -1720,6 +1723,7 @@ type ModelProviderProfileRow = {
   name: string;
   provider: string;
   model: string;
+  base_url: string | null;
   api_key: string | null;
   enabled: number;
   fallback_to_mock: number;
@@ -2553,6 +2557,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     return {
       provider: row.provider,
       model: row.model,
+      baseUrl: row.base_url ?? undefined,
       apiKey: row.api_key ?? undefined,
       enabled: Boolean(row.enabled),
       fallbackToMock: Boolean(row.fallback_to_mock),
@@ -2563,11 +2568,12 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   writeModelProviderConfig(config: PersistedModelProviderConfig) {
     this.db.prepare(`
       INSERT INTO model_provider_settings (
-        id, provider, model, api_key, enabled, fallback_to_mock, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        id, provider, model, base_url, api_key, enabled, fallback_to_mock, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         provider = excluded.provider,
         model = excluded.model,
+        base_url = excluded.base_url,
         api_key = excluded.api_key,
         enabled = excluded.enabled,
         fallback_to_mock = excluded.fallback_to_mock,
@@ -2576,9 +2582,10 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       LEGACY_MODEL_PROVIDER_SETTINGS_ID,
       config.provider ?? getDefaultPiProvider(),
       config.model ?? getDefaultPiModel(),
+      config.baseUrl ?? null,
       config.apiKey ?? null,
-      config.enabled === false ? 0 : 1,
-      config.fallbackToMock === false ? 0 : 1,
+      config.enabled ? 1 : 0,
+      config.fallbackToMock ? 1 : 0,
       config.updatedAt ?? now(),
     );
   }
@@ -2600,13 +2607,14 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   insertModelProviderProfile(record: ModelProviderProfileRecord) {
     this.db.prepare(`
       INSERT INTO model_provider_profiles (
-        id, name, provider, model, api_key, enabled, fallback_to_mock, is_default, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, name, provider, model, base_url, api_key, enabled, fallback_to_mock, is_default, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       record.id,
       record.name,
       record.provider,
       record.model,
+      record.baseUrl ?? null,
       record.apiKey ?? null,
       record.enabled ? 1 : 0,
       record.fallbackToMock ? 1 : 0,
@@ -2619,12 +2627,13 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   updateModelProviderProfile(record: ModelProviderProfileRecord) {
     this.db.prepare(`
       UPDATE model_provider_profiles
-      SET name = ?, provider = ?, model = ?, api_key = ?, enabled = ?, fallback_to_mock = ?, is_default = ?, updated_at = ?
+      SET name = ?, provider = ?, model = ?, base_url = ?, api_key = ?, enabled = ?, fallback_to_mock = ?, is_default = ?, updated_at = ?
       WHERE id = ?
     `).run(
       record.name,
       record.provider,
       record.model,
+      record.baseUrl ?? null,
       record.apiKey ?? null,
       record.enabled ? 1 : 0,
       record.fallbackToMock ? 1 : 0,
@@ -3475,7 +3484,31 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       );
       CREATE INDEX IF NOT EXISTS idx_model_provider_profiles_default ON model_provider_profiles(is_default);
     `);
+    this.ensureModelProviderProfilesBaseUrlColumn();
+    this.ensureModelProviderSettingsBaseUrlColumn();
     this.seedModelProviderProfilesFromLegacy();
+  }
+
+  /**
+   * 幂等迁移：为 model_provider_profiles 表追加 base_url 列（兼容旧库）。
+   * @author fxbin
+   */
+  private ensureModelProviderProfilesBaseUrlColumn() {
+    const columns = this.db.prepare('PRAGMA table_info(model_provider_profiles)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'base_url')) {
+      this.db.exec('ALTER TABLE model_provider_profiles ADD COLUMN base_url TEXT;');
+    }
+  }
+
+  /**
+   * 幂等迁移：为 legacy model_provider_settings 表追加 base_url 列（兼容旧库）。
+   * @author fxbin
+   */
+  private ensureModelProviderSettingsBaseUrlColumn() {
+    const columns = this.db.prepare('PRAGMA table_info(model_provider_settings)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'base_url')) {
+      this.db.exec('ALTER TABLE model_provider_settings ADD COLUMN base_url TEXT;');
+    }
   }
 
   /**
@@ -5048,6 +5081,7 @@ function mapModelProviderProfileRow(row: ModelProviderProfileRow): ModelProvider
     name: row.name,
     provider: row.provider,
     model: row.model,
+    baseUrl: row.base_url ?? undefined,
     apiKey: row.api_key ?? undefined,
     enabled: Boolean(row.enabled),
     fallbackToMock: Boolean(row.fallback_to_mock),
@@ -5197,6 +5231,7 @@ const platformParseTimestamps = new Map<string, number>();
 type RuntimeModelProviderConfig = {
   provider: KnownProvider;
   model: string;
+  baseUrl?: string;
   apiKey?: string;
   enabled: boolean;
   fallbackToMock: boolean;
@@ -5284,6 +5319,7 @@ function runtimeConfigFromProfile(profile: ModelProviderProfileRecord): RuntimeM
   return {
     provider,
     model: profile.model,
+    baseUrl: profile.baseUrl,
     apiKey: profile.apiKey,
     enabled: profile.enabled,
     fallbackToMock: profile.fallbackToMock,
@@ -5334,10 +5370,11 @@ function currentApiKey() {
  * @returns {provider, model, apiKey?} 装配凭据；apiKey 可能为 undefined
  * @author fxbin
  */
-export function getActiveAgentCredentials(): { provider: KnownProvider; model: string; apiKey?: string } {
+export function getActiveAgentCredentials(): { provider: KnownProvider; model: string; baseUrl?: string; apiKey?: string } {
   return {
     provider: modelProviderConfig.provider,
     model: modelProviderConfig.model,
+    baseUrl: modelProviderConfig.baseUrl,
     apiKey: currentApiKey() || undefined,
   };
 }
@@ -5346,6 +5383,7 @@ function createRuntimeFromModelProviderConfig(config: RuntimeModelProviderConfig
   return createPiAiRuntime({
     provider: config.provider,
     model: config.model,
+    baseUrl: config.baseUrl,
     apiKey: config.apiKey ?? getPiEnvApiKey(config.provider),
     enabled: config.enabled,
     fallbackToMock: config.fallbackToMock,
@@ -5357,6 +5395,7 @@ function applyModelProviderConfig() {
   setActiveProfile({
     provider: modelProviderConfig.provider,
     model: modelProviderConfig.model,
+    baseUrl: modelProviderConfig.baseUrl,
     apiKey: currentApiKey() || undefined,
   });
 }
@@ -5365,6 +5404,7 @@ function modelSettingsSnapshot(): ModelProviderSettings {
   return {
     provider: modelProviderConfig.provider,
     model: modelProviderConfig.model,
+    baseUrl: modelProviderConfig.baseUrl,
     enabled: modelProviderConfig.enabled,
     fallbackToMock: modelProviderConfig.fallbackToMock,
     hasApiKey: Boolean(currentApiKey()),
@@ -5394,10 +5434,14 @@ export function saveModelProviderSettings(input: SaveModelProviderSettingsReques
   const apiKey = input.clearApiKey
     ? undefined
     : inputApiKey ?? providerScopedExistingKey;
+  const baseUrl = input.clearBaseUrl
+    ? undefined
+    : (input.baseUrl !== undefined ? (input.baseUrl.trim() || undefined) : activeProfile?.baseUrl);
 
   modelProviderConfig = {
     provider,
     model,
+    baseUrl,
     apiKey,
     enabled: input.enabled ?? Boolean(apiKey ?? envApiKey),
     fallbackToMock: input.fallbackToMock ?? true,
@@ -5409,6 +5453,7 @@ export function saveModelProviderSettings(input: SaveModelProviderSettingsReques
       ...activeProfile,
       provider,
       model,
+      baseUrl,
       apiKey,
       enabled: modelProviderConfig.enabled,
       fallbackToMock: modelProviderConfig.fallbackToMock,
@@ -5419,6 +5464,7 @@ export function saveModelProviderSettings(input: SaveModelProviderSettingsReques
   repository.writeModelProviderConfig({
     provider: modelProviderConfig.provider,
     model: modelProviderConfig.model,
+    baseUrl: modelProviderConfig.baseUrl,
     apiKey: modelProviderConfig.keySource === 'runtime' ? modelProviderConfig.apiKey : undefined,
     enabled: modelProviderConfig.enabled,
     fallbackToMock: modelProviderConfig.fallbackToMock,
@@ -5442,6 +5488,7 @@ function mapModelProviderProfileToApi(record: ModelProviderProfileRecord): Model
     name: record.name,
     provider: record.provider,
     model: record.model,
+    baseUrl: record.baseUrl,
     enabled: record.enabled,
     fallbackToMock: record.fallbackToMock,
     hasApiKey,
@@ -5474,6 +5521,7 @@ export function createModelProviderProfile(input: CreateModelProviderProfileRequ
     ? input.model
     : defaultModelForProvider(provider);
   const apiKey = normalizeSecret(input.apiKey);
+  const baseUrl = input.baseUrl?.trim() || undefined;
   const envApiKey = getPiEnvApiKey(provider);
   const timestamp = now();
   const shouldBeDefault = input.isDefault === true || repository.listModelProviderProfiles().length === 0;
@@ -5485,6 +5533,7 @@ export function createModelProviderProfile(input: CreateModelProviderProfileRequ
     name,
     provider,
     model,
+    baseUrl,
     apiKey,
     enabled: input.enabled ?? Boolean(apiKey ?? envApiKey),
     fallbackToMock: input.fallbackToMock ?? true,
@@ -5517,6 +5566,9 @@ export function updateModelProviderProfile(profileId: string, input: UpdateModel
   const apiKey = input.clearApiKey
     ? undefined
     : (input.apiKey !== undefined ? normalizeSecret(input.apiKey) : existing.apiKey);
+  const baseUrl = input.clearBaseUrl
+    ? undefined
+    : (input.baseUrl !== undefined ? (input.baseUrl.trim() || undefined) : existing.baseUrl);
   const enabled = input.enabled ?? existing.enabled;
   const fallbackToMock = input.fallbackToMock ?? existing.fallbackToMock;
   const updatedAt = now();
@@ -5525,6 +5577,7 @@ export function updateModelProviderProfile(profileId: string, input: UpdateModel
     name,
     provider,
     model,
+    baseUrl,
     apiKey,
     enabled,
     fallbackToMock,
@@ -5606,6 +5659,7 @@ export async function testModelProviderSettings(input: TestModelProviderSettings
     ? requestedModel
     : defaultModelForProvider(provider);
   const apiKey = input.apiKey?.trim() || currentApiKey();
+  const baseUrl = input.baseUrl?.trim() || modelProviderConfig.baseUrl;
 
   if (!apiKey) {
     return {
@@ -5620,6 +5674,7 @@ export async function testModelProviderSettings(input: TestModelProviderSettings
     const rawRuntime = createPiAiRuntime({
       provider,
       model,
+      baseUrl,
       apiKey,
       enabled: true,
       fallbackToMock: false,
