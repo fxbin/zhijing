@@ -209,6 +209,9 @@ export default function GlobalChatDock({
                 </span>
               )}
               {t('chat.metric.sources')} {materials.length} · {t('chat.metric.cards')} {cards.length}
+              <span className="chat-session-scope" title={t('chat.sessionScopeHint')}>
+                {t('chat.sessionScope')}
+              </span>
             </span>
             <div className="global-chat-dock-context-actions">
               <button

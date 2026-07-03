@@ -138,7 +138,7 @@ export function useWorkspaceState({
    * 加载指定工作区的详情。
    * @param {string} workspaceId - 工作区 ID
    * @param {function} [isCancelled] - 取消判定函数
-   * @returns {Promise<void>}
+   * @returns {Promise<object|null>}
    * @author fxbin
    */
   async function loadDetail(workspaceId, isCancelled = () => false) {
@@ -177,8 +177,10 @@ export function useWorkspaceState({
     try {
       const task = await api.get(`${TASKS_PATH}/${taskId}`);
       if (!isCancelled()) setLatestTask(task);
+      return task;
     } catch {
       // API 不可用时保留上一次任务状态
+      return null;
     }
   }
 

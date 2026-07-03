@@ -11,7 +11,6 @@ export const knownViews = new Set([
   'workflow',
   'artifact',
   'maps',
-  'chat',
   'recall',
   'export',
   'assets',

@@ -485,6 +485,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                             />
                           </div>
                         </label>
+                        <p className="settings-security-note">{t('settings.apiKeyStorageNotice')}</p>
                       </div>
 
                       <div className="settings-form-section">
@@ -499,6 +500,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                             {t('settings.fallbackToMock')}
                           </label>
                         </div>
+                        <p className="settings-security-note">{fallbackToMock ? t('settings.mockFallbackNotice') : t('settings.noMockFallbackNotice')}</p>
                       </div>
 
                       <div className="settings-actions settings-actions-primary">
@@ -579,6 +581,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                 </div>
               </label>
               <p className="settings-note">{t('settings.weread.apiKeyHint')}</p>
+              <p className="settings-security-note">{t('settings.weread.apiKeyStorageNotice')}</p>
             </div>
             <div className="settings-actions settings-actions-primary">
               <button disabled={wereadSaving || !wereadApiKey.trim()} onClick={saveWeReadKey} type="button">

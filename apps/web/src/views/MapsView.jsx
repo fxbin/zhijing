@@ -27,9 +27,10 @@ import {
  * @param {string} props.apiStatus - API 连接状态
  * @param {string} props.selectedWorkspaceId - 当前选中的工作区 ID
  * @param {Function} props.setView - 切换视图回调
+ * @param {Function} props.onOpenChat - 打开全局对话胶囊并可预填问题
  * @returns {JSX.Element} 知识地图视图
  */
-export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
+export default function MapsView({ apiStatus, selectedWorkspaceId, setView, onOpenChat }) {
   const { t } = useTranslation();
   const STORAGE_KEY_FILTER = 'zhijing_map_filter';
   const MAP_BASE_WIDTH = 1000;
@@ -1029,7 +1030,13 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView }) {
                     <Link2 size={16} />
                     {t('maps.addRelation')}
                   </button>
-                  <button onClick={() => setView('chat')} type="button">
+                  <button
+                    onClick={() => onOpenChat?.(t('maps.chatPrompt', {
+                      label: selectedNode.label,
+                      summary: selectedNode.summary || t('maps.noSummary'),
+                    }))}
+                    type="button"
+                  >
                     <MessageCircle size={16} />
                     {t('maps.continueConversation')}
                   </button>
