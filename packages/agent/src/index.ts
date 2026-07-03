@@ -65,7 +65,6 @@ export type { AgentRole, AgentRoleConfig, MultiAgentOptions } from './multi-agen
 
 export {
   startOrchestratorSession,
-  clearAgentSession,
   listAgentSessions,
   truncateSessionForRetry,
   getAgentSessionMessages,

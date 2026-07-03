@@ -68,6 +68,12 @@ const SESSION_IDLE_TTL_MS = 30 * 60 * 1000;
 const SESSION_MAX_MESSAGES = 100;
 
 /**
+ * sessionStore 总容量上限，防止攻击者快速创建大量会话导致内存膨胀。
+ * 超过时按 lastUsedAt 升序清理最旧会话。
+ */
+const SESSION_MAX_COUNT = 50;
+
+/**
  * 会话默认标题最大长度（字符），超过时尾部省略号。
  */
 const SESSION_TITLE_MAX_LENGTH = 40;
@@ -145,6 +151,14 @@ function sweepExpiredSessions(): void {
   for (const [id, record] of sessionStore) {
     if (now - record.lastUsedAt > SESSION_IDLE_TTL_MS) {
       sessionStore.delete(id);
+    }
+  }
+  if (sessionStore.size > SESSION_MAX_COUNT) {
+    const sorted = Array.from(sessionStore.entries())
+      .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt);
+    const toRemove = sorted.length - SESSION_MAX_COUNT;
+    for (let i = 0; i < toRemove; i += 1) {
+      sessionStore.delete(sorted[i][0]);
     }
   }
 }
@@ -502,18 +516,6 @@ export interface AgentSessionDetail extends AgentSessionInfo {
 }
 
 /**
- * 清除指定会话的上下文累积。
- * 已 abort / 不存在的 sessionId 静默处理，不抛错。
- *
- * @param sessionId - 会话 id
- * @author fxbin
- */
-export function clearAgentSession(sessionId: string): void {
-  if (!sessionId) return;
-  sessionStore.delete(sessionId);
-}
-
-/**
  * 「重试上一条」的截断结果。
  */
 export interface RetryTurnResult {
@@ -655,8 +657,7 @@ export function renameAgentSession(
 }
 
 /**
- * 删除指定会话（带 workspaceId 校验）。
- * 与 clearAgentSession 的区别：本函数做 workspaceId 鉴权，避免跨工作区误删。
+ * 删除指定会话（带 workspaceId 校验），避免跨工作区误删。
  *
  * @param sessionId - 会话 id
  * @param workspaceId - 工作区 id（必须匹配）
