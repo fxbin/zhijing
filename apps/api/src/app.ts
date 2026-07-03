@@ -275,6 +275,19 @@ const RATE_LIMITED_PATH_PREFIXES = [
 const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
 
 /**
+ * SSE 流空闲超时阈值（毫秒），5 分钟。
+ * 超过此时间无任何事件写入则主动 abort 会话并关闭连接，
+ * 防止 LLM 卡死或网络异常导致连接无限挂起。
+ */
+const SSE_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+
+/**
+ * 会话 id 合法格式正则：sess_{timestamp}_{base36}。
+ * 用于校验前端传入的 sessionId，防止注入控制字符或超长字符串。
+ */
+const SESSION_ID_PATTERN = /^sess_\d+_[a-z0-9]{4,32}$/;
+
+/**
  * 判断路径是否命中限流前缀。
  * @param url - 请求 URL
  * @returns 命中的限流前缀，未命中返回 null
@@ -1718,9 +1731,13 @@ export function buildApi() {
       if (!message) {
         return reply.code(400).send({ error: 'Message is required.' });
       }
-      const sessionId = typeof request.body?.sessionId === 'string' && request.body.sessionId.length > 0
+      const providedSessionId = typeof request.body?.sessionId === 'string' && request.body.sessionId.length > 0
         ? request.body.sessionId
-        : `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        : '';
+      if (providedSessionId && !SESSION_ID_PATTERN.test(providedSessionId)) {
+        return reply.code(400).send({ error: 'Invalid sessionId format.' });
+      }
+      const sessionId = providedSessionId || `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       const isWriting = Boolean(request.body?.isWriting);
       const retryRequested = Boolean(request.body?.retryLastTurn);
 
@@ -1748,7 +1765,12 @@ export function buildApi() {
         'X-Session-Id': sessionId,
       });
 
+      const idleTimer = setTimeout(() => {
+        request.log.warn({ sessionId }, 'agent stream idle timeout, aborting');
+        session?.abort();
+      }, SSE_IDLE_TIMEOUT_MS);
       const send = (event: AgentStreamEvent) => {
+        idleTimer.refresh();
         try {
           reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
         } catch (writeError) {
@@ -1848,6 +1870,7 @@ export function buildApi() {
       try {
         await session.done;
       } finally {
+        clearTimeout(idleTimer);
         activeAgents.delete(sessionId);
         reply.raw.end();
       }
@@ -1860,6 +1883,9 @@ export function buildApi() {
       const sessionId = typeof request.body?.sessionId === 'string' ? request.body.sessionId : '';
       if (!sessionId) {
         return reply.code(400).send({ error: 'sessionId is required.' });
+      }
+      if (!SESSION_ID_PATTERN.test(sessionId)) {
+        return reply.code(400).send({ error: 'Invalid sessionId format.' });
       }
       const session = activeAgents.get(sessionId);
       if (!session) {
