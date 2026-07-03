@@ -8,6 +8,7 @@
 
 import {
   AlertTriangle,
+  Archive,
   BookOpen,
   ChevronRight,
   ClipboardPaste,
@@ -19,7 +20,6 @@ import {
   Search,
   Send,
   SquareArrowOutUpRight,
-  Trash2,
   Upload,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -108,6 +108,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
     setBatchAssignTarget,
     deleteConfirm,
     setDeleteConfirm,
+    archiveUndo,
     deleteModalRef,
     reviewingId,
     reviewDraft,
@@ -131,6 +132,7 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
     suggestAssignment,
     requestDelete,
     confirmDelete,
+    undoArchive,
     reparseSelected,
     assignSelected,
   } = useLibraryOperationsState({
@@ -312,8 +314,8 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
               {t('library.move')}
             </button>
             <button type="button" className="danger" disabled={isBatchProcessing || apiStatus !== 'online'} onClick={requestDelete}>
-              <Trash2 size={14} />
-              {t('common.delete')}
+              <Archive size={14} />
+              {t('library.archive')}
             </button>
             <button type="button" disabled={isBatchProcessing} onClick={clearSelection}>
               {t('library.cancelSelection')}
@@ -448,16 +450,34 @@ export default function LibraryView({ apiStatus, workspaces, onCaptureResult, on
               </div>
             </div>
             <div className="modal-body">
-              <p>{t('library.deleteConfirm.body')} <strong>{deleteConfirm.ids.length}</strong> {t('library.deleteConfirm.materials')}</p>
+              <p>{t('library.archiveConfirm.body', { count: deleteConfirm.ids.length })}</p>
+              {deleteConfirm.loading ? (
+                <p>{t('library.archiveConfirm.loadingImpact')}</p>
+              ) : deleteConfirm.impact ? (
+                <p>{t('library.archiveConfirm.impact', {
+                  linkedCardCount: deleteConfirm.impact.linkedCardCount,
+                  artifactReferenceCount: deleteConfirm.impact.artifactReferenceCount,
+                })}</p>
+              ) : (
+                <p>{t('library.archiveConfirm.impactUnavailable')}</p>
+              )}
               <div className="modal-actions">
                 <button type="button" onClick={() => setDeleteConfirm(null)}>{t('common.cancel')}</button>
                 <button type="button" className="danger" onClick={confirmDelete}>
-                  <Trash2 size={16} />
-                  {t('library.deleteConfirm.confirm')}
+                  <Archive size={16} />
+                  {t('library.archiveConfirm.confirm')}
                 </button>
               </div>
             </div>
           </div>
+        </div>
+      )}
+      {archiveUndo && (
+        <div className="library-undo-banner" role="status">
+          <span>{t('library.archiveUndo.message', { count: archiveUndo.count })}</span>
+          <button type="button" onClick={undoArchive} disabled={isBatchProcessing}>
+            {t('library.archiveUndo.action')}
+          </button>
         </div>
       )}
     </section>

@@ -73,6 +73,11 @@ const LOCAL_FILE_PREFIX = '本地文档：';
 const FILE_INPUT_ACCEPT = '.md,.markdown,.txt,text/markdown,text/plain';
 
 /**
+ * 归档撤销提示保留时长（毫秒）。
+ */
+const ARCHIVE_UNDO_TIMEOUT_MS = 9000;
+
+/**
  * 使用资料库操作域状态。
  * @param {object} params - 入参对象
  * @param {function} params.t - i18n 翻译函数
@@ -138,8 +143,14 @@ export function useLibraryOperationsState({
   const [batchProgress, setBatchProgress] = useState(null);
   const [batchAssignTarget, setBatchAssignTarget] = useState(DEFAULT_BATCH_ASSIGN_TARGET);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [archiveUndo, setArchiveUndo] = useState(null);
   const deleteModalRef = useRef(null);
+  const archiveUndoTimerRef = useRef(null);
   useModalA11y(deleteModalRef, Boolean(deleteConfirm), () => setDeleteConfirm(null));
+
+  useEffect(() => () => {
+    if (archiveUndoTimerRef.current) clearTimeout(archiveUndoTimerRef.current);
+  }, []);
 
   const [reviewingId, setReviewingId] = useState(null);
   const [reviewDraft, setReviewDraft] = useState(INITIAL_REVIEW_DRAFT);
@@ -420,14 +431,34 @@ export function useLibraryOperationsState({
    * 触发批量删除确认：将当前选中 ID 写入删除确认态。
    * @author fxbin
    */
-  function requestDelete() {
+  async function requestDelete() {
     const ids = Array.from(selectedIds);
     if (ids.length === 0 || apiStatus !== 'online' || isBatchProcessing) return;
-    setDeleteConfirm({ ids });
+    setDeleteConfirm({ ids, loading: true, impact: null });
+    try {
+      const impacts = await Promise.all(
+        ids.map((id) => api.get(`${MATERIALS_PATH}/${id}/delete-impact`)),
+      );
+      setDeleteConfirm((current) => {
+        if (!current || current.ids.join('|') !== ids.join('|')) return current;
+        return {
+          ...current,
+          loading: false,
+          impact: {
+            linkedCardCount: impacts.reduce((sum, item) => sum + (item.linkedCardCount ?? 0), 0),
+            artifactReferenceCount: impacts.reduce((sum, item) => sum + (item.artifactReferenceCount ?? 0), 0),
+          },
+        };
+      });
+    } catch {
+      setDeleteConfirm((current) => (current && current.ids.join('|') === ids.join('|')
+        ? { ...current, loading: false, impact: null }
+        : current));
+    }
   }
 
   /**
-   * 确认批量删除：乐观移除列表条目，逐条调用删除接口，失败时回滚并重新加载。
+   * 确认批量归档：乐观移除列表条目，逐条调用归档接口，失败时回滚并重新加载。
    * @author fxbin
    */
   async function confirmDelete() {
@@ -436,8 +467,8 @@ export function useLibraryOperationsState({
     setDeleteConfirm(null);
     const snapshot = items;
     setIsBatchProcessing(true);
-    setBatchProgress({ done: 0, total: ids.length, action: t('common.delete') });
-    setStatus(t('library.status.deletingMaterials', { count: ids.length }));
+    setBatchProgress({ done: 0, total: ids.length, action: t('library.archive') });
+    setStatus(t('library.status.archivingMaterials', { count: ids.length }));
     const selectedSnapshot = new Set(ids);
     clearSelection();
     setItems((current) => current.filter((item) => !selectedSnapshot.has(item.id)));
@@ -445,23 +476,47 @@ export function useLibraryOperationsState({
     const failedIds = [];
     for (let i = 0; i < ids.length; i += 1) {
       try {
-        const result = await api.del(`${MATERIALS_PATH}/${ids[i]}`);
+        const result = await api.post(`${MATERIALS_PATH}/${ids[i]}/archive`);
         onMaterialMutation?.(result);
       } catch {
         failed += 1;
         failedIds.push(ids[i]);
       }
-      setBatchProgress({ done: i + 1, total: ids.length, action: t('common.delete') });
+      setBatchProgress({ done: i + 1, total: ids.length, action: t('library.archive') });
     }
     if (failed > 0) {
-      setStatus(t('library.status.deletePartialFailed', { success: ids.length - failed, failed }));
+      setStatus(t('library.status.archivePartialFailed', { success: ids.length - failed, failed }));
       setItems(snapshot);
       setSelectedIds(new Set(failedIds));
       await loadMaterials();
     } else {
-      setStatus(t('library.status.deleteSuccess', { count: ids.length }));
+      setStatus(t('library.status.archiveSuccess', { count: ids.length }));
+      if (archiveUndoTimerRef.current) clearTimeout(archiveUndoTimerRef.current);
+      setArchiveUndo({ ids, count: ids.length });
+      archiveUndoTimerRef.current = setTimeout(() => setArchiveUndo(null), ARCHIVE_UNDO_TIMEOUT_MS);
     }
     setBatchProgress(null);
+    setIsBatchProcessing(false);
+  }
+
+  async function undoArchive() {
+    const ids = archiveUndo?.ids ?? [];
+    if (ids.length === 0 || isBatchProcessing) return;
+    if (archiveUndoTimerRef.current) clearTimeout(archiveUndoTimerRef.current);
+    setArchiveUndo(null);
+    setIsBatchProcessing(true);
+    setStatus(t('library.status.restoringMaterials', { count: ids.length }));
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        const result = await api.post(`${MATERIALS_PATH}/${id}/unarchive`);
+        onMaterialMutation?.(result);
+      } catch {
+        failed += 1;
+      }
+    }
+    await loadMaterials();
+    setStatus(failed ? t('library.status.restorePartialFailed', { success: ids.length - failed, failed }) : t('library.status.restoreSuccess', { count: ids.length }));
     setIsBatchProcessing(false);
   }
 
@@ -539,6 +594,7 @@ export function useLibraryOperationsState({
     setBatchAssignTarget,
     deleteConfirm,
     setDeleteConfirm,
+    archiveUndo,
     deleteModalRef,
     reviewingId,
     reviewDraft,
@@ -564,6 +620,7 @@ export function useLibraryOperationsState({
     suggestAssignment,
     requestDelete,
     confirmDelete,
+    undoArchive,
     reparseSelected,
     assignSelected,
   };

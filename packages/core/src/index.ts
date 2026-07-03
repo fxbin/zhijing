@@ -7420,6 +7420,35 @@ export function deleteMaterial(materialId: string): { materialId: string; worksp
   return { materialId, workspaceId };
 }
 
+export function getMaterialDeletionImpact(materialId: string): {
+  materialId: string;
+  workspaceId: string;
+  title: string;
+  linkedCardCount: number;
+  artifactReferenceCount: number;
+} {
+  const material = repository.findMaterial(materialId);
+  if (!material) {
+    throw new KnowledgeCoreError('Material not found.', 404);
+  }
+  const workspaceId = resolveWorkspaceId(material.workspaceId);
+  const linkedCardCount = repository
+    .listCards(workspaceId)
+    .filter((card) => card.materialId === materialId)
+    .length;
+  const artifactReferenceCount = repository
+    .listArtifacts(workspaceId)
+    .filter((artifact) => artifact.sourceMaterialIds.includes(materialId))
+    .length;
+  return {
+    materialId,
+    workspaceId,
+    title: material.title,
+    linkedCardCount,
+    artifactReferenceCount,
+  };
+}
+
 function normalizeMediaUrls(values: string[]) {
   return uniqueStrings(values
     .flatMap((value) => value.split(/\s+/))
