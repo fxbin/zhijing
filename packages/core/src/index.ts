@@ -3051,7 +3051,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   }
 
   listDecisionLog(query: DecisionLogQuery): DecisionLog[] {
-    const conditions: string[] = [];
+    const conditions: string[] = ['archived = 0'];
     const params: Record<string, string> = {};
     if (query.kind !== undefined) {
       conditions.push('kind = @kind');
@@ -3077,14 +3077,14 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       conditions.push('created_at <= @until');
       params.until = query.until;
     }
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
     const limit = query.limit ?? DEFAULT_DECISION_LOG_QUERY_LIMIT;
-    const rows = this.db.prepare(`SELECT * FROM decision_log ${whereClause} ORDER BY created_at DESC LIMIT ${limit}`).all(params) as DecisionLogRow[];
+    const rows = this.db.prepare(`SELECT * FROM decision_log ${whereClause} ORDER BY created_at DESC LIMIT @limit`).all({ ...params, limit }) as DecisionLogRow[];
     return rows.map(mapDecisionLog);
   }
 
   deleteDecisionLog(id: string): boolean {
-    const result = this.db.prepare('DELETE FROM decision_log WHERE id = ?').run(id);
+    const result = this.db.prepare('UPDATE decision_log SET archived = 1 WHERE id = ?').run(id);
     return result.changes > 0;
   }
 
@@ -3282,6 +3282,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureFtsTables();
     this.ensureAttentionLogTable();
     this.ensureMessagesProposedCardsColumn();
+    this.ensureDecisionLogArchivedColumn();
   }
 
   /**
@@ -3535,6 +3536,19 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       this.db.exec('ALTER TABLE cards ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;');
     }
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_cards_archived ON cards(archived, workspace_id);');
+  }
+
+  /**
+   * 为 decision_log 表幂等添加归档 archived 列及索引。
+   * 旧库通过 ALTER TABLE 补列，新库建表时已包含。
+   * @author fxbin
+   */
+  private ensureDecisionLogArchivedColumn() {
+    const columns = this.db.prepare('PRAGMA table_info(decision_log)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'archived')) {
+      this.db.exec('ALTER TABLE decision_log ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;');
+    }
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_decision_log_archived ON decision_log(archived);');
   }
 
   /**
@@ -4201,6 +4215,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         evidence_card_ids_json TEXT NOT NULL,
         agent_task_type TEXT,
         metadata_json TEXT,
+        archived INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_decision_log_kind ON decision_log(kind);
@@ -4325,7 +4340,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
    * 1. 仅允许 SELECT 语句，禁止任何写操作；
    * 2. 禁止查询含凭证的敏感表（model_provider_settings、model_provider_profiles、weread_settings）；
    * 3. 禁止查询用户记忆与决策日志等隐私表（user_memory、decision_log）；
-   * 4. limit 参数强制整数化并限定上限，避免 DoS。
+   * 4. limit 参数强制整数化并限定上限，拒绝负数（SQLite 中 LIMIT 负数表示无上限），避免 DoS。
    *
    * @param sql - SQL 语句（必须是 SELECT）
    * @param limit - 最大返回行数
@@ -4342,7 +4357,9 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         throw new KnowledgeCoreError(`inspect 禁止查询敏感表：${forbidden}`, 403);
       }
     }
-    const rawLimit = Number.isFinite(limit as number) ? Math.floor(limit as number) : AGENT_ACTION_LOG_DEFAULT_LIMIT;
+    const rawLimit = Number.isFinite(limit as number) && (limit as number) >= 1
+      ? Math.floor(limit as number)
+      : AGENT_ACTION_LOG_DEFAULT_LIMIT;
     const maxRows = Math.min(rawLimit, AGENT_ACTION_LOG_MAX_LIMIT);
     const stmt = this.db.prepare(`${trimmedSql} LIMIT ${maxRows}`);
     return stmt.all() as Array<Record<string, unknown>>;
@@ -12974,7 +12991,12 @@ export async function recallDeep(
     const shallow = recallShallow(workspaceId, trimmedQuery, limit);
     return relabelRecallResult(shallow, RECALL_TOOL_DEEP);
   }
-  const expandedQuery = await expandQueryWithRuntime(piRuntime, trimmedQuery);
+  const instrumentedRuntime = createInstrumentedPiRuntime(piRuntime, {
+    taskType: 'recall_deep',
+    workspaceId,
+    recorder: recordAgentUsage,
+  });
+  const expandedQuery = await expandQueryWithRuntime(instrumentedRuntime, trimmedQuery);
   if (!expandedQuery) {
     const shallow = recallShallow(workspaceId, trimmedQuery, limit);
     return relabelRecallResult(shallow, RECALL_TOOL_DEEP);

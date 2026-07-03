@@ -1745,7 +1745,8 @@ export type AgentTaskType =
   | 'socratic_questioning'
   | 'deep_research'
   | 'conversation'
-  | 'auxiliary_probe';
+  | 'auxiliary_probe'
+  | 'recall_deep';
 
 /**
  * AgentTaskType 合法值集合。
@@ -1765,6 +1766,7 @@ export const AGENT_TASK_TYPE_VALUES: readonly AgentTaskType[] = [
   'deep_research',
   'conversation',
   'auxiliary_probe',
+  'recall_deep',
 ];
 
 /**
