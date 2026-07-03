@@ -1,6 +1,7 @@
 import cors from '@fastify/cors';
 import cron from 'node-cron';
 import Fastify from 'fastify';
+import { Readable } from 'node:stream';
 import {
   archiveCard,
   archiveMaterial,
@@ -370,8 +371,9 @@ const AGENT_USAGE_MAX_LIMIT = 500;
 const INSPECT_TOKEN = process.env.ZHIJING_INSPECT_TOKEN ?? '';
 
 /**
- * proxy-image / proxy-video 单次响应最大字节数（50MB）。
+ * proxy-image 单次响应最大字节数（50MB）。
  * 防止 OOM 攻击与带宽放大。
+ * proxy-video 改为流式转发后不再受此限制。
  * @author fxbin
  */
 const PROXY_MAX_BYTES = 50 * 1024 * 1024;
@@ -732,10 +734,6 @@ export function buildApi() {
       if (!contentType.startsWith('video/') && !contentType.startsWith('application/')) {
         return reply.code(400).send({ error: 'URL did not return a video.' });
       }
-      const arrayBuffer = await response.arrayBuffer();
-      if (arrayBuffer.byteLength > PROXY_MAX_BYTES) {
-        return reply.code(413).send({ error: 'Video too large to proxy.' });
-      }
       const replyHeaders: Record<string, string> = {
         'Content-Type': contentType,
         'Cache-Control': 'public, max-age=3600',
@@ -749,10 +747,17 @@ export function buildApi() {
       if (contentLength) {
         replyHeaders['Content-Length'] = contentLength;
       }
+      const upstreamBody = response.body;
+      if (!upstreamBody) {
+        return reply.code(502).send({ error: 'Video stream unavailable.' });
+      }
+      const nodeStream = Readable.fromWeb(
+        upstreamBody as Parameters<typeof Readable.fromWeb>[0],
+      );
       return reply
         .code(response.status === 206 ? 206 : 200)
         .headers(replyHeaders)
-        .send(Buffer.from(arrayBuffer));
+        .send(nodeStream);
     } catch (error) {
       request.log.error({ error }, 'proxy video failed');
       return reply.code(502).send({ error: 'Video proxy failed.' });
