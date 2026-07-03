@@ -3117,6 +3117,17 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   }
 
   private migrate() {
+    this.db.exec('BEGIN');
+    try {
+      this.runMigrateStatements();
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  private runMigrateStatements(): void {
     this.ensureWorkspaceRename();
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS workspaces (
@@ -5606,13 +5617,18 @@ export async function testModelProviderSettings(input: TestModelProviderSettings
   }
 
   try {
-    const runtime = createPiAiRuntime({
+    const rawRuntime = createPiAiRuntime({
       provider,
       model,
       apiKey,
       enabled: true,
       fallbackToMock: false,
       maxTokens: 700,
+    });
+    const runtime = createInstrumentedPiRuntime(rawRuntime, {
+      taskType: 'knowledge_cards',
+      workspaceId: undefined,
+      recorder: recordAgentUsage,
     });
     const result = await runtime.completeStructured<{ cards: { title: string }[] }, TSchema>({
       task: 'knowledge_cards',
