@@ -265,6 +265,7 @@ function App() {
     orchestratorModeLabel,
     orchestratorMode,
     orchestratorReason,
+    runStats,
     streamAsk,
     abortStream,
     clearChat,
@@ -859,6 +860,7 @@ function App() {
         orchestratorModeLabel={orchestratorModeLabel}
         orchestratorMode={orchestratorMode}
         orchestratorReason={orchestratorReason}
+        runStats={runStats}
         onClearChat={clearChat}
         onRetryMessage={retryLastMessage}
         onSwitchSession={switchSession}

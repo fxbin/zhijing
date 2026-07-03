@@ -5946,6 +5946,74 @@ button { cursor: pointer; }
   padding: 22px;
 }
 
+.agent-run-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+  padding: 6px 14px;
+  background: rgba(245, 247, 250, 0.7);
+  font-size: 11px;
+  color: var(--secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-run-stats.running {
+  background: rgba(44, 95, 141, 0.06);
+}
+
+.agent-run-stats-left,
+.agent-run-stats-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.agent-run-stats-right {
+  flex-shrink: 0;
+}
+
+.agent-run-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: var(--sage-green);
+  flex-shrink: 0;
+}
+
+.agent-run-stats.running .agent-run-indicator {
+  color: var(--primary);
+}
+
+.agent-run-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  color: var(--secondary);
+}
+
+.agent-run-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.agent-run-stat.has-error {
+  color: #d0463b;
+}
+
 .chat-input-bar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 48px;

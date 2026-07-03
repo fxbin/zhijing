@@ -2159,6 +2159,12 @@ export async function buildApi() {
         request.log.info({ intent }, 'orchestrator intent classified');
       }
 
+      send({
+        type: 'session_info',
+        provider: credentials.provider,
+        model: credentials.model,
+      });
+
       const session = startOrchestratorSession(
         {
           workspaceId: request.params.id,

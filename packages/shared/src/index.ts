@@ -1718,6 +1718,7 @@ export interface OrchestratorDecision {
  * @author fxbin
  */
 export type AgentStreamEvent =
+  | { type: 'session_info'; model: string; provider: string }
   | { type: 'agent_start' }
   | { type: 'agent_end' }
   | { type: 'turn_start' }
@@ -1725,7 +1726,7 @@ export type AgentStreamEvent =
   | { type: 'message_start' }
   | { type: 'message_delta'; delta: string }
   | { type: 'reasoning_delta'; delta: string }
-  | { type: 'message_end'; text: string }
+  | { type: 'message_end'; text: string; usage?: { inputTokens: number | null; outputTokens: number | null; costUsd: number | null } }
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_end'; toolCallId: string; toolName: string; isError: boolean; result: string; details?: unknown }
   | { type: 'mode_update'; mode: string; reason: string; suggestedAction: string }

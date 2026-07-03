@@ -67,6 +67,7 @@ const STORAGE_MAX_MESSAGES = 100;
  * 与 apps/api/src/agent-stream.ts 中 AgentStreamEvent 保持一致。
  */
 const STREAM_EVENT = Object.freeze({
+  SESSION_INFO: 'session_info',
   AGENT_START: 'agent_start',
   AGENT_END: 'agent_end',
   TURN_START: 'turn_start',
@@ -98,6 +99,22 @@ const ORCHESTRATOR_MODE_LABELS = Object.freeze({
  * 默认编排模式（无 mode_update 事件时使用）。
  */
 const DEFAULT_ORCHESTRATOR_MODE = 'mirror';
+
+/**
+ * 运行统计初始值：流式对话未开始时的空状态。
+ */
+const INITIAL_RUN_STATS = Object.freeze({
+  model: '',
+  provider: '',
+  startedAt: 0,
+  endedAt: 0,
+  toolCount: 0,
+  toolErrorCount: 0,
+  outputChars: 0,
+  inputTokens: 0,
+  outputTokens: 0,
+  costUsd: null,
+});
 
 /**
  * 流式对话消息角色常量。
@@ -313,9 +330,11 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
   const [isStreaming, setIsStreaming] = useState(INITIAL_IS_STREAMING);
   const [orchestratorMode, setOrchestratorMode] = useState(DEFAULT_ORCHESTRATOR_MODE);
   const [orchestratorReason, setOrchestratorReason] = useState('');
+  const [runStats, setRunStats] = useState(INITIAL_RUN_STATS);
   const currentSessionId = useRef(null);
   const streamWorkspaceId = useRef(null);
   const abortControllerRef = useRef(null);
+  const runStatsRef = useRef({ ...INITIAL_RUN_STATS });
 
   /**
    * 中断当前正在进行的流式对话（如果有）。
@@ -408,6 +427,10 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
 
     setOrchestratorMode(DEFAULT_ORCHESTRATOR_MODE);
     setOrchestratorReason('');
+
+    const startedAt = Date.now();
+    runStatsRef.current = { ...INITIAL_RUN_STATS, startedAt };
+    setRunStats({ ...runStatsRef.current });
 
     if (options.retryUserId) {
       const retryUserId = options.retryUserId;
@@ -563,6 +586,11 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
           }
 
           switch (event.type) {
+            case STREAM_EVENT.SESSION_INFO:
+              runStatsRef.current.model = typeof event.model === 'string' ? event.model : '';
+              runStatsRef.current.provider = typeof event.provider === 'string' ? event.provider : '';
+              setRunStats({ ...runStatsRef.current });
+              break;
             case STREAM_EVENT.MODE_UPDATE:
               if (typeof event.mode === 'string' && event.mode.length > 0) {
                 setOrchestratorMode(event.mode);
@@ -586,6 +614,19 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
                 assistantText = event.text;
                 syncAssistantContent(assistantText);
               }
+              if (event.usage && typeof event.usage === 'object') {
+                if (typeof event.usage.inputTokens === 'number') {
+                  runStatsRef.current.inputTokens += event.usage.inputTokens;
+                }
+                if (typeof event.usage.outputTokens === 'number') {
+                  runStatsRef.current.outputTokens += event.usage.outputTokens;
+                }
+                if (typeof event.usage.costUsd === 'number') {
+                  runStatsRef.current.costUsd = (runStatsRef.current.costUsd ?? 0) + event.usage.costUsd;
+                }
+              }
+              runStatsRef.current.outputChars = assistantText.length;
+              setRunStats({ ...runStatsRef.current });
               break;
             case STREAM_EVENT.TOOL_START:
               toolCallsByKey.set(event.toolCallId, {
@@ -596,20 +637,27 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
                 isError: false,
                 isStreaming: true,
               });
+              runStatsRef.current.toolCount = toolCallsByKey.size;
               syncToolCallsToMessage();
+              setRunStats({ ...runStatsRef.current });
               break;
             case STREAM_EVENT.TOOL_END: {
               const previous = toolCallsByKey.get(event.toolCallId) ?? { toolName: event.toolName, args: undefined };
+              const wasError = Boolean(event.isError);
               toolCallsByKey.set(event.toolCallId, {
                 ...previous,
                 toolCallId: event.toolCallId,
                 toolName: event.toolName,
-                isError: Boolean(event.isError),
+                isError: wasError,
                 result: typeof event.result === 'string' ? event.result : '',
                 details: event.details,
                 isStreaming: false,
               });
+              if (wasError) {
+                runStatsRef.current.toolErrorCount += 1;
+              }
               syncToolCallsToMessage();
+              setRunStats({ ...runStatsRef.current });
               break;
             }
             case STREAM_EVENT.AUX_DELTA:
@@ -657,10 +705,13 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
       }
     } finally {
       if (isStreamActive()) {
+        runStatsRef.current.endedAt = Date.now();
+        runStatsRef.current.outputChars = assistantText.length;
         setChatMessages((prev) => prev.map((message) => (message.id === assistantId
           ? { ...message, isStreaming: false }
           : message)));
         setIsStreaming(false);
+        setRunStats({ ...runStatsRef.current });
       }
       currentSessionId.current = null;
       streamWorkspaceId.current = null;
@@ -691,6 +742,8 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     setIsStreaming(INITIAL_IS_STREAMING);
     setOrchestratorMode(DEFAULT_ORCHESTRATOR_MODE);
     setOrchestratorReason('');
+    runStatsRef.current = { ...INITIAL_RUN_STATS };
+    setRunStats({ ...INITIAL_RUN_STATS });
     currentSessionId.current = null;
     const targetWorkspaceId = streamWorkspaceId.current ?? selectedWorkspaceId;
     removeChatFromStorage(targetWorkspaceId);
@@ -756,6 +809,7 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     orchestratorMode,
     orchestratorReason,
     orchestratorModeLabel: ORCHESTRATOR_MODE_LABELS[orchestratorMode] ?? ORCHESTRATOR_MODE_LABELS.mirror,
+    runStats,
     streamAsk,
     abortStream,
     clearChat,

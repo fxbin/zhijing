@@ -14,6 +14,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Cpu,
   Database,
   HelpCircle,
   History,
@@ -22,6 +23,9 @@ import {
   Send,
   Sparkles,
   Square,
+  Timer,
+  Wrench,
+  Zap,
 } from 'lucide-react';
 import { useChatLayout } from '../hooks/useChatLayout';
 import { useProposedCards } from '../hooks/useProposedCards';
@@ -33,6 +37,40 @@ import EmptyState from './EmptyState';
 import { CHAT_OPEN_EVENT } from '../constants/options';
 
 const DOCK_STORAGE_KEY = 'zhijing-chat-dock';
+
+/**
+ * 格式化耗时毫秒数为秒字符串，保留一位小数。
+ * @param {number} ms - 耗时毫秒
+ * @returns {string} 格式化后的秒数文本，如 "2.3s"
+ * @author fxbin
+ */
+function formatDuration(ms) {
+  if (!ms || ms <= 0) return '—';
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/**
+ * 格式化 token 数量为紧凑字符串，>=1000 时用 k 单位。
+ * @param {number} value - token 数
+ * @returns {string} 格式化文本
+ * @author fxbin
+ */
+function formatTokenCount(value) {
+  if (typeof value !== 'number' || value <= 0) return '0';
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
+  return String(value);
+}
+
+/**
+ * 格式化美元金额，保留四位小数；无值时返回 "—"。
+ * @param {number|null|undefined} value - 美元金额
+ * @returns {string} 格式化文本
+ * @author fxbin
+ */
+function formatCost(value) {
+  if (typeof value !== 'number' || value <= 0) return '—';
+  return `$${value.toFixed(4)}`;
+}
 
 /**
  * 全局对话胶囊组件。
@@ -88,6 +126,7 @@ export default function GlobalChatDock({
   onCardsAccepted,
   selectedWorkspaceId,
   setAssistantQuestion,
+  runStats,
 }) {
   const { t } = useTranslation();
   const layout = useChatLayout(DOCK_STORAGE_KEY, {
@@ -157,6 +196,29 @@ export default function GlobalChatDock({
     window.addEventListener(CHAT_OPEN_EVENT, handleOpen);
     return () => window.removeEventListener(CHAT_OPEN_EVENT, handleOpen);
   }, [layout]);
+
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!isStreaming) return undefined;
+    const id = window.setInterval(() => setTick((n) => n + 1), 500);
+    return () => window.clearInterval(id);
+  }, [isStreaming]);
+
+  const stats = runStats ?? {};
+  const hasStats = Boolean(stats.startedAt);
+  const elapsedMs = isStreaming
+    ? Date.now() - (stats.startedAt || Date.now())
+    : ((stats.endedAt || 0) - (stats.startedAt || 0));
+  const outputTokens = stats.outputTokens || 0;
+  const inputTokens = stats.inputTokens || 0;
+  const tokensPerSecond = !isStreaming && elapsedMs > 0 && outputTokens > 0
+    ? (outputTokens / (elapsedMs / 1000)).toFixed(1)
+    : null;
+  const toolErrorCount = stats.toolErrorCount || 0;
+  const toolCount = stats.toolCount || 0;
+  const modelLabel = stats.model
+    ? `${stats.provider}/${stats.model}`
+    : '';
 
   return (
     <AIChatShell
@@ -301,6 +363,50 @@ export default function GlobalChatDock({
                 </button>
               ))}
             </section>
+          )}
+
+          {hasStats && (
+            <div className={`agent-run-stats ${isStreaming ? 'running' : 'idle'}`}>
+              <div className="agent-run-stats-left">
+                <span className="agent-run-indicator" title={isStreaming ? t('chat.runRunning') : t('chat.runDone')}>
+                  {isStreaming ? <Loader2 size={12} className="chat-message-tool-spinner" /> : <Zap size={12} />}
+                </span>
+                {modelLabel && (
+                  <span className="agent-run-model" title={modelLabel}>
+                    <Cpu size={11} />
+                    {modelLabel}
+                  </span>
+                )}
+                <span className="agent-run-stat" title={t('chat.runDuration')}>
+                  <Timer size={11} />
+                  {formatDuration(elapsedMs)}
+                </span>
+                {toolCount > 0 && (
+                  <span className={`agent-run-stat ${toolErrorCount > 0 ? 'has-error' : ''}`} title={t('chat.runTools')}>
+                    <Wrench size={11} />
+                    {toolCount}
+                    {toolErrorCount > 0 ? ` (${toolErrorCount}✕)` : ''}
+                  </span>
+                )}
+              </div>
+              <div className="agent-run-stats-right">
+                {(inputTokens > 0 || outputTokens > 0) && (
+                  <span className="agent-run-stat" title={t('chat.runTokens')}>
+                    {formatTokenCount(inputTokens)} in · {formatTokenCount(outputTokens)} out
+                  </span>
+                )}
+                {tokensPerSecond && (
+                  <span className="agent-run-stat" title={t('chat.runSpeed')}>
+                    {tokensPerSecond} tok/s
+                  </span>
+                )}
+                {stats.costUsd != null && stats.costUsd > 0 && (
+                  <span className="agent-run-stat" title={t('chat.runCost')}>
+                    {formatCost(stats.costUsd)}
+                  </span>
+                )}
+              </div>
+            </div>
           )}
 
           <div className="chat-input-bar">

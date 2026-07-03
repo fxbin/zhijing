@@ -20,6 +20,29 @@ import type { AgentStreamEvent } from '@zhijing/shared';
 const TOOL_RESULT_PREVIEW_MAX_LENGTH = 500;
 
 /**
+ * 从 AssistantMessage 中提取 usage 信息并映射字段名。
+ *
+ * pi-ai 的 Usage 字段是 input / output / cost.total，映射为
+ * inputTokens / outputTokens / costUsd，与前端消费结构一致。
+ *
+ * @param message - Assistant 消息对象
+ * @returns 映射后的 usage；无 usage 时返回 undefined
+ * @author fxbin
+ */
+function extractMessageUsage(message: AgentMessage):
+  | { inputTokens: number | null; outputTokens: number | null; costUsd: number | null }
+  | undefined {
+  if (message.role !== 'assistant') return undefined;
+  const usage = (message as { usage?: { input?: number; output?: number; cost?: { total?: number } } }).usage;
+  if (!usage) return undefined;
+  return {
+    inputTokens: typeof usage.input === 'number' ? usage.input : null,
+    outputTokens: typeof usage.output === 'number' ? usage.output : null,
+    costUsd: typeof usage.cost?.total === 'number' ? usage.cost.total : null,
+  };
+}
+
+/**
  * 从 AssistantMessage 中拼接所有 text 内容块的文本，剔除 toolCall / reasoning 等非文本块。
  *
  * @param message - Agent 消息
@@ -108,8 +131,10 @@ export function serializeAgentEvent(event: AgentEvent): AgentStreamEvent[] {
       }
       return [];
     }
-    case 'message_end':
-      return [{ type: 'message_end', text: extractAssistantText(event.message) }];
+    case 'message_end': {
+      const usage = extractMessageUsage(event.message);
+      return [{ type: 'message_end', text: extractAssistantText(event.message), ...(usage ? { usage } : {}) }];
+    }
     case 'tool_execution_start':
       return [{
         type: 'tool_start',
