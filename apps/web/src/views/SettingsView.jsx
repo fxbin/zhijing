@@ -6,7 +6,7 @@
  * @author fxbin
  */
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
@@ -23,6 +23,7 @@ import {
   Sparkles,
   Star,
   Trash2,
+  X,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useTaskStatusLabel, useTaskWorkflowLabel } from '../utils/i18nLabels';
@@ -65,6 +66,8 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
   const taskWorkflowLabel = useTaskWorkflowLabel();
   const [status, setStatus] = useState(t('settings.loadingModelSettings'));
   const [activeSection, setActiveSection] = useState(INITIAL_ACTIVE_SECTION);
+  const [endpointExpanded, setEndpointExpanded] = useState(false);
+  const [policyExpanded, setPolicyExpanded] = useState(false);
 
   const {
     profiles,
@@ -158,12 +161,12 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
   }, [initialSection, onSectionConsumed]);
 
   const SETTINGS_TABS = [
-    { key: 'profiles', label: t('settings.profiles'), icon: PlugZap },
-    { key: 'weread', label: t('settings.weread.title'), icon: BookOpen },
-    { key: 'transparency', label: t('settings.systemTransparency'), icon: BarChart3 },
-    { key: 'agentUsage', label: t('agentUsage.title'), icon: Cpu },
-    { key: 'dataControls', label: t('settings.dataControls'), icon: Database },
-    { key: 'kits', label: t('kit.title'), icon: Sparkles },
+    { key: 'profiles', label: t('settings.profiles'), icon: PlugZap, group: 'integration' },
+    { key: 'weread', label: t('settings.weread.title'), icon: BookOpen, group: 'integration' },
+    { key: 'transparency', label: t('settings.systemTransparency'), icon: BarChart3, group: 'system' },
+    { key: 'agentUsage', label: t('agentUsage.title'), icon: Cpu, group: 'system' },
+    { key: 'dataControls', label: t('settings.dataControls'), icon: Database, group: 'system' },
+    { key: 'kits', label: t('kit.title'), icon: Sparkles, group: 'extension' },
   ];
 
   /**
@@ -315,26 +318,29 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
       </div>
 
       <div className="settings-tabs" role="tablist" aria-label={t('settings.title')}>
-        {SETTINGS_TABS.map((tab) => {
+        {SETTINGS_TABS.map((tab, index) => {
           const Icon = tab.icon;
           const isActive = activeSection === tab.key;
+          const showDivider = index > 0 && SETTINGS_TABS[index - 1].group !== tab.group;
           return (
-            <button
-              key={tab.key}
-              aria-selected={isActive}
-              className={isActive ? 'active' : ''}
-              onClick={() => setActiveSection(tab.key)}
-              role="tab"
-              type="button"
-            >
-              <Icon size={18} />
-              {tab.label}
-            </button>
+            <Fragment key={tab.key}>
+              {showDivider && <span className="settings-tabs-divider" aria-hidden="true" />}
+              <button
+                aria-selected={isActive}
+                className={isActive ? 'active' : ''}
+                onClick={() => setActiveSection(tab.key)}
+                role="tab"
+                type="button"
+              >
+                <Icon size={18} />
+                {tab.label}
+              </button>
+            </Fragment>
           );
         })}
       </div>
 
-      <div className="settings-grid">
+      <div className={`settings-grid ${activeSection === 'profiles' ? 'settings-grid-single' : ''}`}>
         {activeSection === 'profiles' && (
           <section className="settings-panel">
             <div className="settings-panel-head">
@@ -345,73 +351,25 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
               </div>
             </div>
 
-            {showCreateForm ? (
-              <div className="settings-create-form">
-                <strong>{t('settings.createProfile')}</strong>
-                <label className="field-row">
-                  <span>{t('settings.profileName')}</span>
-                  <input
-                    autoComplete="off"
-                    placeholder={t('settings.profileNameExample')}
-                    type="text"
-                    value={newProfile.name}
-                    onChange={(event) => setNewProfile((prev) => ({ ...prev, name: event.target.value }))}
-                  />
-                </label>
-                <label className="field-row">
-                  <span>{t('settings.provider')}</span>
-                  <select value={newProfile.provider} onChange={(event) => changeNewProfileProvider(event.target.value)}>
-                    {providerOptions.map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
-                  </select>
-                </label>
-                <label className="field-row">
-                  <span>{t('settings.model')}</span>
-                  <select value={newProfile.model} onChange={(event) => setNewProfile((prev) => ({ ...prev, model: event.target.value }))}>
-                    {(providerOptions.find((item) => item.id === newProfile.provider)?.models ?? []).map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
-                  </select>
-                </label>
-                <label className="field-row">
-                  <span>{t('settings.baseUrl')}</span>
-                  <input
-                    autoComplete="off"
-                    placeholder={t('settings.baseUrlPlaceholder')}
-                    type="text"
-                    value={newProfile.baseUrl ?? ''}
-                    onChange={(event) => setNewProfile((prev) => ({ ...prev, baseUrl: event.target.value }))}
-                  />
-                </label>
-                <label className="field-row">
-                  <span>{t('settings.apiKey')}</span>
-                  <div className="secret-input">
-                    <KeyRound size={18} />
-                    <input
-                      autoComplete="off"
-                      placeholder={t('settings.apiKeyOptional')}
-                      type="password"
-                      value={newProfile.apiKey}
-                      onChange={(event) => setNewProfile((prev) => ({ ...prev, apiKey: event.target.value }))}
-                    />
-                  </div>
-                </label>
+            <div className="settings-profile-layout">
+              <div className="settings-profile-list-panel">
                 <div className="settings-actions">
-                  <button type="button" disabled={isSaving} onClick={createProfile}>
-                    {isSaving ? t('common.creating') : t('common.create')}
+                  <button type="button" onClick={openCreateForm}>
+                    <Plus size={16} />
+                    {t('settings.createProfile')}
                   </button>
-                  <button type="button" onClick={() => setShowCreateForm(false)}>{t('common.cancel')}</button>
                 </div>
-              </div>
-            ) : (
-              <div className="settings-profile-layout">
-                <div className="settings-profile-list-panel">
-                  <div className="settings-actions">
-                    <button type="button" onClick={openCreateForm}>
-                      <Plus size={16} />
-                      {t('settings.createProfile')}
-                    </button>
-                  </div>
 
                   {profiles.length === 0 ? (
-                    <p className="settings-note">{t('settings.noProfiles')}</p>
+                    <div className="settings-empty-state">
+                      <PlugZap size={32} />
+                      <strong>{t('settings.noProfilesTitle')}</strong>
+                      <p>{t('settings.noProfiles')}</p>
+                      <button type="button" onClick={openCreateForm}>
+                        <Plus size={16} />
+                        {t('settings.createProfile')}
+                      </button>
+                    </div>
                   ) : (
                     <div className="settings-profile-list">
                       {profiles.map((profile) => (
@@ -440,11 +398,11 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                           </button>
                           <div className="settings-profile-actions">
                             {!profile.isDefault && (
-                              <button type="button" onClick={() => activateProfile(profile.id)}>
+                              <button type="button" className="activate-link" onClick={() => activateProfile(profile.id)}>
                                 {t('settings.activate')}
                               </button>
                             )}
-                            <button type="button" className="danger" onClick={() => requestDeleteProfile(profile.id)}>
+                            <button type="button" className="delete-btn" onClick={() => requestDeleteProfile(profile.id)}>
                               <Trash2 size={15} />
                             </button>
                           </div>
@@ -482,8 +440,8 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                         </label>
                       </div>
 
-                      <div className="settings-form-section">
-                        <strong>{t('settings.endpoint')}</strong>
+                      <div className={`settings-form-section collapsible ${endpointExpanded ? '' : 'collapsed'}`}>
+                        <strong onClick={() => setEndpointExpanded((prev) => !prev)}>{t('settings.endpoint')}</strong>
                         <label className="field-row">
                           <span>{t('settings.baseUrl')}</span>
                           <input
@@ -515,8 +473,8 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                         <p className="settings-security-note">{t('settings.apiKeyStorageNotice')}</p>
                       </div>
 
-                      <div className="settings-form-section">
-                        <strong>{t('settings.policyGroup')}</strong>
+                      <div className={`settings-form-section collapsible ${policyExpanded ? '' : 'collapsed'}`}>
+                        <strong onClick={() => setPolicyExpanded((prev) => !prev)}>{t('settings.policyGroup')}</strong>
                         <div className="settings-toggles">
                           <label>
                             <input checked={enabled} onChange={(event) => setEnabled(event.target.checked)} type="checkbox" />
@@ -543,13 +501,102 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                           {t('settings.clearRuntimeKey')}
                         </button>
                       </div>
+                      {testResult && (
+                        <div className={`test-result ${testResult.ok ? 'ok' : 'failed'}`}>
+                          <strong>{testResult.ok ? t('settings.testPassed') : t('settings.testNotPassed')}</strong>
+                          <p>{testResult.message}</p>
+                          {testResult.sampleTitle && <small>{t('settings.returnedCard')}{testResult.sampleTitle}</small>}
+                        </div>
+                      )}
+                      <p className="settings-note">{status}</p>
                     </>
                   ) : (
                     <p className="settings-note">{t('settings.noProfileSelected')}</p>
                   )}
                 </div>
               </div>
-            )}
+
+              {showCreateForm && (
+                <>
+                  <div
+                    className="settings-drawer-overlay open"
+                    onClick={() => setShowCreateForm(false)}
+                  />
+                  <aside className="settings-drawer open">
+                    <div className="settings-drawer-head">
+                      <h4>{t('settings.createProfile')}</h4>
+                      <button type="button" onClick={() => setShowCreateForm(false)} aria-label={t('common.cancel')}>
+                        <X size={18} />
+                      </button>
+                    </div>
+                    <div className="settings-drawer-body">
+                      <label className="field-row">
+                        <span>{t('settings.profileName')}</span>
+                        <input
+                          autoComplete="off"
+                          type="text"
+                          value={newProfile.name}
+                          onChange={(event) => setNewProfile((prev) => ({ ...prev, name: event.target.value }))}
+                        />
+                      </label>
+                      <label className="field-row">
+                        <span>{t('settings.provider')}</span>
+                        <select
+                          value={newProfile.provider}
+                          onChange={(event) => changeNewProfileProvider(event.target.value)}
+                        >
+                          {providerOptions.map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
+                        </select>
+                      </label>
+                      <label className="field-row">
+                        <span>{t('settings.model')}</span>
+                        <select
+                          value={newProfile.model}
+                          onChange={(event) => setNewProfile((prev) => ({ ...prev, model: event.target.value }))}
+                        >
+                          {(providerOptions.find((item) => item.id === newProfile.provider)?.models ?? []).map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
+                        </select>
+                      </label>
+                      <label className="field-row">
+                        <span>{t('settings.baseUrl')}</span>
+                        <input
+                          autoComplete="off"
+                          placeholder={t('settings.baseUrlPlaceholder')}
+                          type="text"
+                          value={newProfile.baseUrl}
+                          onChange={(event) => setNewProfile((prev) => ({ ...prev, baseUrl: event.target.value }))}
+                        />
+                      </label>
+                      <label className="field-row">
+                        <span>{t('settings.apiKey')}</span>
+                        <div className="secret-input">
+                          <KeyRound size={18} />
+                          <input
+                            autoComplete="off"
+                            placeholder={t('settings.apiKeyPlaceholder.empty')}
+                            type="password"
+                            value={newProfile.apiKey}
+                            onChange={(event) => setNewProfile((prev) => ({ ...prev, apiKey: event.target.value }))}
+                          />
+                        </div>
+                      </label>
+                      <p className="settings-security-note">{t('settings.apiKeyStorageNotice')}</p>
+                      <div className="settings-actions settings-actions-primary">
+                        <button
+                          disabled={isSaving || !newProfile.name.trim() || !newProfile.provider || !newProfile.model}
+                          onClick={createProfile}
+                          type="button"
+                        >
+                          {isSaving ? t('common.saving') : t('common.create')}
+                        </button>
+                        <button type="button" onClick={() => setShowCreateForm(false)}>
+                          {t('common.cancel')}
+                        </button>
+                      </div>
+                    </div>
+                  </aside>
+                </>
+              )}
 
             {profileToDelete && (
               <div
@@ -913,9 +960,11 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
           </section>
         )}
 
-        <aside className="settings-status">
-          {renderStatusSidebar()}
-        </aside>
+        {activeSection !== 'profiles' && (
+          <aside className="settings-status">
+            {renderStatusSidebar()}
+          </aside>
+        )}
       </div>
     </section>
   );
