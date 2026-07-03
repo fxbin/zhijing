@@ -1794,9 +1794,9 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
           ) : (
             <div className="weread-stats-gate">
               <p>{t('weread.stats.gateBlocked') ?? '本视图未通过反虚荣门禁'}</p>
-              {statsGate.failedKeys && statsGate.failedKeys.length > 0 && (
+              {statsGate.result && statsGate.result.failedKeys && statsGate.result.failedKeys.length > 0 && (
                 <p className="weread-stats-gate-detail">
-                  {statsGate.failedKeys.join('、')}
+                  {statsGate.result.failedKeys.join('、')}
                 </p>
               )}
               {statsGate.error && (

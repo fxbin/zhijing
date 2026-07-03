@@ -253,6 +253,31 @@ const USER_MEMORY_SCOPE_SET = new Set<string>(USER_MEMORY_SCOPE_VALUES);
 const USER_MEMORY_SOURCE_SET = new Set<string>(USER_MEMORY_SOURCE_VALUES);
 const DECISION_LOG_KIND_SET = new Set<string>(DECISION_LOG_KIND_VALUES);
 
+/**
+ * 反虚荣门禁允许评估的统计视图 ID 白名单。
+ * 防止前端任意构造 viewId 探测未注册视图的可见性。
+ */
+const STATISTICS_GATE_ALLOWED_VIEW_IDS = new Set<string>([
+  'weReadStatsBand',
+  'wereadQuadrant',
+  'topicSpectrum',
+  'readingHealth',
+]);
+
+/**
+ * 反虚荣门禁必须为 boolean 的字段名集合。
+ * 用于在 evaluate-gate 端点逐字段校验类型，非 boolean 一律拒绝。
+ */
+const STATISTICS_GATE_BOOLEAN_FIELDS = [
+  'dependsOnBehaviorTrace',
+  'sharedAcrossUsers',
+  'hasRankingOrComparison',
+  'emphasizesQuantity',
+  'exposesRawData',
+  'allowsUserChallenge',
+  'isLinearlyOptimizable',
+] as const;
+
 const AGENT_USAGE_DEFAULT_LIMIT = 100;
 const AGENT_USAGE_MAX_LIMIT = 500;
 
@@ -2214,6 +2239,15 @@ export function buildApi() {
     const body = request.body ?? {};
     if (typeof body.viewId !== 'string' || body.viewId.length === 0) {
       return reply.code(400).send({ error: 'viewId is required' });
+    }
+    if (!STATISTICS_GATE_ALLOWED_VIEW_IDS.has(body.viewId)) {
+      return reply.code(400).send({ error: 'viewId not registered' });
+    }
+    for (const field of STATISTICS_GATE_BOOLEAN_FIELDS) {
+      const value = body[field];
+      if (value !== undefined && typeof value !== 'boolean') {
+        return reply.code(400).send({ error: `${field} must be boolean` });
+      }
     }
     return evaluateAntiVanity({
       viewId: body.viewId,
