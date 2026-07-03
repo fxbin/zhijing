@@ -3768,10 +3768,20 @@ button { cursor: pointer; }
 .settings-panel-head p,
 .status-card p,
 .settings-note,
+.settings-security-note,
 .test-result p {
   margin: 5px 0 0;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.settings-security-note {
+  padding: 10px 12px;
+  border: 1px solid rgba(212, 148, 74, 0.28);
+  border-radius: 8px;
+  background: rgba(212, 148, 74, 0.08);
+  color: #6b4b20;
+  font-size: 13px;
 }
 
 .field-row {
@@ -7145,6 +7155,30 @@ button { cursor: pointer; }
   border-color: #f3aaa3;
   background: rgba(255, 218, 214, 0.5);
   color: var(--error);
+}
+
+.library-undo-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 20px;
+  border: 1px solid rgba(107, 142, 127, 0.34);
+  border-radius: 10px;
+  background: rgba(107, 142, 127, 0.1);
+  color: var(--primary);
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.library-undo-banner button {
+  border: 1px solid var(--sage);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--primary);
+  padding: 8px 12px;
+  font-weight: 800;
 }
 
 .capture-success-banner {
@@ -11684,6 +11718,19 @@ button { cursor: pointer; }
   gap: 6px;
   font-size: 12px;
   color: var(--muted);
+}
+
+.chat-session-scope {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: help;
 }
 
 .chat-mode-badge {
@@ -18113,6 +18160,126 @@ button { cursor: pointer; }
 }
 
 .error-boundary__retry:focus-visible {
+  outline: 2px solid #2c5f8d;
+  outline-offset: 2px;
+}
+
+.access-gate,
+.access-gate-loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
+  z-index: 9999;
+}
+
+.access-gate-loading .access-gate-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #d0dae8;
+  border-top-color: #2c5f8d;
+  border-radius: 50%;
+  animation: access-gate-spin 0.8s linear infinite;
+}
+
+@keyframes access-gate-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.access-gate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 48px 40px;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(44, 95, 141, 0.12);
+  width: 360px;
+  max-width: calc(100vw - 32px);
+}
+
+.access-gate-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #e8eef5;
+  color: #2c5f8d;
+  margin-bottom: 4px;
+}
+
+.access-gate-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: #1a2a3a;
+}
+
+.access-gate-subtitle {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #5a6a7a;
+  text-align: center;
+}
+
+.access-gate-input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 15px;
+  border: 1px solid #d0dae8;
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.access-gate-input:focus {
+  border-color: #2c5f8d;
+  box-shadow: 0 0 0 3px rgba(44, 95, 141, 0.12);
+}
+
+.access-gate-input:disabled {
+  background: #f5f7fa;
+  cursor: not-allowed;
+}
+
+.access-gate-error {
+  margin: 0;
+  font-size: 13px;
+  color: #d1494a;
+  text-align: center;
+}
+
+.access-gate-button {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #ffffff;
+  background: #2c5f8d;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.access-gate-button:hover:not(:disabled) {
+  background: #234c73;
+}
+
+.access-gate-button:disabled {
+  background: #a0b8cc;
+  cursor: not-allowed;
+}
+
+.access-gate-button:focus-visible {
   outline: 2px solid #2c5f8d;
   outline-offset: 2px;
 }

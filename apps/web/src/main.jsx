@@ -30,6 +30,7 @@ import { useKitState } from './hooks/useKitState';
 import { useMaterialParseState } from './hooks/useMaterialParseState';
 import { useModalState } from './hooks/useModalState';
 import ErrorBoundary from './components/ErrorBoundary';
+import AccessGate from './components/AccessGate';
 import SystemNotice from './components/SystemNotice';
 import NotificationDropdown from './components/NotificationDropdown';
 import CreateKbModal from './components/CreateKbModal';
@@ -79,6 +80,15 @@ const FAILED_TASK_ID_PREFIX = 'local_failed_';
  * 任务状态：失败。
  */
 const TASK_STATUS_FAILED = 'failed';
+
+/**
+ * 任务终态集合：进入这些状态后停止前端轮询。
+ */
+const TASK_TERMINAL_STATUSES = new Set([
+  'succeeded',
+  TASK_STATUS_FAILED,
+  'needs_user_action',
+]);
 
 /**
  * 任务轮询间隔（毫秒）。
@@ -175,6 +185,12 @@ function App() {
     setSearchInitialQuery(initialQuery);
     setSearchOpen(true);
   };
+
+  const openChat = (initialQuestion = '') => {
+    if (initialQuestion) setAssistantQuestion(initialQuestion);
+    window.dispatchEvent(new CustomEvent(CHAT_OPEN_EVENT));
+  };
+
   useHotkey('k', () => {
     if (searchOpen) {
       setSearchOpen(false);
@@ -182,9 +198,7 @@ function App() {
       openSearchCommand('');
     }
   });
-  useHotkey('j', () => {
-    window.dispatchEvent(new CustomEvent(CHAT_OPEN_EVENT));
-  });
+  useHotkey('j', () => openChat());
 
   const editingModalRef = useRef(null);
   const deletingModalRef = useRef(null);
@@ -421,12 +435,21 @@ function App() {
   useEffect(() => {
     if (!latestTaskId) return undefined;
     let cancelled = false;
+    let timer = null;
 
-    loadTask(latestTaskId, () => cancelled);
-    const timer = window.setInterval(() => loadTask(latestTaskId, () => cancelled), TASK_POLL_INTERVAL_MS);
+    async function refreshTask() {
+      const task = await loadTask(latestTaskId, () => cancelled);
+      if (!cancelled && task && TASK_TERMINAL_STATUSES.has(task.status)) {
+        setLatestTaskId(null);
+        if (timer) window.clearInterval(timer);
+      }
+    }
+
+    refreshTask();
+    timer = window.setInterval(refreshTask, TASK_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer) window.clearInterval(timer);
     };
   }, [latestTaskId]);
 
@@ -578,7 +601,12 @@ function App() {
             <WorkspaceSwitcher
               workspaces={workspaces}
               onCreate={() => { setCreateKbError(null); setIsCreateKbOpen(true); }}
-              onDelete={(base) => setDeletingKb({ id: base.id, title: base.title })}
+              onDelete={(base) => setDeletingKb({
+                id: base.id,
+                title: base.title,
+                sourceCount: base.sourceCount ?? 0,
+                cardCount: base.cardCount ?? 0,
+              })}
               onEdit={(base) => setEditingKb({ id: base.id, title: base.title, summary: base.summary ?? '', error: null })}
               onSelect={(id) => {
                 setSelectedWorkspaceId(id);
@@ -655,7 +683,7 @@ function App() {
             />
           )}
           {view === 'artifact' && <ArtifactView artifact={selectedArtifact} detail={workspaceDetail} setView={go} artifactOrigin={artifactOrigin} onClearOrigin={() => setArtifactOrigin(null)} onArtifactUpdate={handleArtifactUpdate} onSwitchArtifact={(next) => { setArtifactOrigin(null); setSelectedArtifact(next); }} />}
-          {view === 'maps' && <MapsView apiStatus={apiStatus} selectedWorkspaceId={selectedWorkspaceId} setView={go} />}
+          {view === 'maps' && <MapsView apiStatus={apiStatus} selectedWorkspaceId={selectedWorkspaceId} setView={go} onOpenChat={openChat} />}
           {view === 'assets' && <GlobalAssetsDashboard data={advancedOpsData} setView={go} onOpenArtifact={openArtifact} onSelectCard={handleSelectCard} onOpenCardDetail={openCardDrawer} />}
           {view === 'compare' && <MultiEntityComparisonView data={advancedOpsData} setView={go} />}
           {view === 'conflicts' && <KnowledgeConflictResolverView data={advancedOpsData} setView={go} />}
@@ -785,6 +813,7 @@ function App() {
             <div className="modal-body">
               <p>{t('workspace.deleteConfirmHint')}</p>
               <p><strong>{deletingKb.title}</strong></p>
+              <p>{t('workspace.deleteImpact', { sourceCount: deletingKb.sourceCount ?? 0, cardCount: deletingKb.cardCount ?? 0 })}</p>
               <p className="modal-error">{t('workspace.deleteConfirmBody')}</p>
               {deletingKb.error && <p className="modal-error" role="alert">{deletingKb.error}</p>}
             </div>
@@ -867,6 +896,8 @@ function App() {
 
 createRoot(document.getElementById('root')).render(
   <ErrorBoundary>
-    <App />
+    <AccessGate>
+      <App />
+    </AccessGate>
   </ErrorBoundary>,
 );

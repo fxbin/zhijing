@@ -11,6 +11,46 @@
 const DEFAULT_TIMEOUT_MS = 20000;
 
 /**
+ * 访问令牌在 sessionStorage 中的存储键。
+ */
+const ACCESS_TOKEN_STORAGE_KEY = 'zhijing:accessToken';
+
+/**
+ * 401 未授权事件名，供全局监听弹出密码框。
+ */
+export const AUTH_REQUIRED_EVENT = 'zhijing:auth-required';
+
+/**
+ * 读取本地存储的访问令牌。
+ * @returns {string} 访问令牌字符串，未存储返回空串
+ * @author fxbin
+ */
+export function getAccessToken() {
+  try {
+    return sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 保存访问令牌到 sessionStorage。
+ * @param {string} token - 访问令牌
+ * @author fxbin
+ */
+export function setAccessToken(token) {
+  try {
+    if (token) {
+      sessionStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token);
+    } else {
+      sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+    }
+  } catch {
+    // sessionStorage 不可用时静默降级
+  }
+}
+
+/**
  * 统一 API 错误类型，承载 HTTP 状态码、原始响应与服务端错误文案，便于调用方按状态码分流处理。
  */
 export class ApiError extends Error {
@@ -65,6 +105,10 @@ async function request(url, options = {}) {
   }
 
   const finalHeaders = { ...headers };
+  const accessToken = getAccessToken();
+  if (accessToken && !finalHeaders['X-Access-Token']) {
+    finalHeaders['X-Access-Token'] = accessToken;
+  }
   let finalBody = undefined;
   if (body !== undefined && body !== null) {
     if (typeof body === 'string' || body instanceof FormData || body instanceof Blob) {
@@ -83,6 +127,14 @@ async function request(url, options = {}) {
       signal: controller.signal,
       ...rest,
     });
+    if (response.status === 401) {
+      setAccessToken('');
+      try {
+        window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT));
+      } catch {
+        // window 不可用时忽略
+      }
+    }
     if (!response.ok) {
       let serverMessage = null;
       try {
@@ -207,6 +259,6 @@ export async function raw(url, options = {}) {
   return request(url, options);
 }
 
-const api = { get, post, put, patch, del, raw, ApiError };
+const api = { get, post, put, patch, del, raw, ApiError, getAccessToken, setAccessToken, AUTH_REQUIRED_EVENT };
 
 export default api;

@@ -1,7 +1,8 @@
 import cors from '@fastify/cors';
 import cron from 'node-cron';
 import Fastify from 'fastify';
-import { Readable } from 'node:stream';
+import { Readable, Transform } from 'node:stream';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import {
   archiveCard,
   archiveMaterial,
@@ -27,6 +28,7 @@ import {
   getConstructionProgress,
   listSkeletonCards,
   getWorkspacePath,
+  getMaterialDeletionImpact,
   getModelProviderSettings,
   getModelProviderSettingsV2,
   getWeReadSettings,
@@ -371,12 +373,90 @@ const AGENT_USAGE_MAX_LIMIT = 500;
 const INSPECT_TOKEN = process.env.ZHIJING_INSPECT_TOKEN ?? '';
 
 /**
+ * 访问密码门禁密码。
+ * 仅当环境变量 ZHIJING_ACCESS_PASSWORD 被设置时，全站门禁才启用；
+ * 未设置时所有接口可自由访问（本地开发场景）。
+ * 公网部署必须设置此变量，防止未授权访问。
+ * @author fxbin
+ */
+const ACCESS_PASSWORD = process.env.ZHIJING_ACCESS_PASSWORD ?? '';
+
+/**
+ * 访问令牌有效期（毫秒），7 天。
+ * 令牌由密码 + 过期时间戳经 HMAC-SHA256 签名生成，无需持久化存储。
+ * @author fxbin
+ */
+const ACCESS_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * 访问令牌签名密钥。
+ * 优先使用环境变量 ZHIJING_ACCESS_TOKEN_SECRET，未设置时由密码派生，
+ * 保证部署后重启不影响已签发令牌的有效性。
+ * @author fxbin
+ */
+const ACCESS_TOKEN_SECRET = process.env.ZHIJING_ACCESS_TOKEN_SECRET ?? ACCESS_PASSWORD;
+
+/**
+ * 门禁放行的公开路径前缀。
+ * 健康检查、登录、图片/视频代理（带 SSRF 校验）不需鉴权。
+ * @author fxbin
+ */
+const PUBLIC_PATH_PREFIXES = [
+  '/health',
+  '/api/health',
+  '/api/auth/login',
+  '/api/auth/status',
+  '/api/proxy-image',
+  '/api/proxy-video',
+];
+
+/**
+ * LLM 调用相关路径前缀。
+ * 这些路径触发 LLM 调用，成本较高，需按日限额控制。
+ * @author fxbin
+ */
+const LLM_PATH_PREFIXES = [
+  '/agent/stream',
+  '/api/workspaces/',
+  '/api/intake',
+  '/api/socratic',
+];
+
+/**
+ * 单 IP 每日 LLM 调用最大次数。
+ * 超过此限额返回 429，防止演示 Key 额度被恶意耗尽。
+ * @author fxbin
+ */
+const LLM_DAILY_LIMIT = 80;
+
+/**
+ * LLM 日限额桶：key 为 ip，value 为 { count, resetAt }。
+ * 按自然日重置（UTC+8 0 点），进程内 Map，不持久化。
+ * @author fxbin
+ */
+const llmDailyBuckets = new Map<string, { count: number; resetAt: number }>();
+
+/**
  * proxy-image 单次响应最大字节数（50MB）。
  * 防止 OOM 攻击与带宽放大。
- * proxy-video 改为流式转发后不再受此限制。
  * @author fxbin
  */
 const PROXY_MAX_BYTES = 50 * 1024 * 1024;
+
+/**
+ * proxy-video 完整响应最大字节数（200MB）。
+ */
+const PROXY_VIDEO_MAX_BYTES = 200 * 1024 * 1024;
+
+/**
+ * proxy-video 单个 Range 响应最大字节数（20MB）。
+ */
+const PROXY_VIDEO_MAX_RANGE_BYTES = 20 * 1024 * 1024;
+
+/**
+ * proxy-video 上游首包超时（毫秒）。
+ */
+const PROXY_VIDEO_FETCH_TIMEOUT_MS = 30_000;
 
 /**
  * SSRF 安全 fetch 单例：用于 proxy-image / proxy-video。
@@ -384,6 +464,52 @@ const PROXY_MAX_BYTES = 50 * 1024 * 1024;
  * @author fxbin
  */
 const ssrfSafeFetch = createSsrfSafeFetch();
+
+function parsePositiveIntegerHeader(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function buildSafeVideoRangeHeader(rawRange: string | undefined): string | null {
+  if (!rawRange) return null;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(rawRange.trim());
+  if (!match) return null;
+  const startRaw = match[1];
+  const endRaw = match[2];
+  if (!startRaw && !endRaw) return null;
+  if (!startRaw) {
+    const suffixLength = Number.parseInt(endRaw, 10);
+    if (!Number.isFinite(suffixLength) || suffixLength < 1 || suffixLength > PROXY_VIDEO_MAX_RANGE_BYTES) {
+      return null;
+    }
+    return `bytes=-${suffixLength}`;
+  }
+  const start = Number.parseInt(startRaw, 10);
+  if (!Number.isFinite(start) || start < 0) return null;
+  if (!endRaw) {
+    return `bytes=${start}-${start + PROXY_VIDEO_MAX_RANGE_BYTES - 1}`;
+  }
+  const end = Number.parseInt(endRaw, 10);
+  if (!Number.isFinite(end) || end < start) return null;
+  const requestedLength = end - start + 1;
+  if (requestedLength > PROXY_VIDEO_MAX_RANGE_BYTES) return null;
+  return rawRange.trim();
+}
+
+function createByteLimitStream(maxBytes: number) {
+  let transferred = 0;
+  return new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      transferred += chunk.byteLength;
+      if (transferred > maxBytes) {
+        callback(new Error('Proxy response exceeded byte limit.'));
+        return;
+      }
+      callback(null, chunk);
+    },
+  });
+}
 
 function resolveAllowedOrigins(): string[] {
   const raw = process.env.ZHIJING_ALLOWED_ORIGINS;
@@ -407,6 +533,110 @@ function isInspectAllowed(request: { headers: Record<string, string | string[] |
   return typeof provided === 'string' && provided.length > 0 && provided === INSPECT_TOKEN;
 }
 
+/**
+ * 判断路径是否属于公开放行路径。
+ * @param url - 请求 URL
+ * @returns 是否放行
+ * @author fxbin
+ */
+function isPublicPath(url: string): boolean {
+  return PUBLIC_PATH_PREFIXES.some((prefix) => url === prefix || url.startsWith(prefix + '/') || url.startsWith(prefix));
+}
+
+/**
+ * 判断路径是否属于 LLM 调用路径。
+ * @param url - 请求 URL
+ * @returns 是否命中
+ * @author fxbin
+ */
+function matchLlmPath(url: string): boolean {
+  return LLM_PATH_PREFIXES.some((prefix) => url.startsWith(prefix));
+}
+
+/**
+ * 签发访问令牌。
+ * 令牌格式：{expireAt}.{hmac}，hmac = HMAC-SHA256(secret, password + ':' + expireAt)。
+ * @returns 签发的访问令牌字符串
+ * @author fxbin
+ */
+function issueAccessToken(): string {
+  const expireAt = Date.now() + ACCESS_TOKEN_TTL_MS;
+  const payload = `${ACCESS_PASSWORD}:${expireAt}`;
+  const hmac = createHmac('sha256', ACCESS_TOKEN_SECRET).update(payload).digest('hex');
+  return `${expireAt}.${hmac}`;
+}
+
+/**
+ * 校验访问令牌。
+ * @param token - 待校验的令牌字符串
+ * @returns 是否有效
+ * @author fxbin
+ */
+function verifyAccessToken(token: string): boolean {
+  const parts = token.split('.');
+  if (parts.length !== 2) return false;
+  const expireAt = Number.parseInt(parts[0], 10);
+  if (!Number.isFinite(expireAt) || expireAt < Date.now()) return false;
+  const payload = `${ACCESS_PASSWORD}:${expireAt}`;
+  const expectedHmac = createHmac('sha256', ACCESS_TOKEN_SECRET).update(payload).digest('hex');
+  const provided = Buffer.from(parts[1], 'hex');
+  const expected = Buffer.from(expectedHmac, 'hex');
+  if (provided.length !== expected.length) return false;
+  return timingSafeEqual(provided, expected);
+}
+
+/**
+ * 从请求中提取访问令牌。
+ * 优先级：X-Access-Token 头 > access_token cookie > query 参数 access_token。
+ * @param request - Fastify 请求对象
+ * @returns 访问令牌字符串或空
+ * @author fxbin
+ */
+function extractAccessToken(request: { headers: Record<string, string | string[] | undefined>; query?: unknown }): string {
+  const headerValue = request.headers['x-access-token'];
+  if (typeof headerValue === 'string' && headerValue.length > 0) return headerValue;
+  if (Array.isArray(headerValue) && headerValue.length > 0) return headerValue[0];
+  const cookieHeader = request.headers.cookie;
+  if (typeof cookieHeader === 'string') {
+    const match = /access_token=([^;]+)/.exec(cookieHeader);
+    if (match) return match[1];
+  }
+  const query = request.query as Record<string, unknown> | undefined;
+  const queryToken = query?.access_token;
+  if (typeof queryToken === 'string' && queryToken.length > 0) return queryToken;
+  return '';
+}
+
+/**
+ * 计算下一个自然日 0 点（UTC+8）的时间戳。
+ * @returns 下个自然日 0 点的毫秒时间戳
+ * @author fxbin
+ */
+function nextDayResetTimestamp(): number {
+  const now = new Date();
+  const nextDay = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const utc8NextDay = new Date(nextDay.getTime() + 8 * 60 * 60 * 1000);
+  utc8NextDay.setUTCHours(0, 0, 0, 0);
+  return utc8NextDay.getTime() - 8 * 60 * 60 * 1000;
+}
+
+/**
+ * 检查 IP 是否超过每日 LLM 调用限额。
+ * @param ip - 客户端 IP
+ * @returns 是否超限
+ * @author fxbin
+ */
+function isLlmQuotaExceeded(ip: string): boolean {
+  const now = Date.now();
+  const bucket = llmDailyBuckets.get(ip);
+  if (!bucket || now > bucket.resetAt) {
+    llmDailyBuckets.set(ip, { count: 1, resetAt: nextDayResetTimestamp() });
+    return false;
+  }
+  bucket.count += 1;
+  return bucket.count > LLM_DAILY_LIMIT;
+}
+
 export function buildApi() {
   const app = Fastify({
     logger: {
@@ -420,11 +650,26 @@ export function buildApi() {
   });
 
   app.addHook('onRequest', async (request, reply) => {
-    const pathPrefix = matchRateLimitedPath(request.url);
-    if (!pathPrefix) return;
-    const ip = request.ip;
-    if (isRateLimited(ip, pathPrefix)) {
-      return reply.code(429).send({ error: 'Too many requests. Please retry later.' });
+    const url = request.url;
+    if (isPublicPath(url)) return;
+    if (ACCESS_PASSWORD) {
+      const token = extractAccessToken(request);
+      if (!token || !verifyAccessToken(token)) {
+        return reply.code(401).send({ error: 'Access token required.', code: 'AUTH_REQUIRED' });
+      }
+    }
+    const pathPrefix = matchRateLimitedPath(url);
+    if (pathPrefix) {
+      const ip = request.ip;
+      if (isRateLimited(ip, pathPrefix)) {
+        return reply.code(429).send({ error: 'Too many requests. Please retry later.' });
+      }
+    }
+    if (matchLlmPath(url)) {
+      const ip = request.ip;
+      if (isLlmQuotaExceeded(ip)) {
+        return reply.code(429).send({ error: 'Daily LLM quota exceeded. Please retry tomorrow.', code: 'LLM_QUOTA_EXCEEDED' });
+      }
     }
   });
 
@@ -459,6 +704,31 @@ export function buildApi() {
     ok: true,
     service: 'zhijing-api',
     timestamp: new Date().toISOString(),
+  }));
+
+  /**
+   * 访问密码登录端点。
+   * 仅当 ZHIJING_ACCESS_PASSWORD 已配置时启用门禁。
+   * 未配置密码时返回门禁未启用信息，便于前端判断。
+   */
+  app.post<{ Body: { password?: string } }>('/api/auth/login', async (request, reply) => {
+    if (!ACCESS_PASSWORD) {
+      return { ok: true, gateEnabled: false, token: '' };
+    }
+    const provided = typeof request.body?.password === 'string' ? request.body.password : '';
+    if (!provided || provided !== ACCESS_PASSWORD) {
+      return reply.code(401).send({ error: 'Invalid password.', code: 'INVALID_PASSWORD' });
+    }
+    const token = issueAccessToken();
+    return { ok: true, gateEnabled: true, token, expiresIn: ACCESS_TOKEN_TTL_MS };
+  });
+
+  /**
+   * 查询门禁状态。
+   * 前端据此判断是否需要弹出密码框。
+   */
+  app.get('/api/auth/status', async () => ({
+    gateEnabled: Boolean(ACCESS_PASSWORD),
   }));
 
   app.get('/api/proxy', async () => {
@@ -723,16 +993,33 @@ export function buildApi() {
         headers['Referer'] = 'https://www.douyin.com/';
       }
       const range = request.headers.range;
-      if (range) {
-        headers['Range'] = range;
+      const safeRange = buildSafeVideoRangeHeader(range);
+      if (range && !safeRange) {
+        return reply.code(416).send({ error: 'Video range is too large or invalid.' });
       }
-      const response = await ssrfSafeFetch(videoUrl, { headers });
+      if (safeRange) {
+        headers['Range'] = safeRange;
+      }
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), PROXY_VIDEO_FETCH_TIMEOUT_MS);
+      request.raw.on('close', () => controller.abort());
+      let response: Awaited<ReturnType<typeof ssrfSafeFetch>>;
+      try {
+        response = await ssrfSafeFetch(videoUrl, { headers, signal: controller.signal });
+      } finally {
+        clearTimeout(timeout);
+      }
       if (!response.ok && response.status !== 206) {
         return reply.code(response.status).send({ error: 'Video fetch failed.' });
       }
       const contentType = response.headers.get('content-type') ?? 'video/mp4';
       if (!contentType.startsWith('video/') && !contentType.startsWith('application/')) {
         return reply.code(400).send({ error: 'URL did not return a video.' });
+      }
+      const maxBytes = response.status === 206 ? PROXY_VIDEO_MAX_RANGE_BYTES : PROXY_VIDEO_MAX_BYTES;
+      const parsedContentLength = parsePositiveIntegerHeader(response.headers.get('content-length'));
+      if (parsedContentLength !== null && parsedContentLength > maxBytes) {
+        return reply.code(413).send({ error: 'Video too large to proxy.' });
       }
       const replyHeaders: Record<string, string> = {
         'Content-Type': contentType,
@@ -753,7 +1040,7 @@ export function buildApi() {
       }
       const nodeStream = Readable.fromWeb(
         upstreamBody as Parameters<typeof Readable.fromWeb>[0],
-      );
+      ).pipe(createByteLimitStream(maxBytes));
       return reply
         .code(response.status === 206 ? 206 : 200)
         .headers(replyHeaders)
@@ -2050,6 +2337,18 @@ export function buildApi() {
       }
       request.log.error({ error }, 'material manual review failed');
       return reply.code(500).send({ error: 'Material manual review failed.' });
+    }
+  });
+
+  app.get<{ Params: { id: string } }>('/api/materials/:id/delete-impact', async (request, reply) => {
+    try {
+      return getMaterialDeletionImpact(request.params.id);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'material delete impact failed');
+      return reply.code(500).send({ error: 'Material delete impact failed.' });
     }
   });
 
