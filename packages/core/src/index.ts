@@ -8027,7 +8027,8 @@ async function parseDouyinMaterial(material: MaterialRecord): Promise<ParsedMate
   }
 
   const mediaUrls = [data.play_addr];
-  if (data.cover) mediaUrls.push(data.cover);
+  const coverUrl = data.cover ?? data.origin_cover ?? data.dynamic_cover;
+  if (coverUrl) mediaUrls.push(coverUrl);
 
   const textParts = [
     data.desc,
@@ -8254,10 +8255,50 @@ function extractXiaohongshuTags(note: Record<string, unknown>) {
 function extractXiaohongshuMediaUrls(note: Record<string, unknown>) {
   const videoUrls = xiaohongshuVideoUrls(note.video);
   if (videoUrls.length) {
-    return [videoUrls[0]];
+    const coverUrls = xiaohongshuVideoCoverUrls(note.video, note.imageList);
+    return uniqueStrings([...videoUrls.slice(0, 1), ...coverUrls]);
   }
   const imageUrls = arrayValue(note.imageList).flatMap(xiaohongshuImageUrls);
   return imageUrls.length ? uniqueStrings(imageUrls) : uniqueStrings(collectMediaUrls(note));
+}
+
+/**
+ * 从小红书视频笔记中提取封面图 URL 列表。
+ * 依次尝试 video.firstFrameFileId、video.coverUrl、imageList 首图作为封面来源。
+ * 返回的封面图 URL 用于前端卡片缩略图展示，避免视频笔记无封面可显示。
+ *
+ * @param video - 笔记的 video 对象
+ * @param imageList - 笔记的 imageList 字段（视频笔记可能也包含封面首图）
+ * @returns 封面图 URL 数组，可能为空
+ * @author fxbin
+ */
+function xiaohongshuVideoCoverUrls(video: unknown, imageList: unknown): string[] {
+  const record = asRecord(video);
+  const urls: string[] = [];
+
+  const firstFrameFileId = stringValue(record?.firstFrameFileId);
+  if (firstFrameFileId) {
+    urls.push(`https://sns-img-bd.xhscdn.com/${firstFrameFileId}`);
+  }
+
+  const coverUrl = stringValue(record?.coverUrl);
+  if (coverUrl) {
+    const normalized = normalizeHttpUrl(coverUrl);
+    if (normalized) urls.push(normalized);
+  }
+
+  const frameUrl = stringValue(record?.frameUrl);
+  if (frameUrl) {
+    const normalized = normalizeHttpUrl(frameUrl);
+    if (normalized) urls.push(normalized);
+  }
+
+  const imageUrls = arrayValue(imageList).flatMap(xiaohongshuImageUrls);
+  if (imageUrls.length > 0) {
+    urls.push(imageUrls[0]);
+  }
+
+  return uniqueStrings(urls.filter((url): url is string => Boolean(url)));
 }
 
 function xiaohongshuImageUrls(image: unknown) {

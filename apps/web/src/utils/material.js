@@ -109,7 +109,7 @@ export function isVideoUrl(url) {
  */
 export function isImageUrl(url) {
   if (isVideoUrl(url)) return false;
-  return /sns-img|image|format\/jpg|format\/png|\.jpe?g|\.png|\.webp/i.test(url);
+  return /sns-img|douyinpic|byteimg|xhscdn|image|format\/jpg|format\/png|\.jpe?g|\.png|\.webp/i.test(url);
 }
 
 /**
