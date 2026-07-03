@@ -18,7 +18,6 @@ import {
   KeyRound,
   PlugZap,
   Plus,
-  Settings,
   ShieldCheck,
   Sparkles,
   Star,
@@ -175,60 +174,6 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
    * @author fxbin
    */
   function renderStatusSidebar() {
-    if (activeSection === 'profiles') {
-      return (
-        <>
-          <div className="status-card">
-            <ShieldCheck size={22} />
-            <div>
-              <span>{t('settings.currentRuntime')}</span>
-              <strong>{formatDisplayName(provider) || t('settings.provider')} / {formatDisplayName(model) || t('settings.model')}</strong>
-              {hasApiKey ? (
-                <p>{t('settings.keyConfigured')} ({t(KEY_SOURCE_KEYS[keySource])})</p>
-              ) : (
-                <p>{t('settings.keyNotConfigured')}</p>
-              )}
-              {updatedAt && <small>{t('settings.lastSaved')}: {formatDateTime(updatedAt)}</small>}
-            </div>
-          </div>
-          <div className="status-card">
-            <Settings size={22} />
-            <div>
-              <span>{t('settings.policy')}</span>
-              <strong>{enabled ? t('settings.realModelFirst') : t('settings.mockOnly')}</strong>
-              <p>{fallbackToMock ? t('settings.fallbackHint') : t('settings.noFallbackHint')}</p>
-            </div>
-          </div>
-          <p className="settings-note">{status}</p>
-          {testResult && (
-            <div className={`test-result ${testResult.ok ? 'ok' : 'failed'}`}>
-              <strong>{testResult.ok ? t('settings.testPassed') : t('settings.testNotPassed')}</strong>
-              <p>{testResult.message}</p>
-              {testResult.sampleTitle && <small>{t('settings.returnedCard')}{testResult.sampleTitle}</small>}
-            </div>
-          )}
-          <div className={`status-card browser-ai-card browser-ai-card--${browserAiStatus}`}>
-            <Cpu size={22} />
-            <div>
-              <span>{t('settings.browserAi.title')}</span>
-              <strong>
-                {browserAiStatus === 'ready' && t('settings.browserAi.ready')}
-                {browserAiStatus === 'need_download' && t('settings.browserAi.needDownload')}
-                {browserAiStatus === 'checking' && t('settings.browserAi.checking')}
-                {(browserAiStatus === 'no_api' || browserAiStatus === 'no_model') && t('settings.browserAi.unavailable')}
-              </strong>
-              <p>
-                {browserAiStatus === 'ready' && t('settings.browserAi.readyHint')}
-                {browserAiStatus === 'need_download' && t('settings.browserAi.needDownloadHint')}
-                {browserAiStatus === 'checking' && t('settings.browserAi.checkingHint')}
-                {(browserAiStatus === 'no_api' || browserAiStatus === 'no_model') && t('settings.browserAi.unavailableHint')}
-              </p>
-            </div>
-          </div>
-        </>
-      );
-    }
-
     if (activeSection === 'weread') {
       return (
         <>
@@ -513,6 +458,24 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                   ) : (
                     <p className="settings-note">{t('settings.noProfileSelected')}</p>
                   )}
+                  <div className={`status-card browser-ai-card browser-ai-card--${browserAiStatus}`}>
+                    <Cpu size={22} />
+                    <div>
+                      <span>{t('settings.browserAi.title')}</span>
+                      <strong>
+                        {browserAiStatus === 'ready' && t('settings.browserAi.ready')}
+                        {browserAiStatus === 'need_download' && t('settings.browserAi.needDownload')}
+                        {browserAiStatus === 'checking' && t('settings.browserAi.checking')}
+                        {(browserAiStatus === 'no_api' || browserAiStatus === 'no_model') && t('settings.browserAi.unavailable')}
+                      </strong>
+                      <p>
+                        {browserAiStatus === 'ready' && t('settings.browserAi.readyHint')}
+                        {browserAiStatus === 'need_download' && t('settings.browserAi.needDownloadHint')}
+                        {browserAiStatus === 'checking' && t('settings.browserAi.checkingHint')}
+                        {(browserAiStatus === 'no_api' || browserAiStatus === 'no_model') && t('settings.browserAi.unavailableHint')}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
