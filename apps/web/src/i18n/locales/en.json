@@ -1027,6 +1027,8 @@
   "settings.title": "Settings",
   "settings.weread.apiKey": "API Key",
   "settings.weread.apiKeyHint": "Get the API Key starting with wrk- from the WeRead Skill page. Only saved to the local database.",
+  "settings.weread.apiKeyGetHint": "Don't have an API Key yet?",
+  "settings.weread.apiKeyGetLink": "Go to WeRead Skill page to get one",
   "settings.weread.apiKeyLabel": "WeRead API Key",
   "settings.weread.apiKeyPlaceholder.configured": "Configured, enter a new value to override",
   "settings.weread.apiKeyPlaceholder.empty": "Paste the API Key starting with wrk-",

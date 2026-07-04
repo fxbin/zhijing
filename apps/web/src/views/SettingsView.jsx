@@ -14,6 +14,7 @@ import {
   Cpu,
   Database,
   Download,
+  ExternalLink,
   FolderOpen,
   KeyRound,
   PlugZap,
@@ -136,19 +137,19 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
 
   useEffect(() => {
     minimalMode.fetchMinimalMode();
-  }, [minimalMode]);
+  }, [minimalMode.fetchMinimalMode]);
 
   const dataPortability = useDataPortability();
 
   useEffect(() => {
     dataPortability.fetchRecords();
-  }, [dataPortability]);
+  }, [dataPortability.fetchRecords]);
 
   const readerMode = useReaderMode();
 
   useEffect(() => {
     readerMode.fetchProfile();
-  }, [readerMode]);
+  }, [readerMode.fetchProfile]);
 
   useEffect(() => {
     if (initialSection) {
@@ -373,15 +374,29 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                         </label>
                         <label className="field-row">
                           <span>{t('settings.provider')}</span>
-                          <select value={provider} onChange={(event) => changeProvider(event.target.value)}>
+                          <input
+                            list="provider-options"
+                            autoComplete="off"
+                            type="text"
+                            value={provider}
+                            onChange={(event) => changeProvider(event.target.value)}
+                          />
+                          <datalist id="provider-options">
                             {providerOptions.map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
-                          </select>
+                          </datalist>
                         </label>
                         <label className="field-row">
                           <span>{t('settings.model')}</span>
-                          <select value={model} onChange={(event) => setModel(event.target.value)}>
+                          <input
+                            list={`model-options-${provider}`}
+                            autoComplete="off"
+                            type="text"
+                            value={model}
+                            onChange={(event) => setModel(event.target.value)}
+                          />
+                          <datalist id={`model-options-${provider}`}>
                             {modelOptions.map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
-                          </select>
+                          </datalist>
                         </label>
                       </div>
 
@@ -504,21 +519,30 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                       </label>
                       <label className="field-row">
                         <span>{t('settings.provider')}</span>
-                        <select
+                        <input
+                          list="provider-options-new"
+                          autoComplete="off"
+                          type="text"
                           value={newProfile.provider}
                           onChange={(event) => changeNewProfileProvider(event.target.value)}
-                        >
+                        />
+                        <datalist id="provider-options-new">
                           {providerOptions.map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
-                        </select>
+                        </datalist>
                       </label>
                       <label className="field-row">
                         <span>{t('settings.model')}</span>
-                        <select
+                        <input
+                          list={`model-options-new-${newProfile.provider}`}
+                          autoComplete="off"
+                          type="text"
                           value={newProfile.model}
                           onChange={(event) => setNewProfile((prev) => ({ ...prev, model: event.target.value }))}
-                        >
-                          {(providerOptions.find((item) => item.id === newProfile.provider)?.models ?? []).map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
-                        </select>
+                        />
+                        <datalist id={`model-options-new-${newProfile.provider}`}>
+                          {(providerOptions.find((item) => item.id === newProfile.provider)?.models ?? [])
+                            .map((item) => <option key={item.id} value={item.id}>{formatDisplayName(item.id)}</option>)}
+                        </datalist>
                       </label>
                       <label className="field-row">
                         <span>{t('settings.baseUrl')}</span>
@@ -618,6 +642,18 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
                 </div>
               </label>
               <p className="settings-note">{t('settings.weread.apiKeyHint')}</p>
+              <p className="settings-note">
+                {t('settings.weread.apiKeyGetHint')}{' '}
+                <a
+                  className="settings-link"
+                  href="https://weread.qq.com/r/weread-skills"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {t('settings.weread.apiKeyGetLink')}
+                  <ExternalLink size={14} />
+                </a>
+              </p>
               <p className="settings-security-note">{t('settings.weread.apiKeyStorageNotice')}</p>
             </div>
             <div className="settings-actions settings-actions-primary">

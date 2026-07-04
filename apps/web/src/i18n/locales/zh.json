@@ -1028,6 +1028,8 @@
   "settings.title": "设置",
   "settings.weread.apiKey": "API Key",
   "settings.weread.apiKeyHint": "从微信读书 Skill 页面获取以 wrk- 开头的 API Key，仅保存到本地数据库。",
+  "settings.weread.apiKeyGetHint": "还没有 API Key？",
+  "settings.weread.apiKeyGetLink": "前往微信读书 Skill 页面获取",
   "settings.weread.apiKeyLabel": "微信读书 API Key",
   "settings.weread.apiKeyPlaceholder.configured": "已配置，输入新值可覆盖",
   "settings.weread.apiKeyPlaceholder.empty": "粘贴 wrk- 开头的 API Key",

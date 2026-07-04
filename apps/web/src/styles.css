@@ -4772,6 +4772,22 @@ button { cursor: pointer; }
   margin: 0;
 }
 
+.settings-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--scholar);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.settings-link:hover {
+  border-bottom-color: var(--scholar);
+}
+
 .test-result {
   border: 1px solid var(--line-soft);
   border-radius: 10px;
