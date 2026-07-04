@@ -7,10 +7,104 @@
  * @author fxbin
  */
 
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
+
 const WEREAD_GATEWAY_URL = 'https://i.weread.qq.com/api/agent/gateway';
-const WEREAD_SKILL_VERSION = '1.0.4';
+const WEREAD_SKILL_VERSION_DEFAULT = '1.0.4';
 const WEREAD_AUTHORIZATION_PREFIX = 'Bearer ';
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
+/**
+ * Skill 安装目录候选路径。
+ *
+ * skills CLI 默认安装到 ~/.agents/skills/，不同工具可能落到不同子目录，
+ * 这里覆盖常见安装位置，按顺序探测。
+ */
+const WEREAD_SKILL_DIR_CANDIDATES = [
+  join(homedir(), '.agents', 'skills', 'weread-skills'),
+  join(homedir(), '.codex', 'skills', 'weread-skills'),
+  join(homedir(), '.workbuddy', 'skills-marketplace', 'skills', 'weread-skills'),
+];
+
+/**
+ * 环境变量名，用于覆盖 Skill 版本号。
+ *
+ * 容器/部署环境若未安装 Skill 文件，可通过此环境变量注入版本号。
+ */
+const WEREAD_SKILL_VERSION_ENV = 'ZHIJING_WEREAD_SKILL_VERSION';
+
+/**
+ * 解析 SKILL.md frontmatter 中的 version 字段。
+ *
+ * SKILL.md 顶部 YAML frontmatter 形如：
+ *   ---
+ *   name: weread-skills
+ *   version: 1.0.4
+ *   ---
+ *
+ * @param content - SKILL.md 文件内容
+ * @returns 解析到的版本号；解析失败返回 undefined
+ *
+ * @author fxbin
+ */
+function parseSkillVersionFromMarkdown(content: string): string | undefined {
+  const match = content.match(/^---\s*\n[\s\S]*?\nversion:\s*([^\s]+)\s*\n[\s\S]*?\n---/m);
+  return match?.[1]?.trim();
+}
+
+/**
+ * 缓存已解析的 Skill 版本号，避免每次请求都读取文件系统。
+ *
+ * 首次解析后缓存结果；若所有探测路径都失败，缓存 null 以避免重复 IO。
+ */
+let cachedSkillVersion: string | null | undefined;
+
+/**
+ * 动态解析微信读书 Skill 版本号。
+ *
+ * 解析优先级（三层降级）：
+ *   1. 本地 Skill 安装目录的 SKILL.md frontmatter version 字段
+ *   2. ZHIJING_WEREAD_SKILL_VERSION 环境变量
+ *   3. 内置默认值 WEREAD_SKILL_VERSION_DEFAULT
+ *
+ * 第一层覆盖本地开发场景（Skill 升级后自动生效），
+ * 第二层覆盖容器/部署场景（未安装 Skill 文件时注入），
+ * 第三层是兜底默认值，确保任何环境下都能工作。
+ *
+ * @returns Skill 版本号字符串
+ *
+ * @author fxbin
+ */
+async function resolveWeReadSkillVersion(): Promise<string> {
+  if (cachedSkillVersion !== undefined) {
+    return cachedSkillVersion ?? WEREAD_SKILL_VERSION_DEFAULT;
+  }
+
+  for (const skillDir of WEREAD_SKILL_DIR_CANDIDATES) {
+    try {
+      const skillMdPath = join(skillDir, 'SKILL.md');
+      const content = await readFile(skillMdPath, 'utf8');
+      const version = parseSkillVersionFromMarkdown(content);
+      if (version) {
+        cachedSkillVersion = version;
+        return version;
+      }
+    } catch {
+      // 文件不存在或读取失败，继续探测下一个候选路径
+    }
+  }
+
+  const envVersion = process.env[WEREAD_SKILL_VERSION_ENV];
+  if (envVersion && envVersion.trim()) {
+    cachedSkillVersion = envVersion.trim();
+    return cachedSkillVersion;
+  }
+
+  cachedSkillVersion = null;
+  return WEREAD_SKILL_VERSION_DEFAULT;
+}
 
 /**
  * 批量信号刷新的默认并发上限。
@@ -274,6 +368,7 @@ export class WeReadClient {
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_REQUEST_TIMEOUT_MS);
 
     try {
+      const skillVersion = await resolveWeReadSkillVersion();
       const response = await fetch(WEREAD_GATEWAY_URL, {
         method: 'POST',
         headers: {
@@ -282,7 +377,7 @@ export class WeReadClient {
         },
         body: JSON.stringify({
           api_name: apiName,
-          skill_version: WEREAD_SKILL_VERSION,
+          skill_version: skillVersion,
           ...payload,
         }),
         signal: controller.signal,
