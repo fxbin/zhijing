@@ -1807,6 +1807,7 @@ button { cursor: pointer; }
 .material-summary {
   margin: 10px 0 14px;
   color: var(--muted);
+  font-family: var(--font-serif);
   font-size: 14px;
   line-height: 1.55;
   word-break: break-word;
@@ -9964,6 +9965,7 @@ button { cursor: pointer; }
 
 .markdown-body {
   color: var(--primary);
+  font-family: var(--font-serif);
   font-size: 14px;
   line-height: 1.65;
   word-break: break-word;
@@ -10093,6 +10095,7 @@ button { cursor: pointer; }
 }
 
 .artifact-section-body {
+  font-family: var(--font-serif);
   min-width: 0;
 }
 
@@ -12455,6 +12458,7 @@ button { cursor: pointer; }
 
 .chat-stream-content .chat-stream-text,
 .chat-message-content .chat-message-text {
+  font-family: var(--font-serif);
   font-size: 14px;
   line-height: 1.6;
   white-space: pre-wrap;
