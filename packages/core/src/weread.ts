@@ -8,7 +8,7 @@
  */
 
 const WEREAD_GATEWAY_URL = 'https://i.weread.qq.com/api/agent/gateway';
-const WEREAD_SKILL_VERSION = '1.0.3';
+const WEREAD_SKILL_VERSION = '1.0.4';
 const WEREAD_AUTHORIZATION_PREFIX = 'Bearer ';
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
