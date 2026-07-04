@@ -45,6 +45,7 @@ import {
   type CardRevision,
   type CardRevisionField,
   type ChatMessage,
+  type ClaimStatus,
   type CloudBackupStub,
   type ConflictAuditEntry,
   type ConflictGroup,
@@ -259,15 +260,14 @@ import {
   questionAnswerSchema,
   socraticQuestioningSchema,
   structuredSchemas,
-  type KnownProvider,
   type PiRuntime,
   setActiveProfile,
   type TSchema,
 } from '@zhijing/pi-runtime';
 import { DuckDBConnection } from '@duckdb/node-api';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
-import { readFile, readdir, stat, unlink } from 'node:fs/promises';
+import { mkdirSync, constants as fsConstants } from 'node:fs';
+import { readFile, readdir, stat, unlink, access } from 'node:fs/promises';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { execFile } from 'node:child_process';
@@ -5229,7 +5229,7 @@ const parserResultCache = new Map<string, ParserCacheEntry>();
 const platformParseTimestamps = new Map<string, number>();
 
 type RuntimeModelProviderConfig = {
-  provider: KnownProvider;
+  provider: string;
   model: string;
   baseUrl?: string;
   apiKey?: string;
@@ -5289,7 +5289,7 @@ function ensureDefaultProfile(): ModelProviderProfileRecord {
  */
 function createEnvProfile(): ModelProviderProfileRecord {
   const provider = normalizeProvider(process.env.ZHIJING_PI_PROVIDER);
-  const envApiKey = process.env.ZHIJING_PI_API_KEY ?? getPiEnvApiKey(provider);
+  const envApiKey = process.env.ZHIJING_PI_API_KEY ?? safeEnvApiKey(provider);
   const envModel = process.env.ZHIJING_PI_MODEL
     ?? (provider === getDefaultPiProvider() ? getDefaultPiModel() : defaultModelForProvider(provider));
   const timestamp = now();
@@ -5315,7 +5315,7 @@ function createEnvProfile(): ModelProviderProfileRecord {
  */
 function runtimeConfigFromProfile(profile: ModelProviderProfileRecord): RuntimeModelProviderConfig {
   const provider = normalizeProvider(profile.provider);
-  const envApiKey = getPiEnvApiKey(provider);
+  const envApiKey = safeEnvApiKey(provider);
   return {
     provider,
     model: profile.model,
@@ -5337,12 +5337,24 @@ function applyActiveProfileToRuntime(profile: ModelProviderProfileRecord) {
   applyModelProviderConfig();
 }
 
-function normalizeProvider(provider: string | undefined): KnownProvider {
-  if (provider && isKnownPiProvider(provider)) return provider;
+/**
+ * 归一化 provider 标识。
+ *
+ * 已知 provider（KnownProvider）原样返回；
+ * 未知但非空的 provider 字符串原样透传，支持自定义 OpenAI 兼容端点（如商汤 SenseNova）；
+ * 空或 undefined 回退到默认 provider（DeepSeek）。
+ *
+ * @param provider - 原始 provider 字符串
+ * @returns 归一化后的 provider 字符串
+ * @author fxbin
+ */
+function normalizeProvider(provider: string | undefined): string {
+  if (provider && provider.trim().length > 0) return provider.trim();
   return getDefaultPiProvider();
 }
 
-function defaultModelForProvider(provider: KnownProvider) {
+function defaultModelForProvider(provider: string) {
+  if (!isKnownPiProvider(provider)) return getDefaultPiModel();
   const models = getKnownPiModels(provider);
   return models[0]?.id ?? getDefaultPiModel();
 }
@@ -5355,7 +5367,22 @@ function providerOptions(): ModelProviderSettings['providers'] {
 }
 
 function currentApiKey() {
-  return modelProviderConfig.apiKey ?? getPiEnvApiKey(modelProviderConfig.provider);
+  if (modelProviderConfig.apiKey) return modelProviderConfig.apiKey;
+  if (isKnownPiProvider(modelProviderConfig.provider)) {
+    return getPiEnvApiKey(modelProviderConfig.provider);
+  }
+  return undefined;
+}
+
+/**
+ * 安全读取 provider 对应的环境变量 API key。
+ * 未知 provider（自定义字符串）无 SDK 环境变量约定，返回 undefined。
+ * @param provider - provider 标识
+ * @returns 环境变量中的 API key 或 undefined
+ * @author fxbin
+ */
+function safeEnvApiKey(provider: string): string | undefined {
+  return isKnownPiProvider(provider) ? getPiEnvApiKey(provider) : undefined;
 }
 
 /**
@@ -5370,7 +5397,7 @@ function currentApiKey() {
  * @returns {provider, model, apiKey?} 装配凭据；apiKey 可能为 undefined
  * @author fxbin
  */
-export function getActiveAgentCredentials(): { provider: KnownProvider; model: string; baseUrl?: string; apiKey?: string } {
+export function getActiveAgentCredentials(): { provider: string; model: string; baseUrl?: string; apiKey?: string } {
   return {
     provider: modelProviderConfig.provider,
     model: modelProviderConfig.model,
@@ -5380,11 +5407,12 @@ export function getActiveAgentCredentials(): { provider: KnownProvider; model: s
 }
 
 function createRuntimeFromModelProviderConfig(config: RuntimeModelProviderConfig) {
+  const envApiKey = safeEnvApiKey(config.provider);
   return createPiAiRuntime({
     provider: config.provider,
     model: config.model,
     baseUrl: config.baseUrl,
-    apiKey: config.apiKey ?? getPiEnvApiKey(config.provider),
+    apiKey: config.apiKey ?? envApiKey,
     enabled: config.enabled,
     fallbackToMock: config.fallbackToMock,
   });
@@ -5408,7 +5436,7 @@ function modelSettingsSnapshot(): ModelProviderSettings {
     enabled: modelProviderConfig.enabled,
     fallbackToMock: modelProviderConfig.fallbackToMock,
     hasApiKey: Boolean(currentApiKey()),
-    keySource: modelProviderConfig.apiKey ? modelProviderConfig.keySource : getPiEnvApiKey(modelProviderConfig.provider) ? 'env' : 'none',
+    keySource: modelProviderConfig.apiKey ? modelProviderConfig.keySource : safeEnvApiKey(modelProviderConfig.provider) ? 'env' : 'none',
     updatedAt: modelProviderConfig.updatedAt,
     providers: providerOptions(),
   };
@@ -5420,17 +5448,14 @@ export function getModelProviderSettings(): ModelProviderSettings {
 
 export function saveModelProviderSettings(input: SaveModelProviderSettingsRequest): ModelProviderSettings {
   const provider = normalizeProvider(input.provider);
-  const availableModels = getKnownPiModels(provider);
-  const model = availableModels.some((item) => item.id === input.model)
-    ? input.model
-    : defaultModelForProvider(provider);
+  const model = input.model?.trim() || getDefaultPiModel();
   const profiles = repository.listModelProviderProfiles();
   const activeProfile = profiles.find((record) => record.isDefault) ?? profiles[0];
   const providerScopedExistingKey = activeProfile && activeProfile.provider === provider
     ? activeProfile.apiKey
     : undefined;
   const inputApiKey = normalizeSecret(input.apiKey);
-  const envApiKey = getPiEnvApiKey(provider);
+  const envApiKey = safeEnvApiKey(provider);
   const apiKey = input.clearApiKey
     ? undefined
     : inputApiKey ?? providerScopedExistingKey;
@@ -5444,7 +5469,7 @@ export function saveModelProviderSettings(input: SaveModelProviderSettingsReques
     baseUrl,
     apiKey,
     enabled: input.enabled ?? Boolean(apiKey ?? envApiKey),
-    fallbackToMock: input.fallbackToMock ?? true,
+    fallbackToMock: input.fallbackToMock ?? false,
     keySource: apiKey ? 'runtime' : envApiKey ? 'env' : 'none',
     updatedAt: now(),
   };
@@ -5480,7 +5505,7 @@ export function saveModelProviderSettings(input: SaveModelProviderSettingsReques
  */
 function mapModelProviderProfileToApi(record: ModelProviderProfileRecord): ModelProviderProfile {
   const provider = normalizeProvider(record.provider);
-  const envApiKey = getPiEnvApiKey(provider);
+  const envApiKey = safeEnvApiKey(provider);
   const hasApiKey = Boolean(record.apiKey ?? envApiKey);
   const keySource = record.apiKey ? 'runtime' : envApiKey ? 'env' : 'none';
   return {
@@ -5516,13 +5541,10 @@ export function createModelProviderProfile(input: CreateModelProviderProfileRequ
   const name = input.name?.trim();
   if (!name) throw new KnowledgeCoreError('Profile 名称不能为空。', 400);
   const provider = normalizeProvider(input.provider);
-  const availableModels = getKnownPiModels(provider);
-  const model = availableModels.some((item) => item.id === input.model)
-    ? input.model
-    : defaultModelForProvider(provider);
+  const model = input.model?.trim() || getDefaultPiModel();
   const apiKey = normalizeSecret(input.apiKey);
   const baseUrl = input.baseUrl?.trim() || undefined;
-  const envApiKey = getPiEnvApiKey(provider);
+  const envApiKey = safeEnvApiKey(provider);
   const timestamp = now();
   const shouldBeDefault = input.isDefault === true || repository.listModelProviderProfiles().length === 0;
   if (input.isDefault === true) {
@@ -5536,7 +5558,7 @@ export function createModelProviderProfile(input: CreateModelProviderProfileRequ
     baseUrl,
     apiKey,
     enabled: input.enabled ?? Boolean(apiKey ?? envApiKey),
-    fallbackToMock: input.fallbackToMock ?? true,
+    fallbackToMock: input.fallbackToMock ?? false,
     isDefault: shouldBeDefault,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -5559,9 +5581,8 @@ export function updateModelProviderProfile(profileId: string, input: UpdateModel
   const name = input.name !== undefined ? input.name.trim() : existing.name;
   if (!name) throw new KnowledgeCoreError('Profile 名称不能为空。', 400);
   const provider = normalizeProvider(input.provider !== undefined ? input.provider : existing.provider);
-  const availableModels = getKnownPiModels(provider);
   const model = input.model !== undefined
-    ? (availableModels.some((item) => item.id === input.model) ? input.model : defaultModelForProvider(provider))
+    ? (input.model.trim() || getDefaultPiModel())
     : existing.model;
   const apiKey = input.clearApiKey
     ? undefined
@@ -5654,10 +5675,7 @@ export function getModelProviderSettingsV2(): ModelProviderSettingsV2 {
 
 export async function testModelProviderSettings(input: TestModelProviderSettingsRequest = {}): Promise<ModelProviderTestResult> {
   const provider = normalizeProvider(input.provider ?? modelProviderConfig.provider);
-  const requestedModel = input.model ?? modelProviderConfig.model;
-  const model = getKnownPiModels(provider).some((item) => item.id === requestedModel)
-    ? requestedModel
-    : defaultModelForProvider(provider);
+  const model = (input.model ?? modelProviderConfig.model).trim() || getDefaultPiModel();
   const apiKey = input.apiKey?.trim() || currentApiKey();
   const baseUrl = input.baseUrl?.trim() || modelProviderConfig.baseUrl;
 
@@ -5946,7 +5964,7 @@ function createCards(
   generatedCards: GeneratedCard[] | undefined,
 ) {
   const timestamp = now();
-  const sourceStatus = material && material.type !== 'question' && material.parseStatus === 'ingested' ? 'sourced' : 'ai_skeleton';
+  const sourceStatus: ClaimStatus = material && material.type !== 'question' && material.parseStatus === 'ingested' ? 'sourced' : 'ai_skeleton';
   const generated = normalizeGeneratedCards(generatedCards);
   const fallbackCards: GeneratedCard[] = [
     {
@@ -5958,11 +5976,14 @@ function createCards(
     },
     {
       type: 'question',
-      title: '下一步要回答的问题',
-      body: '这个主题还需要补充哪些高质量来源、案例和可验证证据？',
+      title: `《${compactTitle(seed)}》还需补充的证据`,
+      body: `围绕「${compactTitle(seed)}」这个主题，还需要补充哪些高质量来源、案例和可验证证据？`,
     },
   ];
-  const cards: KnowledgeCard[] = (generated.length ? generated : fallbackCards).map((card) => ({
+  const existingCards = repository.listCards(base.id);
+  const existingTitles = new Set(existingCards.map((card) => card.title.trim()));
+  const cards: KnowledgeCard[] = (generated.length ? generated : fallbackCards)
+    .map((card) => ({
       id: id('card'),
       workspaceId: base.id,
       materialId: material?.id,
@@ -5972,9 +5993,15 @@ function createCards(
       claimStatus: sourceStatus,
       createdAt: timestamp,
       updatedAt: timestamp,
-  }));
+    }))
+    .filter((card) => {
+      if (!existingTitles.has(card.title)) {
+        existingTitles.add(card.title);
+        return true;
+      }
+      return false;
+    });
   base.cardCount += cards.length;
-  const existingCards = repository.listCards(base.id);
   const sourcedCount = [...existingCards, ...cards].filter((card) => card.claimStatus === 'sourced').length;
   base.sourcedRatio = base.cardCount > 0 ? sourcedCount / base.cardCount : 0;
   base.updatedAt = timestamp;
@@ -8800,6 +8827,16 @@ function touchWorkspace(workspaceId?: string) {
 const execFileAsync = promisify(execFile);
 
 const WHISPER_COMMAND_CANDIDATES = ['whisper', 'whisper-cli', 'whisper.cpp'];
+const WHISPER_FALLBACK_PATHS = [
+  '/opt/miniconda3/bin/whisper',
+  '/opt/miniconda/bin/whisper',
+  '/opt/homebrew/bin/whisper',
+  '/usr/local/bin/whisper',
+  '/usr/bin/whisper',
+  '/opt/miniconda3/bin/whisper-cli',
+  '/opt/homebrew/bin/whisper-cli',
+  '/usr/local/bin/whisper-cli',
+];
 const MIN_CPU_CORES_FOR_TRANSCRIPTION = 4;
 const MIN_MEMORY_BYTES_FOR_TRANSCRIPTION = 4 * 1024 * 1024 * 1024;
 const AUDIO_SAMPLE_RATE = '16000';
@@ -8832,13 +8869,37 @@ async function commandExists(command: string): Promise<boolean> {
 }
 
 /**
+ * 检测文件路径是否存在且可执行
+ * @author fxbin
+ */
+async function pathExistsAndExecutable(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath, fsConstants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 查找可用的本地 whisper 命令
+ *
+ * 检测策略：
+ * 1. 优先通过 which/where 查询 PATH 中的 whisper 命令
+ * 2. 若 PATH 查询失败，回退检查常见安装路径（miniconda/homebrew 等）
+ *    覆盖后端进程 PATH 不完整的场景（如 GUI 启动、容器环境）
+ *
  * @author fxbin
  */
 async function findWhisperCommand(): Promise<string | undefined> {
   for (const command of WHISPER_COMMAND_CANDIDATES) {
     if (await commandExists(command)) {
       return command;
+    }
+  }
+  for (const fallbackPath of WHISPER_FALLBACK_PATHS) {
+    if (await pathExistsAndExecutable(fallbackPath)) {
+      return fallbackPath;
     }
   }
   return undefined;
@@ -8861,10 +8922,15 @@ const BYTES_PER_GB = 1024 * 1024 * 1024;
 
 /**
  * 获取本地视频语音转写能力详细报告
+ *
+ * @param forceRefresh 是否强制重新检测（跳过缓存）
+ *
  * @author fxbin
  */
-export async function getTranscriptionCapabilityReport(): Promise<TranscriptionCapabilityReport> {
-  if (cachedTranscriptionCapability) {
+export async function getTranscriptionCapabilityReport(
+  forceRefresh = false,
+): Promise<TranscriptionCapabilityReport> {
+  if (cachedTranscriptionCapability && !forceRefresh) {
     return cachedTranscriptionCapability;
   }
 

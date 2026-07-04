@@ -420,9 +420,17 @@ const PUBLIC_PATH_PREFIXES = [
  */
 const LLM_PATH_PREFIXES = [
   '/agent/stream',
-  '/api/workspaces/',
   '/api/intake',
   '/api/socratic',
+];
+
+/**
+ * LLM 调用相关路径模式。
+ * 用于匹配动态路径，如工作区 agent stream。
+ * @author fxbin
+ */
+const LLM_PATH_PATTERNS = [
+  /^\/api\/workspaces\/[^/]+\/agent\/stream$/,
 ];
 
 /**
@@ -552,12 +560,14 @@ function isPublicPath(url: string): boolean {
 
 /**
  * 判断路径是否属于 LLM 调用路径。
+ * 先匹配前缀，再匹配动态路径模式。
  * @param url - 请求 URL
  * @returns 是否命中
  * @author fxbin
  */
 function matchLlmPath(url: string): boolean {
-  return LLM_PATH_PREFIXES.some((prefix) => url.startsWith(prefix));
+  return LLM_PATH_PREFIXES.some((prefix) => url.startsWith(prefix))
+    || LLM_PATH_PATTERNS.some((pattern) => pattern.test(url));
 }
 
 /**
@@ -2175,6 +2185,7 @@ export async function buildApi() {
             provider: credentials.provider,
             model: credentials.model,
             apiKey: credentials.apiKey,
+            baseUrl: credentials.baseUrl,
           },
           isWriting,
         },
@@ -2297,9 +2308,10 @@ export async function buildApi() {
     return task;
   });
 
-  app.get('/api/transcription/capability', async (request, reply) => {
+  app.get<{ Querystring: { refresh?: string } }>('/api/transcription/capability', async (request, reply) => {
     try {
-      return await getTranscriptionCapabilityReport();
+      const forceRefresh = request.query.refresh === '1' || request.query.refresh === 'true';
+      return await getTranscriptionCapabilityReport(forceRefresh);
     } catch (error) {
       request.log.error({ error }, 'transcription capability check failed');
       return reply.code(500).send({ error: 'Transcription capability check failed.' });

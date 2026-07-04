@@ -90,6 +90,18 @@ function MaterialTranscriptPanel({ material }) {
     return () => { ignore = true; };
   }, [material.transcriptStatus, report]);
 
+  async function handleRefreshReport() {
+    setLoadingReport(true);
+    try {
+      const payload = await api.get('/api/transcription/capability?refresh=true');
+      setReport(payload);
+    } catch {
+      // 静默失败，保持现有报告状态
+    } finally {
+      setLoadingReport(false);
+    }
+  }
+
   if (!material.transcriptStatus) {
     return null;
   }
@@ -119,28 +131,38 @@ function MaterialTranscriptPanel({ material }) {
             {showReport ? t('detail.hideTranscriptReport') : t('detail.showTranscriptReport')}
           </button>
           {showReport && report && (
-            <ul className="transcript-report">
-              <li>{t('detail.transcriptReportPlatform')}：{report.platform}</li>
-              <li>{t('detail.transcriptReportFfmpeg')}：{report.ffmpegAvailable ? t('detail.transcriptReportDetected') : t('detail.transcriptReportMissing')}</li>
-              <li>
-                {t('detail.transcriptReportWhisper')}：
-                {report.whisperAvailable
-                  ? `${t('detail.transcriptReportDetected')}（${report.whisperCommand}）`
-                  : t('detail.transcriptReportMissing')}
-              </li>
-              <li>{t('detail.transcriptReportCpu')}：{report.cpuCores} {t('detail.transcriptReportCores')}</li>
-              <li>{t('detail.transcriptReportMemory')}：{(report.totalMemoryBytes / BYTES_PER_GB).toFixed(1)} GB</li>
-              {report.reasons?.length > 0 && (
-                <li className="transcript-report-reasons">
-                  {t('detail.transcriptReportReasons')}：
-                  <ul>
-                    {report.reasons.map((reason, index) => (
-                      <li key={index}>{reason}</li>
-                    ))}
-                  </ul>
+            <>
+              <ul className="transcript-report">
+                <li>{t('detail.transcriptReportPlatform')}：{report.platform}</li>
+                <li>{t('detail.transcriptReportFfmpeg')}：{report.ffmpegAvailable ? t('detail.transcriptReportDetected') : t('detail.transcriptReportMissing')}</li>
+                <li>
+                  {t('detail.transcriptReportWhisper')}：
+                  {report.whisperAvailable
+                    ? `${t('detail.transcriptReportDetected')}（${report.whisperCommand}）`
+                    : t('detail.transcriptReportMissing')}
                 </li>
-              )}
-            </ul>
+                <li>{t('detail.transcriptReportCpu')}：{report.cpuCores} {t('detail.transcriptReportCores')}</li>
+                <li>{t('detail.transcriptReportMemory')}：{(report.totalMemoryBytes / BYTES_PER_GB).toFixed(1)} GB</li>
+                {report.reasons?.length > 0 && (
+                  <li className="transcript-report-reasons">
+                    {t('detail.transcriptReportReasons')}：
+                    <ul>
+                      {report.reasons.map((reason, index) => (
+                        <li key={index}>{reason}</li>
+                      ))}
+                    </ul>
+                  </li>
+                )}
+              </ul>
+              <button
+                type="button"
+                className="transcript-report-refresh"
+                onClick={handleRefreshReport}
+                disabled={loadingReport}
+              >
+                {t('detail.transcriptReportRefresh')}
+              </button>
+            </>
           )}
         </>
       )}
