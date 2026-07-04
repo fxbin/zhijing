@@ -32,7 +32,34 @@
   --card-case: #7D8CC4;
   --card-step: #5D8A66;
   --card-viewpoint: #9A8C98;
-  font-family: Inter, "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'PingFang SC', 'Microsoft YaHei', 'Source Han Sans SC',
+    'Noto Sans CJK SC', 'Hiragino Sans GB', system-ui, sans-serif;
+  --font-serif: 'Source Han Serif SC', 'Noto Serif CJK SC',
+    'Songti SC', 'SimSun', serif;
+  --font-mono: 'JetBrains Mono', 'Sarasa Mono SC', 'Source Han Mono',
+    'SF Mono', Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-md: 1.125rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 1.875rem;
+  --text-3xl: 2.25rem;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --leading-tight: 1.15;
+  --leading-snug: 1.3;
+  --leading-normal: 1.5;
+  --leading-prose: 1.6;
+  --leading-relaxed: 1.7;
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.02em;
+  font-family: var(--font-sans);
 }
 
 * { box-sizing: border-box; }
@@ -47,7 +74,7 @@ textarea:focus-visible,
   outline-offset: 2px;
 }
 
-html, body, #root {
+html {
   max-width: 100%;
   overflow-x: hidden;
 }
@@ -55,12 +82,19 @@ html, body, #root {
 body {
   margin: 0;
   min-width: 320px;
+  max-width: 100%;
+  overflow-x: clip;
   color: var(--primary);
   background:
     linear-gradient(to right, rgba(226, 232, 240, 0.62) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(226, 232, 240, 0.62) 1px, transparent 1px),
     var(--background);
   background-size: 40px 40px;
+}
+
+#root {
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 button, input, select { font: inherit; }
@@ -165,7 +199,7 @@ button { cursor: pointer; }
   background: var(--primary);
   color: white;
   font-size: 16px;
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .nav-list {
@@ -192,7 +226,7 @@ button { cursor: pointer; }
   border-left-color: var(--primary);
   background: var(--surface-high);
   color: var(--primary);
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .nav-divider {
@@ -288,7 +322,7 @@ button { cursor: pointer; }
   color: var(--primary);
   padding: 0 12px;
   font-size: 15px;
-  font-weight: 760;
+  font-weight: 700;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
@@ -340,7 +374,7 @@ button { cursor: pointer; }
   color: var(--muted);
   padding: 0 8px;
   font-size: 12px;
-  font-weight: 760;
+  font-weight: 700;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
@@ -649,7 +683,7 @@ button { cursor: pointer; }
   background: transparent;
   color: var(--primary);
   font-size: clamp(20px, 2.1vw, 30px);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .command-box input::placeholder {
@@ -774,7 +808,7 @@ button { cursor: pointer; }
 .system-notice strong,
 .empty-state strong {
   display: block;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .system-notice p,
@@ -1526,7 +1560,7 @@ button { cursor: pointer; }
   color: var(--primary);
   padding: 5px 9px;
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -1558,7 +1592,7 @@ button { cursor: pointer; }
 
 .task-row strong {
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--primary);
 }
 
@@ -2379,7 +2413,7 @@ button { cursor: pointer; }
   background: var(--surface);
   color: var(--primary);
   padding: 10px 16px;
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .page-title-actions {
@@ -2514,7 +2548,7 @@ button { cursor: pointer; }
   display: block;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -3213,7 +3247,7 @@ button { cursor: pointer; }
   padding: 0 10px;
   color: white;
   font-size: 12px;
-  font-weight: 760;
+  font-weight: 700;
   white-space: nowrap;
   transition: opacity 0.2s ease;
 }
@@ -3254,7 +3288,7 @@ button { cursor: pointer; }
   color: var(--muted);
   padding: 0 12px;
   font-size: 13px;
-  font-weight: 760;
+  font-weight: 700;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
@@ -3445,7 +3479,7 @@ button { cursor: pointer; }
   margin-left: auto;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 760;
+  font-weight: 700;
 }
 
 .feed-column-dot {
@@ -3527,7 +3561,7 @@ button { cursor: pointer; }
   color: var(--muted);
   padding: 0 0 12px;
   font-size: 20px;
-  font-weight: 760;
+  font-weight: 700;
 }
 
 .tabs button.active {
@@ -3704,7 +3738,7 @@ button { cursor: pointer; }
   color: var(--muted);
   padding: 0 16px;
   font-size: 15px;
-  font-weight: 760;
+  font-weight: 700;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -3785,6 +3819,7 @@ button { cursor: pointer; }
 .test-result p {
   margin: 5px 0 0;
   color: var(--muted);
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -3808,7 +3843,7 @@ button { cursor: pointer; }
 .status-card span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -3923,7 +3958,7 @@ button { cursor: pointer; }
   align-items: center;
   gap: 10px;
   color: var(--primary);
-  font-weight: 720;
+  font-weight: 700;
 }
 
 .settings-toggles input {
@@ -4449,7 +4484,7 @@ button { cursor: pointer; }
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
   color: var(--muted);
   letter-spacing: 0.02em;
@@ -4571,7 +4606,7 @@ button { cursor: pointer; }
 .settings-drawer-head h4 {
   margin: 0;
   font-size: 18px;
-  font-weight: 780;
+  font-weight: 700;
 }
 
 .settings-drawer-head button {
@@ -4642,7 +4677,7 @@ button { cursor: pointer; }
 .settings-profile-info strong {
   display: block;
   font-size: 17px;
-  font-weight: 780;
+  font-weight: 700;
   color: var(--primary);
 }
 
@@ -4700,7 +4735,7 @@ button { cursor: pointer; }
   cursor: pointer;
   color: var(--primary);
   font-size: 13px;
-  font-weight: 760;
+  font-weight: 700;
   padding: 4px 8px;
   text-decoration: none;
   transition: opacity 0.15s ease;
@@ -5203,7 +5238,7 @@ button { cursor: pointer; }
 .answer-card-list span {
   color: var(--sage-text);
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -5556,7 +5591,7 @@ button { cursor: pointer; }
 .citation-list article > span {
   color: var(--sage-text);
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -5577,7 +5612,7 @@ button { cursor: pointer; }
   margin-top: 6px;
   color: var(--primary);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .citation-item {
@@ -5621,7 +5656,7 @@ button { cursor: pointer; }
   background: var(--scholar-soft);
   color: var(--scholar);
   font-size: 10px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -5667,7 +5702,7 @@ button { cursor: pointer; }
 
 .citation-snippet span {
   font-size: 10px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--sage);
@@ -5686,7 +5721,7 @@ button { cursor: pointer; }
   display: inline-block;
   color: var(--primary);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .assistant-link-button {
@@ -5814,7 +5849,7 @@ button { cursor: pointer; }
   color: var(--muted);
   padding: 0;
   font-size: 13px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .back-button-row {
@@ -5850,7 +5885,7 @@ button { cursor: pointer; }
 .chat-thread-head span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -6115,7 +6150,7 @@ button { cursor: pointer; }
   height: 28px;
   border-radius: 999px;
   background: var(--surface-low);
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .recall-queue button div {
@@ -6148,7 +6183,7 @@ button { cursor: pointer; }
   color: var(--sage-text);
   padding: 6px 12px;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -6188,7 +6223,7 @@ button { cursor: pointer; }
   background: var(--surface);
   color: var(--primary);
   padding: 10px 14px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .recall-card footer button:last-child {
@@ -6210,7 +6245,7 @@ button { cursor: pointer; }
   background: var(--surface);
   color: var(--primary);
   padding: 10px 16px;
-  font-weight: 850;
+  font-weight: 700;
   font-size: 13px;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
@@ -6280,7 +6315,7 @@ button { cursor: pointer; }
 
 .recall-edit-field span {
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -6322,7 +6357,7 @@ button { cursor: pointer; }
   background: var(--scholar);
   color: #fff;
   padding: 9px 18px;
-  font-weight: 850;
+  font-weight: 700;
   font-size: 13px;
   cursor: pointer;
   transition: background 0.15s ease, opacity 0.15s ease;
@@ -6364,7 +6399,7 @@ button { cursor: pointer; }
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  font-weight: 850;
+  font-weight: 700;
   color: var(--primary);
 }
 
@@ -6405,7 +6440,7 @@ button { cursor: pointer; }
   background: var(--scholar-soft);
   color: var(--scholar);
   font-size: 10px;
-  font-weight: 850;
+  font-weight: 700;
   letter-spacing: 0.04em;
 }
 
@@ -6426,7 +6461,7 @@ button { cursor: pointer; }
   background: rgba(212, 148, 74, 0.16);
   color: #b07530;
   font-size: 10px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -6439,7 +6474,7 @@ button { cursor: pointer; }
 
 .recall-revision-diff span {
   font-size: 10px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -6477,7 +6512,7 @@ button { cursor: pointer; }
 .export-head span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -6515,7 +6550,7 @@ button { cursor: pointer; }
   background: var(--surface);
   color: var(--primary);
   padding: 0 14px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .export-head-actions button:last-child,
@@ -6592,7 +6627,7 @@ button { cursor: pointer; }
   background: var(--surface);
   color: var(--muted);
   padding: 0 14px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .export-scope-row button.active {
@@ -6606,7 +6641,7 @@ button { cursor: pointer; }
   align-items: center;
   gap: 10px;
   color: var(--primary);
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .export-checkbox input {
@@ -6831,7 +6866,7 @@ button { cursor: pointer; }
   color: var(--muted);
   padding: 8px 12px;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -6891,7 +6926,7 @@ button { cursor: pointer; }
 .capture-head span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -6916,7 +6951,7 @@ button { cursor: pointer; }
   color: var(--muted);
   padding: 0 10px;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -6988,7 +7023,7 @@ button { cursor: pointer; }
   background: var(--primary);
   color: white;
   padding: 0 14px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .file-import-button {
@@ -7101,7 +7136,7 @@ button { cursor: pointer; }
 .panel-title span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -7186,7 +7221,7 @@ button { cursor: pointer; }
 .lifecycle-steps article > div span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -7242,7 +7277,7 @@ button { cursor: pointer; }
 .recent-capture-card li span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -7729,7 +7764,7 @@ button { cursor: pointer; }
   background: var(--surface);
   color: var(--primary);
   padding: 0 12px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .assignment-row button:disabled,
@@ -7742,7 +7777,7 @@ button { cursor: pointer; }
   margin: 8px 0 0;
   color: var(--sage-text);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 700;
   line-height: 1.4;
 }
 
@@ -7870,7 +7905,7 @@ button { cursor: pointer; }
   color: var(--muted);
   padding: 0 11px;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .map-filter-bar button.active {
@@ -7974,7 +8009,7 @@ button { cursor: pointer; }
 .map-relation-panel h4 {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -8285,7 +8320,7 @@ button { cursor: pointer; }
 .map-svg-node text {
   fill: var(--primary);
   font-size: 13px;
-  font-weight: 750;
+  font-weight: 700;
   text-anchor: middle;
   text-shadow: 0 1px 3px rgba(255,255,255,0.9), 0 -1px 3px rgba(255,255,255,0.9), 1px 0 3px rgba(255,255,255,0.9), -1px 0 3px rgba(255,255,255,0.9);
   pointer-events: none;
@@ -8312,7 +8347,7 @@ button { cursor: pointer; }
   border-radius: 0;
   background: transparent;
   font-size: 20px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .map-floating-controls button:last-child {
@@ -8744,7 +8779,7 @@ button { cursor: pointer; }
   gap: 7px;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 760;
+  font-weight: 700;
 }
 
 .map-detail-drawer {
@@ -8977,7 +9012,7 @@ button { cursor: pointer; }
 .relation-list span {
   color: var(--sage-text);
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -9060,7 +9095,7 @@ button { cursor: pointer; }
   color: var(--muted);
   padding: 4px 10px;
   font-size: 11px;
-  font-weight: 750;
+  font-weight: 700;
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
@@ -9231,7 +9266,7 @@ button { cursor: pointer; }
 .map-source-jump span {
   color: var(--muted);
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -9354,7 +9389,7 @@ button { cursor: pointer; }
   color: var(--primary);
   padding: 0 10px;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   text-decoration: none;
 }
 
@@ -9500,7 +9535,7 @@ button { cursor: pointer; }
   border-radius: 8px;
   background: var(--primary);
   color: white;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .run-kit-button:disabled {
@@ -9559,7 +9594,7 @@ button { cursor: pointer; }
   margin-top: 14px;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -9592,7 +9627,7 @@ button { cursor: pointer; }
   background: var(--surface);
   color: var(--primary);
   padding: 0 14px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .artifact-actions button:last-child,
@@ -9623,7 +9658,7 @@ button { cursor: pointer; }
 .artifact-switcher-label {
   flex-shrink: 0;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   color: var(--muted);
   text-transform: uppercase;
 }
@@ -9659,7 +9694,7 @@ button { cursor: pointer; }
 
 .artifact-switcher-item-type {
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 700;
   color: var(--scholar);
   text-transform: uppercase;
   padding: 2px 6px;
@@ -9690,7 +9725,7 @@ button { cursor: pointer; }
 .artifact-metrics span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -9780,7 +9815,7 @@ button { cursor: pointer; }
   color: var(--muted);
   padding: 7px 10px;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .artifact-action-card button {
@@ -9806,7 +9841,7 @@ button { cursor: pointer; }
   padding: 7px 14px;
   border-radius: 8px;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   background: var(--surface-low);
   color: var(--primary);
   border: 1px solid var(--line);
@@ -10230,7 +10265,7 @@ button { cursor: pointer; }
   background: var(--primary);
   color: white;
   padding: 0 16px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .large-search button:disabled {
@@ -10279,7 +10314,7 @@ button { cursor: pointer; }
   background: var(--surface-high);
   color: var(--primary);
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .search-scope-bar button.active span {
@@ -10364,7 +10399,7 @@ button { cursor: pointer; }
   color: var(--muted);
   padding: 5px 8px;
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -10465,7 +10500,7 @@ button { cursor: pointer; }
   color: var(--primary);
   padding: 6px 12px;
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 700;
   cursor: pointer;
   transition: border-color 0.2s ease, background 0.2s ease;
 }
@@ -10740,7 +10775,7 @@ button { cursor: pointer; }
   color: var(--primary);
   padding: 6px 14px;
   font-size: 13px;
-  font-weight: 750;
+  font-weight: 700;
   cursor: pointer;
   transition: border-color 0.2s ease, background 0.2s ease;
 }
@@ -10792,7 +10827,7 @@ button { cursor: pointer; }
 .conflict-card-head span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -11034,7 +11069,7 @@ button { cursor: pointer; }
   padding: 7px 14px;
   border-radius: 8px;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 700;
   background: var(--primary);
   color: #fff;
   border: 1px solid var(--primary);
@@ -11369,7 +11404,7 @@ button { cursor: pointer; }
   background: var(--primary);
   color: white;
   font-size: 13px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .synthesis-step-list article strong {
@@ -11423,7 +11458,7 @@ button { cursor: pointer; }
 
 .comparison-row > span {
   font-size: 24px;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .health-cell {
@@ -11734,7 +11769,7 @@ button { cursor: pointer; }
   gap: 8px;
   color: var(--primary);
   font-size: 15px;
-  font-weight: 760;
+  font-weight: 700;
 }
 
 .ai-chat-shell-title svg {
@@ -13053,7 +13088,7 @@ button { cursor: pointer; }
 
 .insights-grid .bento-head h2 {
   font-size: 16px;
-  font-weight: 760;
+  font-weight: 700;
   color: var(--primary);
 }
 
@@ -13108,7 +13143,7 @@ button { cursor: pointer; }
 
 .agent-proposals-card .bento-head h2 {
   font-size: 16px;
-  font-weight: 760;
+  font-weight: 700;
   color: var(--primary);
 }
 
@@ -13723,7 +13758,7 @@ button { cursor: pointer; }
 
 .path-step-content h3 {
   font-size: 17px;
-  font-weight: 760;
+  font-weight: 700;
   color: var(--primary);
   margin-bottom: 8px;
 }
@@ -14444,7 +14479,7 @@ button { cursor: pointer; }
   color: var(--primary);
   padding: 8px 14px;
   font-size: 13px;
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .archive-stats .stat-pill svg {
@@ -14597,7 +14632,7 @@ button { cursor: pointer; }
 
 .kb-picker-card strong {
   font-size: 15px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .kb-picker-card span {
@@ -14779,7 +14814,7 @@ button { cursor: pointer; }
   color: var(--primary);
   padding: 0 32px 0 12px;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
   background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
   background-position: calc(100% - 16px) 18px, calc(100% - 11px) 18px;
@@ -14881,7 +14916,7 @@ button { cursor: pointer; }
   border-radius: 999px;
   padding: 5px 12px;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -14937,7 +14972,7 @@ button { cursor: pointer; }
 
 .weread-empty strong {
   font-size: 17px;
-  font-weight: 750;
+  font-weight: 700;
   color: var(--primary);
 }
 
@@ -14977,7 +15012,7 @@ button { cursor: pointer; }
   color: #fff;
   padding: 11px 18px;
   font-size: 14px;
-  font-weight: 750;
+  font-weight: 700;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -15098,7 +15133,7 @@ button { cursor: pointer; }
   padding: 3px 8px;
   border-radius: 6px;
   font-size: 11px;
-  font-weight: 750;
+  font-weight: 700;
   line-height: 1.4;
   max-width: 100%;
   overflow: hidden;
@@ -15138,7 +15173,7 @@ button { cursor: pointer; }
 
 .weread-card-title {
   font-size: 15px;
-  font-weight: 750;
+  font-weight: 700;
   color: var(--primary);
   line-height: 1.32;
   display: -webkit-box;
@@ -15347,7 +15382,7 @@ button { cursor: pointer; }
   cursor: pointer;
   color: var(--primary);
   font-size: 15px;
-  font-weight: 750;
+  font-weight: 700;
   text-align: left;
 }
 
@@ -15422,7 +15457,7 @@ button { cursor: pointer; }
 
 .weread-batch-progress > span {
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--muted);
 }
 
@@ -15463,7 +15498,7 @@ button { cursor: pointer; }
   color: #fff;
   padding: 9px 16px;
   font-size: 13px;
-  font-weight: 750;
+  font-weight: 700;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -15536,7 +15571,7 @@ button { cursor: pointer; }
   color: var(--scholar);
   padding: 6px 12px;
   font-size: 13px;
-  font-weight: 750;
+  font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -15594,7 +15629,7 @@ button { cursor: pointer; }
   padding: 0 8px;
   border-radius: 6px;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 600;
   background: var(--surface-low);
   color: var(--muted);
 }
@@ -16060,7 +16095,7 @@ button { cursor: pointer; }
 .weread-stats-head h3 {
   margin: 0;
   font-size: 15px;
-  font-weight: 750;
+  font-weight: 700;
   color: var(--primary);
   display: inline-flex;
   align-items: center;
@@ -16075,7 +16110,7 @@ button { cursor: pointer; }
   color: var(--muted);
   padding: 5px 10px;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -16132,7 +16167,7 @@ button { cursor: pointer; }
 
 .weread-stats-kpi-label {
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--muted);
 }
 
@@ -16980,7 +17015,7 @@ button { cursor: pointer; }
 .weread-preview-head-info h4 {
   margin: 0 0 4px;
   font-size: 15px;
-  font-weight: 750;
+  font-weight: 700;
   color: var(--primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -16998,7 +17033,7 @@ button { cursor: pointer; }
   display: flex;
   gap: 8px;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .weread-preview-close {
@@ -17293,7 +17328,7 @@ button { cursor: pointer; }
   color: var(--muted);
   padding: 8px 12px;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
@@ -17335,7 +17370,7 @@ button { cursor: pointer; }
 
 .weread-preview-group-count {
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--muted);
   margin-left: auto;
 }
@@ -17348,7 +17383,7 @@ button { cursor: pointer; }
   color: var(--muted);
   padding: 3px 8px;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -17399,7 +17434,7 @@ button { cursor: pointer; }
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 11px;
-  font-weight: 750;
+  font-weight: 700;
   margin-right: 6px;
   vertical-align: middle;
 }
@@ -17476,7 +17511,7 @@ button { cursor: pointer; }
   color: #fff;
   padding: 9px 16px;
   font-size: 13px;
-  font-weight: 750;
+  font-weight: 700;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
