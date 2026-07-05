@@ -214,7 +214,7 @@ export interface PiRuntime {
 }
 
 export interface PiAiRuntimeConfig {
-  provider?: KnownProvider;
+  provider?: string;
   model?: string;
   baseUrl?: string;
   apiKey?: string;
@@ -309,7 +309,7 @@ export function createPiAiRuntime(config: PiAiRuntimeConfig = {}): PiRuntime {
   const fallback = createMockPiRuntime();
   const provider = config.provider ?? defaultProvider;
   const modelId = config.model ?? defaultModel;
-  const apiKey = config.apiKey ?? getEnvApiKey(provider);
+  const apiKey = config.apiKey ?? (isKnownPiProvider(provider) ? getEnvApiKey(provider) : undefined);
   const fallbackToMock = config.fallbackToMock ?? true;
   const enabled = config.enabled ?? Boolean(apiKey);
 
@@ -419,11 +419,11 @@ export function createPiAiRuntime(config: PiAiRuntimeConfig = {}): PiRuntime {
 }
 
 export function createConfiguredPiRuntime(): PiRuntime {
-  const provider = (process.env.ZHIJING_PI_PROVIDER as KnownProvider | undefined) ?? defaultProvider;
+  const provider = process.env.ZHIJING_PI_PROVIDER ?? defaultProvider;
   return createPiAiRuntime({
     provider,
     model: process.env.ZHIJING_PI_MODEL ?? defaultModel,
-    apiKey: process.env.ZHIJING_PI_API_KEY ?? getEnvApiKey(provider),
+    apiKey: process.env.ZHIJING_PI_API_KEY ?? (isKnownPiProvider(provider) ? getEnvApiKey(provider) : undefined),
     enabled: process.env.ZHIJING_PI_ENABLED === '1' ? true : undefined,
     fallbackToMock: process.env.ZHIJING_PI_FALLBACK === '0' ? false : true,
   });
@@ -457,7 +457,7 @@ export {
   type InstrumentedRuntimeOptions,
 } from './instrumented.js';
 
-function getConfiguredModel(provider: KnownProvider, modelId: string, baseUrl?: string): Model<Api> {
+function getConfiguredModel(provider: string, modelId: string, baseUrl?: string): Model<Api> {
   return resolveConfiguredModel(provider, modelId, baseUrl);
 }
 
@@ -480,15 +480,27 @@ function getConfiguredModel(provider: KnownProvider, modelId: string, baseUrl?: 
  * @returns 最终生效的 Model 实例，baseUrl 可能被覆盖
  * @author fxbin
  */
-export function resolveConfiguredModel(provider: KnownProvider, modelId: string, baseUrl?: string): Model<Api> {
-  const baseModel = getModel(provider, modelId as never) as Model<Api>;
+export function resolveConfiguredModel(provider: string, modelId: string, baseUrl?: string): Model<Api> {
+  const knownProvider = isKnownPiProvider(provider) ? provider : null;
+  let baseModel: Model<Api> | undefined;
+  if (knownProvider) {
+    baseModel = getModel(knownProvider, modelId as never) as Model<Api> | undefined;
+  } else {
+    for (const candidateProvider of getKnownPiProviders()) {
+      baseModel = getModel(candidateProvider, modelId as never) as Model<Api> | undefined;
+      if (baseModel) break;
+    }
+  }
+  if (!baseModel) {
+    throw new Error(`未找到 model id "${modelId}" 在任何已知 provider 下的注册记录。请检查 Settings 中的模型配置。`);
+  }
   const effectiveBaseUrl = baseUrl && baseUrl.trim().length > 0
     ? baseUrl.trim()
     : process.env[PI_BASE_URL_ENV];
   if (!effectiveBaseUrl || effectiveBaseUrl.trim().length === 0) {
     return baseModel;
   }
-  return { ...baseModel, baseUrl: effectiveBaseUrl.trim() };
+  return { ...baseModel, baseUrl: effectiveBaseUrl.trim(), compat: { ...baseModel.compat, supportsDeveloperRole: false } };
 }
 
 function buildContext(request: StructuredGenerationRequest): Context {

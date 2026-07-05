@@ -130,6 +130,12 @@ import {
   type AgentUsageQuery,
   type AgentUsageSummary,
   type AgentUsageComparison,
+  type AgentChatMessageRecord,
+  type AgentChatRunRecord,
+  type AgentChatSessionDetail,
+  type AgentChatSessionInfo,
+  type AgentChatToolCallRecord,
+  type PersistAgentChatTurnRequest,
   type UserMemory,
   type UserMemoryScope,
   type UserMemorySource,
@@ -502,12 +508,18 @@ const INSPECT_FORBIDDEN_TABLES: readonly string[] = [
   'user_memory',
   'decision_log',
   'agent_usage',
+  'agent_chat_sessions',
+  'agent_chat_messages',
+  'agent_chat_runs',
+  'agent_chat_tool_calls',
   'messages',
 ];
 const AGENT_ACTION_LOG_TABLE_NAME = 'agent_action_log';
 const AGENT_ACTION_LOG_ID_PREFIX = 'alog';
 const AGENT_ACTION_SUCCESS_TRUE = 1;
 const AGENT_ACTION_SUCCESS_FALSE = 0;
+const AGENT_CHAT_MESSAGE_ID_PREFIX = 'acmsg';
+const AGENT_CHAT_TITLE_MAX_LENGTH = 40;
 
 type StoreState = {
   workspaces: WorkspaceSummary[];
@@ -530,8 +542,20 @@ type StoreState = {
   agentActionLogs: AgentActionLog[];
   proposals: PersistedProposal[];
   agentUsage: AgentUsageRecord[];
+  agentChatSessions: AgentChatSessionInfo[];
+  agentChatMessages: AgentChatMessageRecord[];
+  agentChatRuns: AgentChatRunRecord[];
+  agentChatToolCalls: AgentChatToolCallRecord[];
+  agentChatRawMessages: Record<string, unknown[]>;
   userMemory: UserMemory[];
   decisionLog: DecisionLog[];
+};
+
+type AgentChatRetryResult = {
+  ok: boolean;
+  beforeCount: number;
+  remainingCount: number;
+  truncated: boolean;
 };
 
 type KnowledgeRepository = {
@@ -642,6 +666,13 @@ type KnowledgeRepository = {
   listAgentUsage(query: AgentUsageQuery): AgentUsageRecord[];
   summarizeAgentUsage(query: AgentUsageQuery): AgentUsageSummary;
   compareAgentUsage(query: AgentUsageQuery): AgentUsageComparison;
+  persistAgentChatTurn(record: PersistAgentChatTurnRequest): void;
+  listAgentChatSessions(workspaceId: string): AgentChatSessionInfo[];
+  getAgentChatSession(sessionId: string, workspaceId: string): AgentChatSessionDetail | null;
+  renameAgentChatSession(sessionId: string, workspaceId: string, title: string): boolean;
+  deleteAgentChatSession(sessionId: string, workspaceId: string): boolean;
+  getAgentChatRawMessages(sessionId: string, workspaceId: string): unknown[] | null;
+  truncateAgentChatSessionForRetry(sessionId: string, workspaceId: string): AgentChatRetryResult;
   insertUserMemory(record: UserMemory): void;
   updateUserMemory(id: string, patch: UpdateUserMemoryRequest): UserMemory | undefined;
   deleteUserMemory(id: string): boolean;
@@ -715,6 +746,11 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     agentActionLogs: [],
     proposals: [],
     agentUsage: [],
+    agentChatSessions: [],
+    agentChatMessages: [],
+    agentChatRuns: [],
+    agentChatToolCalls: [],
+    agentChatRawMessages: {},
     userMemory: [],
     decisionLog: [],
   };
@@ -1485,6 +1521,113 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
     const filter = buildUsageFilter(query);
     const filtered = this.state.agentUsage.filter(filter);
     return buildUsageComparison(filtered);
+  }
+
+  persistAgentChatTurn(record: PersistAgentChatTurnRequest): void {
+    const nowIso = now();
+    const existing = this.state.agentChatSessions.find((item) => item.sessionId === record.session.sessionId);
+    const rawMessages = record.rawMessages;
+    const messageRecords = buildAgentChatMessageRecords(record.session.sessionId, record.session.workspaceId, rawMessages);
+    const nextSession: AgentChatSessionInfo = {
+      ...record.session,
+      title: existing?.title ?? record.session.title,
+      messageCount: messageRecords.length,
+      lastUsedAt: record.session.lastUsedAt || nowIso,
+      updatedAt: record.session.updatedAt || nowIso,
+      lastRun: record.run,
+    };
+    this.state.agentChatSessions = [
+      nextSession,
+      ...this.state.agentChatSessions.filter((item) => item.sessionId !== record.session.sessionId),
+    ];
+    this.state.agentChatRawMessages[record.session.sessionId] = rawMessages;
+    this.state.agentChatMessages = [
+      ...this.state.agentChatMessages.filter((item) => item.sessionId !== record.session.sessionId),
+      ...messageRecords,
+    ];
+    this.state.agentChatRuns = [
+      record.run,
+      ...this.state.agentChatRuns.filter((item) => item.id !== record.run.id),
+    ];
+    this.state.agentChatToolCalls = [
+      ...this.state.agentChatToolCalls.filter((item) => item.runId !== record.run.id),
+      ...record.toolCalls,
+    ];
+  }
+
+  listAgentChatSessions(workspaceId: string): AgentChatSessionInfo[] {
+    return this.state.agentChatSessions
+      .filter((item) => item.workspaceId === workspaceId)
+      .sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt));
+  }
+
+  getAgentChatSession(sessionId: string, workspaceId: string): AgentChatSessionDetail | null {
+    const session = this.state.agentChatSessions.find((item) => item.sessionId === sessionId && item.workspaceId === workspaceId);
+    if (!session) return null;
+    const runs = this.state.agentChatRuns
+      .filter((item) => item.sessionId === sessionId && item.workspaceId === workspaceId)
+      .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+    return {
+      ...session,
+      messages: this.state.agentChatRawMessages[sessionId] ?? [],
+      messageRecords: this.state.agentChatMessages
+        .filter((item) => item.sessionId === sessionId && item.workspaceId === workspaceId)
+        .sort((a, b) => a.sequence - b.sequence),
+      runs,
+      toolCalls: this.state.agentChatToolCalls
+        .filter((item) => item.sessionId === sessionId && item.workspaceId === workspaceId)
+        .sort((a, b) => a.startedAt.localeCompare(b.startedAt)),
+    };
+  }
+
+  renameAgentChatSession(sessionId: string, workspaceId: string, title: string): boolean {
+    const trimmed = title.trim();
+    if (!trimmed) return false;
+    const session = this.state.agentChatSessions.find((item) => item.sessionId === sessionId && item.workspaceId === workspaceId);
+    if (!session) return false;
+    session.title = trimmed;
+    session.updatedAt = now();
+    return true;
+  }
+
+  deleteAgentChatSession(sessionId: string, workspaceId: string): boolean {
+    const before = this.state.agentChatSessions.length;
+    this.state.agentChatSessions = this.state.agentChatSessions.filter((item) => !(item.sessionId === sessionId && item.workspaceId === workspaceId));
+    if (before === this.state.agentChatSessions.length) return false;
+    this.state.agentChatMessages = this.state.agentChatMessages.filter((item) => item.sessionId !== sessionId);
+    this.state.agentChatRuns = this.state.agentChatRuns.filter((item) => item.sessionId !== sessionId);
+    this.state.agentChatToolCalls = this.state.agentChatToolCalls.filter((item) => item.sessionId !== sessionId);
+    delete this.state.agentChatRawMessages[sessionId];
+    return true;
+  }
+
+  getAgentChatRawMessages(sessionId: string, workspaceId: string): unknown[] | null {
+    const session = this.state.agentChatSessions.find((item) => item.sessionId === sessionId && item.workspaceId === workspaceId);
+    if (!session) return null;
+    return this.state.agentChatRawMessages[sessionId] ?? [];
+  }
+
+  truncateAgentChatSessionForRetry(sessionId: string, workspaceId: string): AgentChatRetryResult {
+    const rawMessages = this.getAgentChatRawMessages(sessionId, workspaceId);
+    if (!rawMessages) return { ok: false, beforeCount: 0, remainingCount: 0, truncated: false };
+    const lastUserIndex = findLastUserMessageIndex(rawMessages);
+    if (lastUserIndex < 0) {
+      return { ok: false, beforeCount: rawMessages.length, remainingCount: rawMessages.length, truncated: false };
+    }
+    const remaining = rawMessages.slice(0, lastUserIndex);
+    this.state.agentChatRawMessages[sessionId] = remaining;
+    const records = buildAgentChatMessageRecords(sessionId, workspaceId, remaining);
+    this.state.agentChatMessages = [
+      ...this.state.agentChatMessages.filter((item) => item.sessionId !== sessionId),
+      ...records,
+    ];
+    const session = this.state.agentChatSessions.find((item) => item.sessionId === sessionId && item.workspaceId === workspaceId);
+    if (session) {
+      session.messageCount = records.length;
+      session.updatedAt = now();
+      session.lastUsedAt = session.updatedAt;
+    }
+    return { ok: true, beforeCount: rawMessages.length, remainingCount: remaining.length, truncated: true };
   }
 
   insertUserMemory(record: UserMemory): void {
@@ -2955,6 +3098,217 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     return buildUsageComparison(records);
   }
 
+  persistAgentChatTurn(record: PersistAgentChatTurnRequest): void {
+    const existing = this.db.prepare('SELECT * FROM agent_chat_sessions WHERE session_id = ?').get(record.session.sessionId) as AgentChatSessionRow | undefined;
+    const messageRecords = buildAgentChatMessageRecords(record.session.sessionId, record.session.workspaceId, record.rawMessages);
+    const title = existing?.title ?? record.session.title ?? deriveAgentChatTitle(record.rawMessages);
+    const createdAt = existing?.created_at ?? record.session.createdAt;
+    const updatedAt = record.session.updatedAt;
+
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare(`
+        INSERT INTO agent_chat_sessions (
+          session_id, workspace_id, title, message_count, raw_messages_json,
+          provider, model, created_at, updated_at, last_used_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(session_id) DO UPDATE SET
+          workspace_id = excluded.workspace_id,
+          title = agent_chat_sessions.title,
+          message_count = excluded.message_count,
+          raw_messages_json = excluded.raw_messages_json,
+          provider = excluded.provider,
+          model = excluded.model,
+          updated_at = excluded.updated_at,
+          last_used_at = excluded.last_used_at
+      `).run(
+        record.session.sessionId,
+        record.session.workspaceId,
+        title,
+        messageRecords.length,
+        JSON.stringify(record.rawMessages),
+        record.run.provider,
+        record.run.model,
+        createdAt,
+        updatedAt,
+        record.session.lastUsedAt,
+      );
+
+      this.db.prepare('DELETE FROM agent_chat_messages WHERE session_id = ?').run(record.session.sessionId);
+      const insertMessage = this.db.prepare(`
+        INSERT INTO agent_chat_messages (
+          id, session_id, workspace_id, role, text, reasoning, raw_json, sequence, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const message of messageRecords) {
+        insertMessage.run(
+          message.id,
+          message.sessionId,
+          message.workspaceId,
+          message.role,
+          message.text,
+          message.reasoning,
+          JSON.stringify(message.raw),
+          message.sequence,
+          message.createdAt,
+        );
+      }
+
+      this.db.prepare(`
+        INSERT INTO agent_chat_runs (
+          id, session_id, workspace_id, provider, model, input_tokens, output_tokens,
+          cache_read_tokens, cache_write_tokens, cost_usd, duration_ms, status,
+          error_message, started_at, ended_at, tool_call_count
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        record.run.id,
+        record.run.sessionId,
+        record.run.workspaceId,
+        record.run.provider,
+        record.run.model,
+        record.run.inputTokens,
+        record.run.outputTokens,
+        record.run.cacheReadTokens,
+        record.run.cacheWriteTokens,
+        record.run.costUsd,
+        record.run.durationMs,
+        record.run.status,
+        record.run.errorMessage,
+        record.run.startedAt,
+        record.run.endedAt,
+        record.toolCalls.length,
+      );
+
+      const insertToolCall = this.db.prepare(`
+        INSERT INTO agent_chat_tool_calls (
+          id, run_id, session_id, workspace_id, tool_call_id, tool_name,
+          args_json, result, details_json, is_error, started_at, ended_at, duration_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const toolCall of record.toolCalls) {
+        insertToolCall.run(
+          toolCall.id,
+          toolCall.runId,
+          toolCall.sessionId,
+          toolCall.workspaceId,
+          toolCall.toolCallId,
+          toolCall.toolName,
+          JSON.stringify(toolCall.args),
+          toolCall.result,
+          toolCall.details === undefined ? null : JSON.stringify(toolCall.details),
+          toolCall.isError ? 1 : 0,
+          toolCall.startedAt,
+          toolCall.endedAt,
+          toolCall.durationMs,
+        );
+      }
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  listAgentChatSessions(workspaceId: string): AgentChatSessionInfo[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM agent_chat_sessions
+      WHERE workspace_id = ?
+      ORDER BY last_used_at DESC
+    `).all(workspaceId) as AgentChatSessionRow[];
+    return rows.map((row) => {
+      const run = this.db.prepare(`
+        SELECT * FROM agent_chat_runs
+        WHERE session_id = ?
+        ORDER BY started_at DESC
+        LIMIT 1
+      `).get(row.session_id) as AgentChatRunRow | undefined;
+      return mapAgentChatSession(row, run ? mapAgentChatRun(run) : undefined);
+    });
+  }
+
+  getAgentChatSession(sessionId: string, workspaceId: string): AgentChatSessionDetail | null {
+    const row = this.db.prepare('SELECT * FROM agent_chat_sessions WHERE session_id = ? AND workspace_id = ?').get(sessionId, workspaceId) as AgentChatSessionRow | undefined;
+    if (!row) return null;
+    const runs = (this.db.prepare('SELECT * FROM agent_chat_runs WHERE session_id = ? ORDER BY started_at ASC').all(sessionId) as AgentChatRunRow[])
+      .map(mapAgentChatRun);
+    const lastRun = runs.length > 0 ? runs[runs.length - 1] : undefined;
+    return {
+      ...mapAgentChatSession(row, lastRun),
+      messages: JSON.parse(row.raw_messages_json) as unknown[],
+      messageRecords: (this.db.prepare('SELECT * FROM agent_chat_messages WHERE session_id = ? ORDER BY sequence ASC').all(sessionId) as AgentChatMessageRow[])
+        .map(mapAgentChatMessage),
+      runs,
+      toolCalls: (this.db.prepare('SELECT * FROM agent_chat_tool_calls WHERE session_id = ? ORDER BY started_at ASC').all(sessionId) as AgentChatToolCallRow[])
+        .map(mapAgentChatToolCall),
+    };
+  }
+
+  renameAgentChatSession(sessionId: string, workspaceId: string, title: string): boolean {
+    const trimmed = title.trim();
+    if (!trimmed) return false;
+    const result = this.db.prepare(`
+      UPDATE agent_chat_sessions
+      SET title = ?, updated_at = ?
+      WHERE session_id = ? AND workspace_id = ?
+    `).run(trimmed, now(), sessionId, workspaceId);
+    return result.changes > 0;
+  }
+
+  deleteAgentChatSession(sessionId: string, workspaceId: string): boolean {
+    const result = this.db.prepare('DELETE FROM agent_chat_sessions WHERE session_id = ? AND workspace_id = ?').run(sessionId, workspaceId);
+    return result.changes > 0;
+  }
+
+  getAgentChatRawMessages(sessionId: string, workspaceId: string): unknown[] | null {
+    const row = this.db.prepare('SELECT raw_messages_json FROM agent_chat_sessions WHERE session_id = ? AND workspace_id = ?').get(sessionId, workspaceId) as { raw_messages_json: string } | undefined;
+    if (!row) return null;
+    return JSON.parse(row.raw_messages_json) as unknown[];
+  }
+
+  truncateAgentChatSessionForRetry(sessionId: string, workspaceId: string): AgentChatRetryResult {
+    const rawMessages = this.getAgentChatRawMessages(sessionId, workspaceId);
+    if (!rawMessages) return { ok: false, beforeCount: 0, remainingCount: 0, truncated: false };
+    const lastUserIndex = findLastUserMessageIndex(rawMessages);
+    if (lastUserIndex < 0) {
+      return { ok: false, beforeCount: rawMessages.length, remainingCount: rawMessages.length, truncated: false };
+    }
+    const remaining = rawMessages.slice(0, lastUserIndex);
+    const messageRecords = buildAgentChatMessageRecords(sessionId, workspaceId, remaining);
+    const stamp = now();
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare(`
+        UPDATE agent_chat_sessions
+        SET raw_messages_json = ?, message_count = ?, updated_at = ?, last_used_at = ?
+        WHERE session_id = ? AND workspace_id = ?
+      `).run(JSON.stringify(remaining), messageRecords.length, stamp, stamp, sessionId, workspaceId);
+      this.db.prepare('DELETE FROM agent_chat_messages WHERE session_id = ?').run(sessionId);
+      const insertMessage = this.db.prepare(`
+        INSERT INTO agent_chat_messages (
+          id, session_id, workspace_id, role, text, reasoning, raw_json, sequence, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const message of messageRecords) {
+        insertMessage.run(
+          message.id,
+          message.sessionId,
+          message.workspaceId,
+          message.role,
+          message.text,
+          message.reasoning,
+          JSON.stringify(message.raw),
+          message.sequence,
+          message.createdAt,
+        );
+      }
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+    return { ok: true, beforeCount: rawMessages.length, remainingCount: remaining.length, truncated: true };
+  }
+
   insertUserMemory(record: UserMemory): void {
     this.db.prepare(`
       INSERT INTO user_memory (id, scope, key, value, source, workspace_id, created_at, updated_at)
@@ -4235,6 +4589,74 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     `);
 
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS agent_chat_sessions (
+        session_id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        message_count INTEGER NOT NULL DEFAULT 0,
+        raw_messages_json TEXT NOT NULL DEFAULT '[]',
+        provider TEXT,
+        model TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_used_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_agent_chat_sessions_workspace ON agent_chat_sessions(workspace_id, last_used_at DESC);
+
+      CREATE TABLE IF NOT EXISTS agent_chat_messages (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES agent_chat_sessions(session_id) ON DELETE CASCADE,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        role TEXT NOT NULL,
+        text TEXT NOT NULL,
+        reasoning TEXT NOT NULL DEFAULT '',
+        raw_json TEXT NOT NULL,
+        sequence INTEGER NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_agent_chat_messages_session ON agent_chat_messages(session_id, sequence);
+
+      CREATE TABLE IF NOT EXISTS agent_chat_runs (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES agent_chat_sessions(session_id) ON DELETE CASCADE,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        input_tokens INTEGER,
+        output_tokens INTEGER,
+        cache_read_tokens INTEGER,
+        cache_write_tokens INTEGER,
+        cost_usd REAL,
+        duration_ms INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        error_message TEXT,
+        started_at TEXT NOT NULL,
+        ended_at TEXT NOT NULL,
+        tool_call_count INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_agent_chat_runs_session ON agent_chat_runs(session_id, started_at);
+      CREATE INDEX IF NOT EXISTS idx_agent_chat_runs_workspace ON agent_chat_runs(workspace_id, started_at DESC);
+
+      CREATE TABLE IF NOT EXISTS agent_chat_tool_calls (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL REFERENCES agent_chat_runs(id) ON DELETE CASCADE,
+        session_id TEXT NOT NULL REFERENCES agent_chat_sessions(session_id) ON DELETE CASCADE,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        tool_call_id TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        args_json TEXT NOT NULL,
+        result TEXT NOT NULL,
+        details_json TEXT,
+        is_error INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT NOT NULL,
+        ended_at TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_agent_chat_tool_calls_run ON agent_chat_tool_calls(run_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_chat_tool_calls_session ON agent_chat_tool_calls(session_id, started_at);
+    `);
+
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS user_memory (
         id TEXT PRIMARY KEY,
         scope TEXT NOT NULL,
@@ -4807,6 +5229,66 @@ type AgentUsageRow = {
   duration_ms: number;
 };
 
+type AgentChatSessionRow = {
+  session_id: string;
+  workspace_id: string;
+  title: string;
+  message_count: number;
+  raw_messages_json: string;
+  provider: string | null;
+  model: string | null;
+  created_at: string;
+  updated_at: string;
+  last_used_at: string;
+};
+
+type AgentChatMessageRow = {
+  id: string;
+  session_id: string;
+  workspace_id: string;
+  role: string;
+  text: string;
+  reasoning: string;
+  raw_json: string;
+  sequence: number;
+  created_at: string;
+};
+
+type AgentChatRunRow = {
+  id: string;
+  session_id: string;
+  workspace_id: string;
+  provider: string;
+  model: string;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_write_tokens: number | null;
+  cost_usd: number | null;
+  duration_ms: number;
+  status: string;
+  error_message: string | null;
+  started_at: string;
+  ended_at: string;
+  tool_call_count: number;
+};
+
+type AgentChatToolCallRow = {
+  id: string;
+  run_id: string;
+  session_id: string;
+  workspace_id: string;
+  tool_call_id: string;
+  tool_name: string;
+  args_json: string;
+  result: string;
+  details_json: string | null;
+  is_error: number;
+  started_at: string;
+  ended_at: string;
+  duration_ms: number;
+};
+
 function mapAgentUsage(row: AgentUsageRow): AgentUsageRecord {
   return {
     id: row.id,
@@ -4821,6 +5303,74 @@ function mapAgentUsage(row: AgentUsageRow): AgentUsageRecord {
     ok: row.ok === 1,
     errorMessage: row.error_message,
     startedAt: row.started_at,
+    durationMs: row.duration_ms,
+  };
+}
+
+function mapAgentChatRun(row: AgentChatRunRow): AgentChatRunRecord {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    workspaceId: row.workspace_id,
+    provider: row.provider,
+    model: row.model,
+    inputTokens: row.input_tokens,
+    outputTokens: row.output_tokens,
+    cacheReadTokens: row.cache_read_tokens,
+    cacheWriteTokens: row.cache_write_tokens,
+    costUsd: row.cost_usd,
+    durationMs: row.duration_ms,
+    status: row.status as AgentChatRunRecord['status'],
+    errorMessage: row.error_message,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    toolCallCount: row.tool_call_count,
+  };
+}
+
+function mapAgentChatSession(row: AgentChatSessionRow, lastRun?: AgentChatRunRecord): AgentChatSessionInfo {
+  return {
+    sessionId: row.session_id,
+    workspaceId: row.workspace_id,
+    title: row.title,
+    messageCount: row.message_count,
+    lastUsedAt: row.last_used_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    provider: row.provider ?? undefined,
+    model: row.model ?? undefined,
+    lastRun,
+  };
+}
+
+function mapAgentChatMessage(row: AgentChatMessageRow): AgentChatMessageRecord {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    workspaceId: row.workspace_id,
+    role: row.role as AgentChatMessageRecord['role'],
+    text: row.text,
+    reasoning: row.reasoning,
+    raw: JSON.parse(row.raw_json) as unknown,
+    createdAt: row.created_at,
+    sequence: row.sequence,
+  };
+}
+
+function mapAgentChatToolCall(row: AgentChatToolCallRow): AgentChatToolCallRecord {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    sessionId: row.session_id,
+    workspaceId: row.workspace_id,
+    toolCallId: row.tool_call_id,
+    toolName: row.tool_name,
+    args: JSON.parse(row.args_json) as unknown,
+    result: row.result,
+    details: row.details_json ? JSON.parse(row.details_json) as unknown : undefined,
+    isError: row.is_error === 1,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
     durationMs: row.duration_ms,
   };
 }
@@ -5069,6 +5619,89 @@ function mapMessage(row: MessageRow): ChatMessage {
     createdAt: row.created_at,
     proposedCards: proposedCardsJson ? (JSON.parse(proposedCardsJson) as ProposedCard[]) : undefined,
   };
+}
+
+function getRawMessageRole(message: unknown): AgentChatMessageRecord['role'] {
+  if (!message || typeof message !== 'object') return 'unknown';
+  const role = (message as { role?: unknown }).role;
+  if (role === 'user' || role === 'assistant' || role === 'tool' || role === 'system') return role;
+  return 'unknown';
+}
+
+function extractRawMessageText(message: unknown): string {
+  if (!message || typeof message !== 'object') return '';
+  const content = (message as { content?: unknown }).content;
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((part): part is { type: string; text: string } =>
+      part !== null && typeof part === 'object'
+      && (part as { type?: unknown }).type === 'text'
+      && typeof (part as { text?: unknown }).text === 'string')
+    .map((part) => part.text)
+    .join('');
+}
+
+function extractRawMessageReasoning(message: unknown): string {
+  if (!message || typeof message !== 'object') return '';
+  const content = (message as { content?: unknown }).content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((part): part is { type: string; text: string } =>
+      part !== null && typeof part === 'object'
+      && (part as { type?: unknown }).type === 'thinking'
+      && typeof (part as { text?: unknown }).text === 'string')
+    .map((part) => part.text)
+    .join('');
+}
+
+function getRawMessageTimestamp(message: unknown, fallback: string): string {
+  if (!message || typeof message !== 'object') return fallback;
+  const timestamp = (message as { timestamp?: unknown; createdAt?: unknown }).timestamp;
+  if (typeof timestamp === 'number' && Number.isFinite(timestamp)) return new Date(timestamp).toISOString();
+  if (typeof timestamp === 'string' && timestamp.length > 0) return timestamp;
+  const createdAt = (message as { createdAt?: unknown }).createdAt;
+  if (typeof createdAt === 'string' && createdAt.length > 0) return createdAt;
+  return fallback;
+}
+
+function buildAgentChatMessageRecords(
+  sessionId: string,
+  workspaceId: string,
+  rawMessages: unknown[],
+): AgentChatMessageRecord[] {
+  const fallbackCreatedAt = now();
+  return rawMessages.map((message, index) => ({
+    id: `${AGENT_CHAT_MESSAGE_ID_PREFIX}_${sessionId}_${index}`,
+    sessionId,
+    workspaceId,
+    role: getRawMessageRole(message),
+    text: extractRawMessageText(message),
+    reasoning: extractRawMessageReasoning(message),
+    raw: message,
+    createdAt: getRawMessageTimestamp(message, fallbackCreatedAt),
+    sequence: index,
+  }));
+}
+
+function deriveAgentChatTitle(rawMessages: unknown[]): string {
+  for (const message of rawMessages) {
+    if (getRawMessageRole(message) !== 'user') continue;
+    const text = extractRawMessageText(message).trim();
+    if (text.length > 0) {
+      return text.length > AGENT_CHAT_TITLE_MAX_LENGTH
+        ? `${text.slice(0, AGENT_CHAT_TITLE_MAX_LENGTH)}...`
+        : text;
+    }
+  }
+  return '未命名会话';
+}
+
+function findLastUserMessageIndex(rawMessages: unknown[]): number {
+  for (let i = rawMessages.length - 1; i >= 0; i -= 1) {
+    if (getRawMessageRole(rawMessages[i]) === 'user') return i;
+  }
+  return -1;
 }
 
 /**
@@ -13684,6 +14317,34 @@ export function summarizeAgentUsageRecords(query: AgentUsageQuery): AgentUsageSu
  */
 export function compareAgentUsageRecords(query: AgentUsageQuery): AgentUsageComparison {
   return repository.compareAgentUsage(query);
+}
+
+export function persistAgentChatTurn(record: PersistAgentChatTurnRequest): void {
+  repository.persistAgentChatTurn(record);
+}
+
+export function listAgentChatSessions(workspaceId: string): AgentChatSessionInfo[] {
+  return repository.listAgentChatSessions(workspaceId);
+}
+
+export function getAgentChatSession(sessionId: string, workspaceId: string): AgentChatSessionDetail | null {
+  return repository.getAgentChatSession(sessionId, workspaceId);
+}
+
+export function renameAgentChatSession(sessionId: string, workspaceId: string, title: string): boolean {
+  return repository.renameAgentChatSession(sessionId, workspaceId, title);
+}
+
+export function deleteAgentChatSession(sessionId: string, workspaceId: string): boolean {
+  return repository.deleteAgentChatSession(sessionId, workspaceId);
+}
+
+export function getAgentChatRawMessages(sessionId: string, workspaceId: string): unknown[] | null {
+  return repository.getAgentChatRawMessages(sessionId, workspaceId);
+}
+
+export function truncateAgentChatSessionForRetry(sessionId: string, workspaceId: string): AgentChatRetryResult {
+  return repository.truncateAgentChatSessionForRetry(sessionId, workspaceId);
 }
 
 export { type AgentUsageRepository } from './agent-usage.js';

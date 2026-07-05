@@ -1,4 +1,4 @@
-import { getEnvApiKey, type KnownProvider } from '@earendil-works/pi-ai';
+import { getEnvApiKey } from '@earendil-works/pi-ai';
 import type { AgentTaskType, ProviderRoute, RouteResolution } from '@zhijing/shared';
 import { createPiAiRuntime, getDefaultPiProvider, getDefaultPiModel, isKnownPiProvider, type PiRuntime } from './index.js';
 
@@ -137,7 +137,7 @@ export function setActiveProfile(profile: ActiveProfileSnapshot | null): void {
  */
 function hasAvailableApiKey(provider: string): boolean {
   if (!isKnownPiProvider(provider)) {
-    return false;
+    return Boolean(activeProfile?.apiKey && activeProfile.apiKey.length > 0);
   }
   if (provider === getDefaultPiProvider()) {
     const envKey = process.env.ZHIJING_PI_API_KEY;
@@ -240,12 +240,14 @@ export function createRoutedPiRuntime(
   options: { routesOverride?: ProviderRoute[] } = {},
 ): PiRuntime {
   const resolution = routeProvider(taskType, options.routesOverride ?? ACTIVE_ROUTES);
-  const provider = resolution.resolvedProvider as KnownProvider;
+  const provider = resolution.resolvedProvider;
   const model = resolution.resolvedModel;
   const apiKey = activeProfile?.apiKey
-    ?? (resolution.resolvedProvider === getDefaultPiProvider()
-      ? (process.env.ZHIJING_PI_API_KEY ?? getEnvApiKey(provider))
-      : getEnvApiKey(provider));
+    ?? (isKnownPiProvider(provider)
+      ? (resolution.resolvedProvider === getDefaultPiProvider()
+        ? (process.env.ZHIJING_PI_API_KEY ?? getEnvApiKey(provider))
+        : getEnvApiKey(provider))
+      : undefined);
 
   return createPiAiRuntime({
     provider,

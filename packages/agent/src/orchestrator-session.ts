@@ -14,7 +14,6 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { KnownProvider } from '@earendil-works/pi-ai';
 import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
 import type { AgentStreamEvent, OrchestratorDecision, ProposedOperation } from '@zhijing/shared';
 import type { ToolCallSummary } from '@zhijing/core';
@@ -168,11 +167,13 @@ function sweepExpiredSessions(): void {
  */
 export interface OrchestratorCredentials {
   /** LLM provider 标识 */
-  provider: KnownProvider;
+  provider: string;
   /** 模型 id */
   model: string;
   /** API key；与 WorkspaceAgentOptions 一致保持可选，由 agent-factory 兜底解析 */
   apiKey?: string;
+  /** 自定义 base URL；用于 OpenAI 兼容端点 */
+  baseUrl?: string;
 }
 
 /**
@@ -194,6 +195,8 @@ export interface OrchestratorRunContext {
   credentials: OrchestratorCredentials;
   /** 是否写作模式（影响决策，预留字段） */
   isWriting: boolean;
+  /** 从持久化存储恢复的历史消息；内存 sessionStore 未命中时使用 */
+  priorMessages?: AgentMessage[];
 }
 
 /**
@@ -217,6 +220,11 @@ export interface OrchestratorRunCallbacks {
    * 流中拦截器触发时通知（api 层记录日志）。
    */
   onStreamIntercept?: (info: { mode: string; reason: string }) => void;
+  /**
+   * 主 Agent 完整结束后回传最终消息快照。
+   * API 层用于持久化到 SQLite，agent 层保持不直接依赖数据库。
+   */
+  onSessionPersist?: (info: { sessionId: string; workspaceId: string; messages: AgentMessage[]; lastUsedAt: number }) => void;
   /**
    * 编排过程警告日志。
    */
@@ -281,7 +289,7 @@ export function startOrchestratorSession(
   const existing = sessionStore.get(sessionKey);
   const priorMessages = existing && existing.workspaceId === workspaceId
     ? existing.messages
-    : [];
+    : (ctx.priorMessages ?? []);
   if (existing) {
     existing.lastUsedAt = Date.now();
   }
@@ -322,6 +330,7 @@ export function startOrchestratorSession(
       provider: credentials.provider,
       modelId: credentials.model,
       apiKey: credentials.apiKey,
+      baseUrl: credentials.baseUrl,
       messages: priorMessages,
     };
 
@@ -418,6 +427,12 @@ export function startOrchestratorSession(
         messages: trimmed,
         lastUsedAt: Date.now(),
       });
+      callbacks.onSessionPersist?.({
+        sessionId: sessionKey,
+        workspaceId,
+        messages: trimmed,
+        lastUsedAt: Date.now(),
+      });
     } catch {
       // state 读取失败不阻断流程，下一轮从空对话开始
     }
@@ -452,6 +467,7 @@ export function startOrchestratorSession(
       if (!supportsProbeRoleOverride) {
         probeOptions.provider = credentials.provider;
         probeOptions.modelId = credentials.model;
+        probeOptions.baseUrl = credentials.baseUrl;
       }
       probeAgent = createRoleBasedAgent(workspaceId, probeOptions);
       const probePrompt = buildAuxiliaryProbePrompt(message, mainAssistantText);

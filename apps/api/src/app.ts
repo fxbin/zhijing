@@ -3,7 +3,7 @@ import fastifyStatic from '@fastify/static';
 import cron from 'node-cron';
 import Fastify from 'fastify';
 import { Readable, Transform } from 'node:stream';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -92,6 +92,13 @@ import {
   listAgentUsageRecords,
   summarizeAgentUsageRecords,
   compareAgentUsageRecords,
+  persistAgentChatTurn,
+  listAgentChatSessions,
+  getAgentChatSession,
+  renameAgentChatSession,
+  deleteAgentChatSession,
+  getAgentChatRawMessages,
+  truncateAgentChatSessionForRetry,
   computeEvidenceFeedback,
   extractRejectedFeatures,
   EVIDENCE_ACTION_ACCEPT_PROPOSED_CARDS,
@@ -178,13 +185,12 @@ import {
 import {
   startOrchestratorSession,
   truncateSessionForRetry,
-  listAgentSessions,
-  getAgentSessionMessages,
-  renameAgentSession,
-  deleteAgentSession,
   type OrchestratorSession,
 } from '@zhijing/agent';
 import { getActiveRoutes, isRoutesOverriddenByEnv, buildRouteAdvisor } from '@zhijing/pi-runtime';
+import type {
+  AgentMessage,
+} from '@earendil-works/pi-agent-core';
 import type {
   AddMapEdgeRequest,
   AssignMaterialRequest,
@@ -212,6 +218,7 @@ import type {
   KnowledgeCard,
   MaterialRecord,
   AgentStreamEvent,
+  AgentChatToolCallRecord,
   OrchestratorDecision,
   ProposalStatus,
   AgentTaskType,
@@ -292,6 +299,34 @@ const SSE_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
  * 用于校验前端传入的 sessionId，防止注入控制字符或超长字符串。
  */
 const SESSION_ID_PATTERN = /^sess_\d+_[a-z0-9]{4,32}$/;
+const CHAT_SESSION_TITLE_MAX_LENGTH = 40;
+
+type AgentRunTokenStats = {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  costUsd: number | null;
+};
+
+type AgentToolCallDraft = {
+  toolCallId: string;
+  toolName: string;
+  args: unknown;
+  startedAt: string;
+  startedMs: number;
+};
+
+function addNullableNumber(current: number | null, value: number | null | undefined): number | null {
+  if (typeof value !== 'number') return current;
+  return (current ?? 0) + value;
+}
+
+function deriveAgentChatSessionTitle(message: string): string {
+  const trimmed = message.trim();
+  if (!trimmed) return '未命名会话';
+  return trimmed.length > CHAT_SESSION_TITLE_MAX_LENGTH
+    ? `${trimmed.slice(0, CHAT_SESSION_TITLE_MAX_LENGTH)}...`
+    : trimmed;
+}
 
 /**
  * 判断路径是否命中限流前缀。
@@ -2078,7 +2113,9 @@ export async function buildApi() {
       const retryRequested = Boolean(request.body?.retryLastTurn);
 
       if (retryRequested) {
-        const retryResult = truncateSessionForRetry(sessionId, request.params.id);
+        const memoryRetryResult = truncateSessionForRetry(sessionId, request.params.id);
+        const persistedRetryResult = truncateAgentChatSessionForRetry(sessionId, request.params.id);
+        const retryResult = persistedRetryResult.truncated ? persistedRetryResult : memoryRetryResult;
         if (retryResult.truncated) {
           request.log.info(
             { sessionId, workspaceId: request.params.id, before: retryResult.beforeCount, remaining: retryResult.remainingCount },
@@ -2091,6 +2128,16 @@ export async function buildApi() {
           );
         }
       }
+
+      const priorMessages = getAgentChatRawMessages(sessionId, request.params.id) as AgentMessage[] | null;
+      const runId = `run_${Date.now()}_${randomUUID()}`;
+      const runStartedAt = new Date().toISOString();
+      const runStartMs = Date.now();
+      const tokenStats: AgentRunTokenStats = { inputTokens: null, outputTokens: null, costUsd: null };
+      const pendingToolCalls = new Map<string, AgentToolCallDraft>();
+      const persistedToolCalls: AgentChatToolCallRecord[] = [];
+      let runStatus: 'completed' | 'failed' | 'aborted' = 'completed';
+      let runErrorMessage: string | null = null;
 
       reply.hijack();
       reply.raw.writeHead(200, {
@@ -2107,6 +2154,45 @@ export async function buildApi() {
       }, SSE_IDLE_TIMEOUT_MS);
       const send = (event: AgentStreamEvent) => {
         idleTimer.refresh();
+        if (event.type === 'message_end' && event.usage) {
+          tokenStats.inputTokens = addNullableNumber(tokenStats.inputTokens, event.usage.inputTokens);
+          tokenStats.outputTokens = addNullableNumber(tokenStats.outputTokens, event.usage.outputTokens);
+          tokenStats.costUsd = addNullableNumber(tokenStats.costUsd, event.usage.costUsd);
+        }
+        if (event.type === 'tool_start') {
+          pendingToolCalls.set(event.toolCallId, {
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            args: event.args,
+            startedAt: new Date().toISOString(),
+            startedMs: Date.now(),
+          });
+        }
+        if (event.type === 'tool_end') {
+          const draft = pendingToolCalls.get(event.toolCallId);
+          const endedAt = new Date().toISOString();
+          const endedMs = Date.now();
+          persistedToolCalls.push({
+            id: `tool_${runId}_${event.toolCallId}`,
+            runId,
+            sessionId,
+            workspaceId: request.params.id,
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            args: draft?.args ?? null,
+            result: event.result,
+            details: event.details,
+            isError: event.isError,
+            startedAt: draft?.startedAt ?? endedAt,
+            endedAt,
+            durationMs: draft ? Math.max(0, endedMs - draft.startedMs) : 0,
+          });
+          pendingToolCalls.delete(event.toolCallId);
+        }
+        if (event.type === 'error') {
+          runStatus = 'failed';
+          runErrorMessage = event.message;
+        }
         try {
           reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
         } catch (writeError) {
@@ -2188,6 +2274,7 @@ export async function buildApi() {
             baseUrl: credentials.baseUrl,
           },
           isWriting,
+          priorMessages: priorMessages ?? undefined,
         },
         {
           onEvent: send,
@@ -2198,6 +2285,46 @@ export async function buildApi() {
           onWarn: (info, warnMessage) => {
             request.log.warn(info, warnMessage);
           },
+          onSessionPersist: (info) => {
+            const endedAt = new Date().toISOString();
+            try {
+              persistAgentChatTurn({
+                session: {
+                  sessionId: info.sessionId,
+                  workspaceId: info.workspaceId,
+                  title: deriveAgentChatSessionTitle(message),
+                  messageCount: info.messages.length,
+                  lastUsedAt: new Date(info.lastUsedAt).toISOString(),
+                  createdAt: runStartedAt,
+                  updatedAt: endedAt,
+                  provider: credentials.provider,
+                  model: credentials.model,
+                },
+                rawMessages: info.messages,
+                run: {
+                  id: runId,
+                  sessionId: info.sessionId,
+                  workspaceId: info.workspaceId,
+                  provider: credentials.provider,
+                  model: credentials.model,
+                  inputTokens: tokenStats.inputTokens,
+                  outputTokens: tokenStats.outputTokens,
+                  cacheReadTokens: null,
+                  cacheWriteTokens: null,
+                  costUsd: tokenStats.costUsd,
+                  durationMs: Date.now() - runStartMs,
+                  status: runStatus,
+                  errorMessage: runErrorMessage,
+                  startedAt: runStartedAt,
+                  endedAt,
+                  toolCallCount: persistedToolCalls.length,
+                },
+                toolCalls: persistedToolCalls,
+              });
+            } catch (persistError) {
+              request.log.warn({ persistError, sessionId: info.sessionId }, 'agent chat persistence failed');
+            }
+          },
         },
         sessionId,
       );
@@ -2206,6 +2333,8 @@ export async function buildApi() {
 
       reply.raw.on('close', () => {
         if (!reply.raw.writableEnded) {
+          runStatus = 'aborted';
+          runErrorMessage = 'Client connection closed before stream completed.';
           session.abort();
         }
       });
@@ -2246,7 +2375,7 @@ export async function buildApi() {
   app.get<{ Params: { id: string } }>(
     '/api/workspaces/:id/agent/sessions',
     async (request) => {
-      const sessions = listAgentSessions(request.params.id);
+      const sessions = listAgentChatSessions(request.params.id);
       return { sessions };
     },
   );
@@ -2254,7 +2383,7 @@ export async function buildApi() {
   app.get<{ Params: { id: string; sessionId: string } }>(
     '/api/workspaces/:id/agent/sessions/:sessionId',
     async (request, reply) => {
-      const detail = getAgentSessionMessages(request.params.sessionId, request.params.id);
+      const detail = getAgentChatSession(request.params.sessionId, request.params.id);
       if (!detail) {
         return reply.code(404).send({ error: 'Session not found.' });
       }
@@ -2266,7 +2395,7 @@ export async function buildApi() {
     '/api/workspaces/:id/agent/sessions/:sessionId',
     async (request, reply) => {
       const title = typeof request.body?.title === 'string' ? request.body.title : '';
-      const ok = renameAgentSession(request.params.sessionId, request.params.id, title);
+      const ok = renameAgentChatSession(request.params.sessionId, request.params.id, title);
       if (!ok) {
         return reply.code(404).send({ error: 'Session not found or title empty.' });
       }
@@ -2277,7 +2406,7 @@ export async function buildApi() {
   app.delete<{ Params: { id: string; sessionId: string } }>(
     '/api/workspaces/:id/agent/sessions/:sessionId',
     async (request, reply) => {
-      const ok = deleteAgentSession(request.params.sessionId, request.params.id);
+      const ok = deleteAgentChatSession(request.params.sessionId, request.params.id);
       if (!ok) {
         return reply.code(404).send({ error: 'Session not found.' });
       }

@@ -410,6 +410,82 @@ export interface ChatMessage {
   proposedCards?: ProposedCard[];
 }
 
+export type AgentChatMessageRole = 'user' | 'assistant' | 'tool' | 'system' | 'unknown';
+
+export interface AgentChatMessageRecord {
+  id: string;
+  sessionId: string;
+  workspaceId: string;
+  role: AgentChatMessageRole;
+  text: string;
+  reasoning: string;
+  raw: unknown;
+  createdAt: string;
+  sequence: number;
+}
+
+export interface AgentChatToolCallRecord {
+  id: string;
+  runId: string;
+  sessionId: string;
+  workspaceId: string;
+  toolCallId: string;
+  toolName: string;
+  args: unknown;
+  result: string;
+  details?: unknown;
+  isError: boolean;
+  startedAt: string;
+  endedAt: string;
+  durationMs: number;
+}
+
+export interface AgentChatRunRecord {
+  id: string;
+  sessionId: string;
+  workspaceId: string;
+  provider: string;
+  model: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
+  costUsd: number | null;
+  durationMs: number;
+  status: 'completed' | 'failed' | 'aborted';
+  errorMessage: string | null;
+  startedAt: string;
+  endedAt: string;
+  toolCallCount: number;
+}
+
+export interface AgentChatSessionInfo {
+  sessionId: string;
+  workspaceId: string;
+  title: string;
+  messageCount: number;
+  lastUsedAt: string;
+  createdAt: string;
+  updatedAt: string;
+  provider?: string;
+  model?: string;
+  lastRun?: AgentChatRunRecord;
+}
+
+export interface AgentChatSessionDetail extends AgentChatSessionInfo {
+  messages: unknown[];
+  messageRecords: AgentChatMessageRecord[];
+  runs: AgentChatRunRecord[];
+  toolCalls: AgentChatToolCallRecord[];
+}
+
+export interface PersistAgentChatTurnRequest {
+  session: AgentChatSessionInfo;
+  rawMessages: unknown[];
+  run: AgentChatRunRecord;
+  toolCalls: AgentChatToolCallRecord[];
+}
+
 /**
  * 对话生成的卡片提议，尚未落库为 KnowledgeCard。
  * 用户在前端确认采纳后，才会通过 acceptProposedCards 正式写入 cards 表。

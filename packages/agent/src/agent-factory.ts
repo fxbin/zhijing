@@ -6,12 +6,11 @@ import {
   type Api,
   type AssistantMessage,
   type AssistantMessageEvent,
-  type KnownProvider,
   type Message,
   type Model,
 } from '@earendil-works/pi-ai';
 import { Agent, type AgentMessage, type AgentOptions, type ThinkingLevel } from '@earendil-works/pi-agent-core';
-import { routeProvider, resolveConfiguredModel, type AgentTaskType } from '@zhijing/pi-runtime';
+import { routeProvider, resolveConfiguredModel, isKnownPiProvider, type AgentTaskType } from '@zhijing/pi-runtime';
 import { recordAgentUsage } from '@zhijing/core';
 import type { ProviderRole } from '@zhijing/shared';
 import { createWorkspaceTools, getToolCapabilityDeclaration } from './tools/index.js';
@@ -143,7 +142,7 @@ function defaultConvertToLlm(messages: AgentMessage[]): Message[] {
  * - taskType：任务类型，省略时使用 'conversation'；驱动路由引擎选择 Provider/Model
  */
 export interface WorkspaceAgentOptions {
-  provider?: KnownProvider;
+  provider?: string;
   modelId?: string;
   baseUrl?: string;
   apiKey?: string;
@@ -164,10 +163,11 @@ export interface WorkspaceAgentOptions {
  * @returns 最终生效的 apiKey
  * @author fxbin
  */
-function resolveApiKey(provider: KnownProvider, explicit?: string): string | undefined {
+function resolveApiKey(provider: string, explicit?: string): string | undefined {
   if (explicit) return explicit;
   const envApiKey = process.env.ZHIJING_PI_API_KEY;
-  return envApiKey && envApiKey.length > 0 ? envApiKey : getEnvApiKey(provider);
+  if (envApiKey && envApiKey.length > 0) return envApiKey;
+  return isKnownPiProvider(provider) ? getEnvApiKey(provider) : undefined;
 }
 
 /**
@@ -221,7 +221,7 @@ export function createWorkspaceAgent(workspaceId: string, options: WorkspaceAgen
 
   const taskType = options.taskType ?? 'conversation';
   const resolution = routeProvider(taskType);
-  const provider = (options.provider ?? resolution.resolvedProvider) as KnownProvider;
+  const provider = options.provider ?? resolution.resolvedProvider;
   const modelId = options.modelId ?? resolution.resolvedModel;
   const baseUrl = options.baseUrl ?? resolution.resolvedBaseUrl;
   const apiKey = resolveApiKey(provider, options.apiKey);
