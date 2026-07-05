@@ -9,12 +9,15 @@ import { useCallback, useEffect, useState } from 'react';
 const DEFAULT_STORAGE_KEY = 'zhijing-chat-layout';
 const MARKER_SIZE_PX = 52;
 const VIEWPORT_MARGIN_PX = 24;
-const SIDEBAR_WIDTH_PX = 240;
+export const MIN_FLOATING_WIDTH_PX = 320;
+export const MIN_FLOATING_HEIGHT_PX = 420;
 
 const DEFAULT_LAYOUT = {
   mode: 'sidebar',
   minimized: false,
   position: { x: VIEWPORT_MARGIN_PX, y: 96 },
+  markerPosition: { x: VIEWPORT_MARGIN_PX, y: 96 },
+  panelPosition: { x: VIEWPORT_MARGIN_PX, y: 96 },
   size: { width: 380, height: 640 },
 };
 
@@ -27,7 +30,7 @@ function getDefaultMarkerPosition() {
     return DEFAULT_LAYOUT.position;
   }
   return {
-    x: Math.max(SIDEBAR_WIDTH_PX, window.innerWidth - MARKER_SIZE_PX - VIEWPORT_MARGIN_PX),
+    x: Math.max(VIEWPORT_MARGIN_PX, window.innerWidth - MARKER_SIZE_PX - VIEWPORT_MARGIN_PX),
     y: Math.max(VIEWPORT_MARGIN_PX, window.innerHeight - MARKER_SIZE_PX - VIEWPORT_MARGIN_PX),
   };
 }
@@ -41,7 +44,7 @@ function getDefaultFloatingPosition() {
     return DEFAULT_LAYOUT.position;
   }
   return {
-    x: Math.max(SIDEBAR_WIDTH_PX, window.innerWidth - DEFAULT_LAYOUT.size.width - VIEWPORT_MARGIN_PX),
+    x: Math.max(VIEWPORT_MARGIN_PX, window.innerWidth - DEFAULT_LAYOUT.size.width - VIEWPORT_MARGIN_PX),
     y: Math.max(VIEWPORT_MARGIN_PX, window.innerHeight - DEFAULT_LAYOUT.size.height - VIEWPORT_MARGIN_PX),
   };
 }
@@ -58,7 +61,7 @@ function clampMarkerPosition(position) {
   const maxX = window.innerWidth - MARKER_SIZE_PX - VIEWPORT_MARGIN_PX;
   const maxY = window.innerHeight - MARKER_SIZE_PX - VIEWPORT_MARGIN_PX;
   return {
-    x: Math.max(SIDEBAR_WIDTH_PX, Math.min(maxX, position.x)),
+    x: Math.max(VIEWPORT_MARGIN_PX, Math.min(maxX, position.x)),
     y: Math.max(VIEWPORT_MARGIN_PX, Math.min(maxY, position.y)),
   };
 }
@@ -76,8 +79,26 @@ function clampFloatingPosition(position, size) {
   const maxX = window.innerWidth - size.width - VIEWPORT_MARGIN_PX;
   const maxY = window.innerHeight - size.height - VIEWPORT_MARGIN_PX;
   return {
-    x: Math.max(SIDEBAR_WIDTH_PX, Math.min(maxX, position.x)),
+    x: Math.max(VIEWPORT_MARGIN_PX, Math.min(maxX, position.x)),
     y: Math.max(VIEWPORT_MARGIN_PX, Math.min(maxY, position.y)),
+  };
+}
+
+/**
+ * 将浮动面板尺寸限制在可视区域内。
+ * @param {{ width: number; height: number }} size - 目标尺寸
+ * @param {{ x: number; y: number }} position - 当前面板位置
+ * @returns {{ width: number; height: number }} 限制后的尺寸
+ */
+function clampFloatingSize(size, position) {
+  if (typeof window === 'undefined') {
+    return size;
+  }
+  const maxWidth = Math.max(MIN_FLOATING_WIDTH_PX, window.innerWidth - position.x - VIEWPORT_MARGIN_PX);
+  const maxHeight = Math.max(MIN_FLOATING_HEIGHT_PX, window.innerHeight - position.y - VIEWPORT_MARGIN_PX);
+  return {
+    width: Math.max(MIN_FLOATING_WIDTH_PX, Math.min(maxWidth, size.width)),
+    height: Math.max(MIN_FLOATING_HEIGHT_PX, Math.min(maxHeight, size.height)),
   };
 }
 
@@ -93,28 +114,59 @@ function loadLayout(key) {
   try {
     const raw = window.localStorage.getItem(key);
     if (!raw) {
+      const markerPosition = getDefaultMarkerPosition();
+      const panelPosition = getDefaultFloatingPosition();
       return {
         ...DEFAULT_LAYOUT,
-        position: getDefaultMarkerPosition(),
+        position: markerPosition,
+        markerPosition,
+        panelPosition,
       };
     }
     const parsed = JSON.parse(raw);
+    const fallbackMarkerPosition = getDefaultMarkerPosition();
+    const fallbackPanelPosition = getDefaultFloatingPosition();
+    const legacyPosition = {
+      x: Number.isFinite(parsed.position?.x) ? parsed.position.x : fallbackMarkerPosition.x,
+      y: Number.isFinite(parsed.position?.y) ? parsed.position.y : fallbackMarkerPosition.y,
+    };
+    const rawMarkerPosition = {
+      x: Number.isFinite(parsed.markerPosition?.x) ? parsed.markerPosition.x : legacyPosition.x,
+      y: Number.isFinite(parsed.markerPosition?.y) ? parsed.markerPosition.y : legacyPosition.y,
+    };
+    const rawPanelPosition = {
+      x: Number.isFinite(parsed.panelPosition?.x)
+        ? parsed.panelPosition.x
+        : (parsed.mode === 'floating' && !parsed.minimized ? legacyPosition.x : fallbackPanelPosition.x),
+      y: Number.isFinite(parsed.panelPosition?.y)
+        ? parsed.panelPosition.y
+        : (parsed.mode === 'floating' && !parsed.minimized ? legacyPosition.y : fallbackPanelPosition.y),
+    };
+    const rawSize = {
+      width: Number.isFinite(parsed.size?.width) ? parsed.size.width : DEFAULT_LAYOUT.size.width,
+      height: Number.isFinite(parsed.size?.height) ? parsed.size.height : DEFAULT_LAYOUT.size.height,
+    };
+    const mode = parsed.mode === 'floating' ? 'floating' : 'sidebar';
+    const markerPosition = clampMarkerPosition(rawMarkerPosition);
+    const panelPosition = clampFloatingPosition(rawPanelPosition, rawSize);
+    const size = clampFloatingSize(rawSize, panelPosition);
+    const position = parsed.minimized ? markerPosition : panelPosition;
     return {
-      mode: parsed.mode === 'floating' ? 'floating' : 'sidebar',
+      mode,
       minimized: Boolean(parsed.minimized),
-      position: clampMarkerPosition({
-        x: Number.isFinite(parsed.position?.x) ? parsed.position.x : getDefaultMarkerPosition().x,
-        y: Number.isFinite(parsed.position?.y) ? parsed.position.y : getDefaultMarkerPosition().y,
-      }),
-      size: {
-        width: Number.isFinite(parsed.size?.width) ? parsed.size.width : DEFAULT_LAYOUT.size.width,
-        height: Number.isFinite(parsed.size?.height) ? parsed.size.height : DEFAULT_LAYOUT.size.height,
-      },
+      markerPosition,
+      panelPosition: clampFloatingPosition(panelPosition, size),
+      position,
+      size,
     };
   } catch {
+    const markerPosition = getDefaultMarkerPosition();
+    const panelPosition = getDefaultFloatingPosition();
     return {
       ...DEFAULT_LAYOUT,
-      position: getDefaultMarkerPosition(),
+      position: markerPosition,
+      markerPosition,
+      panelPosition,
     };
   }
 }
@@ -161,7 +213,8 @@ export function useChatLayout(storageKey = DEFAULT_STORAGE_KEY, options = {}) {
       ...loaded,
       mode: initialMode,
       minimized: initialMinimized,
-      position: initialMode === 'floating' ? getDefaultFloatingPosition() : loaded.position,
+      position: initialMinimized ? loaded.markerPosition : loaded.panelPosition,
+      panelPosition: initialMode === 'floating' ? getDefaultFloatingPosition() : loaded.panelPosition,
     };
   });
 
@@ -176,40 +229,122 @@ export function useChatLayout(storageKey = DEFAULT_STORAGE_KEY, options = {}) {
   const toggleMode = useCallback(() => {
     setLayout((prev) => {
       const nextMode = prev.mode === 'sidebar' ? 'floating' : 'sidebar';
-      const nextPosition = nextMode === 'floating'
-        ? clampFloatingPosition(getDefaultFloatingPosition(), prev.size)
-        : prev.position;
-      return { ...prev, mode: nextMode, position: nextPosition };
+      const panelPosition = nextMode === 'floating'
+        ? clampFloatingPosition(prev.panelPosition ?? getDefaultFloatingPosition(), prev.size)
+        : prev.panelPosition;
+      return {
+        ...prev,
+        mode: nextMode,
+        panelPosition,
+        position: prev.minimized ? prev.markerPosition : panelPosition,
+      };
     });
   }, []);
 
   const setMinimized = useCallback((minimized) => {
-    setLayout((prev) => ({ ...prev, minimized }));
+    setLayout((prev) => ({
+      ...prev,
+      minimized,
+      mode: minimized ? prev.mode : 'floating',
+      position: minimized ? prev.markerPosition : prev.panelPosition,
+    }));
   }, []);
 
   const toggleMinimized = useCallback(() => {
-    setLayout((prev) => ({ ...prev, minimized: !prev.minimized }));
+    setLayout((prev) => {
+      const minimized = !prev.minimized;
+      return {
+        ...prev,
+        minimized,
+        mode: minimized ? prev.mode : 'floating',
+        position: minimized ? prev.markerPosition : prev.panelPosition,
+      };
+    });
   }, []);
 
   const setPosition = useCallback((position, sizeHint) => {
-    const size = sizeHint ?? (layout.mode === 'floating' ? layout.size : { width: MARKER_SIZE_PX, height: MARKER_SIZE_PX });
-    const clamped = layout.mode === 'floating'
-      ? clampFloatingPosition(position, size)
-      : clampMarkerPosition(position);
-    setLayout((prev) => ({ ...prev, position: clamped }));
-  }, [layout.mode, layout.size]);
+    const isMarker = layout.minimized || layout.mode !== 'floating';
+    const size = sizeHint ?? (isMarker ? { width: MARKER_SIZE_PX, height: MARKER_SIZE_PX } : layout.size);
+    const clamped = isMarker
+      ? clampMarkerPosition(position)
+      : clampFloatingPosition(position, size);
+    setLayout((prev) => ({
+      ...prev,
+      position: clamped,
+      markerPosition: isMarker ? clamped : prev.markerPosition,
+      panelPosition: isMarker ? prev.panelPosition : clamped,
+    }));
+  }, [layout.minimized, layout.mode, layout.size]);
 
   const setSize = useCallback((size) => {
-    setLayout((prev) => ({ ...prev, size }));
+    setLayout((prev) => {
+      const nextSize = prev.mode === 'floating'
+        ? clampFloatingSize(size, prev.panelPosition)
+        : size;
+      const nextPanelPosition = prev.mode === 'floating'
+        ? clampFloatingPosition(prev.panelPosition, nextSize)
+        : prev.panelPosition;
+      return {
+        ...prev,
+        size: nextSize,
+        panelPosition: nextPanelPosition,
+        position: prev.minimized ? prev.markerPosition : nextPanelPosition,
+      };
+    });
   }, []);
+
+  const setBounds = useCallback((position, size) => {
+    setLayout((prev) => {
+      if (prev.mode !== 'floating') {
+        const markerPosition = clampMarkerPosition(position);
+        return {
+          ...prev,
+          position: markerPosition,
+          markerPosition,
+          size,
+        };
+      }
+      const anchorPosition = clampFloatingPosition(position, {
+        width: MIN_FLOATING_WIDTH_PX,
+        height: MIN_FLOATING_HEIGHT_PX,
+      });
+      const nextSize = clampFloatingSize(size, anchorPosition);
+      const nextPanelPosition = clampFloatingPosition(anchorPosition, nextSize);
+      return {
+        ...prev,
+        position: nextPanelPosition,
+        panelPosition: nextPanelPosition,
+        size: nextSize,
+      };
+    });
+  }, []);
+
+  const resetFloatingLayout = useCallback(() => {
+    setLayout((prev) => {
+      const panelPosition = clampFloatingPosition(getDefaultFloatingPosition(), DEFAULT_LAYOUT.size);
+      return {
+        ...prev,
+        mode: 'floating',
+        minimized: false,
+        panelPosition,
+        position: panelPosition,
+        size: DEFAULT_LAYOUT.size,
+      };
+    });
+  }, []);
+
+  const effectivePosition = layout.minimized ? layout.markerPosition : layout.panelPosition;
 
   return {
     ...layout,
+    position: effectivePosition,
     setMode,
     toggleMode,
     setMinimized,
     toggleMinimized,
     setPosition,
     setSize,
+    setBounds,
+    resetFloatingLayout,
   };
 }

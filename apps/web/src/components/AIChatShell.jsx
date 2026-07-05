@@ -6,9 +6,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Minimize2, Move, PanelRight, Sparkles } from 'lucide-react';
+import { Minimize2, Move, PanelRight, RotateCcw, Sparkles } from 'lucide-react';
+import { MIN_FLOATING_HEIGHT_PX, MIN_FLOATING_WIDTH_PX } from '../hooks/useChatLayout';
 
 const DRAG_CLICK_THRESHOLD_PX = 4;
+const RESIZE_DIRECTIONS = ['n', 'e', 's', 'w', 'ne', 'nw', 'se', 'sw'];
 
 /**
  * AI 对话外壳。
@@ -35,10 +37,20 @@ export default function AIChatShell({
     toggleMode,
     toggleMinimized,
     setPosition,
+    setBounds,
+    resetFloatingLayout,
   } = layout;
   const { t } = useTranslation();
 
   const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const resizeRef = useRef({
+    active: false,
+    direction: '',
+    startX: 0,
+    startY: 0,
+    startPosition: { x: 0, y: 0 },
+    startSize: { width: 0, height: 0 },
+  });
   const dragRef = useRef({
     active: false,
     startX: 0,
@@ -47,6 +59,7 @@ export default function AIChatShell({
     isMarker: false,
   });
   const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
 
   useEffect(() => {
     if (!isDragging) {
@@ -99,7 +112,77 @@ export default function AIChatShell({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, setPosition, toggleMinimized]);
+  }, [isDragging, setPosition, size, toggleMinimized]);
+
+  useEffect(() => {
+    if (!isResizing) {
+      return undefined;
+    }
+
+    /**
+     * 处理浮动窗口尺寸拖拉。
+     * @param {MouseEvent} event - 鼠标事件
+     */
+    function handleMouseMove(event) {
+      const current = resizeRef.current;
+      if (!current.active) {
+        return;
+      }
+      const dx = event.clientX - current.startX;
+      const dy = event.clientY - current.startY;
+      let nextX = current.startPosition.x;
+      let nextY = current.startPosition.y;
+      let nextWidth = current.startSize.width;
+      let nextHeight = current.startSize.height;
+
+      if (current.direction.includes('e')) {
+        nextWidth = current.startSize.width + dx;
+      }
+      if (current.direction.includes('s')) {
+        nextHeight = current.startSize.height + dy;
+      }
+      if (current.direction.includes('w')) {
+        nextX = current.startPosition.x + dx;
+        nextWidth = current.startSize.width - dx;
+        if (nextWidth < MIN_FLOATING_WIDTH_PX) {
+          nextX = current.startPosition.x + current.startSize.width - MIN_FLOATING_WIDTH_PX;
+          nextWidth = MIN_FLOATING_WIDTH_PX;
+        }
+      }
+      if (current.direction.includes('n')) {
+        nextY = current.startPosition.y + dy;
+        nextHeight = current.startSize.height - dy;
+        if (nextHeight < MIN_FLOATING_HEIGHT_PX) {
+          nextY = current.startPosition.y + current.startSize.height - MIN_FLOATING_HEIGHT_PX;
+          nextHeight = MIN_FLOATING_HEIGHT_PX;
+        }
+      }
+
+      setBounds({ x: nextX, y: nextY }, { width: nextWidth, height: nextHeight });
+    }
+
+    /**
+     * 结束尺寸拖拉。
+     */
+    function handleMouseUp() {
+      resizeRef.current = {
+        active: false,
+        direction: '',
+        startX: 0,
+        startY: 0,
+        startPosition: { x: 0, y: 0 },
+        startSize: { width: 0, height: 0 },
+      };
+      setIsResizing(false);
+    }
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing, setBounds]);
 
   /**
    * 监听浮动模式下的尺寸变化，实时将面板限制在可视区域内。
@@ -158,12 +241,45 @@ export default function AIChatShell({
   }
 
   /**
+   * 双击浮动窗口标题栏恢复默认位置与尺寸。
+   * @param {import('react').MouseEvent} event - 鼠标事件
+   */
+  function handleHeaderDoubleClick(event) {
+    if (mode !== 'floating' || event.target.closest('button')) {
+      return;
+    }
+    resetFloatingLayout();
+  }
+
+  /**
    * 处理悬浮球按下，启动拖拽。
    * @param {import('react').MouseEvent} event - 鼠标事件
    */
   function handleMarkerMouseDown(event) {
     event.preventDefault();
     startDrag(event, true);
+  }
+
+  /**
+   * 开始拖拉浮动窗口尺寸。
+   * @param {import('react').MouseEvent} event - 鼠标事件
+   * @param {string} direction - 调整方向
+   */
+  function startResize(event, direction) {
+    if (mode !== 'floating') {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    resizeRef.current = {
+      active: true,
+      direction,
+      startX: event.clientX,
+      startY: event.clientY,
+      startPosition: position,
+      startSize: size,
+    };
+    setIsResizing(true);
   }
 
   const defaultMarker = markerIcon ?? <Sparkles size={20} />;
@@ -192,18 +308,37 @@ export default function AIChatShell({
 
   return (
     <section
-      className={`ai-chat-shell ai-chat-shell-${mode} ${isDragging ? 'ai-chat-shell-dragging' : ''} ${className}`}
+      className={`ai-chat-shell ai-chat-shell-${mode} ${isDragging ? 'ai-chat-shell-dragging' : ''} ${isResizing ? 'ai-chat-shell-resizing' : ''} ${className}`}
       style={shellStyle}
     >
+      {isFloating && RESIZE_DIRECTIONS.map((direction) => (
+        <span
+          key={direction}
+          className={`ai-chat-shell-resize-handle ai-chat-shell-resize-${direction}`}
+          aria-hidden="true"
+          onMouseDown={(event) => startResize(event, direction)}
+        />
+      ))}
       <header
         className="ai-chat-shell-header"
         onMouseDown={handleHeaderMouseDown}
+        onDoubleClick={handleHeaderDoubleClick}
       >
         <div className="ai-chat-shell-title">
           <Sparkles size={18} />
           <span>{title}</span>
         </div>
         <div className="ai-chat-shell-controls">
+          {isFloating && (
+            <button
+              className="ai-chat-shell-reset"
+              onClick={resetFloatingLayout}
+              title={t('common.resetView')}
+              type="button"
+            >
+              <RotateCcw size={16} />
+            </button>
+          )}
           <button
             className="ai-chat-shell-mode"
             onClick={toggleMode}
