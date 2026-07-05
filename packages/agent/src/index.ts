@@ -30,6 +30,7 @@ export {
   createSearchCardsTool,
   createSearchMaterialsTool,
   createGetWorkspaceSummaryTool,
+  createWebSearchTool,
   getToolCapabilityDeclaration,
 } from './tools/index.js';
 
@@ -39,6 +40,10 @@ export type {
 export type {
   SearchMaterialsDetails,
 } from './tools/search-materials.js';
+export type {
+  WebSearchDetails,
+  WebSearchResultItem,
+} from './tools/web-search.js';
 
 export {
   selectOrchestratorSystemPrompt,

@@ -8,7 +8,7 @@ import type { TSchema } from '@zhijing/pi-runtime';
  * - mutate：会修改工作区数据（写入/更新/删除卡片、资料、产物等）
  * - network：会发起外部网络请求（抓取网页、调用第三方 API）
  *
- * 知径当前所有工具都是 read 类；mutate/network 用于未来扩展时的门禁。
+ * 知径当前允许 read 与受控 network 工具；mutate 用于未来扩展时的门禁。
  *
  * @author fxbin
  */
@@ -33,12 +33,12 @@ export interface ToolCapabilityDeclaration {
 /**
  * 允许挂载到知径 Agent 的工具能力白名单。
  *
- * 当前只允许 read 类工具：知径 Agent 的能力边界是「只检索当前工作区」，
- * 任何 mutate/network 工具都必须显式放开此白名单后才能挂载。
+ * 当前允许 read 与 network 类工具：知径 Agent 的能力边界是「检索当前工作区
+ * + 通过受控搜索端点查外部资料」，任何 mutate 工具都必须显式放开此白名单后才能挂载。
  *
  * @author fxbin
  */
-const ALLOWED_TOOL_CAPABILITIES: ReadonlySet<ToolCapability> = new Set<ToolCapability>(['read']);
+const ALLOWED_TOOL_CAPABILITIES: ReadonlySet<ToolCapability> = new Set<ToolCapability>(['read', 'network']);
 
 /**
  * 工具调用审计条目。

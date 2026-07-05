@@ -77,6 +77,7 @@ function safeFormatJson(value) {
  * - search_cards：列表展示返回的卡片（type 徽章 + 标题 + 摘要）
  * - search_materials：列表展示返回的资料（platform/parseStatus 徽章 + 标题 + 预览）
  * - get_workspace_summary：紧凑展示工作区概览（标题 / 摘要 / 来源·卡片·资料数）
+ * - web_search：列表展示联网搜索结果（标题 + URL + 摘要）
  * - 其他：回退到 JSON.stringify 折叠展示
  *
  * @param {object} props - 组件属性
@@ -150,6 +151,42 @@ function ToolResultDetails({ toolName, details, t }) {
           </span>
           {overview.stage && <span className="chat-tool-overview-stage">{overview.stage}</span>}
         </div>
+      </details>
+    );
+  }
+
+  if (toolName === 'web_search') {
+    const casted = details;
+    const items = Array.isArray(casted.results) ? casted.results : [];
+    return (
+      <details className="chat-message-tool-structured">
+        <summary>
+          {t('chat.toolResultWebSearch', {
+            count: casted.count ?? items.length,
+            defaultValue: `联网搜索返回 ${casted.count ?? items.length} 条结果`,
+          })}
+        </summary>
+        {casted.errorMessage && (
+          <p className="chat-tool-search-error">{casted.errorMessage}</p>
+        )}
+        {items.length > 0 && (
+          <ul className="chat-tool-search-list">
+            {items.map((result, index) => (
+              <li key={result.url || index}>
+                <a
+                  className="chat-tool-search-title"
+                  href={result.url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {result.title || result.url}
+                </a>
+                {result.url && <span className="chat-tool-search-url">{result.url}</span>}
+                {result.snippet && <p className="chat-tool-search-snippet">{result.snippet}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
       </details>
     );
   }

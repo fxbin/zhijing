@@ -2,9 +2,10 @@ import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { createSearchCardsTool } from './search-cards.js';
 import { createSearchMaterialsTool } from './search-materials.js';
 import { createGetWorkspaceSummaryTool } from './get-workspace-summary.js';
+import { createWebSearchTool } from './web-search.js';
 import type { ToolCapabilityDeclaration } from '../capability-guard.js';
 
-export { createSearchCardsTool, createSearchMaterialsTool, createGetWorkspaceSummaryTool };
+export { createSearchCardsTool, createSearchMaterialsTool, createGetWorkspaceSummaryTool, createWebSearchTool };
 
 /**
  * 工具名常量：search_cards。
@@ -31,17 +32,25 @@ const TOOL_NAME_SEARCH_MATERIALS = 'search_materials';
 const TOOL_NAME_GET_WORKSPACE_SUMMARY = 'get_workspace_summary';
 
 /**
+ * 工具名常量：web_search。
+ *
+ * @author fxbin
+ */
+const TOOL_NAME_WEB_SEARCH = 'web_search';
+
+/**
  * 工具能力声明映射表。
  *
  * 每个挂载到知径 Agent 的工具都必须在此声明其 capability 与 workspaceScoped，
  * 否则 createWorkspaceAgent 会拒绝挂载（fail-fast）。
  *
- * 当前所有工具都是 read 类且绑定到单个工作区：
+ * 工作区检索工具是 read 类且绑定到单个工作区：
  * - search_cards：检索当前工作区卡片
  * - search_materials：检索当前工作区资料
  * - get_workspace_summary：返回当前工作区概览
+ * - web_search：通过受控搜索端点检索外部网页摘要，不读取或修改工作区
  *
- * 未来若引入 mutate/network 工具（如写入卡片、抓取网页），
+ * 未来若引入 mutate 工具（如写入卡片），
  * 必须在此声明并显式放开 ALLOWED_TOOL_CAPABILITIES 白名单后方可挂载。
  *
  * @author fxbin
@@ -50,6 +59,7 @@ const TOOL_CAPABILITY_DECLARATIONS: Record<string, ToolCapabilityDeclaration> = 
   [TOOL_NAME_SEARCH_CARDS]: { capability: 'read', workspaceScoped: true },
   [TOOL_NAME_SEARCH_MATERIALS]: { capability: 'read', workspaceScoped: true },
   [TOOL_NAME_GET_WORKSPACE_SUMMARY]: { capability: 'read', workspaceScoped: true },
+  [TOOL_NAME_WEB_SEARCH]: { capability: 'network', workspaceScoped: false },
 };
 
 /**
@@ -66,10 +76,11 @@ export function getToolCapabilityDeclaration(toolName: string): ToolCapabilityDe
 /**
  * 为指定工作区构造全部检索工具，返回 Agent 可用的工具集。
  *
- * 当前包含三件套：
+ * 当前包含四类工具：
  * - search_cards：检索已结构化的知识卡片
  * - search_materials：检索已导入的来源资料
  * - get_workspace_summary：返回工作区整体概览
+ * - web_search：联网搜索外部资料摘要
  *
  * 工具按「先局部后整体、先卡片后资料」的检索策略排序，
  * 由 systemPrompt 引导模型按需调用。
@@ -83,5 +94,6 @@ export function createWorkspaceTools(workspaceId: string): AgentTool[] {
     createSearchCardsTool(workspaceId),
     createSearchMaterialsTool(workspaceId),
     createGetWorkspaceSummaryTool(workspaceId),
+    createWebSearchTool(),
   ];
 }
