@@ -13214,24 +13214,53 @@ button { cursor: pointer; }
 .agent-proposal-item {
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  padding: 14px 16px;
   background: rgba(255, 255, 255, 0.5);
-  transition: border-color 0.2s ease;
+  overflow: hidden;
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
 .agent-proposal-item:hover {
   border-color: var(--primary);
 }
 
+.agent-proposal-item.is-expanded {
+  background: rgba(255, 255, 255, 0.72);
+}
+
 .agent-proposal-item.workspace-emergence {
   border-left: 3px solid var(--sage);
+}
+
+.agent-proposal-summary {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.agent-proposal-summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.agent-proposal-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .agent-proposal-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
 }
 
 .agent-proposal-type-badge {
@@ -13242,24 +13271,83 @@ button { cursor: pointer; }
   letter-spacing: 0.5px;
 }
 
-.agent-proposal-item h3 {
+.agent-proposal-title {
   font-size: var(--text-sm);
   font-weight: 700;
   color: var(--primary);
-  margin: 0 0 6px 0;
 }
 
-.agent-proposal-item p {
+.agent-proposal-desc {
   font-size: var(--text-sm);
   color: var(--text);
   line-height: 1.5;
-  margin: 0 0 10px 0;
+}
+
+.agent-proposal-chevron {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--muted);
+  transition: transform 0.2s ease;
+}
+
+.agent-proposal-item.is-expanded .agent-proposal-chevron {
+  transform: rotate(180deg);
+}
+
+.agent-proposal-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 16px 14px 16px;
+}
+
+.agent-proposal-evidence,
+.agent-proposal-samples {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 10px;
+}
+
+.agent-proposal-detail-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.agent-proposal-evidence ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.agent-proposal-sample-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agent-proposal-sample-list span {
+  max-width: 100%;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: rgba(44, 95, 141, 0.06);
+  color: var(--primary);
+  padding: 4px 8px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .agent-proposal-action {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  align-self: flex-start;
   padding: 6px 14px;
   font-size: var(--text-xs);
   font-weight: 700;
@@ -13278,12 +13366,6 @@ button { cursor: pointer; }
 .agent-proposal-action:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.agent-proposal-action-label {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--muted);
 }
 
 .insights-grid .growth-chart {

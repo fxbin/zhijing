@@ -11173,6 +11173,8 @@ export function detectWorkspaceEmergence(): WorkspaceEmergenceCluster[] {
  */
 export function generateAgentProposals(): AgentProposalReport {
   const proposals: AgentProposal[] = [];
+  const workspaceTitles = new Map(repository.listWorkspaces().map((base) => [base.id, base.title]));
+  const workspaceTitleOf = (workspaceId?: string) => workspaceTitles.get(resolveWorkspaceId(workspaceId)) ?? '';
 
   const coverage = computeTopicCoverage();
   for (const topic of coverage.topics.filter((item) => item.isBlindSpot).slice(0, PROPOSAL_MAX_PER_TYPE)) {
@@ -11181,18 +11183,35 @@ export function generateAgentProposals(): AgentProposalReport {
       title: `盲区补充：${topic.term}`,
       description: `你对「${topic.term}」关注度高（权重 ${topic.interestWeight}），但知识库中覆盖不足（仅 ${topic.totalCards} 张卡片、${topic.totalMaterials} 条资料）。建议补充相关资料。`,
       actionLabel: '补充资料',
-      metadata: { term: topic.term, interestWeight: topic.interestWeight, coverageScore: topic.coverageScore },
+      metadata: {
+        term: topic.term,
+        interestWeight: topic.interestWeight,
+        coverageScore: topic.coverageScore,
+        totalCards: topic.totalCards,
+        totalMaterials: topic.totalMaterials,
+      },
     });
   }
 
   const repeatedThinking = detectRepeatedThinking();
   for (const group of repeatedThinking.groups.slice(0, PROPOSAL_MAX_PER_TYPE)) {
+    const sortedQuestions = [...group.questions].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const latestQuestion = sortedQuestions[sortedQuestions.length - 1];
     proposals.push({
       type: 'repeated_thinking',
       title: '重复思考提醒',
       description: `你已 ${group.repeatCount} 次提出相似问题：「${group.representativeQuestion}」。考虑换个角度或深化已有回答？`,
       actionLabel: '查看历史回答',
-      metadata: { repeatCount: group.repeatCount, similarityScore: group.similarityScore },
+      metadata: {
+        repeatCount: group.repeatCount,
+        similarityScore: group.similarityScore,
+        representativeQuestion: group.representativeQuestion,
+        firstAskedAt: group.firstAskedAt,
+        lastAskedAt: group.lastAskedAt,
+        workspaceId: latestQuestion?.workspaceId,
+        workspaceTitle: workspaceTitleOf(latestQuestion?.workspaceId),
+        questionSamples: sortedQuestions.slice(-3).map((item) => item.question),
+      },
     });
   }
 
@@ -11203,7 +11222,14 @@ export function generateAgentProposals(): AgentProposalReport {
       title: `复习建议：${item.cardTitle}`,
       description: `这张卡片已 ${item.daysSinceLastAccess} 天未访问，recall 分数仅 ${item.recallScore}。建议复习以防遗忘。`,
       actionLabel: '复习卡片',
-      metadata: { cardId: item.cardId, recallScore: item.recallScore, daysSinceLastAccess: item.daysSinceLastAccess },
+      metadata: {
+        cardId: item.cardId,
+        cardTitle: item.cardTitle,
+        workspaceId: item.workspaceId,
+        workspaceTitle: item.workspaceTitle,
+        recallScore: item.recallScore,
+        daysSinceLastAccess: item.daysSinceLastAccess,
+      },
     });
   }
 
@@ -11214,7 +11240,13 @@ export function generateAgentProposals(): AgentProposalReport {
       title: `主题探索：${topic.term}`,
       description: `「${topic.term}」是你近期高关注主题（权重 ${topic.weight}，来源 ${topic.sourceCount}）。考虑深入探索或建立专题知识库？`,
       actionLabel: '探索主题',
-      metadata: { term: topic.term, weight: topic.weight, sourceCount: topic.sourceCount },
+      metadata: {
+        term: topic.term,
+        weight: topic.weight,
+        sourceCount: topic.sourceCount,
+        windowDays: profile.windowDays,
+        totalSignals: profile.totalSignals,
+      },
     });
   }
 
@@ -11231,6 +11263,7 @@ export function generateAgentProposals(): AgentProposalReport {
         cardCount: cluster.cardCount,
         cardIds: cluster.cardIds,
         sampleTitles: cluster.sampleTitles,
+        triggerRule: `默认工作区中同一关键词关联卡片数达到 ${EMERGENCE_MIN_CARD_COUNT} 张，且该关键词未被已有工作区标题覆盖。`,
       },
     });
   }

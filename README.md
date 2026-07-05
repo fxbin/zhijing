@@ -132,14 +132,6 @@ docker run -p 8787:8787 \
 
 知识卡片类型：`concept` / `method` / `fact` / `question` / `general`。
 
-## 参赛信息
-
-本项目参加 **TRAE AI 创造力大赛**，使用 TRAE IDE 完成全部开发。
-
-- 体验链接：[部署后补充]
-- 创作思路：见大赛作品帖
-- 开发工具：TRAE IDE
-
 ## License
 
 MIT

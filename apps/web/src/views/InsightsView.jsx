@@ -51,9 +51,10 @@ function isAllZero(data) {
  * @param {Function} [props.onCreateWorkspace] - 创建工作区回调，接收 { title, summary, cardIds } 参数
  * @param {Function} [props.onSelectWorkspace] - 选中工作区回调，接收 workspaceId 参数后跳转到工作区详情
  * @param {(cardId: string, workspaceId: string) => void} [props.onSelectCard] - 选中知识卡片回调，跳转到工作区详情页高亮该卡片
+ * @param {Function} [props.onAskAgent] - 打开全局 AI 对话回调
  * @returns {JSX.Element} 洞察视图
  */
-export default function InsightsView({ setView, onCreateWorkspace, onSelectWorkspace, onSelectCard, onOpenCardDetail, selectedWorkspaceId }) {
+export default function InsightsView({ setView, onCreateWorkspace, onSelectWorkspace, onSelectCard, onOpenCardDetail, onAskAgent, selectedWorkspaceId }) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
   const claimStatusLabel = useClaimStatusLabel();
@@ -391,7 +392,12 @@ export default function InsightsView({ setView, onCreateWorkspace, onSelectWorks
           )}
         </section>
 
-        <AgentProposalsPanel onCreateWorkspace={onCreateWorkspace} />
+        <AgentProposalsPanel
+          onCreateWorkspace={onCreateWorkspace}
+          onNavigate={setView}
+          onSelectCard={onSelectCard}
+          onAskAgent={onAskAgent}
+        />
       </div>
     </div>
   );

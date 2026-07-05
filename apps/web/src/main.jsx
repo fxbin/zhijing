@@ -698,6 +698,7 @@ function App() {
               }}
               onSelectCard={handleSelectCard}
               onOpenCardDetail={openCardDrawer}
+              onAskAgent={openChat}
               selectedWorkspaceId={selectedWorkspaceId}
             />
           )}
