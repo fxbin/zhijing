@@ -1,6 +1,6 @@
 /**
  * @module views/SettingsView
- * 设置视图：配置多模型 Profile、系统透明度、数据控制。
+ * 设置视图：配置多模型 Profile、系统状态、数据控制。
  * 状态层已下沉至 useSettingsProfile / useSettingsWeread / useSettingsStats 三个 hook，
  * 本视图仅保留跨域共享的 status 文案与 activeSection 路由两个 UI state。
  * @author fxbin
@@ -51,7 +51,7 @@ import { useReaderMode } from '../hooks/useReaderMode';
 const INITIAL_ACTIVE_SECTION = 'profiles';
 
 /**
- * 设置视图组件：多 Profile 管理 + 系统透明度 + 数据控制 + 微信读书。
+ * 设置视图组件：多 Profile 管理 + 系统状态 + 数据控制 + 微信读书。
  *
  * @param {object} props - 组件属性
  * @param {string|null} props.initialSection - 初始激活的设置分区
