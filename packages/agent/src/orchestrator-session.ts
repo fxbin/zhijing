@@ -164,15 +164,18 @@ function sweepExpiredSessions(): void {
 
 /**
  * 编排运行凭证。
+ *
+ * provider 放宽为 string，支持自定义 provider（如商汤 SenseNova 等 OpenAI 兼容端点）。
+ * baseUrl 配合自定义 provider 使用，覆盖 SDK 内置默认端点地址。
  */
 export interface OrchestratorCredentials {
-  /** LLM provider 标识 */
+  /** LLM provider 标识；可为 SDK 内置 KnownProvider 或自定义字符串 */
   provider: string;
   /** 模型 id */
   model: string;
   /** API key；与 WorkspaceAgentOptions 一致保持可选，由 agent-factory 兜底解析 */
   apiKey?: string;
-  /** 自定义 base URL；用于 OpenAI 兼容端点 */
+  /** 自定义 base URL；用于 OpenAI 兼容的第三方端点 */
   baseUrl?: string;
 }
 

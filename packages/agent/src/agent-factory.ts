@@ -142,6 +142,7 @@ function defaultConvertToLlm(messages: AgentMessage[]): Message[] {
  * - taskType：任务类型，省略时使用 'conversation'；驱动路由引擎选择 Provider/Model
  */
 export interface WorkspaceAgentOptions {
+  /** LLM provider；可为 SDK 内置 KnownProvider 或自定义字符串（OpenAI 兼容端点） */
   provider?: string;
   modelId?: string;
   baseUrl?: string;
@@ -158,7 +159,10 @@ export interface WorkspaceAgentOptions {
 /**
  * 解析 apiKey：参数 > 环境变量 > pi-ai 默认查找规则。
  *
- * @param provider - 最终生效的 provider
+ * provider 为自定义字符串（非 KnownProvider）时跳过 SDK 环境变量查找，
+ * 仅依赖显式传入的 apiKey 或 ZHIJING_PI_API_KEY 环境变量。
+ *
+ * @param provider - 最终生效的 provider（可为自定义字符串）
  * @param explicit - 调用方显式传入的 apiKey
  * @returns 最终生效的 apiKey
  * @author fxbin
@@ -167,7 +171,10 @@ function resolveApiKey(provider: string, explicit?: string): string | undefined 
   if (explicit) return explicit;
   const envApiKey = process.env.ZHIJING_PI_API_KEY;
   if (envApiKey && envApiKey.length > 0) return envApiKey;
-  return isKnownPiProvider(provider) ? getEnvApiKey(provider) : undefined;
+  if (isKnownPiProvider(provider)) {
+    return getEnvApiKey(provider);
+  }
+  return undefined;
 }
 
 /**

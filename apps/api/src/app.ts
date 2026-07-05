@@ -1151,10 +1151,11 @@ export async function buildApi() {
   });
 
   app.post<{ Body: Partial<TestModelProviderSettingsRequest> }>('/api/settings/model-provider/test', async (request) => testModelProviderSettings({
+    profileId: typeof request.body?.profileId === 'string' ? request.body.profileId.trim() : undefined,
     provider: typeof request.body?.provider === 'string' ? request.body.provider.trim() : undefined,
     model: typeof request.body?.model === 'string' ? request.body.model.trim() : undefined,
     apiKey: typeof request.body?.apiKey === 'string' ? request.body.apiKey : undefined,
-    baseUrl: typeof request.body?.baseUrl === 'string' ? request.body.baseUrl.trim() : undefined,
+    baseUrl: typeof request.body?.baseUrl === 'string' ? request.body.baseUrl : undefined,
   }));
 
   app.get('/api/settings/model-provider/v2', async () => getModelProviderSettingsV2());

@@ -214,6 +214,7 @@ export interface PiRuntime {
 }
 
 export interface PiAiRuntimeConfig {
+  /** LLM provider；可为 SDK 内置 KnownProvider 或自定义字符串（OpenAI 兼容端点） */
   provider?: string;
   model?: string;
   baseUrl?: string;
@@ -480,12 +481,24 @@ function getConfiguredModel(provider: string, modelId: string, baseUrl?: string)
  * 2. 环境变量 ZHIJING_PI_BASE_URL
  * 3. SDK 内置 provider 的默认 base URL
  *
- * 用于接入 OpenAI 兼容的第三方端点（如商汤 SenseNova Token Plan：
- * `https://token.sensenova.cn/v1`，model id 直接复用 `deepseek-v4-flash`）
+ * provider 解析：
+ * - 已知 provider（KnownProvider）：走 SDK 原逻辑 getModel(provider, modelId)
+ * - 未知 provider（自定义字符串）：遍历所有已知 provider 查找第一个注册了该 modelId 的，
+ *   作为基础 Model 再覆盖 baseUrl。适用于 OpenAI 兼容的第三方端点（如商汤 SenseNova
+ *   Token Plan：`https://token.sensenova.cn/v1`，model id 直接复用 `deepseek-v4-flash`）。
+ *   旧实现硬编码 'openai' 会在 modelId 不在 openai provider 注册时返回 undefined，
+ *   导致后续 stream 调用抛 "No API provider registered for api: undefined"。
+ *
+ * OpenAI 兼容端点的协议降级：
+ * - 只要 baseUrl 被显式覆盖（非空且非默认），即视为第三方 OpenAI 兼容端点
+ * - 强制 supportsDeveloperRole=false，避免原 provider 的 reasoning 模型用 developer
+ *   role 发 systemPrompt 导致第三方端点返回 400（商汤等不兼容 developer role）
+ * - 这让用户配商汤 Token Plan 时只需：provider=deepseek + model=deepseek-v4-flash
+ *   + baseUrl=https://token.sensenova.cn/v1 + apiKey=商汤token
  *
  * 该函数被 pi-runtime 与 agent-factory 共用，保证两条 LLM 入口的 base URL 一致。
  *
- * @param provider - LLM provider，如 'deepseek' / 'openai'
+ * @param provider - LLM provider；可为 SDK 内置 KnownProvider 或自定义字符串
  * @param modelId - 模型 id，如 'deepseek-v4-flash'
  * @param baseUrl - 可选 base URL 覆盖，优先级高于环境变量
  * @returns 最终生效的 Model 实例，baseUrl 可能被覆盖
@@ -497,13 +510,16 @@ export function resolveConfiguredModel(provider: string, modelId: string, baseUr
   if (knownProvider) {
     baseModel = getModel(knownProvider, modelId as never) as Model<Api> | undefined;
   } else {
-    for (const candidateProvider of getKnownPiProviders()) {
-      baseModel = getModel(candidateProvider, modelId as never) as Model<Api> | undefined;
-      if (baseModel) break;
+    for (const candidate of getKnownPiProviders()) {
+      const candidateModel = getModel(candidate, modelId as never) as Model<Api> | undefined;
+      if (candidateModel) {
+        baseModel = candidateModel;
+        break;
+      }
     }
   }
   if (!baseModel) {
-    throw new Error(`未找到 model id "${modelId}" 在任何已知 provider 下的注册记录。请检查 Settings 中的模型配置。`);
+    throw new Error(`未找到 model id "${modelId}" 在任何已知 provider 下的注册记录。请检查 Settings → Model Provider 的 model 配置。`);
   }
   const effectiveBaseUrl = baseUrl && baseUrl.trim().length > 0
     ? baseUrl.trim()
@@ -511,7 +527,8 @@ export function resolveConfiguredModel(provider: string, modelId: string, baseUr
   if (!effectiveBaseUrl || effectiveBaseUrl.trim().length === 0) {
     return baseModel;
   }
-  return { ...baseModel, baseUrl: effectiveBaseUrl.trim(), compat: { ...baseModel.compat, supportsDeveloperRole: false } };
+  const overriddenCompat = { ...baseModel.compat, supportsDeveloperRole: false };
+  return { ...baseModel, baseUrl: effectiveBaseUrl.trim(), compat: overriddenCompat };
 }
 
 function buildContext(request: StructuredGenerationRequest): Context {

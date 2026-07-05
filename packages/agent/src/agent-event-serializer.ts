@@ -20,6 +20,11 @@ import type { AgentStreamEvent } from '@zhijing/shared';
 const TOOL_RESULT_PREVIEW_MAX_LENGTH = 500;
 
 /**
+ * Agent 错误消息的 stopReason 值。
+ */
+const ERROR_STOP_REASONS = new Set(['error', 'aborted']);
+
+/**
  * 从 AssistantMessage 中提取 usage 信息并映射字段名。
  *
  * pi-ai 的 Usage 字段是 input / output / cost.total，映射为
@@ -55,6 +60,27 @@ function extractAssistantText(message: AgentMessage): string {
     .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
     .map((block) => block.text)
     .join('');
+}
+
+/**
+ * 从 assistant 消息提取运行错误。
+ *
+ * pi-agent-core 在底层 streamFn 抛错时会生成一个空 assistant 消息，
+ * 并把 stopReason/errorMessage 挂在消息上；若不转成 error 事件，前端会把它当作
+ * “正常结束但没有正文”，用户看到的就是对话静默中断。
+ *
+ * @param message - Agent 消息
+ * @returns 错误文案；无错误时返回 undefined
+ */
+function extractAssistantError(message: AgentMessage): string | undefined {
+  if (message.role !== 'assistant') return undefined;
+  const errorMessage = (message as { errorMessage?: unknown }).errorMessage;
+  if (typeof errorMessage !== 'string' || errorMessage.trim().length === 0) return undefined;
+  const stopReason = (message as { stopReason?: unknown }).stopReason;
+  if (typeof stopReason === 'string' && ERROR_STOP_REASONS.has(stopReason)) {
+    return errorMessage;
+  }
+  return undefined;
 }
 
 /**
@@ -133,7 +159,13 @@ export function serializeAgentEvent(event: AgentEvent): AgentStreamEvent[] {
     }
     case 'message_end': {
       const usage = extractMessageUsage(event.message);
-      return [{ type: 'message_end', text: extractAssistantText(event.message), ...(usage ? { usage } : {}) }];
+      const messageEnd: AgentStreamEvent = {
+        type: 'message_end',
+        text: extractAssistantText(event.message),
+        ...(usage ? { usage } : {}),
+      };
+      const error = extractAssistantError(event.message);
+      return error ? [messageEnd, { type: 'error', message: error }] : [messageEnd];
     }
     case 'tool_execution_start':
       return [{

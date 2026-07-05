@@ -253,14 +253,18 @@ export function useSettingsProfile({ setStatus, t }) {
   }
 
   /**
-   * 切换服务商，并自动选择第一个模型。
+   * 切换服务商。
+   * 已知服务商自动选择第一个模型；自定义服务商（不在预设列表中）保留当前 model 值，
+   * 由用户自行输入模型名称。
    * @param {string} nextProvider - 服务商 id
    * @author fxbin
    */
   function changeProvider(nextProvider) {
     setProvider(nextProvider);
-    const nextModels = providerOptions.find((item) => item.id === nextProvider)?.models ?? [];
-    setModel(nextModels[0]?.id ?? INITIAL_FORM_TEXT);
+    const knownProvider = providerOptions.find((item) => item.id === nextProvider);
+    if (knownProvider) {
+      setModel(knownProvider.models[0]?.id ?? INITIAL_FORM_TEXT);
+    }
   }
 
   /**
@@ -338,14 +342,16 @@ export function useSettingsProfile({ setStatus, t }) {
     setIsSaving(true);
     setTestResult(INITIAL_TEST_RESULT);
     try {
+      const nextBaseUrl = baseUrl.trim();
       const result = await api.patch(`${PROFILES_PATH}/${selectedProfileId}`, {
         name: profileName.trim(),
         provider,
         model,
-        baseUrl: baseUrl.trim() || undefined,
+        baseUrl: nextBaseUrl || undefined,
         apiKey: apiKey.trim() || undefined,
         enabled,
         fallbackToMock,
+        clearBaseUrl: nextBaseUrl.length === 0,
       });
       const updated = result.profile;
       setProfiles((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
@@ -371,10 +377,11 @@ export function useSettingsProfile({ setStatus, t }) {
     setTestResult(INITIAL_TEST_RESULT);
     try {
       const result = await api.post(TEST_PATH, {
+        profileId: selectedProfileId,
         provider,
         model,
         apiKey: apiKey.trim() || undefined,
-        baseUrl: baseUrl.trim() || undefined,
+        baseUrl: baseUrl.trim(),
       });
       setTestResult(result);
       setStatus(result.ok ? t('settings.testPass') : t('settings.testFail'));
@@ -394,13 +401,15 @@ export function useSettingsProfile({ setStatus, t }) {
     setIsSaving(true);
     setTestResult(INITIAL_TEST_RESULT);
     try {
+      const nextBaseUrl = baseUrl.trim();
       const result = await api.patch(`${PROFILES_PATH}/${selectedProfileId}`, {
         provider,
         model,
-        baseUrl: baseUrl.trim() || undefined,
+        baseUrl: nextBaseUrl || undefined,
         enabled,
         fallbackToMock,
         clearApiKey: true,
+        clearBaseUrl: nextBaseUrl.length === 0,
       });
       const updated = result.profile;
       setProfiles((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
@@ -426,13 +435,18 @@ export function useSettingsProfile({ setStatus, t }) {
   }
 
   /**
-   * 切换新建 Profile 表单中的服务商，并自动选择第一个模型。
+   * 切换新建 Profile 表单中的服务商。
+   * 已知服务商自动选择第一个模型；自定义服务商保留当前 model 值。
    * @param {string} nextProvider - 服务商 id
    * @author fxbin
    */
   function changeNewProfileProvider(nextProvider) {
-    const nextModels = providerOptions.find((item) => item.id === nextProvider)?.models ?? [];
-    setNewProfile((prev) => ({ ...prev, provider: nextProvider, model: nextModels[0]?.id ?? INITIAL_FORM_TEXT }));
+    const knownProvider = providerOptions.find((item) => item.id === nextProvider);
+    setNewProfile((prev) => ({
+      ...prev,
+      provider: nextProvider,
+      model: knownProvider ? (knownProvider.models[0]?.id ?? INITIAL_FORM_TEXT) : prev.model,
+    }));
   }
 
   /**

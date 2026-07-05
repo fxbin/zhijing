@@ -6306,11 +6306,20 @@ export function getModelProviderSettingsV2(): ModelProviderSettingsV2 {
   };
 }
 
+const MODEL_PROVIDER_TEST_PROMPTS = [
+  '请只回复这句话：知径模型连接正常',
+  '只回复：连接正常',
+];
+
 export async function testModelProviderSettings(input: TestModelProviderSettingsRequest = {}): Promise<ModelProviderTestResult> {
-  const provider = normalizeProvider(input.provider ?? modelProviderConfig.provider);
-  const model = (input.model ?? modelProviderConfig.model).trim() || getDefaultPiModel();
-  const apiKey = input.apiKey?.trim() || currentApiKey();
-  const baseUrl = input.baseUrl?.trim() || modelProviderConfig.baseUrl;
+  const profile = input.profileId ? repository.findModelProviderProfile(input.profileId) : undefined;
+  const provider = normalizeProvider(input.provider ?? profile?.provider ?? modelProviderConfig.provider);
+  const model = (input.model ?? profile?.model ?? modelProviderConfig.model).trim() || getDefaultPiModel();
+  const profileApiKey = profile?.provider === provider ? profile.apiKey : undefined;
+  const apiKey = input.apiKey?.trim() || profileApiKey || safeEnvApiKey(provider);
+  const baseUrl = input.baseUrl !== undefined
+    ? (input.baseUrl.trim() || undefined)
+    : (profile ? profile.baseUrl : modelProviderConfig.baseUrl);
 
   if (!apiKey) {
     return {
@@ -6332,26 +6341,38 @@ export async function testModelProviderSettings(input: TestModelProviderSettings
       maxTokens: 700,
     });
     const runtime = createInstrumentedPiRuntime(rawRuntime, {
-      taskType: 'knowledge_cards',
+      taskType: 'conversation',
       workspaceId: undefined,
       recorder: recordAgentUsage,
     });
-    const result = await runtime.completeStructured<{ cards: { title: string }[] }, TSchema>({
-      task: 'knowledge_cards',
-      prompt: '用中文生成一张用于验证模型设置的知识卡片，主题是「知径模型设置」。',
-      schema: structuredSchemas.knowledge_cards as TSchema,
-      context: {
-        verification: true,
-        expectedLanguage: 'zh-CN',
-      },
-    });
+    let sampleText = '';
+    let usage: ModelProviderTestResult['usage'];
+    for (const prompt of MODEL_PROVIDER_TEST_PROMPTS) {
+      for await (const chunk of runtime.streamText({
+        prompt,
+        context: {
+          verification: true,
+          expectedOutput: 'plain_text',
+          expectedLanguage: 'zh-CN',
+        },
+      })) {
+        sampleText += chunk.text;
+        usage = chunk.usage ?? usage;
+      }
+      if (sampleText.trim()) {
+        break;
+      }
+    }
+    if (!sampleText.trim()) {
+      throw new Error('模型接口已响应，但连续两次未返回正文。请检查该模型是否支持普通文本对话，或更换同一 Provider 下的非推理模型。');
+    }
     return {
       ok: true,
       provider,
       model,
-      message: '模型连接正常，已返回真实结构化 JSON。',
-      sampleTitle: result.output.cards[0]?.title,
-      usage: result.usage,
+      message: '模型连接正常，已返回真实文本响应。',
+      sampleTitle: compactTitle(sampleText),
+      usage,
     };
   } catch (error) {
     return {

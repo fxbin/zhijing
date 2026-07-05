@@ -250,6 +250,7 @@ export interface UpdateModelProviderProfileRequest {
 }
 
 export interface TestModelProviderSettingsRequest {
+  profileId?: string;
   provider?: string;
   model?: string;
   apiKey?: string;
