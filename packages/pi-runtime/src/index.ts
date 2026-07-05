@@ -235,6 +235,17 @@ const defaultModel = 'deepseek-v4-flash';
  */
 const PI_BASE_URL_ENV = 'ZHIJING_PI_BASE_URL';
 
+const CARD_QUALITY_CONTRACT = [
+  'Knowledge-card quality contract:',
+  '- Prefer fewer high-signal cards over many generic cards. If the source does not support a useful card, omit it.',
+  '- Every card must be atomic: one reusable concept, method, case, step, viewpoint, or open question.',
+  '- Ground cards in the prompt/source text. Do not invent facts, names, citations, or user intent.',
+  '- Avoid filler titles such as 核心概念, 关键问题, 下一步要回答的问题, 知识卡片, 资料总结, 背景补充.',
+  '- concept cards must define the concept and include a boundary, contrast, condition, or source clue.',
+  '- question cards must be genuine unresolved questions implied by the source, not generic next-step reminders.',
+  '- Body text must explain why the card matters or how it can be used; avoid repeating the title.',
+].join('\n');
+
 export function getDefaultPiProvider() {
   return defaultProvider;
 }
@@ -506,11 +517,15 @@ export function resolveConfiguredModel(provider: string, modelId: string, baseUr
 function buildContext(request: StructuredGenerationRequest): Context {
   const schema = request.schema ? `\nJSON schema:\n${JSON.stringify(request.schema, null, 2)}` : '';
   const extraContext = request.context ? `\nContext:\n${JSON.stringify(request.context, null, 2)}` : '';
+  const cardContract = ['workspace_skeleton', 'material_summary', 'knowledge_cards', 'question_answer'].includes(request.task)
+    ? CARD_QUALITY_CONTRACT
+    : '';
   return {
     systemPrompt: [
       'You are the structured generation runtime for Zhijing, a personal knowledge-base workbench.',
       'Return only valid JSON. Do not wrap the JSON in Markdown. Do not include commentary.',
       'Preserve provenance boundaries: use ai_skeleton for unsourced topic scaffolds and sourced only when source material is provided.',
+      cardContract,
     ].join('\n'),
     messages: [
       {
@@ -936,8 +951,8 @@ function mockOutputFor(request: StructuredGenerationRequest) {
       },
       {
         type: 'question',
-        title: '下一步要回答的问题',
-        body: '这份资料还需要补充哪些背景、案例和可验证证据？',
+        title: `《${title}》还需补充的证据`,
+        body: `围绕「${title}」这份资料，还需要补充哪些背景、案例和可验证证据？`,
       },
     ],
     artifactTitle: `${title} 摘要`,

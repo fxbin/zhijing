@@ -6599,6 +6599,7 @@ function createCards(
   const timestamp = now();
   const sourceStatus: ClaimStatus = material && material.type !== 'question' && material.parseStatus === 'ingested' ? 'sourced' : 'ai_skeleton';
   const generated = normalizeGeneratedCards(generatedCards);
+  const hasModelCardOutput = Boolean(generatedCards?.length);
   const fallbackCards: GeneratedCard[] = [
     {
       type: 'concept',
@@ -6615,7 +6616,8 @@ function createCards(
   ];
   const existingCards = repository.listCards(base.id);
   const existingTitles = new Set(existingCards.map((card) => card.title.trim()));
-  const cards: KnowledgeCard[] = (generated.length ? generated : fallbackCards)
+  const cardSeeds = generated.length ? generated : hasModelCardOutput ? [] : fallbackCards;
+  const cards: KnowledgeCard[] = cardSeeds
     .map((card) => ({
       id: id('card'),
       workspaceId: base.id,
@@ -6763,13 +6765,55 @@ function buildFallbackKitBody(base: WorkspaceSummary, kitId: KnowledgeKitId) {
 function normalizeGeneratedCards(cards: GeneratedCard[] | undefined) {
   if (!cards?.length) return [];
   return cards
-    .filter((card) => card.title?.trim() || card.body?.trim())
+    .filter((card) => isUsefulGeneratedCard(card))
     .slice(0, 6);
 }
 
 function normalizeCardType(type: GeneratedCard['type']): KnowledgeCard['type'] {
   const allowed = new Set<KnowledgeCard['type']>(['concept', 'method', 'case', 'question', 'step', 'viewpoint']);
   return type && allowed.has(type) ? type : 'concept';
+}
+
+const CARD_BODY_MIN_LENGTH = 18;
+const CARD_SIMILAR_TEXT_MIN_LENGTH = 6;
+const CARD_GENERIC_TITLE_PATTERNS = [
+  /^(核心概念|关键概念|重要概念|主要概念)$/,
+  /^(关键问题|核心问题|下一步要回答的问题|待回答问题)$/,
+  /^(知识卡片|资料总结|内容总结|背景补充|后续补充方向)$/,
+  /^(概念|问题|方法|案例|观点|步骤)\d*$/,
+];
+const CARD_CONCEPT_SIGNAL_PATTERN = /是|指|定义|区别|边界|不是|属于|用于|依赖|条件|意味着|核心在于|本质/;
+const CARD_QUESTION_SIGNAL_PATTERN = /[?？]|如何|为什么|是否|能否|怎样|哪些|什么|何时|哪里|谁|多大|多少/;
+
+function normalizeCardText(value: string | undefined): string {
+  return (value ?? '').trim().replace(/\s+/g, '');
+}
+
+function isGenericCardTitle(title: string): boolean {
+  return CARD_GENERIC_TITLE_PATTERNS.some((pattern) => pattern.test(title));
+}
+
+function isMostlyRepeatedTitle(title: string, body: string): boolean {
+  const normalizedTitle = normalizeCardText(title);
+  const normalizedBody = normalizeCardText(body);
+  return normalizedTitle.length >= CARD_SIMILAR_TEXT_MIN_LENGTH && normalizedBody === normalizedTitle;
+}
+
+function isUsefulGeneratedCard(card: GeneratedCard): boolean {
+  const title = card.title?.trim() ?? '';
+  const body = card.body?.trim() ?? '';
+  if (!title || !body) return false;
+  if (body.length < CARD_BODY_MIN_LENGTH) return false;
+  if (isGenericCardTitle(title)) return false;
+  if (isMostlyRepeatedTitle(title, body)) return false;
+  const type = normalizeCardType(card.type);
+  if (type === 'concept') {
+    return CARD_CONCEPT_SIGNAL_PATTERN.test(`${title}\n${body}`);
+  }
+  if (type === 'question') {
+    return CARD_QUESTION_SIGNAL_PATTERN.test(`${title}\n${body}`);
+  }
+  return true;
 }
 
 async function generateKnowledge(
