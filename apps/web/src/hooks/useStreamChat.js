@@ -630,8 +630,10 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
               break;
             case STREAM_EVENT.MESSAGE_END:
               if (typeof event.text === 'string' && event.text.length > 0) {
-                assistantText = event.text;
-                syncAssistantContent(assistantText);
+                if (assistantText.length === 0) {
+                  assistantText = event.text;
+                  syncAssistantContent(assistantText);
+                }
               }
               if (event.usage && typeof event.usage === 'object') {
                 if (typeof event.usage.inputTokens === 'number') {
