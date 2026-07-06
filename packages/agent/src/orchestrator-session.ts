@@ -810,51 +810,108 @@ function sanitizeProposedOperation(operation: ProposedOperation): ProposedOperat
 }
 
 /**
- * 文字版「建议」模式的兜底匹配模式。
+ * 文字版「建议」行中识别的卡片类型关键词 → type 映射。
  *
- * 当 LLM 未遵循 proposal-batch 输出约定、退化到自然语言时（如「1️⃣ 建议新建卡片」「建议一：创建」），
- * 本模式用于触发兜底解析，把文字描述尝试转换为结构化 proposal。
- *
- * 匹配模式解释：
- * - 行首的 emoji 数字（1️⃣2️⃣ 等）+ 「建议」关键词；
- * - 或行首的中文数字（一二三四五六七八九十）+ 冒号/顿号；
- * - 或行首的阿拉伯数字 + 点号/冒号；
- * - 后接「新建/创建/补充/可以/建议」等动作关键词。
- */
-const PLAIN_SUGGESTION_HEADING_PATTERN =
-  /^\s*(?:[\u0030-\u0039\uFE0F\u20E3\u2460-\u2473]{1,4}|[1-9][0-9]?|[一二三四五六七八九十]+)[\s.,:：、)]?\s*(?:建议|可以|推荐|提议)/m;
-
-/**
- * 文字版「建议」段落的标题提取模式。
- *
- * 用于从「建议新建卡片：xxx」「建议创建 xxx」等表述中提取卡片标题。
- * 捕获组 1 为标题文本。
- */
-const PLAIN_SUGGESTION_TITLE_PATTERN =
-  /(?:新建|创建|补充|新增|提炼|关联|建议)[^\u4e00-\u9fa5a-zA-Z0-9]{0,8}(?:卡片|资料|概念|问题|方法|步骤|案例|观点)?[：:是为]?\s*([「『\""]?)([^「」『』\""\n]{2,80})\1/;
-
-/**
- * 文字版「建议」段落中识别的卡片类型关键词 → type 映射。
+ * 同时覆盖英文 type 名和中文关键词，提高启发式识别准确度。
  */
 const PLAIN_SUGGESTION_TYPE_KEYWORDS: ReadonlyArray<{ readonly type: CardType; readonly keywords: readonly string[] }> = [
-  { type: 'concept', keywords: ['概念'] },
-  { type: 'method', keywords: ['方法'] },
-  { type: 'case', keywords: ['案例'] },
-  { type: 'question', keywords: ['问题'] },
-  { type: 'step', keywords: ['步骤'] },
-  { type: 'viewpoint', keywords: ['观点'] },
+  { type: 'concept', keywords: ['concept', '概念'] },
+  { type: 'method', keywords: ['method', '方法'] },
+  { type: 'case', keywords: ['case', '案例'] },
+  { type: 'question', keywords: ['question', '问题'] },
+  { type: 'step', keywords: ['step', '步骤'] },
+  { type: 'viewpoint', keywords: ['viewpoint', '观点'] },
 ];
+
+/**
+ * 去除 markdown 装饰前缀（#、*、-、>）与首尾空白，返回干净行内容。
+ *
+ * 用于让 heading 判断不受 markdown 语法干扰。
+ *
+ * @param line - 原始行文本
+ * @returns 去除装饰后的净文本
+ * @author fxbin
+ */
+function stripMarkdownDecorations(line: string): string {
+  return line.replace(/^\s*[#*\->≥≤•·]+\s*/, '').trim();
+}
+
+/**
+ * 判断一行是否为「建议」heading 行。
+ *
+ * 判断标准：行内同时出现（1）建议动词（建议/推荐/提议）和（2）编号标记
+ * （阿拉伯数字、emoji 数字、中文数字、带圈数字），顺序不限。
+ * 这覆盖 LLM 常见的两种输出格式：
+ * - 「1️⃣ 建议新建卡片」（数字在前）
+ * - 「### 建议 1️⃣ — 建 concept 卡片」（建议在前，数字在后，带 markdown 前缀）
+ *
+ * @param rawLine - 原始行文本
+ * @returns 是否为建议 heading 行
+ * @author fxbin
+ */
+function isSuggestionHeadingLine(rawLine: string): boolean {
+  const stripped = stripMarkdownDecorations(rawLine);
+  if (stripped.length === 0) return false;
+  if (stripped.startsWith('```')) return false;
+  const hasVerb = stripped.includes('建议') || stripped.includes('推荐') || stripped.includes('提议');
+  if (!hasVerb) return false;
+  const hasNumber = /[\d一二三四五六七八九十①②③④⑤⑥⑦⑧⑨⑩\u2460-\u2473]/.test(stripped);
+  return hasNumber;
+}
+
+/**
+ * 从建议 heading 行中提取卡片标题。
+ *
+ * 提取优先级：
+ * 1. 引号包裹内容（「」『』""''）——最可靠
+ * 2. 「卡片」/「资料」后面的文本
+ * 3. 冒号后面的文本
+ * 4. 去掉前缀后的整行余文
+ *
+ * @param rawLine - heading 行原始文本
+ * @returns 提取出的标题（2-80 字）；提取失败返回空串
+ * @author fxbin
+ */
+function extractTitleFromHeading(rawLine: string): string {
+  const stripped = stripMarkdownDecorations(rawLine);
+  const quoted = stripped.match(/[「『""'']([^「」『』""''\n]{2,80})[」』""'']/);
+  if (quoted && quoted[1]) return quoted[1].trim();
+  const afterCard = stripped.match(/(?:卡片|资料)[：:是为]?\s*(.+)/);
+  if (afterCard && afterCard[1]) return afterCard[1].trim().slice(0, 80);
+  const afterColon = stripped.match(/[：:]\s*(.+)/);
+  if (afterColon && afterColon[1]) return afterColon[1].trim().slice(0, 80);
+  const cleaned = stripped.replace(/^(?:建议|推荐|提议)[\d一二三四五六七八九十①②③④⑤⑥⑦⑧⑨⑩\s.,:：、)）\-—–]+/, '').trim();
+  return cleaned.slice(0, 80);
+}
+
+/**
+ * 从建议 heading 行中识别卡片类型。
+ *
+ * @param rawLine - heading 行原始文本
+ * @returns 匹配到的 CardType；无匹配时默认 concept
+ * @author fxbin
+ */
+function detectCardTypeFromHeading(rawLine: string): CardType {
+  const lower = rawLine.toLowerCase();
+  for (const candidate of PLAIN_SUGGESTION_TYPE_KEYWORDS) {
+    if (candidate.keywords.some((kw) => lower.includes(kw.toLowerCase()))) {
+      return candidate.type;
+    }
+  }
+  return 'concept';
+}
 
 /**
  * 从 Agent 最终响应文本中提取文字版「建议」段落，转换为 proposal-batch 结构。
  *
- * 兜底场景：LLM 未输出 ```proposal-batch``` 块，但正文中含「建议一/建议二/1️⃣ 建议新建卡片」等
- * 模式时，逐段提取卡片标题（粗略启发式），转 create_card 提议，由用户在前端确认。
+ * 兜底场景：LLM 未输出 ```proposal-batch``` 块，但正文中含
+ * 「### 建议 1️⃣」「建议一：」「1. 建议新建卡片」等模式时，
+ * 逐段提取卡片标题与正文，转 create_card 提议，由用户在前端确认。
  *
  * 设计权衡：
  * - 启发式提取准确性有限，宁可少识别一些（避免误转换），不能误把正常段落当建议；
  * - 仅提取 create_card 类型；edit/archive 等操作需要明确 cardId，文字描述中拿不到，跳过；
- * - 提取出的 title/body 较粗糙，用户在前端可编辑后再采纳，前端 ProposalBlock 组件应支持编辑。
+ * - 提取出的 title/body 较粗糙，用户在前端可编辑后再采纳。
  *
  * @param text - Agent 最终响应文本
  * @returns 兜底提取的 batch；无识别命中时返回 null
@@ -864,13 +921,13 @@ function extractPlainTextSuggestions(
   text: string,
 ): { batchId: string; proposals: ProposedOperation[] } | null {
   if (typeof text !== 'string' || text.length === 0) return null;
-  if (!PLAIN_SUGGESTION_HEADING_PATTERN.test(text)) return null;
-  const proposals: ProposedOperation[] = [];
   const lines = text.split(/\r?\n/);
+  const proposals: ProposedOperation[] = [];
   let currentTitle = '';
   let currentBody = '';
   let currentType: CardType = 'concept';
   let inSuggestion = false;
+
   const flush = () => {
     if (!inSuggestion) return;
     const title = currentTitle.trim();
@@ -888,25 +945,13 @@ function extractPlainTextSuggestions(
     currentType = 'concept';
     inSuggestion = false;
   };
+
   for (const line of lines) {
-    const headingMatch = line.match(/^\s*(?:[\u0030-\u0039\uFE0F\u20E3\u2460-\u2473]{1,4}|[1-9][0-9]?|[一二三四五六七八九十]+)[\s.,:：、)]?\s*(?:建议|可以|推荐|提议)(.*)$/);
-    if (headingMatch) {
+    if (isSuggestionHeadingLine(line)) {
       flush();
       inSuggestion = true;
-      const rest = headingMatch[1] ?? '';
-      const titleMatch = rest.match(PLAIN_SUGGESTION_TITLE_PATTERN);
-      if (titleMatch && titleMatch[2]) {
-        currentTitle = titleMatch[2].trim();
-      } else {
-        const cleaned = rest.replace(/^[\s:：、是是为\-—–]+/, '').trim();
-        currentTitle = cleaned.slice(0, 80);
-      }
-      for (const candidate of PLAIN_SUGGESTION_TYPE_KEYWORDS) {
-        if (candidate.keywords.some((kw) => line.includes(kw))) {
-          currentType = candidate.type;
-          break;
-        }
-      }
+      currentTitle = extractTitleFromHeading(line);
+      currentType = detectCardTypeFromHeading(line);
       continue;
     }
     if (inSuggestion) {
