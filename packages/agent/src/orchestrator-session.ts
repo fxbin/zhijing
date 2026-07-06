@@ -28,6 +28,7 @@ import {
   buildAuxiliaryProbePrompt,
   AUXILIARY_PROBE_MIN_TOOL_CALLS,
   AUXILIARY_PROBE_MAX_OUTPUT_LENGTH,
+  AUXILIARY_PROBE_SYSTEM_PROMPT,
 } from './multi-agent-orchestrator.js';
 
 /**
@@ -471,6 +472,7 @@ export function startOrchestratorSession(
       const probeOptions: Parameters<typeof createRoleBasedAgent>[1] = {
         role: 'probe',
         apiKey: credentials.apiKey,
+        systemPromptOverride: AUXILIARY_PROBE_SYSTEM_PROMPT,
       };
       if (!supportsProbeRoleOverride) {
         probeOptions.provider = credentials.provider;

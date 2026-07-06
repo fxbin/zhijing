@@ -88,6 +88,21 @@ export const TOOL_FAILURE_FALLBACK_SEGMENT = [
 ].join('\n');
 
 /**
+ * 不确定性表达规范段。
+ *
+ * 定义高/中/低置信度的语言模板和禁用词汇，
+ * 防止 LLM 使用绝对化措辞误导用户。
+ */
+export const UNCERTAINTY_EXPRESSION_SEGMENT = [
+  '',
+  '不确定性表达：',
+  '- 高置信度（有直接证据）：直接陈述，附证据 id。',
+  '- 中置信度（基于多源推断）：使用「根据现有资料，倾向于…」「目前来看…」。',
+  '- 低置信度（单源或推断）：使用「尚无明确证据，可能…」「这是一个推断，需进一步验证」。',
+  '- 禁用词汇：显然、必然、绝对、肯定、毫无疑问。',
+].join('\n');
+
+/**
  * 组装完整的公共基础提示词。
  *
  * 供 agent-factory.ts 的 ZHIJING_AGENT_SYSTEM_PROMPT 和编排层共用。
@@ -107,5 +122,6 @@ export function buildBaseSystemPrompt(): string {
     PROPOSAL_BATCH_SEGMENT,
     '',
     TOOL_FAILURE_FALLBACK_SEGMENT,
+    UNCERTAINTY_EXPRESSION_SEGMENT,
   ].join('\n');
 }

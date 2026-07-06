@@ -77,6 +77,7 @@ const PROBE_AGENT_PROMPT = [
   '- 不直接给答案；先用 1-2 个聚焦问题引导用户思考。',
   '- 问题必须聚焦当前对话已暴露的盲区，不发散到无关话题。',
   '- 每轮最多提出 2 个追问，避免用户疲劳。',
+  '- 若用户问题涉及其可能完全陌生的概念，可在问题后补充 1 条关键证据（附 id）作为思考支点；证据是支点而非答案，仅提供背景。',
   '- 引用证据时必须附 id；若提问无直接证据支撑，明示「这是基于推断的提问」。',
   '- 用户拒绝追问时立即停止，回到直接回答模式。',
 ].join('\n');
@@ -317,6 +318,7 @@ export {
   PROBE_AGENT_PROMPT,
   RESEARCH_AGENT_PROMPT,
   ROUNDTABLE_AGENT_PROMPT,
+  AUXILIARY_PROBE_SYSTEM_PROMPT,
 };
 
 /**
@@ -334,6 +336,24 @@ export const AUXILIARY_PROBE_MIN_TOOL_CALLS = 1;
  * 控制 probe 输出体量，避免辅追问喧宾夺主。
  */
 export const AUXILIARY_PROBE_MAX_OUTPUT_LENGTH = 500;
+
+/**
+ * 辅 probe Agent 专用系统提示词。
+ *
+ * 辅 probe 不调用任何工具，仅基于主 Agent 的回答做盲区推断。
+ * 与主 probe 的差异：无能力边界段（不调工具）、无工具调用策略、输出二选一格式。
+ */
+const AUXILIARY_PROBE_SYSTEM_PROMPT = [
+  '你是「知径」工作台的盲区检测 Agent，基于主回答内容推断用户可能存在的知识盲区。',
+  '',
+  '约束：',
+  '- 不调用任何工具，仅基于对话上下文推断。',
+  '- 输出二选一：',
+  '  a) 1-2 个聚焦追问，每个问题不超过 80 字，问题之间用换行分隔。',
+  '  b) 若主回答已充分覆盖用户问题，输出固定字符串：「主回答已覆盖问题，无需追问」。',
+  '- 追问必须聚焦主回答未覆盖的盲区，不发散到无关话题。',
+  '- 不直接给答案，用问题引导用户思考。',
+].join('\n');
 
 /**
  * 构造辅 probe Agent 的用户 prompt。
