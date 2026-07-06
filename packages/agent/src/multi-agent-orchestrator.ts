@@ -1,18 +1,13 @@
 /**
- * 多 Agent 编排层 PoC（P1.0）。
+ * 多 Agent 编排层。
  *
- * 验证 pi-agent-core 能否承载多个专用 Agent 角色的独立定义与按意图选择。
+ * 多个专用 Agent 角色的独立定义与按意图选择。
  * 角色对应 v1.1 §3.2 的设计：
- * - 结构化 Agent：知识卡片生成、实体提取、骨架构建（DeepSeek-V3 主力）
- * - 对话 Agent：知识库问答、聊天、产物生成（DeepSeek-V3 主力）
- * - 追问 Agent：苏格拉底追问、盲区检测、假设检验（DeepSeek-V3 主力）
- * - 研究 Agent：深度研究、外部查证、竞品分析、证据账本（DeepSeek-V3 主力）
- * - 圆桌 Agent：单 Agent 多视角研讨、分歧识别、决策收敛（DeepSeek-V3 主力）
- *
- * PoC 验证点：
- * 1. 多角色配置可独立定义（不同 systemPrompt + 推荐 model）
- * 2. 按用户意图可选择对应角色
- * 3. 选定角色可装配为 Agent 实例（复用 createWorkspaceAgent）
+ * - 结构化 Agent：知识卡片生成、实体提取、骨架构建
+ * - 对话 Agent：知识库问答、聊天、产物生成
+ * - 追问 Agent：苏格拉底追问、盲区检测、假设检验
+ * - 研究 Agent：深度研究、外部查证、竞品分析、证据账本
+ * - 圆桌 Agent：单 Agent 多视角研讨、分歧识别、决策收敛
  *
  * @module multi-agent-orchestrator
  * @author fxbin
@@ -22,6 +17,7 @@ import type { KnownProvider } from '@earendil-works/pi-ai';
 import { Agent } from '@earendil-works/pi-agent-core';
 import type { AgentTaskType } from '@zhijing/shared';
 import { createWorkspaceAgent, type WorkspaceAgentOptions } from './agent-factory.js';
+import { CAPABILITY_BOUNDARY_SEGMENT, PROPOSAL_BATCH_SEGMENT } from './prompts/index.js';
 
 /**
  * Agent 角色标识枚举。
@@ -37,9 +33,7 @@ export type AgentRole = 'structured' | 'conversation' | 'probe' | 'research' | '
 const STRUCTURED_AGENT_PROMPT = [
   '你是「知径」工作台的结构化处理 Agent，专门负责知识卡片生成、实体提取和骨架构建。',
   '',
-  '能力边界：',
-  '- 只能通过提供的工具获取信息：search_cards、search_materials、get_workspace_summary、web_search、fetch_web_page、deep_search。',
-  '- 只能通过 web_search / fetch_web_page / deep_search 联网；不能访问其他工作区、不能修改任何数据。',
+  CAPABILITY_BOUNDARY_SEGMENT,
   '',
   '输出约束：',
   '- 输出必须严格遵循指定的 JSON schema，不得添加自由文本。',
@@ -57,9 +51,7 @@ const STRUCTURED_AGENT_PROMPT = [
 const CONVERSATION_AGENT_PROMPT = [
   '你是「知径」工作台的对话 Agent，专门负责知识库问答、聊天和产物生成。',
   '',
-  '能力边界：',
-  '- 只能通过提供的工具获取信息：search_cards、search_materials、get_workspace_summary、web_search、fetch_web_page、deep_search。',
-  '- 只能通过 web_search / fetch_web_page / deep_search 联网；不能访问其他工作区、不能修改任何数据。',
+  CAPABILITY_BOUNDARY_SEGMENT,
   '- 当用户明确要求最新信息、外部资料、联网搜索，或工作区证据不足以回答外部事实时，才调用联网工具，并在回答中附 URL。',
   '- 当用户要求深度搜索、查证或多来源研究时，优先调用 deep_search。',
   '',
@@ -79,9 +71,7 @@ const CONVERSATION_AGENT_PROMPT = [
 const PROBE_AGENT_PROMPT = [
   '你是「知径」工作台的追问 Agent，专门负责苏格拉底追问、盲区检测和假设检验。',
   '',
-  '能力边界：',
-  '- 只能通过提供的工具获取信息：search_cards、search_materials、get_workspace_summary、web_search、fetch_web_page、deep_search。',
-  '- 只能通过 web_search / fetch_web_page / deep_search 联网；不能访问其他工作区、不能修改任何数据。',
+  CAPABILITY_BOUNDARY_SEGMENT,
   '',
   '追问策略：',
   '- 不直接给答案；先用 1-2 个聚焦问题引导用户思考。',
@@ -94,18 +84,15 @@ const PROBE_AGENT_PROMPT = [
 /**
  * 研究/圆桌结果沉淀协议。
  *
- * 复用现有 proposal-batch apply diff 通道：
- * Agent 只提出结构化变更，用户在前端确认后才真正落库。
+ * 复用 PROPOSAL_BATCH_SEGMENT 的统一 schema 定义，
+ * 仅追加角色专属的沉淀映射规则，不重复定义 op 列表。
  */
 const SEDIMENTATION_PROMPT = [
   '',
   '结果沉淀协议：',
   '- 当本轮输出产生可复用的结论、开放问题、方法步骤、反方观点或关键证据时，必须在回答末尾追加一个 ```proposal-batch 代码块。',
   '- proposal-batch 只用于提议沉淀，不代表已经写入；用户会在前端逐条确认后才落库。',
-  '- JSON 结构必须是：{"batchId":"可选字符串","proposals":[...]}。',
-  '- 支持的 proposals 形态：',
-  '  - {"op":"create_card","type":"concept|method|case|question|step|viewpoint","title":"卡片标题","body":"卡片正文","materialId":"可选资料 id","rationale":"提议理由"}',
-  '  - {"op":"edit_card","cardId":"已有卡片 id","title":"可选","body":"可选","type":"可选","rationale":"提议理由"}',
+  PROPOSAL_BATCH_SEGMENT,
   '- 研究结论优先沉淀为 viewpoint 或 concept；可执行步骤沉淀为 step；未解决问题沉淀为 question；方法论沉淀为 method；案例证据沉淀为 case。',
   '- 每张卡片必须原子化，只承载一个可复用知识点；正文必须写清依据、适用边界或不确定性。',
   '- 不要编造 materialId/cardId；只有工具结果里出现过的真实 id 才能写入对应字段。',
@@ -121,9 +108,7 @@ const SEDIMENTATION_PROMPT = [
 const RESEARCH_AGENT_PROMPT = [
   '你是「知径」工作台的研究 Agent，专门负责深度研究、外部查证、竞品分析和证据账本整理。',
   '',
-  '能力边界：',
-  '- 只能通过提供的工具获取信息：search_cards、search_materials、get_workspace_summary、web_search、fetch_web_page、deep_search。',
-  '- 只能通过 web_search / fetch_web_page / deep_search 联网；不能访问其他工作区、不能直接修改任何数据。',
+  CAPABILITY_BOUNDARY_SEGMENT,
   '- 工作区内容是用户的内部知识背景；外部搜索结果是外部证据。回答中必须区分两者。',
   '',
   '研究流程：',
@@ -150,9 +135,7 @@ const RESEARCH_AGENT_PROMPT = [
 const ROUNDTABLE_AGENT_PROMPT = [
   '你是「知径」工作台的圆桌 Agent，负责用单 Agent 多视角协议组织研讨、评审和决策收敛。',
   '',
-  '能力边界：',
-  '- 只能通过提供的工具获取信息：search_cards、search_materials、get_workspace_summary、web_search、fetch_web_page、deep_search。',
-  '- 只能通过 web_search / fetch_web_page / deep_search 联网；不能访问其他工作区、不能直接修改任何数据。',
+  CAPABILITY_BOUNDARY_SEGMENT,
   '- 不要声称你实际启动了多个独立专家或并行子 Agent；只能表述为「从多个视角评估」。',
   '',
   '研讨流程：',
@@ -195,12 +178,8 @@ export interface AgentRoleConfig {
 /**
  * 专用 Agent 角色配置表。
  *
- * 对应 v1.1 §3.2 的角色定义：
- * - structured：DeepSeek-V3 主力（成本低 + 中文结构化质量高）
- * - conversation：DeepSeek-V3 主力（中文对话流畅）
- * - probe：DeepSeek-V3 主力（沿用当前已注册模型，避免未配置 reasoner 时运行失败）
- * - research：DeepSeek-V3 主力（联网研究与中文证据整理稳定，走 deep_research taskType 便于成本统计）
- * - roundtable：DeepSeek-V3 主力（多视角研讨与中文决策收敛稳定，走 roundtable taskType 便于成本统计）
+ * 各角色统一使用 deepseek provider + deepseek-v4-flash 模型。
+ * taskType 用于成本统计与模型路由差异化。
  */
 export const AGENT_ROLE_CONFIGS: Record<AgentRole, AgentRoleConfig> = {
   structured: {
