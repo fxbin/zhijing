@@ -182,6 +182,7 @@ import {
   cancelReaderModeRollback,
   checkUrlForSsrf,
   createSsrfSafeFetch,
+  retryMaterialCardGeneration,
 } from '@zhijing/core';
 import {
   startOrchestratorSession,
@@ -2568,6 +2569,19 @@ export async function buildApi() {
       }
       request.log.error({ error }, 'material unarchive failed');
       return reply.code(500).send({ error: 'Material unarchive failed.' });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>('/api/materials/:id/regenerate-cards', async (request, reply) => {
+    try {
+      const result = await retryMaterialCardGeneration(request.params.id);
+      return { ok: true, cardCount: result.cards.length, cardIds: result.cards.map((card) => card.id) };
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'material card regeneration failed');
+      return reply.code(500).send({ error: 'Material card regeneration failed.' });
     }
   });
 

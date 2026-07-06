@@ -2508,18 +2508,33 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     }
 
     const sanitized = sanitizeFtsQuery(query);
-    if (!sanitized) return [];
+    if (sanitized) {
+      try {
+        const rows = this.db.prepare(`
+          SELECT c.* FROM cards c
+          JOIN cards_fts ON c.id = cards_fts.card_id
+          WHERE cards_fts.workspace_id = ? AND cards_fts MATCH ? AND c.archived = 0
+          ORDER BY bm25(cards_fts)
+          LIMIT ?
+        `).all(workspaceId, sanitized, limit) as CardRow[];
+        if (rows.length > 0) return rows.map(mapCard);
+      } catch (error) {
+        console.warn('[searchCardsByRelevance] FTS query failed', error);
+      }
+    }
+
+    const likePattern = `%${query.trim().replace(/[%_]/g, (match) => `\\${match}`)}%`;
     try {
       const rows = this.db.prepare(`
-        SELECT c.* FROM cards c
-        JOIN cards_fts ON c.id = cards_fts.card_id
-        WHERE cards_fts.workspace_id = ? AND cards_fts MATCH ? AND c.archived = 0
-        ORDER BY bm25(cards_fts)
+        SELECT * FROM cards
+        WHERE workspace_id = ? AND archived = 0
+          AND (title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\')
+        ORDER BY updated_at DESC
         LIMIT ?
-      `).all(workspaceId, sanitized, limit) as CardRow[];
+      `).all(workspaceId, likePattern, likePattern, limit) as CardRow[];
       return rows.map(mapCard);
     } catch (error) {
-      console.warn('[searchCardsByRelevance] FTS query failed', error);
+      console.warn('[searchCardsByRelevance] content LIKE fallback failed', error);
       return [];
     }
   }
@@ -2556,18 +2571,33 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     }
 
     const sanitized = sanitizeFtsQuery(query);
-    if (!sanitized) return [];
+    if (sanitized) {
+      try {
+        const rows = this.db.prepare(`
+          SELECT m.* FROM materials m
+          JOIN materials_fts ON m.id = materials_fts.material_id
+          WHERE materials_fts.workspace_id = ? AND materials_fts MATCH ? AND m.archived = 0
+          ORDER BY bm25(materials_fts)
+          LIMIT ?
+        `).all(workspaceId, sanitized, limit) as MaterialRow[];
+        if (rows.length > 0) return rows.map(mapMaterial);
+      } catch (error) {
+        console.warn('[searchMaterialsByRelevance] FTS query failed', error);
+      }
+    }
+
+    const likePattern = `%${query.trim().replace(/[%_]/g, (match) => `\\${match}`)}%`;
     try {
       const rows = this.db.prepare(`
-        SELECT m.* FROM materials m
-        JOIN materials_fts ON m.id = materials_fts.material_id
-        WHERE materials_fts.workspace_id = ? AND materials_fts MATCH ? AND m.archived = 0
-        ORDER BY bm25(materials_fts)
+        SELECT * FROM materials
+        WHERE workspace_id = ? AND archived = 0
+          AND (title LIKE ? ESCAPE '\\' OR content_text LIKE ? ESCAPE '\\')
+        ORDER BY updated_at DESC
         LIMIT ?
-      `).all(workspaceId, sanitized, limit) as MaterialRow[];
+      `).all(workspaceId, likePattern, likePattern, limit) as MaterialRow[];
       return rows.map(mapMaterial);
     } catch (error) {
-      console.warn('[searchMaterialsByRelevance] FTS query failed', error);
+      console.warn('[searchMaterialsByRelevance] content LIKE fallback failed', error);
       return [];
     }
   }
@@ -10324,6 +10354,58 @@ export function searchWorkspaceMaterials(workspaceId: string, query: string, lim
 }
 
 /**
+ * 重试为指定资料生成知识卡片。
+ *
+ * 用于 link 导入时 generateKnowledge 失败的后续重试场景：
+ * 资料已入库但卡片为空，用户可调用此函数重新生成卡片。
+ *
+ * 内部流程：
+ * 1. 查询 material 与所属 workspace
+ * 2. 调用 generateKnowledge('material_summary', ...) 重新生成
+ * 3. 成功则 createCards 写库并更新 base.stage
+ * 4. 失败则抛错由调用方处理
+ *
+ * @param materialId - 资料 ID
+ * @returns 生成结果：成功时返回 cards 数组，失败时抛错
+ * @throws {KnowledgeCoreError} 资料不存在、工作区不存在、生成失败
+ * @author fxbin
+ */
+export async function retryMaterialCardGeneration(materialId: string): Promise<{ cards: KnowledgeCard[] }> {
+  const material = repository.findMaterial(materialId);
+  if (!material) {
+    throw new KnowledgeCoreError('Material not found.', 404);
+  }
+  const base = repository.findWorkspace(resolveWorkspaceId(material.workspaceId));
+  if (!base) {
+    throw new KnowledgeCoreError('Knowledge base not found.', 404);
+  }
+  const text = material.contentText ?? material.rawInput ?? material.title;
+  const mediaUrls = material.mediaUrls ?? [];
+  const generation = await generateKnowledge('material_summary', text, {
+    kind: 'link',
+    workspaceId: base.id,
+    materialId: material.id,
+    hasSourceMaterial: true,
+    parseStatus: material.parseStatus,
+    sourceUrl: material.sourceUrl,
+    parsedTitle: material.title,
+    contentLength: text.length,
+    mediaUrls,
+    mediaCount: mediaUrls.length,
+    needsReview: material.parseStatus === 'needs_review',
+    cacheHit: false,
+  });
+  const generated = generation.output;
+  const cards = createCards(base, material, text, generated.cards);
+  const sourceMaterialIds = cards
+    .map((card) => card.materialId)
+    .filter((idValue): idValue is string => Boolean(idValue));
+  base.stage = sourceMaterialIds.length > 0 ? 'grounded' : 'organizing';
+  repository.updateWorkspace(base);
+  return { cards };
+}
+
+/**
  * 获取指定工作区的概览信息（标题、摘要、统计计数）。
  * 工作区不存在时返回 undefined。
  * @param workspaceId - 工作区 ID
@@ -10333,14 +10415,18 @@ export function getWorkspaceOverview(workspaceId: string): WorkspaceOverview | u
   if (!workspaceId) return undefined;
   const base = repository.findWorkspace(workspaceId);
   if (!base) return undefined;
+  const materialCount = repository.listMaterials(workspaceId).length;
+  const stage = base.stage === 'ai_skeleton' && materialCount > 0 && base.cardCount === 0
+    ? 'organizing'
+    : base.stage;
   return {
     id: base.id,
     title: base.title,
     summary: base.summary,
-    stage: base.stage,
+    stage,
     sourceCount: base.sourceCount,
     cardCount: base.cardCount,
-    materialCount: repository.listMaterials(workspaceId).length,
+    materialCount,
   };
 }
 

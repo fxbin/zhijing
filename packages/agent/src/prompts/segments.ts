@@ -37,6 +37,9 @@ export const TOOL_STRATEGY_SEGMENT = [
   '- 当用户要求"深度搜索/深度研究/查证/竞品外部分析"，或问题需要多来源交叉验证时，优先调用 deep_search，而不是手动多次 web_search。',
   '- 外部搜索结果只能作为外部参考；回答中必须附上使用到的 URL，且不要把搜索结果当成工作区内证据。',
   '- 同一轮可并行调用多次检索工具，使用不同关键词扩展检索面。',
+  '- 当 search_cards 返回空时，必须再调 search_materials 检索原始资料；不得在未尝试 search_materials 的情况下断言"工作区无实质内容"。',
+  '- 当 get_workspace_summary 返回 materialCount > 0 时，不得回答"工作区尚处于骨架阶段"或"无实质内容"；应基于 search_materials 检索到的资料原文回答。',
+  '- 当 cardCount = 0 但 materialCount > 0 时，说明资料已导入但卡片尚未生成，应直接基于资料原文回答，并提示用户卡片生成可能仍在进行或已失败可重试。',
 ].join('\n');
 
 /**
