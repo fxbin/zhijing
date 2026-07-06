@@ -28,6 +28,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useCardTypeLabel } from '../utils/i18nLabels';
 import { renderMarkdown } from '../utils/markdown';
+import { copyTextToClipboard } from '../utils/clipboard';
 import { BADGE_CAPABILITY_IDS } from '../constants/capabilities';
 import SourceCitation from './SourceCitation';
 
@@ -317,6 +318,7 @@ export default function ChatMessageItem({
   const cardTypeLabel = useCardTypeLabel();
   const toolsDetailsRef = useRef(null);
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const copyResetTimerRef = useRef(null);
 
   /**
@@ -333,21 +335,29 @@ export default function ChatMessageItem({
 
   /**
    * 复制 AI 回复正文到剪贴板。
-   * 复制成功后按钮短暂切换为"已复制"状态（1.2s），用于视觉反馈。
-   * 流式中不允许复制（文本仍在变化），避免复制到不完整内容。
+   *
+   * 三态视觉反馈：
+   * - idle：默认「复制」
+   * - copied：成功后切换为「已复制」1.2s 后回退
+   * - failed：失败时切换为「复制失败」1.8s 后回退（clipboard API 失败且 execCommand 也失败时触发）
+   *
+   * 降级策略：navigator.clipboard 不可用（非 secure context）或失败时，
+   * 自动走 textarea + document.execCommand('copy') 兜底，覆盖本地开发偶发权限问题。
+   *
    * @author fxbin
    */
   async function handleCopyAssistantText() {
     if (!item.text || item.isStreaming) return;
-    try {
-      await navigator.clipboard.writeText(item.text);
+    const ok = await copyTextToClipboard(item.text);
+    if (copyResetTimerRef.current) {
+      clearTimeout(copyResetTimerRef.current);
+    }
+    if (ok) {
       setCopied(true);
-      if (copyResetTimerRef.current) {
-        clearTimeout(copyResetTimerRef.current);
-      }
       copyResetTimerRef.current = setTimeout(() => setCopied(false), 1200);
-    } catch {
-      // 剪贴板 API 失败时静默，浏览器可能未授权 clipboard 权限
+    } else {
+      setCopyFailed(true);
+      copyResetTimerRef.current = setTimeout(() => setCopyFailed(false), 1800);
     }
   }
 
@@ -460,16 +470,18 @@ export default function ChatMessageItem({
               dangerouslySetInnerHTML={{ __html: renderMarkdown(item.text) }}
             />
             {!item.isStreaming && (
-              <button
-                type="button"
-                className={`chat-message-copy-btn ${copied ? 'copied' : ''}`}
-                onClick={() => void handleCopyAssistantText()}
-                title={t('chat.copyAnswer')}
-                aria-label={t('chat.copyAnswer')}
-              >
-                {copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
-                {copied ? t('chat.copied') : t('chat.copy')}
-              </button>
+              <div className="chat-message-actions">
+                <button
+                  type="button"
+                  className={`chat-message-action-btn ${copied ? 'copied' : ''} ${copyFailed ? 'failed' : ''}`}
+                  onClick={() => void handleCopyAssistantText()}
+                  title={t('chat.copyAnswer')}
+                  aria-label={t('chat.copyAnswer')}
+                >
+                  {copyFailed ? <Info size={13} /> : copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
+                  {copyFailed ? t('chat.copyFailed') : copied ? t('chat.copied') : t('chat.copy')}
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -520,6 +532,7 @@ export default function ChatMessageItem({
           <ProposalBatchBlock
             item={item}
             state={proposalBatchState}
+            cardTypeLabel={cardTypeLabel}
             t={t}
           />
         )}
@@ -616,156 +629,212 @@ function ProposedCardsBlock({ proposedCards, state, cardTypeLabel, t }) {
 }
 
 /**
- * 根据 proposal batch 构造默认全选索引集合。
- * 默认勾选所有提议，方便用户直接采纳；可在 UI 中取消勾选。
- *
- * @param {object|null} batch - proposal batch 对象
- * @returns {Set<number>} 默认全选的索引集合；batch 为空时返回空集合
- * @author fxbin
+ * 冻结的空集合常量，用于 appliedIndicesByMessage / dismissedIndicesByMessage
+ * 未命中时的兜底引用，避免每次渲染创建新 Set 对象。
  */
-function buildDefaultSelectedIndices(batch) {
-  if (!batch || !Array.isArray(batch.proposals) || batch.proposals.length === 0) {
-    return new Set();
-  }
-  return new Set(batch.proposals.map((_, index) => index));
-}
+const EMPTY_INDEX_SET = Object.freeze(new Set());
 
 /**
  * 流式 apply diff 提议变更区块（assistant 消息内嵌）。
  *
- * 与 useProposalBatch hook 协同：
- * - acceptingMessageIds：采纳进行态的 message id 集合
- * - appliedBatches：已处理（采纳或拒绝）的 message id 集合
- * - errorByMessageId：采纳失败文案映射
- * - acceptBatch(messageId, batch, selectedIndices)：采纳选中
- * - dismissBatch(messageId)：拒绝全部（仅前端标记已处理）
+ * 渲染形态：卡片预览 + 一键创建。
+ * 每条 proposal 渲染为独立卡片预览块，展示操作类型 chip、卡片类型 chip、
+ * 标题、正文摘要与理由，并配备「创建」「跳过」两个单条操作按钮。
+ * 当存在多条待处理项时，底部额外提供「全部创建」「全部跳过」快捷操作。
  *
- * 选中态由本组件按 message 粒度维护，初始为「全选」；
- * 当 item.proposalBatch 引用变化时（同一 message 多次下发）重置选中集合。
+ * 与 useProposalBatch hook 协同：
+ * - acceptSingle(messageId, batch, index)：单条采纳
+ * - dismissSingle(messageId, index)：单条跳过（前端标记）
+ * - acceptBatch(messageId, batch, selectedIndices)：批量采纳（用于「全部创建」）
+ * - acceptSingle/acceptBatch 进行态、已采纳/已跳过索引集合均从 state 读取
+ *
+ * 状态判定优先级：
+ * 1. appliedBatches 命中 → 整体已处理（acceptBatch 成功或 dismissBatch 标记）
+ * 2. 所有 proposal 均已采纳或跳过 → 整体完成态
+ * 3. 否则逐条渲染待处理/采纳中/已采纳/已跳过四种态
  *
  * @param {object} props - 组件属性
  * @param {object} props.item - ChatThreadItem，需含 proposalBatch 字段
  * @param {object} props.state - useProposalBatch 返回值
+ * @param {function} props.cardTypeLabel - CardType → 本地化文案映射函数
  * @param {function} props.t - i18n 翻译函数
  * @returns {JSX.Element} apply diff 提议区块
  * @author fxbin
  */
-function ProposalBatchBlock({ item, state, t }) {
+function ProposalBatchBlock({ item, state, cardTypeLabel, t }) {
   const batch = item.proposalBatch;
   const messageId = item.id;
   const {
     acceptingMessageIds,
+    acceptingMessageIndices,
     appliedBatches,
+    appliedIndicesByMessage,
+    dismissedIndicesByMessage,
     errorByMessageId,
     acceptBatch,
-    dismissBatch,
+    acceptSingle,
+    dismissSingle,
   } = state;
 
-  const [selectedIndices, setSelectedIndices] = useState(() => buildDefaultSelectedIndices(batch));
-
-  useEffect(() => {
-    setSelectedIndices(buildDefaultSelectedIndices(batch));
-  }, [batch]);
-
-  const isAccepting = acceptingMessageIds.has(messageId);
-  const isApplied = appliedBatches.has(messageId);
+  const appliedSet = appliedIndicesByMessage[messageId] ?? EMPTY_INDEX_SET;
+  const dismissedSet = dismissedIndicesByMessage[messageId] ?? EMPTY_INDEX_SET;
+  const isAcceptingBatch = acceptingMessageIds.has(messageId);
   const errorMessage = errorByMessageId[messageId] ?? '';
 
-  if (isApplied) {
+  const total = batch.proposals.length;
+  const handledCount = appliedSet.size + dismissedSet.size;
+  const allHandled = handledCount >= total;
+
+  /**
+   * 「全部创建」：将当前所有待处理 proposal 一次性提交后端。
+   * 仅当待处理项多于一条时触发（单条时使用单条创建按钮即可）。
+   * @returns {void}
+   * @author fxbin
+   */
+  function handleAcceptAll() {
+    const pending = [];
+    batch.proposals.forEach((_, index) => {
+      if (!appliedSet.has(index) && !dismissedSet.has(index)) {
+        pending.push(index);
+      }
+    });
+    if (pending.length === 0) return;
+    void acceptBatch(messageId, batch, new Set(pending));
+  }
+
+  /**
+   * 「全部跳过」：逐条标记待处理 proposal 为已跳过。
+   * @returns {void}
+   * @author fxbin
+   */
+  function handleSkipAll() {
+    batch.proposals.forEach((_, index) => {
+      if (!appliedSet.has(index) && !dismissedSet.has(index)) {
+        dismissSingle(messageId, index);
+      }
+    });
+  }
+
+  if (appliedBatches.has(messageId) || allHandled) {
     return (
       <div className="chat-proposal-batch applied">
         <CheckCircle2 size={14} />
-        <span>{t('chat.proposalApplied')}</span>
+        <span>{t('chat.proposalAllDone')}</span>
       </div>
     );
   }
 
-  /**
-   * 切换指定索引的勾选状态。
-   * @param {number} index - 提议在 batch.proposals 中的下标
-   * @returns {void}
-   * @author fxbin
-   */
-  function toggleIndex(index) {
-    setSelectedIndices((prev) => {
-      const next = new Set(prev);
-      if (next.has(index)) {
-        next.delete(index);
-      } else {
-        next.add(index);
-      }
-      return next;
-    });
-  }
+  const hasMultiPending = total - handledCount > 1;
 
   return (
     <div className="chat-proposal-batch">
       <div className="chat-proposal-head">
         <strong>{t('chat.proposalTitle')}</strong>
-        <span className="chat-proposal-hint">{t('chat.proposalHint')}</span>
+        <span className="chat-proposal-hint">{t('chat.proposalHintCard')}</span>
       </div>
       <ul className="chat-proposal-list">
         {batch.proposals.map((proposal, index) => {
           const opLabelKey = PROPOSAL_OP_LABEL_KEYS[proposal.op] ?? PROPOSAL_OP_FALLBACK_KEY;
-          const isSelected = selectedIndices.has(index);
+          const isAccepted = appliedSet.has(index);
+          const isDismissed = dismissedSet.has(index);
+          const isAccepting = acceptingMessageIndices.has(`${messageId}:${index}`);
+          const showCardType = proposal.op === PROPOSAL_OP_CREATE_CARD
+            || proposal.op === PROPOSAL_OP_EDIT_CARD;
+          const itemClassName = [
+            'chat-proposal-item',
+            isAccepted ? 'accepted' : '',
+            isDismissed ? 'dismissed' : '',
+            isAccepting ? 'accepting' : '',
+          ].filter(Boolean).join(' ');
+
           return (
-            <li
-              key={`${proposal.op}-${index}`}
-              className={`chat-proposal-item ${isSelected ? 'selected' : ''}`}
-            >
-              <label>
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={() => toggleIndex(index)}
-                  disabled={isAccepting}
-                />
+            <li key={`${proposal.op}-${index}`} className={itemClassName}>
+              <div className="chat-proposal-item-head">
                 <span className={`chat-proposal-op-badge op-${proposal.op}`}>
                   {t(opLabelKey)}
                 </span>
-                <div className="chat-proposal-body">
-                  {proposal.title && <strong>{proposal.title}</strong>}
-                  {proposal.body && <p>{proposal.body}</p>}
-                  {proposal.cardId && (
-                    <p className="chat-proposal-meta">
-                      <span className="chat-proposal-meta-label">{t('chat.proposalMetaCardId')}</span>
-                      <code>{proposal.cardId}</code>
-                    </p>
-                  )}
-                  {proposal.materialId && (
-                    <p className="chat-proposal-meta">
-                      <span className="chat-proposal-meta-label">{t('chat.proposalMetaMaterialId')}</span>
-                      <code>{proposal.materialId}</code>
-                    </p>
-                  )}
-                  {proposal.rationale && (
-                    <p className="chat-proposal-rationale">{proposal.rationale}</p>
-                  )}
+                {showCardType && proposal.type && (
+                  <span className="chat-proposal-type-chip">
+                    {cardTypeLabel(proposal.type)}
+                  </span>
+                )}
+              </div>
+              <div className="chat-proposal-body">
+                {proposal.title && <strong>{proposal.title}</strong>}
+                {proposal.body && <p>{proposal.body}</p>}
+                {proposal.cardId && (
+                  <p className="chat-proposal-meta">
+                    <span className="chat-proposal-meta-label">{t('chat.proposalMetaCardId')}</span>
+                    <code>{proposal.cardId}</code>
+                  </p>
+                )}
+                {proposal.materialId && (
+                  <p className="chat-proposal-meta">
+                    <span className="chat-proposal-meta-label">{t('chat.proposalMetaMaterialId')}</span>
+                    <code>{proposal.materialId}</code>
+                  </p>
+                )}
+                {proposal.rationale && (
+                  <p className="chat-proposal-rationale">{proposal.rationale}</p>
+                )}
+              </div>
+              {!isAccepted && !isDismissed && (
+                <div className="chat-proposal-item-actions">
+                  <button
+                    type="button"
+                    className="chat-proposal-create-one"
+                    disabled={isAccepting || isAcceptingBatch}
+                    onClick={() => void acceptSingle(messageId, batch, index)}
+                  >
+                    {isAccepting && <Loader2 size={13} className="chat-message-tool-spinner" />}
+                    {isAccepting ? t('chat.proposalCreatingOne') : t('chat.proposalCreateOne')}
+                  </button>
+                  <button
+                    type="button"
+                    className="chat-proposal-skip-one"
+                    disabled={isAccepting || isAcceptingBatch}
+                    onClick={() => dismissSingle(messageId, index)}
+                  >
+                    {t('chat.proposalSkipOne')}
+                  </button>
                 </div>
-              </label>
+              )}
+              {isAccepted && (
+                <div className="chat-proposal-item-status accepted">
+                  <CheckCircle2 size={13} />
+                  <span>{t('chat.proposalCreatedOne')}</span>
+                </div>
+              )}
+              {isDismissed && (
+                <div className="chat-proposal-item-status dismissed">
+                  <span>{t('chat.proposalSkippedOne')}</span>
+                </div>
+              )}
             </li>
           );
         })}
       </ul>
-      <div className="chat-proposal-actions">
-        <button
-          type="button"
-          className="chat-proposal-accept"
-          disabled={isAccepting || selectedIndices.size === 0}
-          onClick={() => void acceptBatch(messageId, batch, selectedIndices)}
-        >
-          {isAccepting && <Loader2 size={13} className="chat-message-tool-spinner" />}
-          {isAccepting ? t('chat.proposalAccepting') : t('chat.proposalAcceptSelected')}
-        </button>
-        <button
-          type="button"
-          className="chat-proposal-dismiss"
-          disabled={isAccepting}
-          onClick={() => dismissBatch(messageId)}
-        >
-          {t('chat.proposalReject')}
-        </button>
-      </div>
+      {hasMultiPending && (
+        <div className="chat-proposal-actions">
+          <button
+            type="button"
+            className="chat-proposal-accept"
+            disabled={isAcceptingBatch}
+            onClick={handleAcceptAll}
+          >
+            {isAcceptingBatch && <Loader2 size={13} className="chat-message-tool-spinner" />}
+            {isAcceptingBatch ? t('chat.proposalAccepting') : t('chat.proposalAcceptAll')}
+          </button>
+          <button
+            type="button"
+            className="chat-proposal-dismiss"
+            disabled={isAcceptingBatch}
+            onClick={handleSkipAll}
+          >
+            {t('chat.proposalSkipAll')}
+          </button>
+        </div>
+      )}
       {errorMessage && (
         <p className="chat-proposal-error" role="alert">{errorMessage}</p>
       )}
