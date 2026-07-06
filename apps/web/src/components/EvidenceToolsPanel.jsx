@@ -88,11 +88,11 @@ function EvidenceAuditSection({ workspaceId }) {
   return (
     <div className="evidence-audit-report">
       <div className="evidence-audit-totals">
-        <div className="evidence-audit-ratio">
-          <span>{t('evidenceTools.sourcedRatio')}</span>
-          <strong>{formatPercent(report.sourcedRatio ?? 0)}</strong>
-        </div>
         <div className="evidence-audit-breakdown">
+          <article className="evidence-audit-ratio">
+            <span>{t('evidenceTools.sourcedRatio')}</span>
+            <strong>{formatPercent(report.sourcedRatio ?? 0)}</strong>
+          </article>
           <article className="evidence-stat">
             <span>{t('evidenceTools.totalCards')}</span>
             <strong>{totals.cards}</strong>

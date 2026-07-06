@@ -2746,22 +2746,22 @@ button { cursor: pointer; }
 }
 
 .evidence-audit-ratio {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 12px 14px;
-  border-radius: 10px;
-  background: var(--scholar-soft);
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface-low);
 }
 
 .evidence-audit-ratio span {
   color: var(--muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
 }
 
 .evidence-audit-ratio strong {
+  font-size: var(--text-md);
   color: var(--scholar);
-  font-size: var(--text-lg);
 }
 
 .evidence-audit-breakdown {
