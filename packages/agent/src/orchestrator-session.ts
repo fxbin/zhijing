@@ -837,13 +837,65 @@ function stripMarkdownDecorations(line: string): string {
 }
 
 /**
- * 判断一行是否为「建议」heading 行。
+ * 建议卡片 heading 的行首编号标记正则。
  *
- * 判断标准：行内同时出现（1）建议动词（建议/推荐/提议）和（2）编号标记
- * （阿拉伯数字、emoji 数字、中文数字、带圈数字），顺序不限。
- * 这覆盖 LLM 常见的两种输出格式：
- * - 「1️⃣ 建议新建卡片」（数字在前）
- * - 「### 建议 1️⃣ — 建 concept 卡片」（建议在前，数字在后，带 markdown 前缀）
+ * 匹配以下「行首」编号形式（去除 markdown 装饰后）：
+ * - keycap emoji 数字：1️⃣ 2️⃣ …（数字 + 变体选择符 + 组合用包围符）
+ * - 阿拉伯数字 + 分隔符：1. / 1、 / 1) / 1： / 1(空格)
+ * - 带圈数字：①②…⑩
+ * - 圈圈字母数字区：\u2460-\u2473
+ * - 中文数字 + 分隔符：一、 / 二. / 三：
+ *
+ * 用于把 heading 判定约束在「以编号开头」的行，避免误抓正文中
+ * 偶然出现「建议 + 数字」的普通段落（如寒暄、小节标题）。
+ */
+const SUGGESTION_HEADING_NUMBER_PATTERN = /^\s*(?:\d\uFE0F?\u20E3|\d[.、)）:：\s]|[①-⑩]|[\u2460-\u2473]|[一二三四五六七八九十]+[、.：:）)])/;
+
+/**
+ * markdown 水平分隔线正则：仅由 3 个及以上 `-` / `*` / `_` 组成的行。
+ *
+ * 用于在累积卡片正文时跳过分隔线，避免预览正文首尾出现孤立 `---` 噪声。
+ */
+const HORIZONTAL_RULE_PATTERN = /^(?:-{3,}|\*{3,}|_{3,})$/;
+
+/**
+ * 判断文本是否含明确的「卡片类型」信号。
+ *
+ * 中文需带「卡」后缀（概念卡/方法卡/案例卡/问题卡/观点卡/步骤卡/事实卡/通用卡），
+ * 避免裸词「问题/方法/观点」误伤普通编号列表；英文沿用类型关键词。
+ *
+ * @param text - 已去除 markdown 装饰的行文本
+ * @returns 是否含卡片类型信号
+ * @author fxbin
+ */
+function hasCardTypeSignal(text: string): boolean {
+  if (/(?:概念|方法|案例|问题|观点|步骤|事实|通用)卡/.test(text)) return true;
+  const lower = text.toLowerCase();
+  for (const candidate of PLAIN_SUGGESTION_TYPE_KEYWORDS) {
+    const hit = candidate.keywords.some((kw) => {
+      if (/[\u4e00-\u9fff]/.test(kw)) return false;
+      return lower.includes(kw.toLowerCase());
+    });
+    if (hit) return true;
+  }
+  return text.includes('卡片');
+}
+
+/**
+ * 判断一行是否为「建议卡片」heading 行。
+ *
+ * 判断标准（两者必须同时满足）：
+ * 1. 去除 markdown 装饰后，行首为编号标记（数字/keycap/带圈/中文数字 + 分隔符）；
+ * 2. 行内含建议动词（建议/推荐/提议）或卡片类型信号（X卡 / concept / 卡片）。
+ *
+ * 这覆盖 LLM 常见输出：
+ * - `### 1️⃣ 概念卡：「标题」`（编号 + 类型卡）
+ * - `### 建议 1️⃣ — 建 concept 卡片：「标题」`（编号 + 建议 + concept）
+ * - `1. 建议新建卡片「标题」`（编号 + 建议）
+ *
+ * 同时排除两类误判：
+ * - 寒暄段「…为你提炼3个…附上建议的标题…」（数字不在行首 → 排除）
+ * - 小节标题 `## 📇 建议新建的 3 张知识卡片`（行首是 emoji 非编号 → 排除）
  *
  * @param rawLine - 原始行文本
  * @returns 是否为建议 heading 行
@@ -853,10 +905,9 @@ function isSuggestionHeadingLine(rawLine: string): boolean {
   const stripped = stripMarkdownDecorations(rawLine);
   if (stripped.length === 0) return false;
   if (stripped.startsWith('```')) return false;
+  if (!SUGGESTION_HEADING_NUMBER_PATTERN.test(stripped)) return false;
   const hasVerb = stripped.includes('建议') || stripped.includes('推荐') || stripped.includes('提议');
-  if (!hasVerb) return false;
-  const hasNumber = /[\d一二三四五六七八九十①②③④⑤⑥⑦⑧⑨⑩\u2460-\u2473]/.test(stripped);
-  return hasNumber;
+  return hasVerb || hasCardTypeSignal(stripped);
 }
 
 /**
@@ -955,9 +1006,11 @@ function extractPlainTextSuggestions(
       continue;
     }
     if (inSuggestion) {
-      if (line.trim().length === 0) continue;
+      const trimmed = line.trim();
+      if (trimmed.length === 0) continue;
+      if (HORIZONTAL_RULE_PATTERN.test(trimmed)) continue;
       if (currentBody.length < 300) {
-        currentBody = currentBody.length === 0 ? line.trim() : `${currentBody}\n${line.trim()}`;
+        currentBody = currentBody.length === 0 ? trimmed : `${currentBody}\n${trimmed}`;
       }
     }
   }
