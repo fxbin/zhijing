@@ -11,8 +11,7 @@
 import { useState } from 'react';
 import api from '../utils/api';
 import { materialFromApi } from '../utils/material';
-import { fallbackDetail, emptyDetail } from '../utils/knowledge';
-import { seedWorkspaces, seedMaterials } from '../constants/seedData';
+import { emptyDetail } from '../utils/knowledge';
 import { API_STATUS_ONLINE, API_STATUS_OFFLINE } from './useUiState';
 
 /**
@@ -90,11 +89,11 @@ export function useWorkspaceState({
   go,
   t,
 }) {
-  const [workspaces, setWorkspaces] = useState(seedWorkspaces);
-  const [materials, setMaterials] = useState(seedMaterials);
+  const [workspaces, setWorkspaces] = useState([]);
+  const [materials, setMaterials] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(null);
-  const [workspaceDetail, setWorkspaceDetail] = useState(fallbackDetail);
+  const [workspaceDetail, setWorkspaceDetail] = useState(emptyDetail());
   const [workspaceAnalytics, setWorkspaceAnalytics] = useState(null);
   const [latestTaskId, setLatestTaskId] = useState(null);
   const [latestTask, setLatestTask] = useState(null);
@@ -146,7 +145,7 @@ export function useWorkspaceState({
       const detail = await api.get(`${WORKSPACES_PATH}/${workspaceId}`);
       if (!isCancelled()) setWorkspaceDetail(detail);
     } catch {
-      if (!isCancelled()) setWorkspaceDetail(fallbackDetail());
+      if (!isCancelled()) setWorkspaceDetail(emptyDetail());
     }
   }
 
@@ -316,7 +315,7 @@ export function useWorkspaceState({
    * @author fxbin
    */
   function resetDetailForEmptySelection() {
-    setWorkspaceDetail(apiStatus === API_STATUS_ONLINE ? emptyDetail() : fallbackDetail());
+    setWorkspaceDetail(emptyDetail());
     setWorkspaceAnalytics(null);
   }
 

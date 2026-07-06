@@ -110,7 +110,7 @@ export default function AccessGate({ children }) {
             {t('accessGate.title', { defaultValue: '知径 · 体验入口' })}
           </h2>
           <p className="access-gate-subtitle">
-            {t('accessGate.subtitle', { defaultValue: '请输入访问密码以体验 Demo' })}
+            {t('accessGate.subtitle', { defaultValue: '请输入访问密码' })}
           </p>
           <input
             type="password"

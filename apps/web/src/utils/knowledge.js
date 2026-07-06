@@ -177,40 +177,6 @@ export function buildAdvancedOpsData({ workspaces, materials, detail, tasks }) {
 }
 
 /**
- * 返回离线演示用的工作区详情。
- * @returns {object} 演示用详情对象
- */
-export function fallbackDetail() {
-  return {
-    title: 'AI Agent 学习',
-    summary: 'Exploring the fundamentals, tools, memory systems, and multi-agent collaborative frameworks.',
-    sourceCount: 12,
-    cardCount: 42,
-    sourcedRatio: 0.62,
-    materials: [
-      {
-        id: 'seed-material',
-        title: "Beginner's Guide to AI Agents",
-        platform: 'xiaohongshu',
-        parseStatus: 'ingested',
-        createdAt: new Date().toISOString(),
-      },
-    ],
-    cards: [
-      {
-        id: 'seed-card',
-        type: 'concept',
-        title: 'ReAct Framework',
-        body: 'Reasoning + Acting. Forces the LLM to generate a reasoning trace before taking an action, improving transparency and success rate in complex tasks.',
-        claimStatus: 'sourced',
-        updatedAt: new Date().toISOString(),
-      },
-    ],
-    artifacts: [],
-  };
-}
-
-/**
  * 返回空工作区详情。
  * @returns {object} 空详情对象
  */
