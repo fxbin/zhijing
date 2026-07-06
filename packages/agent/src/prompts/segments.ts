@@ -95,7 +95,9 @@ export const PROPOSAL_BATCH_SEGMENT = [
   '',
   '这种文字描述用户必须手动创建卡片，体验差。任何「建议」「可以」「推荐」字样出现时都要检查是否应转为 proposal-batch。',
   '',
-  '- 仅当回答确实涉及知识结构化建议时才产出 proposal；提议必须基于已检索到的真实卡片/资料 id，不要编造不存在的 id。',
+  '- 仅当回答确实涉及知识结构化建议时才产出 proposal。',
+  '- create_card（新建卡片）：鼓励主动使用。从当前对话中提炼出的新概念、新方法、新观点都可以提议，materialId 是可选的关联（若对话涉及具体资料则附上，没有就留空）。',
+  '- edit_card / archive_card / unarchive_card / archive_material（编辑/归档类操作）：cardId 或 materialId 必填，必须使用已检索到的真实 id，不要编造不存在的 id。',
   '- 用户在前端可逐条选择采纳或拒绝，未采纳的提议不会落库。',
 ].join('\n');
 
