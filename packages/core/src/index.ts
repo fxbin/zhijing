@@ -2593,7 +2593,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         SELECT * FROM materials
         WHERE workspace_id = ? AND archived = 0
           AND (title LIKE ? ESCAPE '\\' OR content_text LIKE ? ESCAPE '\\')
-        ORDER BY updated_at DESC
+        ORDER BY created_at DESC
         LIMIT ?
       `).all(workspaceId, likePattern, likePattern, limit) as MaterialRow[];
       return rows.map(mapMaterial);
