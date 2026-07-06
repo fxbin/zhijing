@@ -16,6 +16,8 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2,
+  Check as CheckIcon,
+  Copy as CopyIcon,
   Info,
   Loader2,
   RotateCcw,
@@ -310,6 +312,8 @@ export default function ChatMessageItem({
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
   const toolsDetailsRef = useRef(null);
+  const [copied, setCopied] = useState(false);
+  const copyResetTimerRef = useRef(null);
 
   /**
    * 流式态变化时自动控制工具调用区块的展开/折叠：
@@ -322,6 +326,34 @@ export default function ChatMessageItem({
       toolsDetailsRef.current.open = item.isStreaming;
     }
   }, [item.isStreaming]);
+
+  /**
+   * 复制 AI 回复正文到剪贴板。
+   * 复制成功后按钮短暂切换为"已复制"状态（1.2s），用于视觉反馈。
+   * 流式中不允许复制（文本仍在变化），避免复制到不完整内容。
+   * @author fxbin
+   */
+  async function handleCopyAssistantText() {
+    if (!item.text || item.isStreaming) return;
+    try {
+      await navigator.clipboard.writeText(item.text);
+      setCopied(true);
+      if (copyResetTimerRef.current) {
+        clearTimeout(copyResetTimerRef.current);
+      }
+      copyResetTimerRef.current = setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // 剪贴板 API 失败时静默，浏览器可能未授权 clipboard 权限
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimerRef.current) {
+        clearTimeout(copyResetTimerRef.current);
+      }
+    };
+  }, []);
 
   if (item.role === 'user') {
     const canRetry = typeof onRetry === 'function' && !isStreaming && !item.isStreaming;
@@ -418,10 +450,24 @@ export default function ChatMessageItem({
         )}
 
         {hasText && (
-          <div
-            className="chat-message-text"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(item.text) }}
-          />
+          <div className="chat-message-text-wrapper">
+            <div
+              className="chat-message-text"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(item.text) }}
+            />
+            {!item.isStreaming && (
+              <button
+                type="button"
+                className={`chat-message-copy-btn ${copied ? 'copied' : ''}`}
+                onClick={() => void handleCopyAssistantText()}
+                title={t('chat.copyAnswer')}
+                aria-label={t('chat.copyAnswer')}
+              >
+                {copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
+                {copied ? t('chat.copied') : t('chat.copy')}
+              </button>
+            )}
+          </div>
         )}
 
         {isWaiting && <p className="chat-message-pending">{t('chat.loadingAnswer')}</p>}

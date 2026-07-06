@@ -12712,6 +12712,53 @@ button { cursor: pointer; }
   color: var(--color-text-primary, inherit);
 }
 
+/**
+ * AI 回复文本容器：relative 定位承载复制按钮，
+ * 按钮 absolute 在右上角，默认隐藏，hover 容器时浮现。
+ */
+.chat-message-text-wrapper {
+  position: relative;
+}
+
+.chat-message-copy-btn {
+  position: absolute;
+  top: -4px;
+  right: 0;
+  transform: translateY(-100%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border-soft, rgba(0, 0, 0, 0.08));
+  background: var(--color-surface, #fff);
+  color: var(--color-text-secondary, #777);
+  font-size: var(--text-xs);
+  font-family: var(--font-sans);
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.chat-message-text-wrapper:hover .chat-message-copy-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chat-message-copy-btn:hover {
+  color: var(--primary, #2C5F8D);
+  border-color: var(--primary, #2C5F8D);
+}
+
+.chat-message-copy-btn.copied {
+  opacity: 1;
+  pointer-events: auto;
+  color: var(--sage, #6B8E7F);
+  border-color: var(--sage, #6B8E7F);
+}
+
 /* Markdown 美化渲染 */
 .chat-message-text h1,
 .chat-message-text h2,
