@@ -127,10 +127,13 @@ export interface WorkspaceAgentOptions {
 }
 
 /**
- * 解析 apiKey：参数 > 环境变量 > pi-ai 默认查找规则。
+ * 解析 apiKey：显式传入 > provider 专属环境变量 > 通用环境变量。
  *
- * provider 为自定义字符串（非 KnownProvider）时跳过 SDK 环境变量查找，
- * 仅依赖显式传入的 apiKey 或 ZHIJING_PI_API_KEY 环境变量。
+ * 回退顺序遵守 provider 匹配原则，避免跨 provider 误用：
+ * 1. 显式传入的 apiKey（来自激活 Profile）
+ * 2. 该 provider 专属环境变量（如 DEEPSEEK_API_KEY）
+ * 3. 通用环境变量 ZHIJING_PI_API_KEY（仅当 provider 为自定义字符串时回退，
+ *    已知 provider 不回退到通用变量，防止 key 与 provider 不匹配导致 401）
  *
  * @param provider - 最终生效的 provider（可为自定义字符串）
  * @param explicit - 调用方显式传入的 apiKey
@@ -139,11 +142,11 @@ export interface WorkspaceAgentOptions {
  */
 function resolveApiKey(provider: string, explicit?: string): string | undefined {
   if (explicit) return explicit;
-  const envApiKey = process.env.ZHIJING_PI_API_KEY;
-  if (envApiKey && envApiKey.length > 0) return envApiKey;
   if (isKnownPiProvider(provider)) {
     return getEnvApiKey(provider);
   }
+  const envApiKey = process.env.ZHIJING_PI_API_KEY;
+  if (envApiKey && envApiKey.length > 0) return envApiKey;
   return undefined;
 }
 
