@@ -190,6 +190,8 @@
   "chat.capabilityBadge.simulation": "单 Agent 模拟 · 多 Agent 并行将在后续版本支持",
   "chat.clearHistory": "清空当前对话",
   "chat.reasoning": "推理过程",
+  "chat.toolCallsCount_one": "调用 1 个工具",
+  "chat.toolCallsCount_other": "调用 {{count}} 个工具",
   "chat.toolArgs": "入参",
   "chat.toolResult": "查看结果",
   "chat.toolResultStructured": "结构化结果",

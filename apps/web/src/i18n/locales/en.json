@@ -190,6 +190,8 @@
   "chat.capabilityBadge.simulation": "Single Agent Simulation · Multi-Agent parallel will be supported in future versions",
   "chat.clearHistory": "Clear current chat",
   "chat.reasoning": "Reasoning",
+  "chat.toolCallsCount_one": "Called 1 tool",
+  "chat.toolCallsCount_other": "Called {{count}} tools",
   "chat.toolArgs": "Args",
   "chat.toolResult": "Result",
   "chat.toolResultStructured": "Structured result",

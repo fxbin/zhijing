@@ -13,7 +13,7 @@
  * @author fxbin
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2,
   Info,
@@ -309,6 +309,19 @@ export default function ChatMessageItem({
 }) {
   const { t } = useTranslation();
   const cardTypeLabel = useCardTypeLabel();
+  const toolsDetailsRef = useRef(null);
+
+  /**
+   * 流式态变化时自动控制工具调用区块的展开/折叠：
+   * - 流式开始（isStreaming true）→ 自动展开，让用户看到工具调用进度
+   * - 流式结束（isStreaming false）→ 自动折叠，保持对话流清爽（Trae 风格）
+   * 用户在非流式态手动展开/折叠不受干扰。
+   */
+  useEffect(() => {
+    if (toolsDetailsRef.current) {
+      toolsDetailsRef.current.open = item.isStreaming;
+    }
+  }, [item.isStreaming]);
 
   if (item.role === 'user') {
     const canRetry = typeof onRetry === 'function' && !isStreaming && !item.isStreaming;
@@ -364,37 +377,44 @@ export default function ChatMessageItem({
         )}
 
         {hasToolCalls && (
-          <div className="chat-message-tools">
-            {item.toolCalls.map((tool) => (
-              <div
-                key={tool.toolCallId}
-                className={`chat-message-tool ${tool.isError ? 'failed' : ''} ${tool.isStreaming ? 'streaming' : ''}`}
-              >
-                <Wrench size={13} />
-                <span>{tool.toolName}</span>
-                {tool.isStreaming && <Loader2 size={12} className="chat-message-tool-spinner" />}
-                {!tool.isStreaming && tool.args !== undefined && tool.args !== null && (
-                  <details className="chat-message-tool-args">
-                    <summary>{t('chat.toolArgs')}</summary>
-                    <pre className="chat-message-tool-args-text">{safeFormatJson(tool.args)}</pre>
-                  </details>
-                )}
-                {!tool.isStreaming && tool.details && (
-                  <ToolResultDetails
-                    toolName={tool.toolName}
-                    details={tool.details}
-                    t={t}
-                  />
-                )}
-                {!tool.isStreaming && tool.result && (
-                  <details className="chat-message-tool-result">
-                    <summary>{t('chat.toolResult')}</summary>
-                    <pre className="chat-message-tool-result-text">{tool.result}</pre>
-                  </details>
-                )}
-              </div>
-            ))}
-          </div>
+          <details className="chat-message-tools-collapsible" ref={toolsDetailsRef}>
+            <summary className="chat-message-tools-summary">
+              <Wrench size={13} />
+              <span>{t('chat.toolCallsCount', { count: item.toolCalls.length })}</span>
+              {item.isStreaming && <Loader2 size={12} className="chat-message-tool-spinner" />}
+            </summary>
+            <div className="chat-message-tools">
+              {item.toolCalls.map((tool) => (
+                <div
+                  key={tool.toolCallId}
+                  className={`chat-message-tool ${tool.isError ? 'failed' : ''} ${tool.isStreaming ? 'streaming' : ''}`}
+                >
+                  <Wrench size={13} />
+                  <span>{tool.toolName}</span>
+                  {tool.isStreaming && <Loader2 size={12} className="chat-message-tool-spinner" />}
+                  {!tool.isStreaming && tool.args !== undefined && tool.args !== null && (
+                    <details className="chat-message-tool-args">
+                      <summary>{t('chat.toolArgs')}</summary>
+                      <pre className="chat-message-tool-args-text">{safeFormatJson(tool.args)}</pre>
+                    </details>
+                  )}
+                  {!tool.isStreaming && tool.details && (
+                    <ToolResultDetails
+                      toolName={tool.toolName}
+                      details={tool.details}
+                      t={t}
+                    />
+                  )}
+                  {!tool.isStreaming && tool.result && (
+                    <details className="chat-message-tool-result">
+                      <summary>{t('chat.toolResult')}</summary>
+                      <pre className="chat-message-tool-result-text">{tool.result}</pre>
+                    </details>
+                  )}
+                </div>
+              ))}
+            </div>
+          </details>
         )}
 
         {hasText && (
