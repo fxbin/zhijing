@@ -33,7 +33,7 @@ const QUERY_MAX_LENGTH = 240;
 /**
  * 搜索响应超时时间。
  */
-const WEB_SEARCH_TIMEOUT_MS = 15_000;
+const WEB_SEARCH_TIMEOUT_MS = 20_000;
 
 /**
  * 原始响应体最大字符数。
@@ -59,6 +59,47 @@ const DEFAULT_SEARCH_BASE_URL = 'https://s.jina.ai/';
  * 搜索请求 UA 标识。
  */
 const USER_AGENT = 'ZhijingBot/0.1 (+https://local.zhijing.app)';
+
+/**
+ * 内存缓存有效期（毫秒），5 分钟内相同 query 复用结果。
+ */
+const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * 内存缓存最大条目数，避免无界增长。
+ */
+const SEARCH_CACHE_MAX_SIZE = 64;
+
+interface SearchCacheEntry {
+  results: WebSearchResultItem[];
+  expireAt: number;
+}
+
+const searchCache = new Map<string, SearchCacheEntry>();
+
+/**
+ * 读取缓存。命中且未过期时返回结果，否则返回 null。
+ */
+function readSearchCache(key: string): WebSearchResultItem[] | null {
+  const entry = searchCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expireAt) {
+    searchCache.delete(key);
+    return null;
+  }
+  return entry.results;
+}
+
+/**
+ * 写入缓存。超过上限时按 FIFO 淘汰最早条目。
+ */
+function writeSearchCache(key: string, results: WebSearchResultItem[]): void {
+  if (searchCache.size >= SEARCH_CACHE_MAX_SIZE) {
+    const oldestKey = searchCache.keys().next().value;
+    if (oldestKey) searchCache.delete(oldestKey);
+  }
+  searchCache.set(key, { results, expireAt: Date.now() + SEARCH_CACHE_TTL_MS });
+}
 
 export interface WebSearchResultItem {
   title: string;
@@ -194,6 +235,9 @@ function parseTextResults(text: string, limit: number): WebSearchResultItem[] {
 }
 
 export async function searchWeb(query: string, limit: number): Promise<WebSearchResultItem[]> {
+  const cacheKey = `${query}::${limit}`;
+  const cached = readSearchCache(cacheKey);
+  if (cached) return cached;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), WEB_SEARCH_TIMEOUT_MS);
   try {
@@ -215,13 +259,21 @@ export async function searchWeb(query: string, limit: number): Promise<WebSearch
     }
 
     const text = (await response.text()).slice(0, MAX_RESPONSE_TEXT_LENGTH);
+    let results: WebSearchResultItem[];
     try {
       const jsonResults = parseJsonResults(JSON.parse(text), limit);
-      if (jsonResults.length > 0) return jsonResults;
+      if (jsonResults.length > 0) {
+        results = jsonResults;
+      } else {
+        results = parseTextResults(text, limit);
+      }
     } catch {
-      return parseTextResults(text, limit);
+      results = parseTextResults(text, limit);
     }
-    return parseTextResults(text, limit);
+    if (results.length > 0) {
+      writeSearchCache(cacheKey, results);
+    }
+    return results;
   } finally {
     clearTimeout(timer);
   }

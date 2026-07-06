@@ -23,10 +23,10 @@ const DeepSearchParameters = Type.Object({
 const DEFAULT_MAX_QUERIES = 3;
 const DEFAULT_MAX_SOURCES = 6;
 const DEFAULT_FETCH_TOP_K = 3;
-const SEARCH_LIMIT_PER_QUERY = 5;
+const SEARCH_LIMIT_PER_QUERY = 8;
 const QUERY_MAX_LENGTH = 180;
 const SOURCE_TEXT_MAX_LENGTH = 1800;
-const SOURCE_SNIPPET_MAX_LENGTH = 360;
+const SOURCE_SNIPPET_MAX_LENGTH = 720;
 const CLAIM_MAX_LENGTH = 220;
 const MAX_CLAIMS = 8;
 const MAX_GAPS = 6;
@@ -88,8 +88,8 @@ function buildSearchQueries(question: string, explicitQueries: string[] | undefi
   return uniqueStrings([
     base,
     ...explicit,
-    `${base} evidence`,
-    `${base} criticism OR limitation`,
+    `${base} 优缺点`,
+    `${base} 案例 实践`,
   ], maxQueries);
 }
 
@@ -117,9 +117,21 @@ function splitSentences(text: string): string[] {
     .filter((line) => line.length >= 24);
 }
 
+function splitParagraphs(text: string): string[] {
+  return text
+    .split(/\n{2,}/)
+    .map((paragraph) => normalizeText(paragraph, CLAIM_MAX_LENGTH))
+    .filter((paragraph) => paragraph.length >= 24);
+}
+
 function selectClaimSentence(text: string): string {
+  if (!text) return '';
+  const paragraphs = splitParagraphs(text);
+  if (paragraphs.length > 0) {
+    return paragraphs[0];
+  }
   const candidates = splitSentences(text);
-  return candidates.find((line) => /(?:is|are|will|can|because|therefore|显示|表明|认为|指出|导致|支持|反对|限制|风险)/i.test(line))
+  return candidates.find((line) => /(?:is|are|will|can|because|therefore|显示|表明|认为|指出|导致|支持|反对|限制|风险|核心|关键|主要|结论)/i.test(line))
     ?? candidates[0]
     ?? normalizeText(text, CLAIM_MAX_LENGTH);
 }
