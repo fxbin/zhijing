@@ -10,7 +10,14 @@ import { sanitizeForLlmContext } from './sanitize.js';
  * - limit：返回资料数量上限，可选；省略时使用 core 默认值。
  */
 const SearchMaterialsParameters = Type.Object({
-  query: Type.String({ description: '检索关键词或自然语言片段，必填' }),
+  query: Type.String({
+    description: [
+      '检索关键词或自然语言片段，必填。',
+      '重要：query 必须直接取自用户原始输入中的原词，禁止自行改写、扩写、补全或拼接多个关键词。',
+      '若用户输入是「命运赠送」，query 就传「命运赠送」，不要改写成「命运赠送 礼物 价格」等长句。',
+      '如需多关键词检索，应通过多次并行调用实现，每次调用使用一个原词。',
+    ].join(' '),
+  }),
   limit: Type.Optional(
     Type.Integer({ description: '返回资料数量上限，省略时使用默认值', minimum: 1, maximum: 20 }),
   ),
@@ -71,12 +78,19 @@ export function createSearchMaterialsTool(workspaceId: string): AgentTool<typeof
     description: [
       '在当前工作区内按关键词搜索已导入的来源资料（material），返回标题、平台、解析状态与内容预览。',
       '用于追溯一手资料或查阅卡片未覆盖的信息；仅在 search_cards 结果不足以作答时调用。',
+      '重要：query 参数必须直接取自用户原始输入中的原词，禁止自行改写、扩写或拼接关键词。',
     ].join(' '),
     parameters: SearchMaterialsParameters,
     async execute(_toolCallId, params): Promise<AgentToolResult<SearchMaterialsDetails>> {
       const items = searchWorkspaceMaterials(workspaceId, params.query, params.limit);
       const summary = items.length === 0
-        ? `未在工作区内检索到与「${params.query}」相关的来源资料。`
+        ? [
+            `未在工作区内检索到与「${params.query}」相关的来源资料。`,
+            '建议：',
+            '(1) 确认 query 是否为用户原始输入中的原词——若你已改写或扩写，请用用户原词重试；',
+            '(2) 若用户输入较长，可拆分为多个短关键词，通过多次并行调用分别检索；',
+            '(3) 若原词检索仍无结果，再判断工作区是否缺少相关内容，不要仅凭单次检索 0 命中就断言"无实质内容"。',
+          ].join('\n')
         : `已检索到 ${items.length} 条与「${params.query}」相关的来源资料：\n${items.map(formatMaterialLine).join('\n')}`;
       return {
         content: [{ type: 'text', text: summary }],

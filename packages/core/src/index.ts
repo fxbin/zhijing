@@ -214,6 +214,17 @@ import {
   type CardIndexInput,
   type MaterialIndexInput,
 } from './search-zvec.js';
+
+/**
+ * jieba-wasm 分词器（LIKE fallback 专用）。
+ *
+ * 用 createRequire 引入，避免 TS 模块解析问题；与 statistics/tokenize.ts 同源。
+ * 仅用于 splitQueryForLikeFallback，对 LLM 改写后的多词 query 做分词，
+ * 让 LIKE 保底匹配能按 token OR 命中，而非要求整串连续。
+ */
+import { createRequire as createRequireForJieba } from 'node:module';
+const jiebaRequire = createRequireForJieba(import.meta.url);
+const jiebaCut: (text: string, hmm?: boolean) => string[] = (jiebaRequire('jieba-wasm') as { cut: (text: string, hmm?: boolean) => string[] }).cut;
 export { initProxyDispatcher, getCurrentProxy } from './fetch-dispatcher.js';
 export { detectSystemProxy, setManualProxy, resetProxyCache } from './proxy-detector.js';
 export { checkUrlForSsrf, assertUrlSafeForSsrf, createSsrfSafeFetch } from './ssrf-guard.js';
@@ -2524,16 +2535,39 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       }
     }
 
-    const likePattern = `%${query.trim().replace(/[%_]/g, (match) => `\\${match}`)}%`;
+    const likeTokens = splitQueryForLikeFallback(query);
+    if (likeTokens.length === 0) return [];
     try {
+      const escapedTokens = likeTokens.map((t) => `%${t.replace(/[%_]/g, (m) => `\\${m}`)}%`);
+      const orClauses: string[] = escapedTokens.map(() => '(title LIKE ? ESCAPE \'\\\' OR body LIKE ? ESCAPE \'\\\')');
+      const params: Array<string | number> = [workspaceId];
+      for (const escaped of escapedTokens) {
+        params.push(escaped, escaped);
+      }
+      params.push(limit * 3);
       const rows = this.db.prepare(`
         SELECT * FROM cards
-        WHERE workspace_id = ? AND archived = 0
-          AND (title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\')
+        WHERE workspace_id = ? AND archived = 0 AND (
+          ${orClauses.join(' OR ')}
+        )
         ORDER BY updated_at DESC
         LIMIT ?
-      `).all(workspaceId, likePattern, likePattern, limit) as CardRow[];
-      return rows.map(mapCard);
+      `).all(...params) as CardRow[];
+      const scored = rows.map((row) => {
+        const card = mapCard(row);
+        const titleLower = card.title.toLowerCase();
+        const bodyLower = card.body.toLowerCase();
+        let hitCount = 0;
+        for (const token of likeTokens) {
+          const tokenLower = token.toLowerCase();
+          if (titleLower.includes(tokenLower) || bodyLower.includes(tokenLower)) {
+            hitCount += 1;
+          }
+        }
+        return { card, hitCount };
+      });
+      scored.sort((a, b) => b.hitCount - a.hitCount);
+      return scored.slice(0, limit).map((s) => s.card);
     } catch (error) {
       console.warn('[searchCardsByRelevance] content LIKE fallback failed', error);
       return [];
@@ -2587,16 +2621,39 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
       }
     }
 
-    const likePattern = `%${query.trim().replace(/[%_]/g, (match) => `\\${match}`)}%`;
+    const likeTokens = splitQueryForLikeFallback(query);
+    if (likeTokens.length === 0) return [];
     try {
+      const escapedTokens = likeTokens.map((t) => `%${t.replace(/[%_]/g, (m) => `\\${m}`)}%`);
+      const orClauses: string[] = escapedTokens.map(() => '(title LIKE ? ESCAPE \'\\\' OR content_text LIKE ? ESCAPE \'\\\')');
+      const params: Array<string | number> = [workspaceId];
+      for (const escaped of escapedTokens) {
+        params.push(escaped, escaped);
+      }
+      params.push(limit * 3);
       const rows = this.db.prepare(`
         SELECT * FROM materials
-        WHERE workspace_id = ? AND archived = 0
-          AND (title LIKE ? ESCAPE '\\' OR content_text LIKE ? ESCAPE '\\')
+        WHERE workspace_id = ? AND archived = 0 AND (
+          ${orClauses.join(' OR ')}
+        )
         ORDER BY created_at DESC
         LIMIT ?
-      `).all(workspaceId, likePattern, likePattern, limit) as MaterialRow[];
-      return rows.map(mapMaterial);
+      `).all(...params) as MaterialRow[];
+      const scored = rows.map((row) => {
+        const material = mapMaterial(row);
+        const titleLower = material.title.toLowerCase();
+        const contentLower = (material.contentText ?? material.rawInput ?? '').toLowerCase();
+        let hitCount = 0;
+        for (const token of likeTokens) {
+          const tokenLower = token.toLowerCase();
+          if (titleLower.includes(tokenLower) || contentLower.includes(tokenLower)) {
+            hitCount += 1;
+          }
+        }
+        return { material, hitCount };
+      });
+      scored.sort((a, b) => b.hitCount - a.hitCount);
+      return scored.slice(0, limit).map((s) => s.material);
     } catch (error) {
       console.warn('[searchMaterialsByRelevance] content LIKE fallback failed', error);
       return [];
@@ -5165,6 +5222,78 @@ function mapCardRevision(row: CardRevisionRow): CardRevision {
 const FTS_SPECIAL_CHARS_PATTERN = /["*:(\-+)^]/g;
 const FTS_WHITESPACE_PATTERN = /\s+/g;
 const CJK_CHARACTER_PATTERN = /[\u4e00-\u9fff]/;
+
+/**
+ * LIKE fallback 分词后保留的最小 token 长度。
+ * 长度 < 2 的 token（单个中文字、单字母）不参与 LIKE 匹配，避免召回噪音过大。
+ */
+const LIKE_FALLBACK_MIN_TOKEN_LENGTH = 2;
+
+/**
+ * LIKE fallback 分词后保留的最大 token 数量。
+ * 上限避免 SQL IN 列表或 OR 子句过长影响性能。
+ */
+const LIKE_FALLBACK_MAX_TOKENS = 8;
+
+/**
+ * 判断字符是否为 CJK 统一表意文字（U+4E00 - U+9FFF）。
+ * @param ch - 待检测字符
+ * @returns 是否为中文汉字
+ */
+function isCjkCharForLike(ch: string): boolean {
+  const code = ch.codePointAt(0) ?? 0;
+  return code >= 0x4e00 && code <= 0x9fff;
+}
+
+/**
+ * 将查询字符串分词为 LIKE fallback 可用的 token 数组。
+ *
+ * 设计目的：LLM 倾向于把用户短查询改写成多关键词长句（如「命运赠送」→「命运赠送 礼物 暗中标好了价格」），
+ * 原来的 `%query%` 连续子串匹配在这种场景下必然 0 命中。本函数用 jieba 分词后，
+ * 保留长度 >= 2 的有效 token，让 LIKE fallback 按 token OR 匹配，任一词命中即召回。
+ *
+ * 处理流程：
+ * 1. jieba cut(HMM=true) 切词
+ * 2. 过滤长度 < 2 的 token（单字、单字母）
+ * 3. 过滤纯标点、纯空白
+ * 4. 去重
+ * 5. 截断至上限数量
+ *
+ * 兜底：若分词后 token 数组为空（如全标点输入），返回原始 query 去空格后的单元素数组，
+ * 让 LIKE 仍能做一次完整子串匹配，避免完全无保底。
+ *
+ * @param query - 原始或 LLM 改写后的查询字符串
+ * @returns 用于 LIKE OR 匹配的 token 数组，长度 >= 1
+ * @author fxbin
+ */
+function splitQueryForLikeFallback(query: string): string[] {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+  const raw = jiebaCut(trimmed, true);
+  const seen = new Set<string>();
+  const tokens: string[] = [];
+  for (const token of raw) {
+    if (!token || token.length < LIKE_FALLBACK_MIN_TOKEN_LENGTH) continue;
+    const cleaned = token.trim();
+    if (!cleaned) continue;
+    let hasContent = false;
+    for (const ch of cleaned) {
+      if (isCjkCharForLike(ch) || /[A-Za-z0-9]/.test(ch)) {
+        hasContent = true;
+        break;
+      }
+    }
+    if (!hasContent) continue;
+    if (seen.has(cleaned)) continue;
+    seen.add(cleaned);
+    tokens.push(cleaned);
+    if (tokens.length >= LIKE_FALLBACK_MAX_TOKENS) break;
+  }
+  if (tokens.length === 0) {
+    return [trimmed];
+  }
+  return tokens;
+}
 
 /**
  * 清理 FTS5 查询字符串，去除 FTS5 查询语法中的特殊字符，避免语法错误。
