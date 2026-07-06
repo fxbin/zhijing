@@ -446,10 +446,23 @@ const REQUEST_ROUNDTABLE_KEYWORDS: readonly string[] = [
 ];
 
 /**
+ * 负向上下文正则列表：匹配到时抑制对应意图，避免子串误命中。
+ *
+ * 例如「我研究一下再回你」命中 request_research 的「研究一下」，
+ * 但实际是用户自我表态而非请求；「评估一下这张卡片」命中 request_roundtable
+ * 的「评估一下」，但实际只是要 Agent 评价一张卡片。
+ */
+const NEGATIVE_CONTEXT_PATTERNS: ReadonlyArray<{ pattern: RegExp; suppress: UserIntent }> = [
+  { pattern: /我(再|先)?(研究|调研|看看|了解)一下/, suppress: 'request_research' },
+  { pattern: /我(再|先)?(研究|调研)下/, suppress: 'request_research' },
+  { pattern: /(评估|评价)一下(这张|这张卡|这个卡片|这个卡)/, suppress: 'request_roundtable' },
+];
+
+/**
  * 对用户消息做规则意图识别。
  *
- * P0.4 前置拦截器的核心：基于关键词匹配识别用户意图，
- * 不引入 LLM（KISS 原则，避免成本与延迟）。
+ * 基于关键词匹配识别用户意图，不引入 LLM（KISS 原则）。
+ * 增加负向上下文模式检测，避免「我研究一下再回你」等自我表态被误判为请求。
  *
  * 识别优先级：skeptic > request_roundtable > request_research > request_probe > request_advice > neutral
  * （质疑信号优先级最高，确保用户拒绝时立即回到被动响应）。
@@ -462,14 +475,21 @@ export function classifyUserIntent(message: string): UserIntent {
   const text = message.trim();
   if (text.length === 0) return 'neutral';
 
+  const suppressedIntents = new Set<UserIntent>();
+  for (const { pattern, suppress } of NEGATIVE_CONTEXT_PATTERNS) {
+    if (pattern.test(text)) {
+      suppressedIntents.add(suppress);
+    }
+  }
+
   for (const keyword of SKEPTIC_KEYWORDS) {
     if (text.includes(keyword)) return 'skeptic';
   }
   for (const keyword of REQUEST_ROUNDTABLE_KEYWORDS) {
-    if (text.includes(keyword)) return 'request_roundtable';
+    if (text.includes(keyword) && !suppressedIntents.has('request_roundtable')) return 'request_roundtable';
   }
   for (const keyword of REQUEST_RESEARCH_KEYWORDS) {
-    if (text.includes(keyword)) return 'request_research';
+    if (text.includes(keyword) && !suppressedIntents.has('request_research')) return 'request_research';
   }
   for (const keyword of REQUEST_PROBE_KEYWORDS) {
     if (text.includes(keyword)) return 'request_probe';

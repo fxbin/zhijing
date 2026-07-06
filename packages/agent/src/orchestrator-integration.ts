@@ -160,23 +160,10 @@ function readNumberMetadata(metadata: Record<string, unknown> | undefined, key: 
 }
 
 /**
- * 数字转保留两位小数的字符串；null 返回空字符串。
+ * 把单条催化剂模式 proposal 渲染为简短追问指令。
  *
- * @param value - 数字值
- * @returns 格式化字符串
- * @author fxbin
- */
-function formatNumber(value: number | null): string {
-  return value === null ? '' : value.toFixed(2);
-}
-
-/**
- * 把单条催化剂模式 proposal 渲染为「最尖锐的提问」模板。
- *
- * 催化剂模式的核心理念是「不直接给答案，用最尖锐的问题引导用户自己发现认知缺口」。
- * 因此本函数不是简单列出 proposal，而是把 evidence 转化为具体追问方向：
- * - blind_spot：把「盲区术语 + 兴趣权重 + 覆盖分数」转化为「为什么这片一直没补」的反思追问
- * - repeated_thinking：把「重复次数 + 相似度」转化为「是否该换角度」的元认知追问
+ * 模板极简化：只保留核心行动指令，不包含元指令（如「请用一个聚焦问题引导…」），
+ * 避免 LLM 原样复制模板内容给用户。
  *
  * @param proposal - 催化剂模式下的活跃提议（blind_spot 或 repeated_thinking）
  * @returns 结构化追问模板；非催化剂类型返回空字符串
@@ -186,63 +173,41 @@ function buildCatalystQuestionHint(proposal: AgentProposal): string {
   if (proposal.type === 'blind_spot') {
     const term = readStringMetadata(proposal.metadata, 'term');
     if (!term) return '';
-    const interestWeight = readNumberMetadata(proposal.metadata, 'interestWeight');
-    const coverageScore = readNumberMetadata(proposal.metadata, 'coverageScore');
-    const weightPart = interestWeight !== null ? `兴趣权重 ${formatNumber(interestWeight)}` : '';
-    const coveragePart = coverageScore !== null ? `覆盖分数 ${formatNumber(coverageScore)}` : '';
-    const evidence = [weightPart, coveragePart].filter((s) => s.length > 0).join('，');
-    return `• 盲区追问：你对「${term}」关注度高${evidence ? `（${evidence}）` : ''}，但知识库覆盖不足。请用一个聚焦问题引导用户反思：为什么这片一直没补？是难度太大、还是优先级被其他主题挤掉了？不要直接告诉用户该补什么，要让用户自己说出原因。`;
+    return `• 用一句开放问题引导用户思考「${term}」为何未补，不要直接给答案。`;
   }
   if (proposal.type === 'repeated_thinking') {
     const repeatCount = readNumberMetadata(proposal.metadata, 'repeatCount');
-    const similarityScore = readNumberMetadata(proposal.metadata, 'similarityScore');
     const countPart = repeatCount !== null ? `${repeatCount} 次` : '多次';
-    const simPart = similarityScore !== null ? `，相似度 ${formatNumber(similarityScore)}` : '';
-    return `• 元认知追问：用户已 ${countPart}提出相似问题${simPart}。请用一个聚焦问题引导用户做元认知反思：是同一问题没想清楚需要深化，还是陷入了思维定式需要换角度？不要直接告诉用户「你在重复」，要让用户自己意识到。`;
+    return `• 用户已 ${countPart}提出相似问题，用一句开放问题引导其反思是否需要换角度。`;
   }
   return '';
 }
 
 /**
- * 把单条导航员模式 proposal 渲染为「具体可执行建议」模板。
+ * 把单条导航员模式 proposal 渲染为简短可执行建议指令。
  *
- * 导航员模式的核心理念是「建议必须可执行，明示这是建议而非命令」。
- * 因此本函数把 evidence 转化为带具体 id/分数/天数的可执行行动：
- * - recall_review：建议复习具体卡片（附 cardId + recall 分数 + 未访问天数）
- * - topic_explore：建议探索具体主题（附 term + 权重 + 来源数）
- * - workspace_emergence：建议创建命名工作区（附 keyword + 卡片数）
+ * 模板极简化：只保留核心行动和 id，不包含分数/天数等 metadata，
+ * 避免 LLM 原样暴露内部状态给用户。
  *
  * @param proposal - 导航员模式下的活跃提议（recall_review / topic_explore / workspace_emergence）
- * @returns 结构化可执行建议模板；非导航员类型返回空字符串
+ * @returns 简短建议指令；非导航员类型返回空字符串
  * @author fxbin
  */
 function buildNavigatorActionHint(proposal: AgentProposal): string {
   if (proposal.type === 'recall_review') {
     const cardId = readStringMetadata(proposal.metadata, 'cardId');
     if (!cardId) return '';
-    const recallScore = readNumberMetadata(proposal.metadata, 'recallScore');
-    const daysSinceLastAccess = readNumberMetadata(proposal.metadata, 'daysSinceLastAccess');
-    const scorePart = recallScore !== null ? `recall 分数 ${formatNumber(recallScore)}` : '';
-    const daysPart = daysSinceLastAccess !== null ? `已 ${daysSinceLastAccess} 天未访问` : '';
-    const evidence = [scorePart, daysPart].filter((s) => s.length > 0).join('，');
-    return `• 复习建议：建议复习卡片 ${cardId}${evidence ? `（${evidence}）` : ''}。请在回答中明示这是建议而非命令，用户可拒绝，拒绝后不重复推送。`;
+    return `• 建议复习卡片 ${cardId}，明示建议非命令。`;
   }
   if (proposal.type === 'topic_explore') {
     const term = readStringMetadata(proposal.metadata, 'term');
     if (!term) return '';
-    const weight = readNumberMetadata(proposal.metadata, 'weight');
-    const sourceCount = readNumberMetadata(proposal.metadata, 'sourceCount');
-    const weightPart = weight !== null ? `权重 ${formatNumber(weight)}` : '';
-    const sourcePart = sourceCount !== null ? `来源 ${sourceCount} 篇` : '';
-    const evidence = [weightPart, sourcePart].filter((s) => s.length > 0).join('，');
-    return `• 探索建议：建议探索主题「${term}」${evidence ? `（${evidence}）` : ''}。可考虑深化已有资料或建立专题知识库。明示这是建议，用户可拒绝。`;
+    return `• 建议探索主题「${term}」，明示建议非命令。`;
   }
   if (proposal.type === 'workspace_emergence') {
     const keyword = readStringMetadata(proposal.metadata, 'keyword');
     if (!keyword) return '';
-    const cardCount = readNumberMetadata(proposal.metadata, 'cardCount');
-    const countPart = cardCount !== null ? `${cardCount} 张` : '多张';
-    return `• 组织建议：默认工作区中有 ${countPart}卡片与「${keyword}」相关。建议创建命名工作区来组织这些卡片。明示这是建议，用户可拒绝。`;
+    return `• 建议为「${keyword}」创建命名工作区，明示建议非命令。`;
   }
   return '';
 }
