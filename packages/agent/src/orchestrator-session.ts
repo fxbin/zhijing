@@ -359,6 +359,21 @@ export function startOrchestratorSession(
     const unsubscribe = mainAgent.subscribe((event) => {
       const wireEvents = serializeAgentEvent(event);
       for (const wire of wireEvents) {
+        if (wire.type === 'message_end' && typeof wire.text === 'string') {
+          mainAssistantText = wire.text;
+          const batch = extractProposalBatchFromText(wire.text) ?? extractPlainTextSuggestions(wire.text);
+          const cleanText = stripProposalBatchBlock(wire.text);
+          callbacks.onEvent({ ...wire, text: cleanText });
+          if (batch) {
+            callbacks.onEvent({
+              type: 'proposal_batch',
+              batchId: batch.batchId,
+              proposals: batch.proposals,
+            });
+          }
+          continue;
+        }
+
         callbacks.onEvent(wire);
 
         if (wire.type === 'tool_end') {
@@ -368,18 +383,6 @@ export function startOrchestratorSession(
             resultText: wire.result,
           });
           mainToolCallCount += 1;
-        }
-
-        if (wire.type === 'message_end' && typeof wire.text === 'string') {
-          mainAssistantText = wire.text;
-          const batch = extractProposalBatchFromText(wire.text) ?? extractPlainTextSuggestions(wire.text);
-          if (batch) {
-            callbacks.onEvent({
-              type: 'proposal_batch',
-              batchId: batch.batchId,
-              proposals: batch.proposals,
-            });
-          }
         }
 
         if (wire.type === 'turn_end' && currentDecision && turnToolCalls.length > 0) {
@@ -699,6 +702,33 @@ export function deleteAgentSession(
  * 匹配形如 ```proposal-batch\n{...}\n``` 的 fenced code block。
  */
 const PROPOSAL_BATCH_BLOCK_PATTERN = /```proposal-batch\s*\n([\s\S]*?)\n```/;
+
+/**
+ * 全局匹配模式，用于从文本中移除所有 proposal-batch 代码块。
+ *
+ * 与 PROPOSAL_BATCH_BLOCK_PATTERN 的区别：前者仅匹配第一个（exec），
+ * 此模式用 g flag 匹配所有出现，确保多块场景也能完全清除。
+ */
+const PROPOSAL_BATCH_BLOCK_GLOBAL_PATTERN = /```proposal-batch\s*\n[\s\S]*?\n```/g;
+
+/**
+ * 从展示文本中剥离所有 ```proposal-batch``` 代码块。
+ *
+ * 用途：Agent 回复中可能包含 proposal-batch JSON 块（供后端提取结构化提议），
+ * 但该 JSON 不应展示给用户。本函数在转发 message_end 事件前调用，
+ * 确保前端 renderMarkdown 只渲染正常 Markdown 文本，不出现原始 JSON。
+ *
+ * 剥离后清理多余空行，保持文本紧凑。
+ *
+ * @param text - Agent 原始响应文本
+ * @returns 剥离 proposal-batch 块后的干净文本
+ * @author fxbin
+ */
+function stripProposalBatchBlock(text: string): string {
+  if (typeof text !== 'string' || text.length === 0) return text;
+  const stripped = text.replace(PROPOSAL_BATCH_BLOCK_GLOBAL_PATTERN, '');
+  return stripped.replace(/\n{3,}/g, '\n\n').trim();
+}
 
 /**
  * proposal-batch 块中合法的 op 值集合，用于过滤非法操作类型。
