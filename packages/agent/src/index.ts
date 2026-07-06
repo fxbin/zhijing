@@ -58,7 +58,6 @@ export type {
 export {
   selectOrchestratorSystemPrompt,
   createOrchestratedWorkspaceAgent,
-  ORCHESTRATOR_BASE_PROMPT,
   MIRROR_BEHAVIOR_PROMPT,
   CATALYST_BEHAVIOR_PROMPT,
   NAVIGATOR_BEHAVIOR_PROMPT,

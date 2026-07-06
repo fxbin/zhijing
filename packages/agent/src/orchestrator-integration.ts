@@ -19,37 +19,8 @@
 
 import type { AgentProposal, OrchestratorDecision, OrchestratorMode } from '@zhijing/shared';
 import { Agent } from '@earendil-works/pi-agent-core';
-import { createWorkspaceAgent, type WorkspaceAgentOptions } from './agent-factory.js';
+import { createWorkspaceAgent, ZHIJING_AGENT_SYSTEM_PROMPT, type WorkspaceAgentOptions } from './agent-factory.js';
 import { AGENT_ROLE_CONFIGS, type AgentRole } from './multi-agent-orchestrator.js';
-
-/**
- * 编排 Agent 公共能力边界段。
- *
- * 三模式共享，定义工具边界、调用策略与输出风格。
- * 与 agent-factory.ts 中的 ZHIJING_AGENT_SYSTEM_PROMPT 内容一致，
- * 此处独立提取以便三模式拼接复用，避免运行时依赖。
- */
-const ORCHESTRATOR_BASE_PROMPT = [
-  '你是「知径」工作台的智能助理，专门帮助用户管理当前工作区内的个人知识库。',
-  '',
-  '能力边界：',
-  '- 只能通过提供的工具获取信息：search_cards（搜索已结构化卡片）、search_materials（搜索原始来源资料）、get_workspace_summary（查看工作区整体概览）、web_search（联网搜索外部摘要）、fetch_web_page（抓取单页正文）、deep_search（多查询深度搜索与轻量证据整理）。',
-  '- 只能通过 web_search / fetch_web_page / deep_search 联网；不能访问其他工作区、不能修改任何数据。',
-  '- 不能替代用户做最终判断；证据不足时如实说明，不要编造内容或引用不存在的卡片/资料。',
-  '',
-  '工具调用策略：',
-  '- 接入新对话或处理宏观问题时，先调 get_workspace_summary。',
-  '- 处理具体问题时，先调 search_cards；若卡片结果不足以作答，再调 search_materials。',
-  '- 当用户明确要求最新信息、外部资料、联网搜索，或工作区证据不足以回答外部事实时，先用 web_search 找来源；需要核验证据时用 fetch_web_page 抓取具体 URL。',
-  '- 当用户要求“深度搜索/深度研究/查证/竞品外部分析”，或问题需要多来源交叉验证时，优先调用 deep_search，而不是手动多次 web_search。',
-  '- 外部搜索结果只能作为外部参考；回答中必须附上使用到的 URL，且不要把搜索结果当成工作区内证据。',
-  '- 同一轮可并行调用多次检索工具，使用不同关键词扩展检索面。',
-  '',
-  '输出风格：',
-  '- 中文回答；引用卡片/资料时附上其 id，方便用户定位。',
-  '- 若工作区检索结果为空或不足以作答，明确告知用户当前工作区缺少哪些信息；如已使用联网工具，区分「工作区证据」与「外部搜索结果」，并说明证据缺口与置信度。',
-  '- 不输出与用户问题无关的客套话或重复信息。',
-].join('\n');
 
 /**
  * 镜子模式行为段。
@@ -341,9 +312,8 @@ export function buildBehaviorContext(decision: OrchestratorDecision): string {
 /**
  * 根据编排决策选择对应的完整 systemPrompt。
  *
- * P0.2 升级：从静态拼接升级为动态注入——
- * 在 ORCHESTRATOR_BASE_PROMPT + 模式行为段之后，
- * 追加 buildBehaviorContext 产出的 evidence 段。
+ * 统一使用 ZHIJING_AGENT_SYSTEM_PROMPT 作为 base（含完整能力边界、工具策略、输出风格、proposal-batch 协议），
+ * 追加模式行为段和动态 evidence 上下文。
  *
  * @param decision - 编排决策；其 mode 决定行为段，activeProposals 决定 evidence 段
  * @returns 拼接后的完整 systemPrompt
@@ -353,9 +323,27 @@ export function selectOrchestratorSystemPrompt(decision: OrchestratorDecision): 
   const behavior = MODE_BEHAVIOR_PROMPTS[decision.mode];
   const context = buildBehaviorContext(decision);
   return context
-    ? `${ORCHESTRATOR_BASE_PROMPT}\n${behavior}\n${context}`
-    : `${ORCHESTRATOR_BASE_PROMPT}\n${behavior}`;
+    ? `${ZHIJING_AGENT_SYSTEM_PROMPT}\n${behavior}\n${context}`
+    : `${ZHIJING_AGENT_SYSTEM_PROMPT}\n${behavior}`;
 }
+
+/**
+ * 角色与编排模式的合法组合矩阵。
+ *
+ * 并非所有 5 角色 × 3 模式的 15 种组合都语义合法：
+ * - structured 只支持 mirror（纯结构化输出，不参与编排）
+ * - probe 不支持 navigator（追问 Agent 不给行动建议）
+ * - research/roundtable 不支持 catalyst（研究/圆桌需给结论，与追问不给答案冲突）
+ *
+ * 冲突时采用「角色优先」策略：保留 role 的 systemPrompt，将 mode 降级为 mirror。
+ */
+const ROLE_MODE_COMPATIBILITY: Record<AgentRole, OrchestratorMode[]> = {
+  structured: ['mirror'],
+  conversation: ['mirror', 'catalyst', 'navigator'],
+  probe: ['mirror', 'catalyst'],
+  research: ['mirror', 'navigator'],
+  roundtable: ['mirror', 'navigator'],
+};
 
 /**
  * 编排 Agent 工厂配置项。
@@ -375,11 +363,9 @@ export interface OrchestratedAgentOptions extends WorkspaceAgentOptions {
   /**
    * Agent 角色；其 recommendedProvider/recommendedModelId 会覆盖调用方传入的 provider/modelId。
    *
-   * P1.1a 引入：让 /agent/stream 路由按 classifyUserIntent(message) → selectAgentRole(intent)
-   * 选择对应角色，probe 角色自动用 deepseek-reasoner，structured/conversation 保持 deepseek-v4-flash。
    * apiKey 不被覆盖（同 provider 共用 key）。
    *
-   * 若省略则保持调用方传入的 provider/modelId 不变（向后兼容 P0.x 行为）。
+   * 若省略则保持调用方传入的 provider/modelId 不变。
    */
   role?: AgentRole;
 }
@@ -388,8 +374,9 @@ export interface OrchestratedAgentOptions extends WorkspaceAgentOptions {
  * 为指定工作区构造一个编排感知的 Agent 实例。
  *
  * 与 createWorkspaceAgent 的差异：
- * - 若提供 decision，按 decision.mode 选择 systemPrompt（覆盖 systemPromptOverride）
- * - 若提供 role，按 AGENT_ROLE_CONFIGS[role] 覆盖 provider/modelId（P1.1a 新增）
+ * - 若提供 role，按角色配置选择 systemPrompt 和 provider/modelId
+ * - 若同时提供 decision，在角色 systemPrompt 基础上追加模式行为段和动态 evidence
+ * - 若 role 与 decision.mode 不兼容，将 mode 降级为 mirror（角色优先）
  * - 若均未提供，回退到 createWorkspaceAgent 的默认行为
  *
  * 调用方负责先通过 core.buildInterceptedDecision(workspaceId, message) 获取决策，
@@ -397,7 +384,7 @@ export interface OrchestratedAgentOptions extends WorkspaceAgentOptions {
  * 最后将 decision + role 一并传入本函数。本函数不做信号聚合或意图识别，保持薄装配层定位。
  *
  * @param workspaceId - 工作区 id；所有工具会绑定此 id 做检索
- * @param options - 配置项；decision.mode 决定 systemPrompt，role 决定 provider/modelId
+ * @param options - 配置项；role 决定 systemPrompt 和 provider/modelId，decision 决定行为段
  * @returns 配置完成的 Agent 实例
  * @author fxbin
  */
@@ -408,17 +395,36 @@ export function createOrchestratedWorkspaceAgent(
   const { decision, role, ...rest } = options;
   const mergedOptions: WorkspaceAgentOptions = { ...rest };
 
-  if (decision) {
-    mergedOptions.systemPromptOverride = selectOrchestratorSystemPrompt(decision);
+  let effectiveDecision = decision;
+
+  if (role && decision) {
+    const allowedModes = ROLE_MODE_COMPATIBILITY[role];
+    if (!allowedModes.includes(decision.mode)) {
+      effectiveDecision = { ...decision, mode: 'mirror' as OrchestratorMode };
+    }
   }
 
   if (role) {
     const roleConfig = AGENT_ROLE_CONFIGS[role];
+    const rolePrompt = roleConfig.systemPrompt;
+
+    if (effectiveDecision) {
+      const behavior = MODE_BEHAVIOR_PROMPTS[effectiveDecision.mode];
+      const context = buildBehaviorContext(effectiveDecision);
+      mergedOptions.systemPromptOverride = context
+        ? `${rolePrompt}\n${behavior}\n${context}`
+        : `${rolePrompt}\n${behavior}`;
+    } else {
+      mergedOptions.systemPromptOverride = rolePrompt;
+    }
+
     if (!rest.provider && !rest.modelId) {
       mergedOptions.provider = roleConfig.recommendedProvider;
       mergedOptions.modelId = roleConfig.recommendedModelId;
     }
     mergedOptions.taskType = roleConfig.taskType;
+  } else if (effectiveDecision) {
+    mergedOptions.systemPromptOverride = selectOrchestratorSystemPrompt(effectiveDecision);
   }
 
   return createWorkspaceAgent(workspaceId, mergedOptions);
@@ -428,7 +434,6 @@ export function createOrchestratedWorkspaceAgent(
  * 导出三模式 prompt 段，便于调用方在其基础上做定制拼接或测试断言。
  */
 export {
-  ORCHESTRATOR_BASE_PROMPT,
   MIRROR_BEHAVIOR_PROMPT,
   CATALYST_BEHAVIOR_PROMPT,
   NAVIGATOR_BEHAVIOR_PROMPT,
