@@ -5,14 +5,12 @@ import { createPiAiRuntime, getDefaultPiProvider, getDefaultPiModel, isKnownPiPr
 /**
  * 默认 Provider 路由配置。
  *
- * 设计依据 v1.1 §4.2：以 DeepSeek 为主力，互补 Provider 仅在 DeepSeek 短板场景启用。
+ * 设计依据 v1.1 §4.2：以 DeepSeek 为主力，所有任务类型均路由到 DeepSeek。
+ * 未命中显式路由的任务类型会回退到默认 Provider（DeepSeek）。
  *
- * 当前所有任务都路由到 DeepSeek（主力），deep_research 预留 anthropic 互补路由但
- * 默认不启用（需配置 ANTHROPIC_API_KEY）。互补路由的 fallback 始终是 DeepSeek，
- * 确保外部 Provider 故障不会导致系统不可用。
- *
- * P2.3 扩展：支持通过 ZHIJING_PI_ROUTES_JSON 环境变量覆盖默认路由表，
- * 格式为 ProviderRoute[] 的 JSON 字符串。解析失败时回退到 DEFAULT_ROUTES 并输出警告。
+ * 如需启用互补 Provider（如 anthropic），可通过 ZHIJING_PI_ROUTES_JSON
+ * 环境变量注入自定义路由表，格式为 ProviderRoute[] 的 JSON 字符串。
+ * 解析失败时回退到 DEFAULT_ROUTES 并输出警告。
  *
  * @author fxbin
  */
@@ -38,15 +36,6 @@ const DEFAULT_ROUTES: ProviderRoute[] = [
     role: 'primary',
     taskTypes: ['socratic_questioning'],
     reason: '推理链思维适合 Socratic 多步追问和证据审计',
-  },
-  {
-    provider: 'anthropic',
-    model: 'claude-sonnet-4-20250514',
-    role: 'complementary',
-    taskTypes: ['deep_research'],
-    reason: '超长文档处理时上下文窗口利用率和指令遵循更稳定',
-    fallbackProvider: 'deepseek',
-    fallbackModel: 'deepseek-v4-flash',
   },
 ];
 
@@ -130,6 +119,7 @@ export function setActiveProfile(profile: ActiveProfileSnapshot | null): void {
  *
  * 主力 Provider（DeepSeek）检查 ZHIJING_PI_API_KEY 或 provider 默认 env key；
  * 互补 Provider 检查其默认 env key（如 ANTHROPIC_API_KEY）。
+ * 自定义 Provider（非 KnownProvider）检查激活 profile 中暂存的 apiKey。
  *
  * @param provider - Provider id（string 形式，内部转为 KnownProvider）
  * @returns 是否有可用 API key
