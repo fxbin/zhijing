@@ -198,6 +198,7 @@ import type { BookSignalInputs, QuadrantSummary, TopicSpectrum } from '@zhijing/
 import { DEGRADE_MATRIX_REGISTRY } from './statistics/degrade-matrix.js';
 import { computeQuadrantSummary } from './statistics/quadrant.js';
 import { computeTopicSpectrum } from './statistics/topic-spectrum.js';
+import { tokenizeText } from './statistics/tokenize.js';
 import {
   initZvecSearch,
   isZvecSearchReady,
@@ -10262,19 +10263,22 @@ function isChineseStopWord(term: string): boolean {
   return CHINESE_STOP_WORDS.has(term);
 }
 
+/**
+ * TF-IDF 专用分词入口。
+ *
+ * 复用 statistics/tokenize 的 jieba-wasm 分词器（jieba cut HMM + 停用词过滤 +
+ * 单字过滤 + ASCII 小写），取代早期 2-gram 滑窗方案。
+ *
+ * jieba 基于词典的真实分词能正确识别「机器学习」「深度学习」等多字术语，
+ * 而 bigram 会将「机器学习」切成「机器 / 器学 / 学习」三个碎片，
+ * 导致主题探索与工作区涌现的语义匹配失真。
+ *
+ * @param text - 原始文本（卡片 title/body、问题文本等）
+ * @returns 分词后的 token 数组
+ * @author fxbin
+ */
 function tokenizeForTfidf(text: string): string[] {
-  const normalized = text.toLowerCase();
-  const tokens: string[] = [];
-  const englishWords = normalized.match(/[a-z]{2,}/g) ?? [];
-  tokens.push(...englishWords);
-  const cjkChars = normalized.match(/[\u4e00-\u9fff]/g) ?? [];
-  for (let i = 0; i < cjkChars.length - 1; i++) {
-    const bigram = cjkChars[i] + cjkChars[i + 1];
-    if (!isChineseStopWord(bigram)) {
-      tokens.push(bigram);
-    }
-  }
-  return tokens;
+  return tokenizeText(text);
 }
 
 function buildIdfMap(): Map<string, number> {
@@ -12270,15 +12274,44 @@ const EMERGENCE_SAMPLE_TITLES = 3;
 const EMERGENCE_MAX_CLUSTERS = 5;
 
 /**
+ * 无主题承载能力的宽泛关键词集合。
+ *
+ * 这些词虽然在 jieba 分词后是多字 token（能通过停用词和长度过滤），
+ * 但语义过于通用，出现在大量卡片中却不代表任何具体主题，
+ * 会污染「工作区涌现」聚类结果。
+ *
+ * 在 detectWorkspaceEmergence 中作为黑名单过滤，确保涌现的关键词
+ * 具备足够的主题辨识度。
+ */
+const EMERGENCE_GENERIC_KEYWORDS = new Set([
+  '方法', '问题', '概念', '内容', '基本', '通过', '进行',
+  '可以', '可能', '需要', '应该', '如果', '虽然', '但是',
+  '因此', '因为', '所以', '主要', '重要', '关键', '基础',
+  '核心', '目标', '目的', '方式', '方面', '部分', '类型',
+  '结构', '系统', '过程', '结果', '原因', '影响', '作用',
+  '功能', '特点', '特征', '原理', '理论', '实践', '应用',
+  '研究', '分析', '理解', '思考', '学习', '工作', '情况',
+  '状态', '水平', '能力', '质量', '效果', '效率', '价值',
+  '数据', '信息', '知识', '技术', '工具', '平台', '服务',
+  '用户', '产品', '项目', '团队', '管理', '设计', '开发',
+  '实现', '测试', '部署', '运行', '操作', '使用', '查看',
+  '开始', '结束', '完成', '继续', '返回', '设置', '配置',
+  '介绍', '说明', '描述', '定义', '区别', '联系', '关系',
+  '比较', '选择', '采用', '基于', '提供', '支持', '包含',
+]);
+
+/**
  * 检测默认工作区中的卡片主题聚类，发现可涌现为命名工作区的主题。
  *
  * 聚类策略（KISS）：
  *  - 取默认工作区（default）中的卡片
- *  - 对每张卡片的 title + body 用 tokenizeForTfidf 分词（bigram 为主）
+ *  - 对每张卡片的 title + body 用 tokenizeForTfidf 分词（jieba 词典分词）
  *  - 按关键词聚合卡片 ID，统计每个关键词关联的卡片数
- *  - 过滤：关联卡片数 >= 阈值、关键词长度 >= 2、关键词非停用词
+ *  - 过滤：关联卡片数 >= 阈值、关键词长度 >= 2、关键词非停用词、
+ *    关键词不在 EMERGENCE_GENERIC_KEYWORDS 宽泛词黑名单中
+ *  - 记录关键词是否出现在卡片标题中（标题命中的关键词语义相关性更强）
  *  - 排除已有工作区标题包含的关键词（避免重复提议）
- *  - 按关联卡片数降序排序，取 Top N
+ *  - 排序：标题命中的关键词优先，其次按关联卡片数降序，取 Top N
  *
  * @returns 工作区涌现聚类列表
  * @author fxbin
@@ -12292,20 +12325,27 @@ export function detectWorkspaceEmergence(): WorkspaceEmergenceCluster[] {
   const existingTitles = repository.listWorkspaces().map((base) => base.title.toLowerCase());
 
   const keywordToCards = new Map<string, Set<string>>();
+  const keywordInTitle = new Map<string, boolean>();
   const cardTitleMap = new Map<string, string>();
 
   for (const card of defaultCards) {
     cardTitleMap.set(card.id, card.title ?? '');
+    const titleTokens = new Set(tokenizeForTfidf(card.title ?? ''));
     const text = [card.title ?? '', card.body ?? ''].join(' ');
     const tokens = tokenizeForTfidf(text);
     const uniqueTokens = new Set(tokens);
     for (const token of uniqueTokens) {
       if (token.length < EMERGENCE_MIN_KEYWORD_LENGTH) continue;
       if (isChineseStopWord(token)) continue;
+      if (EMERGENCE_GENERIC_KEYWORDS.has(token)) continue;
       if (!keywordToCards.has(token)) {
         keywordToCards.set(token, new Set());
+        keywordInTitle.set(token, false);
       }
       keywordToCards.get(token)!.add(card.id);
+      if (titleTokens.has(token)) {
+        keywordInTitle.set(token, true);
+      }
     }
   }
 
@@ -12330,7 +12370,12 @@ export function detectWorkspaceEmergence(): WorkspaceEmergenceCluster[] {
     });
   }
 
-  clusters.sort((a, b) => b.cardCount - a.cardCount);
+  clusters.sort((a, b) => {
+    const aInTitle = keywordInTitle.get(a.keyword) ? 1 : 0;
+    const bInTitle = keywordInTitle.get(b.keyword) ? 1 : 0;
+    if (aInTitle !== bInTitle) return bInTitle - aInTitle;
+    return b.cardCount - a.cardCount;
+  });
   return clusters.slice(0, EMERGENCE_MAX_CLUSTERS);
 }
 
@@ -12425,14 +12470,14 @@ export function generateAgentProposals(): AgentProposalReport {
     proposals.push({
       type: 'workspace_emergence',
       title: `工作区涌现：${cluster.keyword}`,
-      description: `默认工作区中有 ${cluster.cardCount} 张卡片与「${cluster.keyword}」相关${sampleList ? `（如 ${sampleList}）` : ''}。建议创建命名工作区来组织这些卡片。`,
+      description: `默认工作区中有 ${cluster.cardCount} 张卡片提到了「${cluster.keyword}」${sampleList ? `（如 ${sampleList}）` : ''}。建议创建命名工作区来组织这些卡片。`,
       actionLabel: '创建工作区',
       metadata: {
         keyword: cluster.keyword,
         cardCount: cluster.cardCount,
         cardIds: cluster.cardIds,
         sampleTitles: cluster.sampleTitles,
-        triggerRule: `默认工作区中同一关键词关联卡片数达到 ${EMERGENCE_MIN_CARD_COUNT} 张，且该关键词未被已有工作区标题覆盖。`,
+        triggerRule: `默认工作区中同一关键词出现在至少 ${EMERGENCE_MIN_CARD_COUNT} 张卡片中，且该关键词未被已有工作区标题覆盖。`,
       },
     });
   }

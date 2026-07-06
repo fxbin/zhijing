@@ -149,8 +149,8 @@ export default function AgentProposalsPanel({ onCreateWorkspace, onNavigate, onS
       await onCreateWorkspace({
         title: keyword,
         summary: [
-          `由 AI 提议创建，源于默认工作区中「${keyword}」主题的卡片聚类。`,
-          `包含 ${proposal.metadata?.cardCount ?? cardIds.length} 张相关卡片。`,
+          `由 AI 提议创建，源于默认工作区中高频出现的关键词「${keyword}」。`,
+          `包含 ${proposal.metadata?.cardCount ?? cardIds.length} 张涉及该关键词的卡片。`,
           sampleTitles.length ? `代表卡片：${sampleTitles.join('、')}` : '',
         ].filter(Boolean).join('\n'),
         cardIds,
