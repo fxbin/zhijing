@@ -92,6 +92,27 @@ const PROBE_AGENT_PROMPT = [
 ].join('\n');
 
 /**
+ * 研究/圆桌结果沉淀协议。
+ *
+ * 复用现有 proposal-batch apply diff 通道：
+ * Agent 只提出结构化变更，用户在前端确认后才真正落库。
+ */
+const SEDIMENTATION_PROMPT = [
+  '',
+  '结果沉淀协议：',
+  '- 当本轮输出产生可复用的结论、开放问题、方法步骤、反方观点或关键证据时，必须在回答末尾追加一个 ```proposal-batch 代码块。',
+  '- proposal-batch 只用于提议沉淀，不代表已经写入；用户会在前端逐条确认后才落库。',
+  '- JSON 结构必须是：{"batchId":"可选字符串","proposals":[...]}。',
+  '- 支持的 proposals 形态：',
+  '  - {"op":"create_card","type":"concept|method|case|question|step|viewpoint","title":"卡片标题","body":"卡片正文","materialId":"可选资料 id","rationale":"提议理由"}',
+  '  - {"op":"edit_card","cardId":"已有卡片 id","title":"可选","body":"可选","type":"可选","rationale":"提议理由"}',
+  '- 研究结论优先沉淀为 viewpoint 或 concept；可执行步骤沉淀为 step；未解决问题沉淀为 question；方法论沉淀为 method；案例证据沉淀为 case。',
+  '- 每张卡片必须原子化，只承载一个可复用知识点；正文必须写清依据、适用边界或不确定性。',
+  '- 不要编造 materialId/cardId；只有工具结果里出现过的真实 id 才能写入对应字段。',
+  '- 如果本轮没有任何值得沉淀的知识点，明确写一句「本轮暂无可沉淀卡片」，不要输出空 proposal-batch。',
+].join('\n');
+
+/**
  * 研究 Agent 系统提示词。
  *
  * 职责：深度研究、外部查证、竞品分析、证据账本。
@@ -116,8 +137,8 @@ const RESEARCH_AGENT_PROMPT = [
   '- 再给「证据账本」：列出每条关键证据的来源 URL 或工作区卡片/资料 id。',
   '- 再给「冲突与不确定性」：说明哪些证据互相冲突、哪些只是推断。',
   '- 最后给「下一步研究问题」：3 个以内，必须具体可执行。',
-  '- 如适合沉淀为卡片，可在末尾输出 proposal-batch；提议必须基于真实证据，不要编造 id。',
   '- 中文回答；不要输出空泛洞察，不要把搜索摘要当成已核实事实。',
+  SEDIMENTATION_PROMPT,
 ].join('\n');
 
 /**
@@ -145,8 +166,8 @@ const ROUNDTABLE_AGENT_PROMPT = [
   '- 再给「分视角意见」：每个视角 2-4 条，附工作区 id 或 URL 证据；没有证据时标注为推断。',
   '- 再给「关键分歧」：列出各视角互相冲突的地方，不要强行和稀泥。',
   '- 最后给「收敛方案」：3 步以内，必须是下一步可执行动作。',
-  '- 如适合沉淀为卡片，可在末尾输出 proposal-batch；提议必须基于真实证据，不要编造 id。',
   '- 中文回答；避免空泛的专家腔和没有证据的判断。',
+  SEDIMENTATION_PROMPT,
 ].join('\n');
 
 /**
