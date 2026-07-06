@@ -162,6 +162,7 @@ import {
   type AudienceTier,
   type AudienceProfile,
   type ReaderModeState,
+  type WorkspaceStage,
   type RecommendationBucket,
 } from '@zhijing/shared';
 import { fetchUrlAsMarkdown, parseRawHtml } from './web-fetch.js';
@@ -10354,6 +10355,21 @@ export function searchWorkspaceMaterials(workspaceId: string, query: string, lim
 }
 
 /**
+ * 根据资料数与卡片数实时计算工作区阶段。
+ *
+ * 不依赖数据库中持久化的 stage 字段，避免 stage 未同步更新导致 Agent 误判。
+ *
+ * - materialCount = 0 且 cardCount = 0 → ai_skeleton（骨架阶段）
+ * - materialCount > 0 且 cardCount = 0 → organizing（资料已导入，卡片待生成）
+ * - 其他情况 → grounded（已有实质内容）
+ */
+function computeWorkspaceStage(materialCount: number, cardCount: number): WorkspaceStage {
+  if (materialCount > 0 && cardCount === 0) return 'organizing';
+  if (materialCount === 0 && cardCount === 0) return 'ai_skeleton';
+  return 'grounded';
+}
+
+/**
  * 重试为指定资料生成知识卡片。
  *
  * 用于 link 导入时 generateKnowledge 失败的后续重试场景：
@@ -10397,10 +10413,8 @@ export async function retryMaterialCardGeneration(materialId: string): Promise<{
   });
   const generated = generation.output;
   const cards = createCards(base, material, text, generated.cards);
-  const sourceMaterialIds = cards
-    .map((card) => card.materialId)
-    .filter((idValue): idValue is string => Boolean(idValue));
-  base.stage = sourceMaterialIds.length > 0 ? 'grounded' : 'organizing';
+  const materialCount = repository.listMaterials(base.id).length;
+  base.stage = computeWorkspaceStage(materialCount, cards.length);
   repository.updateWorkspace(base);
   return { cards };
 }
@@ -10416,9 +10430,7 @@ export function getWorkspaceOverview(workspaceId: string): WorkspaceOverview | u
   const base = repository.findWorkspace(workspaceId);
   if (!base) return undefined;
   const materialCount = repository.listMaterials(workspaceId).length;
-  const stage = base.stage === 'ai_skeleton' && materialCount > 0 && base.cardCount === 0
-    ? 'organizing'
-    : base.stage;
+  const stage = computeWorkspaceStage(materialCount, base.cardCount);
   return {
     id: base.id,
     title: base.title,
