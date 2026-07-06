@@ -52,6 +52,16 @@ const AGGREGATE_SIGNAL_LIMIT = 20;
  *
  * P0.3 升级：这组常量即为 v1.1 §2.4 设计的 agent-constraints 配置入口，
  * 不引入 YAML 解析依赖（符合 KISS 原则）。调整约束只需修改此常量。
+ *
+ * neverInterruptDuringWriting 设计局限说明：
+ * 该约束在当前架构下处于「保留但不生效」状态。原因：
+ * 1. 前置拦截路径（buildInterceptedDecision）在用户发送消息后触发，此时用户已按回车，
+ *    isWriting 必为 false（用户已停止编辑）。
+ * 2. 流式回复期间 textarea 被 disabled（GlobalChatDock canAsk = ... && !isStreaming），
+ *    用户无法编辑，无法产生 isWriting=true 信号。
+ * 3. preInterceptInStream 不评估 isWriting（流中拦截只调整 mode，不立即下发主动提议）。
+ * 保留该约束标记是为了未来引入 WebSocket/心跳双向通信时可复用评估逻辑，
+ * 同时表达「对用户注意力的尊重」这一设计意图。
  */
 export const DEFAULT_EXPERIENCE_CONSTRAINTS: ExperienceConstraints = {
   maxDailyActiveSuggestions: 3,
@@ -643,6 +653,12 @@ export function classifyToolResultIntent(toolCalls: ToolCallSummary[]): UserInte
  * - preInterceptInStream 在 Agent 工具调用后执行（基于工具结果）
  * - 流中拦截产出的决策是「建议」，当前轮 Agent 已按原 systemPrompt 运行，
  *   mode_update 通知前端展示新模式，下一轮对话时前置拦截器会使用更新后的上下文
+ *
+ * 为何不评估 isWriting 约束：
+ * 流中拦截只调整 mode（mirror→catalyst/navigator）并下发 mode_update 事件，
+ * 不会立即下发主动提议（active_suggestion_sent），因此不会增加用户的打断频率。
+ * 真正的主动提议下发发生在前置拦截路径（buildInterceptedDecision）中，
+ * 由 evaluateConstraints 评估 isWriting 约束。故本函数无需接收 isWriting 参数。
  *
  * @param toolCalls - 本轮所有工具调用结果摘要
  * @param currentDecision - 当前生效的编排决策

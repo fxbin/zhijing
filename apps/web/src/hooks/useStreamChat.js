@@ -410,6 +410,15 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
    * @param {string} [options.retryUserId] - 被重试的 user 消息 id；
    *                                          提供时会在追加新消息前先从 chatMessages 移除该消息及其后续
    * @returns {Promise<void>}
+   *
+   * isWriting 信号设计局限说明：
+   * 后端 /agent/stream 路由支持 isWriting 字段（控制 neverInterruptDuringWriting 约束），
+   * 但当前前端架构下该信号根本性无效——GlobalChatDock 的 textarea 在 isStreaming 期间被
+   * disabled（canAsk = ... && !isStreaming），用户无法在流式回复期间编辑输入框；
+   * 而发送消息时用户已按回车，isWriting 必为 false。故请求体不再携带 isWriting 字段，
+   * 由后端默认 Boolean(undefined) = false。若未来引入流中双向通信（WebSocket/心跳），
+   * 可在此处恢复 isWriting 的动态传递。
+   *
    * @author fxbin
    */
   const streamAsk = useCallback(async (text, options = {}) => {
@@ -467,7 +476,7 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
     try {
       response = await api.raw(`${WORKSPACES_PATH}/${selectedWorkspaceId}/agent/stream`, {
         method: 'POST',
-        body: { message: trimmed, sessionId, isWriting: false, retryLastTurn: options.retry === true },
+        body: { message: trimmed, sessionId, retryLastTurn: options.retry === true },
         timeout: STREAM_TIMEOUT_DISABLED,
         signal: controller.signal,
       });
