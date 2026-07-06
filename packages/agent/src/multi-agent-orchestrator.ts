@@ -2,10 +2,11 @@
  * 多 Agent 编排层 PoC（P1.0）。
  *
  * 验证 pi-agent-core 能否承载三专用 Agent 角色的独立定义与按意图选择。
- * 三角色对应 v1.1 §3.2 的设计：
+ * 角色对应 v1.1 §3.2 的设计：
  * - 结构化 Agent：知识卡片生成、实体提取、骨架构建（DeepSeek-V3 主力）
  * - 对话 Agent：知识库问答、聊天、产物生成（DeepSeek-V3 主力）
- * - 追问 Agent：苏格拉底追问、盲区检测、假设检验（DeepSeek-R1 主力 / V3 fallback）
+ * - 追问 Agent：苏格拉底追问、盲区检测、假设检验（DeepSeek-V3 主力）
+ * - 研究 Agent：深度研究、外部查证、竞品分析、证据账本（DeepSeek-V3 主力）
  *
  * PoC 验证点：
  * 1. 三角色配置可独立定义（不同 systemPrompt + 推荐 model）
@@ -18,12 +19,13 @@
 
 import type { KnownProvider } from '@earendil-works/pi-ai';
 import { Agent } from '@earendil-works/pi-agent-core';
+import type { AgentTaskType } from '@zhijing/shared';
 import { createWorkspaceAgent, type WorkspaceAgentOptions } from './agent-factory.js';
 
 /**
  * Agent 角色标识枚举。
  */
-export type AgentRole = 'structured' | 'conversation' | 'probe';
+export type AgentRole = 'structured' | 'conversation' | 'probe' | 'research';
 
 /**
  * 结构化 Agent 系统提示词。
@@ -89,6 +91,35 @@ const PROBE_AGENT_PROMPT = [
 ].join('\n');
 
 /**
+ * 研究 Agent 系统提示词。
+ *
+ * 职责：深度研究、外部查证、竞品分析、证据账本。
+ * 必须优先调用 deep_search，并把结论与证据分层呈现。
+ */
+const RESEARCH_AGENT_PROMPT = [
+  '你是「知径」工作台的研究 Agent，专门负责深度研究、外部查证、竞品分析和证据账本整理。',
+  '',
+  '能力边界：',
+  '- 只能通过提供的工具获取信息：search_cards、search_materials、get_workspace_summary、web_search、fetch_web_page、deep_search。',
+  '- 只能通过 web_search / fetch_web_page / deep_search 联网；不能访问其他工作区、不能直接修改任何数据。',
+  '- 工作区内容是用户的内部知识背景；外部搜索结果是外部证据。回答中必须区分两者。',
+  '',
+  '研究流程：',
+  '- 先调 get_workspace_summary 理解当前工作区背景。',
+  '- 需要外部资料、多来源查证、竞品分析或事实核验时，优先调用 deep_search。',
+  '- deep_search 证据不足时，再用 web_search 扩展关键词，必要时用 fetch_web_page 抓取关键页面正文。',
+  '- 至少尝试覆盖 3 类证据视角：正向证据、反向/限制条件、仍缺失的信息。',
+  '',
+  '输出结构：',
+  '- 先给「研究结论」：3-5 条，按置信度排序，不夸大。',
+  '- 再给「证据账本」：列出每条关键证据的来源 URL 或工作区卡片/资料 id。',
+  '- 再给「冲突与不确定性」：说明哪些证据互相冲突、哪些只是推断。',
+  '- 最后给「下一步研究问题」：3 个以内，必须具体可执行。',
+  '- 如适合沉淀为卡片，可在末尾输出 proposal-batch；提议必须基于真实证据，不要编造 id。',
+  '- 中文回答；不要输出空泛洞察，不要把搜索摘要当成已核实事实。',
+].join('\n');
+
+/**
  * Agent 角色配置。
  */
 export interface AgentRoleConfig {
@@ -106,15 +137,18 @@ export interface AgentRoleConfig {
   supportsFallback: boolean;
   /** fallback model id（若支持） */
   fallbackModelId?: string;
+  /** 成本统计与模型路由任务类型 */
+  taskType: AgentTaskType;
 }
 
 /**
- * 三专用 Agent 角色配置表。
+ * 专用 Agent 角色配置表。
  *
  * 对应 v1.1 §3.2 的角色定义：
  * - structured：DeepSeek-V3 主力（成本低 + 中文结构化质量高）
  * - conversation：DeepSeek-V3 主力（中文对话流畅）
- * - probe：DeepSeek-R1 主力 / V3 fallback（R1 推理链适合多步追问）
+ * - probe：DeepSeek-V3 主力（沿用当前已注册模型，避免未配置 reasoner 时运行失败）
+ * - research：DeepSeek-V3 主力（联网研究与中文证据整理稳定，走 deep_research taskType 便于成本统计）
  */
 export const AGENT_ROLE_CONFIGS: Record<AgentRole, AgentRoleConfig> = {
   structured: {
@@ -124,6 +158,7 @@ export const AGENT_ROLE_CONFIGS: Record<AgentRole, AgentRoleConfig> = {
     recommendedProvider: 'deepseek',
     recommendedModelId: 'deepseek-v4-flash',
     supportsFallback: false,
+    taskType: 'knowledge_cards',
   },
   conversation: {
     role: 'conversation',
@@ -132,15 +167,25 @@ export const AGENT_ROLE_CONFIGS: Record<AgentRole, AgentRoleConfig> = {
     recommendedProvider: 'deepseek',
     recommendedModelId: 'deepseek-v4-flash',
     supportsFallback: false,
+    taskType: 'conversation',
   },
   probe: {
     role: 'probe',
     label: '追问 Agent',
     systemPrompt: PROBE_AGENT_PROMPT,
     recommendedProvider: 'deepseek',
-    recommendedModelId: 'deepseek-reasoner',
-    supportsFallback: true,
-    fallbackModelId: 'deepseek-v4-flash',
+    recommendedModelId: 'deepseek-v4-flash',
+    supportsFallback: false,
+    taskType: 'socratic_questioning',
+  },
+  research: {
+    role: 'research',
+    label: '研究 Agent',
+    systemPrompt: RESEARCH_AGENT_PROMPT,
+    recommendedProvider: 'deepseek',
+    recommendedModelId: 'deepseek-v4-flash',
+    supportsFallback: false,
+    taskType: 'deep_research',
   },
 };
 
@@ -150,6 +195,7 @@ export const AGENT_ROLE_CONFIGS: Record<AgentRole, AgentRoleConfig> = {
  * 基于用户消息意图选择最合适的 Agent 角色：
  * - request_advice → conversation（用户请求建议/下一步，对话 Agent 主回答）
  * - request_probe → probe（用户请求追问/盲区识别，追问 Agent 接管）
+ * - request_research → research（用户请求深度研究、调研、竞品分析或多来源查证）
  * - skeptic → conversation（用户质疑，回到对话 Agent 直接回答）
  * - neutral → conversation（默认对话 Agent）
  *
@@ -159,6 +205,7 @@ export const AGENT_ROLE_CONFIGS: Record<AgentRole, AgentRoleConfig> = {
 const INTENT_TO_ROLE_MAP: Record<string, AgentRole> = {
   request_advice: 'conversation',
   request_probe: 'probe',
+  request_research: 'research',
   skeptic: 'conversation',
   neutral: 'conversation',
 };
@@ -212,6 +259,9 @@ export function createRoleBasedAgent(
     mergedOptions.provider = config.recommendedProvider;
     mergedOptions.modelId = config.recommendedModelId;
   }
+  if (!rest.taskType) {
+    mergedOptions.taskType = config.taskType;
+  }
 
   return createWorkspaceAgent(workspaceId, mergedOptions);
 }
@@ -223,6 +273,7 @@ export {
   STRUCTURED_AGENT_PROMPT,
   CONVERSATION_AGENT_PROMPT,
   PROBE_AGENT_PROMPT,
+  RESEARCH_AGENT_PROMPT,
 };
 
 /**

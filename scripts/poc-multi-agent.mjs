@@ -19,6 +19,7 @@ import {
   STRUCTURED_AGENT_PROMPT,
   CONVERSATION_AGENT_PROMPT,
   PROBE_AGENT_PROMPT,
+  RESEARCH_AGENT_PROMPT,
 } from '../packages/agent/src/index.ts';
 
 const TEST_WORKSPACE_ID = 'poc-test-workspace';
@@ -39,30 +40,40 @@ function assert(condition, message) {
 
 console.log('P1.0 PoC: pi-agent-core 多 Agent 角色承载能力验证\n');
 
-console.log('验证点 1: 三角色配置独立定义');
-assert(Object.keys(AGENT_ROLE_CONFIGS).length === 3, '三角色配置表包含 3 个角色');
+console.log('验证点 1: 专用角色配置独立定义');
+assert(Object.keys(AGENT_ROLE_CONFIGS).length === 4, '角色配置表包含 4 个角色');
 assert(AGENT_ROLE_CONFIGS.structured.role === 'structured', 'structured 角色标识正确');
 assert(AGENT_ROLE_CONFIGS.conversation.role === 'conversation', 'conversation 角色标识正确');
 assert(AGENT_ROLE_CONFIGS.probe.role === 'probe', 'probe 角色标识正确');
+assert(AGENT_ROLE_CONFIGS.research.role === 'research', 'research 角色标识正确');
 
-console.log('\n验证点 2: 三角色 systemPrompt 各不相同');
+console.log('\n验证点 2: 角色 systemPrompt 各不相同');
 assert(STRUCTURED_AGENT_PROMPT !== CONVERSATION_AGENT_PROMPT, 'structured 与 conversation 提示词不同');
 assert(STRUCTURED_AGENT_PROMPT !== PROBE_AGENT_PROMPT, 'structured 与 probe 提示词不同');
 assert(CONVERSATION_AGENT_PROMPT !== PROBE_AGENT_PROMPT, 'conversation 与 probe 提示词不同');
+assert(RESEARCH_AGENT_PROMPT !== CONVERSATION_AGENT_PROMPT, 'research 与 conversation 提示词不同');
+assert(RESEARCH_AGENT_PROMPT !== PROBE_AGENT_PROMPT, 'research 与 probe 提示词不同');
 assert(STRUCTURED_AGENT_PROMPT.includes('结构化处理'), 'structured 提示词包含角色标识');
 assert(CONVERSATION_AGENT_PROMPT.includes('对话'), 'conversation 提示词包含角色标识');
 assert(PROBE_AGENT_PROMPT.includes('追问'), 'probe 提示词包含角色标识');
+assert(RESEARCH_AGENT_PROMPT.includes('深度研究'), 'research 提示词包含深度研究标识');
+assert(RESEARCH_AGENT_PROMPT.includes('deep_search'), 'research 提示词要求优先使用 deep_search');
 
-console.log('\n验证点 3: 三角色推荐 model 配置');
+console.log('\n验证点 3: 角色推荐 model 与 taskType 配置');
 assert(AGENT_ROLE_CONFIGS.structured.recommendedModelId === 'deepseek-v4-flash', 'structured 推荐 V3');
 assert(AGENT_ROLE_CONFIGS.conversation.recommendedModelId === 'deepseek-v4-flash', 'conversation 推荐 V3');
-assert(AGENT_ROLE_CONFIGS.probe.recommendedModelId === 'deepseek-reasoner', 'probe 推荐 R1');
-assert(AGENT_ROLE_CONFIGS.probe.supportsFallback === true, 'probe 支持 fallback');
-assert(AGENT_ROLE_CONFIGS.probe.fallbackModelId === 'deepseek-v4-flash', 'probe fallback 为 V3');
+assert(AGENT_ROLE_CONFIGS.probe.recommendedModelId === 'deepseek-v4-flash', 'probe 推荐 V3');
+assert(AGENT_ROLE_CONFIGS.research.recommendedModelId === 'deepseek-v4-flash', 'research 推荐 V3');
+assert(AGENT_ROLE_CONFIGS.probe.supportsFallback === false, 'probe 不依赖未注册 fallback 模型');
+assert(AGENT_ROLE_CONFIGS.structured.taskType === 'knowledge_cards', 'structured taskType 为 knowledge_cards');
+assert(AGENT_ROLE_CONFIGS.conversation.taskType === 'conversation', 'conversation taskType 为 conversation');
+assert(AGENT_ROLE_CONFIGS.probe.taskType === 'socratic_questioning', 'probe taskType 为 socratic_questioning');
+assert(AGENT_ROLE_CONFIGS.research.taskType === 'deep_research', 'research taskType 为 deep_research');
 
 console.log('\n验证点 4: 按用户意图选择 Agent 角色');
 assert(selectAgentRole('request_advice') === 'conversation', 'request_advice → conversation');
 assert(selectAgentRole('request_probe') === 'probe', 'request_probe → probe');
+assert(selectAgentRole('request_research') === 'research', 'request_research → research');
 assert(selectAgentRole('skeptic') === 'conversation', 'skeptic → conversation');
 assert(selectAgentRole('neutral') === 'conversation', 'neutral → conversation');
 assert(selectAgentRole('unknown_intent') === 'conversation', '未知意图 → conversation (默认)');
@@ -93,6 +104,13 @@ try {
   assert(false, `structured 角色装配失败: ${error.message}`);
 }
 
+try {
+  const agent = createRoleBasedAgent(TEST_WORKSPACE_ID, { role: 'research' });
+  assert(agent !== null && agent !== undefined, 'research 角色可装配为 Agent 实例');
+} catch (error) {
+  assert(false, `research 角色装配失败: ${error.message}`);
+}
+
 console.log('\n验证点 6: 省略 role 时回退到 conversation');
 try {
   const agent = createRoleBasedAgent(TEST_WORKSPACE_ID);
@@ -105,9 +123,9 @@ console.log('\n验证点 7: 显式传入 modelId 时不被角色配置覆盖');
 try {
   const agent = createRoleBasedAgent(TEST_WORKSPACE_ID, {
     role: 'probe',
-    modelId: 'custom-model',
+    modelId: 'deepseek-v4-flash',
   });
-  assert(agent !== null && agent !== undefined, '显式 modelId 时不覆盖，装配成功');
+  assert(agent !== null && agent !== undefined, '显式传入已注册 modelId 时装配成功');
 } catch (error) {
   assert(false, `显式 modelId 装配失败: ${error.message}`);
 }

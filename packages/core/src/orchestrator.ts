@@ -380,11 +380,12 @@ export function buildOrchestratorDecisionFromData(
  * - skeptic：用户在质疑 Agent 的追问方向，应回到被动响应
  * - request_advice：用户主动请求建议或下一步行动
  * - request_probe：用户主动请求追问或盲区识别
+ * - request_research：用户主动请求深度研究、调研、查证或竞品分析
  * - neutral：无明确意图信号，沿用 baseDecision
  *
  * @author fxbin
  */
-export type UserIntent = 'skeptic' | 'request_advice' | 'request_probe' | 'neutral';
+export type UserIntent = 'skeptic' | 'request_advice' | 'request_probe' | 'request_research' | 'neutral';
 
 /**
  * 质疑/拒绝信号关键词。
@@ -420,12 +421,24 @@ const REQUEST_PROBE_KEYWORDS: readonly string[] = [
 ];
 
 /**
+ * 请求深度研究关键词。
+ *
+ * 命中时不改变编排模式，只由 agent 层选择 research 角色：
+ * 这类请求需要更严格的证据账本、结论分级和开放问题，而不是主动提议模式切换。
+ */
+const REQUEST_RESEARCH_KEYWORDS: readonly string[] = [
+  '深度研究', '深度调研', '深入研究', '系统调研', '研究一下', '调研一下',
+  '帮我调研', '帮我研究', '竞品分析', '多来源查证', '交叉验证', '证据账本',
+  '研究报告', '背景研究', '外部分析',
+];
+
+/**
  * 对用户消息做规则意图识别。
  *
  * P0.4 前置拦截器的核心：基于关键词匹配识别用户意图，
  * 不引入 LLM（KISS 原则，避免成本与延迟）。
  *
- * 识别优先级：skeptic > request_probe > request_advice > neutral
+ * 识别优先级：skeptic > request_research > request_probe > request_advice > neutral
  * （质疑信号优先级最高，确保用户拒绝时立即回到被动响应）。
  *
  * @param message - 用户当前消息文本
@@ -438,6 +451,9 @@ export function classifyUserIntent(message: string): UserIntent {
 
   for (const keyword of SKEPTIC_KEYWORDS) {
     if (text.includes(keyword)) return 'skeptic';
+  }
+  for (const keyword of REQUEST_RESEARCH_KEYWORDS) {
+    if (text.includes(keyword)) return 'request_research';
   }
   for (const keyword of REQUEST_PROBE_KEYWORDS) {
     if (text.includes(keyword)) return 'request_probe';
@@ -480,7 +496,7 @@ export function preInterceptUserMessage(
 ): OrchestratorDecision {
   const intent = classifyUserIntent(message);
 
-  if (intent === 'neutral') {
+  if (intent === 'neutral' || intent === 'request_research') {
     return baseDecision;
   }
 

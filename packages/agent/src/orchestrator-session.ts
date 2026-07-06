@@ -329,21 +329,26 @@ export function startOrchestratorSession(
    * 结束时把 agent.state.messages 存回 sessionStore 供下一轮复用。
    */
   async function runMainAgent() {
-    const agentOptions: WorkspaceAgentOptions = {
-      provider: credentials.provider,
-      modelId: credentials.model,
-      apiKey: credentials.apiKey,
-      baseUrl: credentials.baseUrl,
-      messages: priorMessages,
-    };
-
     const supportsRoleOverride = credentials.provider === getDefaultPiProvider();
     const selectedRole = selectAgentRole(intent);
-    const role = supportsRoleOverride ? selectedRole : undefined;
+    const agentOptions: WorkspaceAgentOptions = supportsRoleOverride
+      ? {
+        apiKey: credentials.apiKey,
+        baseUrl: credentials.baseUrl,
+        messages: priorMessages,
+      }
+      : {
+        provider: credentials.provider,
+        modelId: credentials.model,
+        apiKey: credentials.apiKey,
+        baseUrl: credentials.baseUrl,
+        messages: priorMessages,
+      };
+    const role = selectedRole;
     if (selectedRole && !supportsRoleOverride) {
       callbacks.onWarn(
-        { provider: credentials.provider },
-        'role model override skipped: provider mismatch, fallback to user-configured model',
+        { provider: credentials.provider, role: selectedRole },
+        'role model override skipped: provider mismatch, role prompt and taskType retained',
       );
     }
 

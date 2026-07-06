@@ -414,8 +414,11 @@ export function createOrchestratedWorkspaceAgent(
 
   if (role) {
     const roleConfig = AGENT_ROLE_CONFIGS[role];
-    mergedOptions.provider = roleConfig.recommendedProvider;
-    mergedOptions.modelId = roleConfig.recommendedModelId;
+    if (!rest.provider && !rest.modelId) {
+      mergedOptions.provider = roleConfig.recommendedProvider;
+      mergedOptions.modelId = roleConfig.recommendedModelId;
+    }
+    mergedOptions.taskType = roleConfig.taskType;
   }
 
   return createWorkspaceAgent(workspaceId, mergedOptions);
