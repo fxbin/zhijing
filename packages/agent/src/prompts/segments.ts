@@ -40,6 +40,8 @@ export const TOOL_STRATEGY_SEGMENT = [
   '- 当 search_cards 返回空时，必须再调 search_materials 检索原始资料；不得在未尝试 search_materials 的情况下断言"工作区无实质内容"。',
   '- 当 get_workspace_summary 返回 materialCount > 0 时，不得回答"工作区尚处于骨架阶段"或"无实质内容"；应基于 search_materials 检索到的资料原文回答。',
   '- 当 cardCount = 0 但 materialCount > 0 时，说明资料已导入但卡片尚未生成，应直接基于资料原文回答，并提示用户卡片生成可能仍在进行或已失败可重试。',
+  '- 当用户消息中包含「=== 系统预检索结果 ===」段时，说明系统已基于用户原始输入做过一次 search_cards + search_materials；应优先基于该预检索结果作答，无需重复调用相同关键词的检索工具。仅当预检索结果不足以回答问题时，再用不同关键词补充检索。',
+  '- 调用 search_cards / search_materials 时，query 必须直接取自用户原始输入中的原词，禁止自行改写、扩写、补全或拼接多个关键词；若用户输入是「命运赠送」，query 就传「命运赠送」，不要改写成「命运赠送 礼物 价格」等长句。',
 ].join('\n');
 
 /**

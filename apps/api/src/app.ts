@@ -154,6 +154,8 @@ import {
   saveModelProviderSettings,
   saveWeReadSettings,
   searchKnowledgeAssets,
+  searchWorkspaceCards,
+  searchWorkspaceMaterials,
   suggestMaterialAssignments,
   testHypothesis,
   testModelProviderSettings,
@@ -403,6 +405,64 @@ const STATISTICS_GATE_BOOLEAN_FIELDS = [
 
 const AGENT_USAGE_DEFAULT_LIMIT = 100;
 const AGENT_USAGE_MAX_LIMIT = 500;
+
+/**
+ * Pre-fetch 检索每个集合（cards / materials）的默认 top-K。
+ * 取 5 条平衡召回率与上下文体积，避免 token 膨胀。
+ */
+const PREFETCH_SEARCH_TOP_K = 5;
+
+/**
+ * Pre-fetch 检索关键词最大长度，超过则截断，避免长问题场景下整段话做 TF-IDF 失效。
+ */
+const PREFETCH_QUERY_MAX_LENGTH = 50;
+
+/**
+ * 构造 Pre-fetch 上下文注入文本。
+ *
+ * 设计目的：LLM 倾向于改写用户短 query 导致召回失败，Pre-fetch 用用户原始消息
+ * 在代码层做一次确定性检索，把命中结果作为上下文注入 LLM 输入，让 LLM 优先基于
+ * 系统预检索结果作答，而非自行改写 query 调 search 工具。
+ *
+ * 触发条件：用户消息长度 >= 2 且非纯空白；命中结果为空时不注入，避免污染 LLM 上下文。
+ *
+ * @param workspaceId - 工作区 id
+ * @param userMessage - 用户原始消息
+ * @returns 注入文本，空字符串表示不注入
+ * @author fxbin
+ */
+function buildPrefetchContext(workspaceId: string, userMessage: string): string {
+  const trimmed = userMessage.trim();
+  if (trimmed.length < 2) return '';
+  const query = trimmed.slice(0, PREFETCH_QUERY_MAX_LENGTH);
+  let cards: ReturnType<typeof searchWorkspaceCards> = [];
+  let materials: ReturnType<typeof searchWorkspaceMaterials> = [];
+  try {
+    cards = searchWorkspaceCards(workspaceId, query, PREFETCH_SEARCH_TOP_K);
+    materials = searchWorkspaceMaterials(workspaceId, query, PREFETCH_SEARCH_TOP_K);
+  } catch {
+    return '';
+  }
+  if (cards.length === 0 && materials.length === 0) return '';
+  const lines: string[] = [
+    '=== 系统预检索结果（基于用户原始输入，覆盖 search_cards + search_materials） ===',
+    `原始输入：${query}`,
+  ];
+  if (cards.length > 0) {
+    lines.push(`知识卡片（命中 ${cards.length} 张）：`);
+    for (const card of cards) {
+      lines.push(`- [${card.type}] ${card.title}：${card.body.slice(0, 120)}`);
+    }
+  }
+  if (materials.length > 0) {
+    lines.push(`来源资料（命中 ${materials.length} 条）：`);
+    for (const m of materials) {
+      lines.push(`- ${m.title}：${m.preview.slice(0, 200)}`);
+    }
+  }
+  lines.push('=== 预检索结束。请优先基于以上结果作答；若不足，再调用 search_cards / search_materials 补充检索 ===');
+  return lines.join('\n');
+}
 
 /**
  * inspect 调试路由访问令牌。
@@ -2265,10 +2325,15 @@ export async function buildApi() {
         model: credentials.model,
       });
 
+      const prefetchContext = buildPrefetchContext(request.params.id, message);
+      const effectiveMessage = prefetchContext
+        ? `${prefetchContext}\n\n用户问题：${message}`
+        : message;
+
       const session = startOrchestratorSession(
         {
           workspaceId: request.params.id,
-          message,
+          message: effectiveMessage,
           intent,
           decision,
           credentials: {
