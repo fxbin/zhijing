@@ -118,7 +118,6 @@
   "capabilities.roundtable.label": "Roundtable Discussion",
   "capabilities.roundtable.description": "Convene multiple role perspectives for a roundtable discussion in chat, covering viewpoints from different domains",
   "capabilities.roundtable.boundary1": "Currently a single Agent simulation. One Agent plays different roles sequentially rather than real multi-agent parallel execution",
-  "capabilities.roundtable.boundary2": "For real multi-agent parallel discussion, invoke the roundtable-forge skill in TRAE IDE",
   "capabilities.roundtable.futurePlan": "Future versions will support real multi-agent parallel orchestration",
   "capabilities.roundtable.trigger": "Triggered when chat mentions keywords like \"roundtable\", \"multi-perspective\", \"cross-disciplinary\", \"expert discussion\"",
   "capabilities.deepSearch.label": "Deep Search",

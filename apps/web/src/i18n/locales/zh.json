@@ -118,7 +118,6 @@
   "capabilities.roundtable.label": "圆桌研讨",
   "capabilities.roundtable.description": "在对话中召集多个角色视角进行圆桌研讨，覆盖不同领域的观点与立场",
   "capabilities.roundtable.boundary1": "当前为单 Agent 模拟，由一个 Agent 依次扮演不同角色发言，并非真实多 Agent 并行",
-  "capabilities.roundtable.boundary2": "如需真实多 Agent 并行讨论，请在 TRAE IDE 中调用 roundtable-forge skill",
   "capabilities.roundtable.futurePlan": "后续版本将支持真实多 Agent 并行编排",
   "capabilities.roundtable.trigger": "在对话中提到「圆桌」「多视角」「跨学科」「专家讨论」等关键词时触发",
   "capabilities.deepSearch.label": "深度搜索",

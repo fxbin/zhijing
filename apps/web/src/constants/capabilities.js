@@ -44,7 +44,6 @@ export const CAPABILITIES = Object.freeze([
     executionModeLabelKey: 'capabilities.executionMode.singleAgentSimulation',
     boundariesKeys: [
       'capabilities.roundtable.boundary1',
-      'capabilities.roundtable.boundary2',
     ],
     futurePlanKey: 'capabilities.roundtable.futurePlan',
     triggerKey: 'capabilities.roundtable.trigger',
