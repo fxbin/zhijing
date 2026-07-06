@@ -10836,10 +10836,13 @@ function withSearchMetadata(match: SearchScore, metadata: KnowledgeSearchResult[
 export function getWorkspace(id: string): WorkspaceDetail | undefined {
   const base = repository.findWorkspace(id);
   if (!base) return undefined;
+  const materials = repository.listMaterials(id);
+  const cards = repository.listCards(id);
   return {
     ...base,
-    materials: repository.listMaterials(id),
-    cards: repository.listCards(id),
+    stage: computeWorkspaceStage(materials.length, base.cardCount),
+    materials,
+    cards,
     artifacts: repository.listArtifacts(id),
   };
 }
