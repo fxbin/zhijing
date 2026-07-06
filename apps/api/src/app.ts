@@ -48,6 +48,7 @@ import {
   recordExport,
   getWorkspaceAnalytics,
   getWorkspace,
+  getWorkspaceOverview,
   getKnowledgeMap,
   getWorkspaceNodePositions,
   saveWorkspaceNodePositions,
@@ -1441,11 +1442,11 @@ export async function buildApi() {
   });
 
   app.get<{ Params: { id: string } }>('/api/workspaces/:id', async (request, reply) => {
-    const base = getWorkspace(request.params.id);
-    if (!base) {
+    const overview = getWorkspaceOverview(request.params.id);
+    if (!overview) {
       return reply.code(404).send({ error: 'Knowledge base not found.' });
     }
-    return base;
+    return overview;
   });
 
   app.get<{ Params: { id: string } }>('/api/workspaces/:id/analytics', async (request, reply) => {
