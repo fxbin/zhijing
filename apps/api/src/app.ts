@@ -1155,7 +1155,7 @@ export async function buildApi() {
     provider: typeof request.body?.provider === 'string' ? request.body.provider.trim() : undefined,
     model: typeof request.body?.model === 'string' ? request.body.model.trim() : undefined,
     apiKey: typeof request.body?.apiKey === 'string' ? request.body.apiKey : undefined,
-    baseUrl: typeof request.body?.baseUrl === 'string' ? request.body.baseUrl : undefined,
+    baseUrl: typeof request.body?.baseUrl === 'string' ? request.body.baseUrl.trim() : undefined,
   }));
 
   app.get('/api/settings/model-provider/v2', async () => getModelProviderSettingsV2());

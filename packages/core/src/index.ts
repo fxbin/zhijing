@@ -3105,6 +3105,13 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     const createdAt = existing?.created_at ?? record.session.createdAt;
     const updatedAt = record.session.updatedAt;
 
+    let rawMessagesJson: string;
+    try {
+      rawMessagesJson = JSON.stringify(record.rawMessages);
+    } catch {
+      rawMessagesJson = '[]';
+    }
+
     this.db.exec('BEGIN');
     try {
       this.db.prepare(`
@@ -3125,8 +3132,8 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         record.session.sessionId,
         record.session.workspaceId,
         title,
-        messageRecords.length,
-        JSON.stringify(record.rawMessages),
+        record.rawMessages.length,
+        rawMessagesJson,
         record.run.provider,
         record.run.model,
         createdAt,
@@ -3141,6 +3148,12 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const message of messageRecords) {
+        let rawJson: string;
+        try {
+          rawJson = JSON.stringify(message.raw);
+        } catch {
+          rawJson = '{}';
+        }
         insertMessage.run(
           message.id,
           message.sessionId,
@@ -3148,7 +3161,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
           message.role,
           message.text,
           message.reasoning,
-          JSON.stringify(message.raw),
+          rawJson,
           message.sequence,
           message.createdAt,
         );
@@ -3186,6 +3199,22 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const toolCall of record.toolCalls) {
+        let argsJson: string;
+        try {
+          argsJson = JSON.stringify(toolCall.args);
+        } catch {
+          argsJson = '{}';
+        }
+        let detailsJson: string | null;
+        if (toolCall.details === undefined) {
+          detailsJson = null;
+        } else {
+          try {
+            detailsJson = JSON.stringify(toolCall.details);
+          } catch {
+            detailsJson = '{}';
+          }
+        }
         insertToolCall.run(
           toolCall.id,
           toolCall.runId,
@@ -3193,9 +3222,9 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
           toolCall.workspaceId,
           toolCall.toolCallId,
           toolCall.toolName,
-          JSON.stringify(toolCall.args),
+          argsJson,
           toolCall.result,
-          toolCall.details === undefined ? null : JSON.stringify(toolCall.details),
+          detailsJson,
           toolCall.isError ? 1 : 0,
           toolCall.startedAt,
           toolCall.endedAt,
@@ -6620,7 +6649,6 @@ function createCards(
   const timestamp = now();
   const sourceStatus: ClaimStatus = material && material.type !== 'question' && material.parseStatus === 'ingested' ? 'sourced' : 'ai_skeleton';
   const generated = normalizeGeneratedCards(generatedCards);
-  const hasModelCardOutput = Boolean(generatedCards?.length);
   const fallbackCards: GeneratedCard[] = [
     {
       type: 'concept',
@@ -6637,7 +6665,7 @@ function createCards(
   ];
   const existingCards = repository.listCards(base.id);
   const existingTitles = new Set(existingCards.map((card) => card.title.trim()));
-  const cardSeeds = generated.length ? generated : hasModelCardOutput ? [] : fallbackCards;
+  const cardSeeds = generated.length ? generated : fallbackCards;
   const cards: KnowledgeCard[] = cardSeeds
     .map((card) => ({
       id: id('card'),
@@ -14577,6 +14605,12 @@ export function interceptInStream(
   const proposalReport = generateAgentProposals();
   return preInterceptStream(toolCalls, currentDecision, proposalReport.proposals);
 }
+
+export {
+  fetchUrlAsMarkdown,
+  parseRawHtml,
+  type FetchedContent,
+} from './web-fetch.js';
 
 export {
   ANTI_VANITY_THRESHOLD_PASS,
