@@ -170,6 +170,7 @@ import {
   setManualProxy,
   getHiddenInterestHint,
   computeWeReadQuadrantSummary,
+  computeWeReadGlobalTopicSpectrum,
   setHiddenInterestPermanentlyDismissed,
   dismissHiddenInterestBook,
   markHiddenInterestHintShown,
@@ -3008,6 +3009,23 @@ export async function buildApi() {
 
   app.get('/api/weread/quadrant', async () => {
     return computeWeReadQuadrantSummary();
+  });
+
+  app.get<{ Querystring: { force?: string } }>('/api/weread/topic-spectrum/global', async (request) => {
+    const force = request.query?.force === '1';
+    const spectrum = await computeWeReadGlobalTopicSpectrum(force);
+    const validation = validateTopicSpectrum(spectrum);
+    if (!validation.valid) {
+      return { spectrum, degradeAssessment: null };
+    }
+    const now = Date.now();
+    const defaultBook = createDefaultDataAccount(new Date(now).toISOString());
+    const disabledDimensions = listDisabledDimensions(defaultBook);
+    const topicSpectrumEntry = DEGRADE_MATRIX_REGISTRY.find((e) => e.key === 'topic_spectrum');
+    const degradeAssessment = topicSpectrumEntry
+      ? assessDegrade(topicSpectrumEntry, disabledDimensions)
+      : null;
+    return { spectrum, degradeAssessment };
   });
 
   app.post<{ Body: { permanentlyDismissed?: boolean } }>('/api/weread/hidden-interest/toggle', async (request, reply) => {

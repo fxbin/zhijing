@@ -119,7 +119,7 @@ export function computeQuadrantSummary(
       coreReading: [],
       commitmentDebt: [],
       hiddenInterest: [],
-      irrelevant: 0,
+      irrelevant: [],
       insufficientData: true,
       recommendationSeeds: [],
       computedAt,
@@ -144,7 +144,7 @@ export function computeQuadrantSummary(
   const coreReading = results.filter((r) => r.kind === 'core_reading');
   const commitmentDebt = results.filter((r) => r.kind === 'commitment_debt');
   const hiddenInterest = results.filter((r) => r.kind === 'hidden_interest');
-  const irrelevant = results.filter((r) => r.kind === 'irrelevant').length;
+  const irrelevant = results.filter((r) => r.kind === 'irrelevant');
   const recommendationSeeds = results
     .filter((r) => r.isRecommendationSeed)
     .map((r) => r.bookId);

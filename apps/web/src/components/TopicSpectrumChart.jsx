@@ -157,6 +157,7 @@ export default function TopicSpectrumChart({ spectrum, degradeAssessment, loadin
     return (
       <div className="topic-spectrum-chart is-loading">
         <div className="topic-spectrum-skeleton" aria-label="加载中" />
+        <p className="topic-spectrum-loading-text">LLM 正在生成主题标签，请稍候 1-2 分钟…</p>
       </div>
     );
   }

@@ -193,9 +193,10 @@ import {
   cancelTempRollback,
   resolveEffectiveTier,
 } from './statistics/audience-adapter.js';
-import type { BookSignalInputs, QuadrantSummary } from '@zhijing/shared';
+import type { BookSignalInputs, QuadrantSummary, TopicSpectrum } from '@zhijing/shared';
 import { DEGRADE_MATRIX_REGISTRY } from './statistics/degrade-matrix.js';
 import { computeQuadrantSummary } from './statistics/quadrant.js';
+import { computeTopicSpectrum } from './statistics/topic-spectrum.js';
 import {
   initZvecSearch,
   isZvecSearchReady,
@@ -648,6 +649,10 @@ type KnowledgeRepository = {
   }): boolean;
   readHiddenInterestState(): HiddenInterestState | null;
   saveHiddenInterestState(state: HiddenInterestState): void;
+  readWeReadTopicLabel(cacheKey: string): { label: string; expiresAt: number } | null;
+  saveWeReadTopicLabel(cacheKey: string, label: string, expiresAt: number): void;
+  readWeReadGlobalTopicSpectrumCache(): { spectrumJson: string; expiresAt: number } | null;
+  saveWeReadGlobalTopicSpectrumCache(spectrumJson: string, expiresAt: number): void;
   recordDataPortability(record: DataPortabilityRecord): void;
   listDataPortability(): DataPortabilityRecord[];
   revokeDataPortability(id: string, revokedAt: number): void;
@@ -1308,6 +1313,8 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
   private hiddenInterestState: HiddenInterestState | null = null;
   private dataPortabilityRecords: DataPortabilityRecord[] = [];
   private readerModeState: ReaderModeState | null = null;
+  private topicLabelStore: Map<string, { label: string; expiresAt: number }> = new Map();
+  private globalTopicSpectrumCache: { spectrumJson: string; expiresAt: number } | null = null;
 
   /**
    * 读取隐性真兴趣提示的持久化状态（NS-8）。
@@ -1321,6 +1328,34 @@ class MemoryKnowledgeRepository implements KnowledgeRepository {
    */
   saveHiddenInterestState(state: HiddenInterestState): void {
     this.hiddenInterestState = { ...state };
+  }
+
+  /**
+   * 内存版主题标签缓存查询。测试环境不调 LLM，正常不会命中。
+   */
+  readWeReadTopicLabel(cacheKey: string): { label: string; expiresAt: number } | null {
+    return this.topicLabelStore.get(cacheKey) ?? null;
+  }
+
+  /**
+   * 内存版主题标签缓存写入。
+   */
+  saveWeReadTopicLabel(cacheKey: string, label: string, expiresAt: number): void {
+    this.topicLabelStore.set(cacheKey, { label, expiresAt });
+  }
+
+  /**
+   * 内存版全局主题谱缓存查询。测试环境不调 LLM，正常不会命中。
+   */
+  readWeReadGlobalTopicSpectrumCache(): { spectrumJson: string; expiresAt: number } | null {
+    return this.globalTopicSpectrumCache;
+  }
+
+  /**
+   * 内存版全局主题谱缓存写入。
+   */
+  saveWeReadGlobalTopicSpectrumCache(spectrumJson: string, expiresAt: number): void {
+    this.globalTopicSpectrumCache = { spectrumJson, expiresAt };
   }
 
   /**
@@ -3668,6 +3703,7 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
     this.ensureWeReadHiddenInterestStateTable();
     this.ensureWeReadDataPortabilityTable();
     this.ensureWeReadReaderModeTable();
+    this.ensureWeReadTopicLabelTable();
     this.ensureVerificationStateTable();
     this.ensureMaterialMediaColumn();
     this.ensureMaterialStatusTimelineColumn();
@@ -4169,6 +4205,33 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
   }
 
   /**
+   * 微信读书全局主题谱 LLM 标签缓存表。
+   *
+   * 持久化每个主题簇的 LLM 生成标签，避免后端重启或 24h 内存缓存失效后
+   * 重复调 LLM（17 个簇 × 1.5s 间隔 = 浪费 token 与时间）。
+   *
+   * cacheKey 为代表词排序后拼接，label 为 4-12 字主题短语，
+   * expiresAt 为毫秒时间戳，过期后下次读取视为未命中。
+   *
+   * @author fxbin
+   */
+  private ensureWeReadTopicLabelTable() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS weread_topic_label_cache (
+        cache_key TEXT PRIMARY KEY,
+        label TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+      DELETE FROM weread_topic_label_cache WHERE label = '待补充';
+      CREATE TABLE IF NOT EXISTS weread_global_topic_spectrum_cache (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        spectrum_json TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+    `);
+  }
+
+  /**
    * 为轻校验覆盖状态表做向后兼容：若旧库没有 verification_state 表则创建（NS-7）。
    *
    * 追加块模式，兼容新旧数据库。verified_at 存毫秒时间戳字符串。
@@ -4371,6 +4434,65 @@ class SqliteKnowledgeRepository implements KnowledgeRepository {
         dismissedBookIds: JSON.stringify(state.dismissedBookIds),
         updatedAt: state.updatedAt,
       });
+  }
+
+  /**
+   * 读取微信读书全局主题谱 LLM 标签缓存。过期或不存在返回 null。
+   */
+  readWeReadTopicLabel(cacheKey: string): { label: string; expiresAt: number } | null {
+    const row = this.db
+      .prepare('SELECT label, expires_at FROM weread_topic_label_cache WHERE cache_key = ?')
+      .get(cacheKey) as { label: string; expires_at: number } | undefined;
+    if (!row) return null;
+    return { label: row.label, expiresAt: row.expires_at };
+  }
+
+  /**
+   * 保存微信读书全局主题谱 LLM 标签缓存。upsert 语义，同 cacheKey 覆盖。
+   */
+  saveWeReadTopicLabel(cacheKey: string, label: string, expiresAt: number): void {
+    this.db
+      .prepare(
+        `
+      INSERT INTO weread_topic_label_cache (cache_key, label, expires_at)
+      VALUES (@cacheKey, @label, @expiresAt)
+      ON CONFLICT(cache_key) DO UPDATE SET
+        label = @label,
+        expires_at = @expiresAt
+    `,
+      )
+      .run({ cacheKey, label, expiresAt });
+  }
+
+  /**
+   * 读取全局主题谱缓存。单行表（id=1），不存在或过期返回 null。
+   *
+   * 持久化整个 spectrum JSON，避免每次进入统计 tab 都重新聚类 + 调 LLM。
+   * 默认 TTL 7 天，过期后下次读取视为未命中，触发重算。
+   */
+  readWeReadGlobalTopicSpectrumCache(): { spectrumJson: string; expiresAt: number } | null {
+    const row = this.db
+      .prepare('SELECT spectrum_json, expires_at FROM weread_global_topic_spectrum_cache WHERE id = 1')
+      .get() as { spectrum_json: string; expires_at: number } | undefined;
+    if (!row) return null;
+    return { spectrumJson: row.spectrum_json, expiresAt: row.expires_at };
+  }
+
+  /**
+   * 保存全局主题谱缓存。upsert 语义，单行表始终只保留最新一份。
+   */
+  saveWeReadGlobalTopicSpectrumCache(spectrumJson: string, expiresAt: number): void {
+    this.db
+      .prepare(
+        `
+      INSERT INTO weread_global_topic_spectrum_cache (id, spectrum_json, expires_at)
+      VALUES (1, @spectrumJson, @expiresAt)
+      ON CONFLICT(id) DO UPDATE SET
+        spectrum_json = @spectrumJson,
+        expires_at = @expiresAt
+    `,
+      )
+      .run({ spectrumJson, expiresAt });
   }
 
   /**
@@ -5916,6 +6038,7 @@ export function resetKnowledgeCoreForTests() {
   repository = createMemoryKnowledgeRepository();
   parserResultCache.clear();
   platformParseTimestamps.clear();
+  topicLabelCache.clear();
   modelProviderConfig = initialModelProviderConfig();
   applyModelProviderConfig();
 }
@@ -12293,6 +12416,12 @@ export async function getWorkspaceAnalytics(id: string): Promise<WorkspaceAnalyt
  * 洞察页来源分布最多展示的平台数量。
  */
 const INSIGHTS_SOURCE_PLATFORM_LIMIT = 6;
+
+/**
+ * 洞察页知识增长图展示的天数（近 9 个月）。
+ * 约 39 周，兼顾信息密度与可读性，避免 12 个月在 2D 视图中过于拥挤。
+ */
+const INSIGHTS_GROWTH_DAYS = 274;
 const DEFAULT_USER_MEMORY_QUERY_LIMIT = 200;
 const DEFAULT_DECISION_LOG_QUERY_LIMIT = 200;
 
@@ -12321,7 +12450,7 @@ export function getGlobalInsights(workspaceId?: string): GlobalInsights {
   const nowDate = new Date();
   const labels: string[] = [];
   const data: number[] = [];
-  for (let i = 29; i >= 0; i -= 1) {
+  for (let i = INSIGHTS_GROWTH_DAYS - 1; i >= 0; i -= 1) {
     const date = new Date(nowDate);
     date.setDate(date.getDate() - i);
     const dateKey = date.toISOString().slice(0, 10);
@@ -13642,6 +13771,277 @@ export function computeWeReadQuadrantSummary(): QuadrantSummary {
   return computeQuadrantSummary(inputs);
 }
 
+const WEREAD_HIGHLIGHT_LINE_PATTERN = /^>\s+(.+)$/;
+const WEREAD_HIGHLIGHT_DATE_PATTERN = /^>\s+—\s+划线于\s+(\d{4}-\d{2}-\d{2})$/;
+const WEREAD_GLOBAL_TOPIC_BOOK_ID = 'all';
+
+/**
+ * 从微信读书 material 的 markdown 文本中提取划线三元组。
+ *
+ * 解析 buildWeReadMaterialMarkdown 生成的格式：
+ *   > 划线文本
+ *   > — 划线于 YYYY-MM-DD
+ * 连续两行 `>` 开头，第二行含"划线于"日期才算一条有效划线。
+ *
+ * @param content - material.contentText 或 rawInput
+ * @param bookId - 所属 material ID，用于组装 highlight.id
+ * @returns 划线三元组数组 { id, text, time }
+ * @author fxbin
+ */
+function extractWeReadHighlightsFromMarkdown(
+  content: string,
+  bookId: string,
+): Array<{ id: string; text: string; time: number }> {
+  if (!content) return [];
+  const lines = content.split('\n');
+  const highlights: Array<{ id: string; text: string; time: number }> = [];
+  for (let i = 0; i < lines.length - 1; i += 1) {
+    const textMatch = lines[i].match(WEREAD_HIGHLIGHT_LINE_PATTERN);
+    if (!textMatch) continue;
+    const text = textMatch[1].trim();
+    if (text.startsWith('—') || text.startsWith('划线于')) continue;
+    const dateMatch = lines[i + 1].match(WEREAD_HIGHLIGHT_DATE_PATTERN);
+    if (!dateMatch) continue;
+    const dateStr = dateMatch[1];
+    const time = Date.parse(`${dateStr}T00:00:00.000Z`);
+    if (!Number.isFinite(time)) continue;
+    highlights.push({
+      id: `${bookId}-${i}`,
+      text,
+      time,
+    });
+  }
+  return highlights;
+}
+
+const TOPIC_LABEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const TOPIC_LABEL_FALLBACK_TTL_MS = 10 * 60 * 1000;
+const TOPIC_LABEL_MAX_SAMPLES = 8;
+const TOPIC_LABEL_MIN_LENGTH = 4;
+const TOPIC_LABEL_MAX_LENGTH = 8;
+const TOPIC_LABEL_CLEAN_MAX_LENGTH = 12;
+const TOPIC_LABEL_INTER_CALL_MS = 1500;
+const TOPIC_LABEL_FALLBACK = '待补充';
+const TOPIC_LABEL_PROMPT_HEADER = '你是一位知识管理助手，擅长从阅读划线中提炼主题。\n\n任务：阅读以下划线样本与代表词，生成一个 4-8 字的纯中文主题标签，概括这组划线的核心主题。\n\n硬约束：\n- 必须是纯中文，禁止任何英文字母、数字、标点\n- 长度 4-8 字\n- 必须是语义完整的短语，表达代表词之间的共同指向，而非代表词本身的罗列\n- 只返回标签本身，不要解释、不要前缀\n\n代表词：';
+const TOPIC_LABEL_PROMPT_SAMPLES = '\n\n划线样本：\n';
+const TOPIC_LABEL_PROMPT_FEW_SHOT = '\n\n示例：\n代表词：投资、复利、时间\n划线样本：\n1. 复利是世界第八大奇迹，时间是投资者的朋友。\n2. 长期持有的关键不是耐心，而是对复利的理解。\n标签：复利时间的力量\n\n代表词：学习、思考、反馈\n划线样本：\n1. 真正的学习需要主动思考，反馈是校正认知偏差的关键。\n2. 没有反馈的思考是空想，没有思考的反馈是噪音。\n标签：主动反馈式学习\n\n代表词：恐惧、未知、勇气\n划线样本：\n1. 恐惧源于未知，勇气不是不害怕，而是带着害怕前行。\n2. 已知带来安全感，未知带来可能性。\n标签：直面未知的勇气\n';
+const TOPIC_LABEL_PROMPT_SUFFIX = '\n\n标签：';
+const TOPIC_LABEL_ENGLISH_REGEX = /[a-zA-Z]/;
+
+const topicLabelCache = new Map<string, { label: string; expiresAt: number }>();
+
+/**
+ * 校验并清洗 LLM 返回的原始标签文本。
+ *
+ * 三级校验：
+ * 1. 格式清洗：去除引号、书名号、换行，截断到 12 字
+ * 2. 内容校验：空、含英文字母、含「·」分隔符、长度不在 4-8 字范围均视为不合格
+ * 3. 返回清洗后的标签或 null（由调用方决定降级）
+ *
+ * @param rawText - LLM 原始返回文本
+ * @returns 合格的标签字符串，或 null 表示需要降级
+ * @author fxbin
+ */
+function validateAndCleanTopicLabel(rawText: string): string | null {
+  const cleaned = rawText
+    .trim()
+    .replace(/["""''《》\n\r]/g, '')
+    .slice(0, TOPIC_LABEL_CLEAN_MAX_LENGTH);
+  if (cleaned.length === 0) return null;
+  if (TOPIC_LABEL_ENGLISH_REGEX.test(cleaned)) return null;
+  if (cleaned.includes('·')) return null;
+  if (cleaned.length < TOPIC_LABEL_MIN_LENGTH || cleaned.length > TOPIC_LABEL_MAX_LENGTH) return null;
+  return cleaned;
+}
+
+/**
+ * 软检测：标签是否偷懒地等于代表词前 N 个的「·」拼接。
+ *
+ * 只检测带「·」分隔符的拼接，且只检测从第一个代表词开始的连续子集。
+ * 无分隔符的短语（如「财富管理本质」）视为 LLM 已做提炼，不算偷懒。
+ * 任意中间子集（如跳过第一个词）也不算偷懒，因为 LLM 至少做了选择。
+ *
+ * 覆盖「财富·管理」「财富·管理·本质」等从首个代表词开始的连续拼接。
+ *
+ * @param label - 已校验通过的标签
+ * @param terms - 该簇的代表词列表
+ * @returns true 表示标签是代表词的懒拼接，应触发重试或降级
+ * @author fxbin
+ */
+function isTopicLabelLazy(label: string, terms: string[]): boolean {
+  const maxLen = Math.min(terms.length, 4);
+  for (let len = 2; len <= maxLen; len += 1) {
+    const prefixWithSeparator = terms.slice(0, len).join('·');
+    if (label === prefixWithSeparator) return true;
+  }
+  return false;
+}
+
+/**
+ * 调用 LLM 流式生成标签文本，提取「标签：」之后的内容。
+ *
+ * @param prompt - 完整提示词
+ * @returns LLM 原始返回文本（未校验），mock 路径或异常时返回空字符串
+ * @author fxbin
+ */
+async function callLlmForTopicLabel(prompt: string): Promise<string> {
+  let rawText = '';
+  let provider = '';
+  for await (const chunk of piRuntime.streamText({ prompt })) {
+    if (chunk.provider) provider = chunk.provider;
+    rawText += chunk.text;
+  }
+  if (provider === 'mock' || rawText.includes('本地 mock') || rawText.includes('本地mock')) {
+    return '';
+  }
+  return rawText;
+}
+
+/**
+ * 用 LLM 为单个主题簇生成人类可读的标签。
+ *
+ * 流程：
+ * 1. 内存缓存 → SQLite 缓存 → LLM 调用（三级查询）
+ * 2. LLM 输出经校验（英文/「·」/长度）与软检测（代表词懒拼接）
+ * 3. 校验失败或软检测命中时，重试一次 LLM
+ * 4. 仍失败则降级为「待补充」并写缓存（避免无限重试）
+ *
+ * 缓存：key 为代表词排序后拼接，TTL 24 小时，同时写内存 Map 与 SQLite 表。
+ *
+ * @param terms - 该簇的代表词列表
+ * @param sampleHighlights - 该簇的划线文本样本
+ * @returns LLM 生成的主题标签，或降级文案
+ * @author fxbin
+ */
+async function generateTopicLabelWithLlm(
+  terms: string[],
+  sampleHighlights: string[],
+): Promise<string> {
+  if (sampleHighlights.length === 0 || terms.length === 0) {
+    return terms.slice(0, 3).join('·');
+  }
+  const cacheKey = [...terms].sort().join('|');
+  const nowMs = Date.now();
+  const memCached = topicLabelCache.get(cacheKey);
+  if (memCached && memCached.expiresAt > nowMs) {
+    return memCached.label;
+  }
+  const dbCached = repository.readWeReadTopicLabel(cacheKey);
+  if (dbCached && dbCached.expiresAt > nowMs) {
+    topicLabelCache.set(cacheKey, dbCached);
+    return dbCached.label;
+  }
+  const prompt =
+    TOPIC_LABEL_PROMPT_HEADER +
+    terms.join('、') +
+    TOPIC_LABEL_PROMPT_SAMPLES +
+    sampleHighlights.map((h, i) => `${i + 1}. ${h}`).join('\n') +
+    TOPIC_LABEL_PROMPT_FEW_SHOT +
+    TOPIC_LABEL_PROMPT_SUFFIX;
+
+  let label: string | null = null;
+  try {
+    const firstRaw = await callLlmForTopicLabel(prompt);
+    label = validateAndCleanTopicLabel(firstRaw);
+    if (label && isTopicLabelLazy(label, terms)) {
+      label = null;
+    }
+  } catch {
+    label = null;
+  }
+
+  if (!label) {
+    try {
+      const retryRaw = await callLlmForTopicLabel(prompt);
+      label = validateAndCleanTopicLabel(retryRaw);
+      if (label && isTopicLabelLazy(label, terms)) {
+        label = null;
+      }
+    } catch {
+      label = null;
+    }
+  }
+
+  const expiresAt = nowMs + TOPIC_LABEL_CACHE_TTL_MS;
+  if (label) {
+    topicLabelCache.set(cacheKey, { label, expiresAt });
+    repository.saveWeReadTopicLabel(cacheKey, label, expiresAt);
+    return label;
+  }
+  const fallbackExpiresAt = nowMs + TOPIC_LABEL_FALLBACK_TTL_MS;
+  topicLabelCache.set(cacheKey, { label: TOPIC_LABEL_FALLBACK, expiresAt: fallbackExpiresAt });
+  return TOPIC_LABEL_FALLBACK;
+}
+
+const GLOBAL_TOPIC_SPECTRUM_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * 计算微信读书已导入笔记的全局主题演变谱。
+ *
+ * 数据源：materials 表中 platform='weread' 且未归档的记录。
+ * 从每条 material.contentText 解析划线三元组，汇总后调 computeTopicSpectrum 做全书架聚合。
+ *
+ * 覆盖范围：仅包含已导入到知径的书。未导入的书划线只在腾讯 gateway 上，不在本聚合范围内。
+ * 语义上已导入的书是用户认可的核心阅读，主题演变最相关。
+ *
+ * LLM 标签：聚类完成后，对每个簇取若干划线样本调 LLM 生成 4-8 字主题短语，
+ * 替换原代表词拼接的 label。失败时降级为代表词拼接。单簇标签结果缓存 24 小时。
+ *
+ * 整体缓存：完整的 spectrum 结果持久化到 SQLite，TTL 7 天。
+ * 未过期时直接返回缓存，避免聚类 + 17 次 LLM 串行调用。
+ * force=true 时强制重算并刷新缓存（用户点「刷新主题谱」按钮触发）。
+ *
+ * @param force - true 表示强制重算并刷新缓存
+ * @returns 全局主题演变谱（含 LLM 生成的主题标签）
+ * @author fxbin
+ */
+export async function computeWeReadGlobalTopicSpectrum(force = false) {
+  if (!force) {
+    const cached = repository.readWeReadGlobalTopicSpectrumCache();
+    if (cached && cached.expiresAt > Date.now()) {
+      try {
+        return JSON.parse(cached.spectrumJson) as TopicSpectrum;
+      } catch {
+        // 缓存 JSON 损坏，忽略并重算
+      }
+    }
+  }
+  const materials = repository.listMaterials().filter(
+    (m) => m.platform === 'weread' && typeof m.contentText === 'string' && m.contentText.length > 0,
+  );
+  const booksRead = materials.length;
+  const highlights: Array<{ id: string; text: string; time: number }> = [];
+  for (const material of materials) {
+    const extracted = extractWeReadHighlightsFromMarkdown(material.contentText ?? '', material.id);
+    highlights.push(...extracted);
+  }
+  const spectrum = computeTopicSpectrum({
+    bookId: WEREAD_GLOBAL_TOPIC_BOOK_ID,
+    highlights,
+    booksRead,
+  });
+  if (spectrum.clusters.length > 0) {
+    const highlightsById = new Map(highlights.map((h) => [h.id, h]));
+    for (let i = 0; i < spectrum.clusters.length; i += 1) {
+      const cluster = spectrum.clusters[i];
+      const samples = (cluster.highlightIds ?? [])
+        .map((id) => highlightsById.get(id)?.text)
+        .filter((t): t is string => typeof t === 'string' && t.length > 0)
+        .slice(0, TOPIC_LABEL_MAX_SAMPLES);
+      if (samples.length === 0) continue;
+      cluster.label = await generateTopicLabelWithLlm(cluster.representativeTerms, samples);
+      if (i < spectrum.clusters.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, TOPIC_LABEL_INTER_CALL_MS));
+      }
+    }
+  }
+  repository.saveWeReadGlobalTopicSpectrumCache(
+    JSON.stringify(spectrum),
+    Date.now() + GLOBAL_TOPIC_SPECTRUM_CACHE_TTL_MS,
+  );
+  return spectrum;
+}
+
 /**
  * 获取隐性真兴趣提示（NS-8）。
  *
@@ -14725,9 +15125,8 @@ export {
 export type { ComputeTrulyReadOptions } from './statistics/truly-read.js';
 
 export {
-  TOKENIZE_NGRAM_SIZE,
   TOKENIZE_ASCII_MIN_LENGTH,
-  TOKENIZE_STOP_CHARS,
+  TOKENIZE_STOP_WORDS,
   tokenizeText,
   tokenizeDocs,
 } from './statistics/tokenize.js';

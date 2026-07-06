@@ -23,6 +23,7 @@ import api from '../utils/api';
 import { useWeReadShelfState } from '../hooks/useWeReadShelfState';
 import { useStatisticsGate } from '../hooks/useStatisticsGate';
 import { useWeReadQuadrant } from '../hooks/useWeReadQuadrant';
+import { useWeReadGlobalTopicSpectrum } from '../hooks/useWeReadGlobalTopicSpectrum';
 import { QuadrantGrid } from '../components/QuadrantCard';
 import TopicSpectrumChart from '../components/TopicSpectrumChart';
 import { useWeReadCatalogState } from '../hooks/useWeReadCatalogState';
@@ -30,7 +31,6 @@ import { useWeReadImportState } from '../hooks/useWeReadImportState';
 import { useBookSignals } from '../hooks/useBookSignals';
 import { useHiddenInterest } from '../hooks/useHiddenInterest';
 import HiddenInterestBanner from '../components/HiddenInterestBanner';
-import { useTopicSpectrum } from '../hooks/useTopicSpectrum';
 import { useRecommendation } from '../hooks/useRecommendation';
 import {
   TAB_BOOKS,
@@ -76,7 +76,6 @@ import {
   REASON_CARD_LINKED,
   WEREAD_WEB_ORIGIN,
   WEREAD_WEB_READER_PATH,
-  WEREAD_WEB_SEARCH_PATH,
   WEREAD_PREVIEW_PATH,
   WEREAD_SIGNALS_REFRESH_PATH,
   CARD_STATE_IDLE,
@@ -92,11 +91,38 @@ const wereadWebBookUrl = (book) => {
   if (book?.bookIdLong) {
     return `${WEREAD_WEB_ORIGIN}${WEREAD_WEB_READER_PATH}${book.bookIdLong}`;
   }
-  if (book?.title) {
-    return `${WEREAD_WEB_ORIGIN}${WEREAD_WEB_SEARCH_PATH}${encodeURIComponent(book.title)}`;
-  }
   return WEREAD_WEB_ORIGIN;
 };
+
+/**
+ * 复制文本到剪贴板(兼容 HTTPS 与降级场景)
+ * 优先使用 navigator.clipboard,失败时回退到 textarea + execCommand
+ * @param {string} text - 待复制文本
+ * @returns {Promise<boolean>} 是否复制成功
+ */
+async function copyTextToClipboard(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // 进入降级路径
+  }
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return ok;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * 格式化相对时间
@@ -218,6 +244,7 @@ const WeReadCard = memo(function WeReadCard({
   onToggleSelect,
   onImport,
   onOpenImported,
+  onCopyTitleForSearch,
 }) {
   const { t } = useTranslation();
   const showSelect = selecting;
@@ -309,6 +336,10 @@ const WeReadCard = memo(function WeReadCard({
             rel="noopener noreferrer"
             aria-label={t('weread.openInApp')}
             title={t('weread.openInApp')}
+            onClick={() => {
+              if (!onCopyTitleForSearch) return;
+              onCopyTitleForSearch();
+            }}
           >
             <ExternalLink size={15} />
           </a>
@@ -580,7 +611,6 @@ function WeReadPreviewDrawer({ book, mode, batchCount, onClose, onImport, t }) {
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [collapsedChapters, setCollapsedChapters] = useState(() => new Set());
-  const topicSpectrum = useTopicSpectrum();
 
   useEffect(() => {
     if (!book) return;
@@ -604,11 +634,6 @@ function WeReadPreviewDrawer({ book, mode, batchCount, onClose, onImport, t }) {
     })();
     return () => { alive = false; };
   }, [book, t]);
-
-  useEffect(() => {
-    if (!data?.notes || !book?.bookId) return;
-    topicSpectrum.fetchSpectrum(book.bookId, data.notes);
-  }, [data, book, topicSpectrum]);
 
   const filteredNotes = useMemo(() => {
     if (!data?.notes) return [];
@@ -744,17 +769,6 @@ function WeReadPreviewDrawer({ book, mode, batchCount, onClose, onImport, t }) {
             <X size={18} />
           </button>
         </div>
-
-        {data ? (
-          <div className="weread-preview-topic">
-            <TopicSpectrumChart
-              spectrum={topicSpectrum.spectrum}
-              degradeAssessment={topicSpectrum.degradeAssessment}
-              loading={topicSpectrum.loading}
-              error={topicSpectrum.error}
-            />
-          </div>
-        ) : null}
 
         <div className="weread-preview-tools">
           <div className="weread-preview-search">
@@ -1083,6 +1097,11 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
 
   const signalsCoverageLow = signalsCoverage > 0 && signalsCoverage < 0.5;
   const quadrantState = useWeReadQuadrant(activeTab === TAB_STATS);
+  const globalTopicSpectrum = useWeReadGlobalTopicSpectrum();
+
+  useEffect(() => {
+    globalTopicSpectrum.ensureLoaded();
+  }, [globalTopicSpectrum.ensureLoaded]);
 
   const [signalsToast, setSignalsToast] = useState(null);
   const [signalsProgress, setSignalsProgress] = useState(null);
@@ -1292,6 +1311,21 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
     return '';
   }, [filter, t]);
 
+  const handleCopyTitleForSearch = useCallback(async (title) => {
+    const ok = await copyTextToClipboard(title);
+    if (ok) {
+      setToast({
+        type: TOAST_TYPE_SUCCESS,
+        text: t('weread.copyTitleForSearchSuccess', { title }),
+      });
+    } else {
+      setToast({
+        type: TOAST_TYPE_ERROR,
+        text: t('weread.copyTitleForSearchFailed'),
+      });
+    }
+  }, [setToast, t]);
+
   const renderBookCard = useCallback((book) => {
     const id = String(book.bookId);
     const importing = importingIds.has(id);
@@ -1324,9 +1358,14 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
         onToggleSelect={() => toggleSelect(id)}
         onImport={() => handleImport(book)}
         onOpenImported={() => handleOpenImported(id)}
+        onCopyTitleForSearch={
+          !book.bookIdLong && book.title
+            ? () => handleCopyTitleForSearch(book.title)
+            : undefined
+        }
       />
     );
-  }, [importingIds, importResults, selecting, activeTab, selectedIds, view, toggleSelect, handleImport, handleOpenImported]);
+  }, [importingIds, importResults, selecting, activeTab, selectedIds, view, toggleSelect, handleImport, handleOpenImported, handleCopyTitleForSearch]);
 
   const syncedAtText = useMemo(() => {
     if (syncState?.lastSyncedAt) {
@@ -1789,6 +1828,33 @@ export default function WeReadView({ workspaces = [], selectedWorkspaceId, onOpe
                   onTogglePermanent={handleHiddenInterestTogglePermanent}
                   busy={hiddenInterest.loading}
                 />
+              </section>
+
+              <section className="weread-global-topic-section" aria-label="已导入笔记的主题演变">
+                <div className="weread-quadrant-head">
+                  <h2>已导入笔记的主题演变</h2>
+                  <button
+                    type="button"
+                    className="weread-signals-refresh-btn"
+                    onClick={() => globalTopicSpectrum.refresh()}
+                    disabled={globalTopicSpectrum.loading}
+                  >
+                    {globalTopicSpectrum.loading ? '计算中…' : '刷新主题谱'}
+                  </button>
+                </div>
+                <p className="weread-global-topic-hint">
+                  聚合已导入到知径的微信读书笔记，按月分桶展示主题簇随时间的演变。仅包含已导入的书，未导入的书划线不在统计范围内。
+                </p>
+                {globalTopicSpectrum.error ? (
+                  <p className="quadrant-grid-error">主题谱计算失败：{String(globalTopicSpectrum.error)}</p>
+                ) : (
+                  <TopicSpectrumChart
+                    spectrum={globalTopicSpectrum.spectrum}
+                    degradeAssessment={globalTopicSpectrum.degradeAssessment}
+                    loading={globalTopicSpectrum.loading}
+                    error={globalTopicSpectrum.error}
+                  />
+                )}
               </section>
             </div>
           ) : (

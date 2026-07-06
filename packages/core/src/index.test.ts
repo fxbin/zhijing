@@ -259,7 +259,7 @@ describe('quadrant summary', () => {
       { bookId: 'h', onShelf: true, finishReading: false, hasReadActivity: true, highlightCount: 30, noteCharCount: 600, chapterCount: 9, hasLongReview: false },
     ];
     const summary = computeQuadrantSummary(inputs);
-    assert.ok(summary.irrelevant >= 1, 'at least one off-shelf shallow book should be irrelevant');
+    assert.ok(summary.irrelevant.length >= 1, 'at least one off-shelf shallow book should be irrelevant');
     assert.ok(summary.recommendationSeeds.length >= 1, 'recommendation seeds must be non-empty');
     for (const bookId of summary.recommendationSeeds) {
       const book = [...summary.coreReading, ...summary.hiddenInterest].find((r) => r.bookId === bookId);
@@ -287,7 +287,7 @@ describe('quadrant summary', () => {
     assert.equal(summary.coreReading.length, 0);
     assert.equal(summary.commitmentDebt.length, 0);
     assert.equal(summary.hiddenInterest.length, 0);
-    assert.equal(summary.irrelevant, 0);
+    assert.equal(summary.irrelevant.length, 0);
     assert.equal(summary.insufficientData, true);
     assert.deepEqual(summary.recommendationSeeds, []);
   });
@@ -306,7 +306,7 @@ describe('quadrant summary', () => {
     const summary = computeQuadrantSummary(inputs);
     const debtIds = summary.commitmentDebt.map((r) => r.bookId);
     assert.deepEqual(debtIds, ['p1'], 'only on-shelf + unfinished + has-read-activity + shallow should be commitment_debt');
-    assert.ok(summary.irrelevant >= 3, 'p2/p3/p4 should all fall into irrelevant');
+    assert.ok(summary.irrelevant.length >= 3, 'p2/p3/p4 should all fall into irrelevant');
   });
 });
 

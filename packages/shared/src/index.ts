@@ -2365,7 +2365,7 @@ export interface QuadrantSummary {
   coreReading: BookQuadrant[];
   commitmentDebt: BookQuadrant[];
   hiddenInterest: BookQuadrant[];
-  irrelevant: number;
+  irrelevant: BookQuadrant[];
   /**
    * 数据充分性警告：滚动分位不足时为 true
    */

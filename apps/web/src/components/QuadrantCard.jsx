@@ -111,9 +111,9 @@ export function QuadrantGrid({ summary, labels, descriptions, emptyHints }) {
       kind: 'irrelevant',
       title: labels.irrelevant,
       description: descriptions.irrelevant,
-      books: [],
+      books: summary.irrelevant,
       isSeed: false,
-      emptyHint: `${summary.irrelevant} 本`,
+      emptyHint: `${summary.irrelevant.length} 本`,
     },
   ];
 

@@ -17,23 +17,10 @@ import {
 } from 'lucide-react';
 import AgentProposalsPanel from '../components/AgentProposalsPanel';
 import EmptyState from '../components/EmptyState';
+import GrowthHeatmap from '../components/GrowthHeatmap';
 import api from '../utils/api';
 import { useCardTypeLabel, useClaimStatusLabel, getPlatformLabel } from '../utils/i18nLabels';
 import { formatDate } from '../utils/material';
-
-/**
- * 获取最近 30 天的日期标签，按周分组显示。
- * @param {string[]} labels - 日期标签数组
- * @returns {string[]} 稀疏化后的标签
- */
-function sparseLabels(labels) {
-  return labels.map((label, index) => {
-    if (index === 0 || index === labels.length - 1 || index % 7 === 0) {
-      return label.slice(5);
-    }
-    return '';
-  });
-}
 
 /**
  * 判断数据是否全部为零或空。
@@ -82,16 +69,6 @@ export default function InsightsView({ setView, onCreateWorkspace, onSelectWorks
     loadInsights();
     return () => { ignore = true; };
   }, [t, selectedWorkspaceId]);
-
-  const maxGrowth = useMemo(() => {
-    if (!insights) return 1;
-    return Math.max(1, ...insights.growth.data);
-  }, [insights]);
-
-  const growthLabels = useMemo(() => {
-    if (!insights) return [];
-    return sparseLabels(insights.growth.labels);
-  }, [insights]);
 
   const totalSources = useMemo(() => {
     if (!insights?.sourceDistribution.length) return 0;
@@ -185,7 +162,7 @@ export default function InsightsView({ setView, onCreateWorkspace, onSelectWorks
               <h2>{t('insights.growthTitle')}</h2>
               <span className="bento-meta">{t('insights.growthMeta')}</span>
             </div>
-            <span className="period-badge">30D</span>
+            <span className="period-badge">9M</span>
           </div>
           {isAllZero(insights.growth.data) ? (
             <EmptyState
@@ -195,30 +172,10 @@ export default function InsightsView({ setView, onCreateWorkspace, onSelectWorks
               compact
             />
           ) : (
-            <div className="growth-chart">
-              {insights.growth.data.map((value, index) => {
-                const hasValue = value > 0;
-                const heightPercent = hasValue ? (value / maxGrowth) * 100 : 0;
-                const showLabel = index === 0 || index === insights.growth.data.length - 1
-                  || index % 7 === 0 || hasValue;
-                return (
-                  <div
-                    key={insights.growth.labels[index]}
-                    className={`growth-bar-wrapper${hasValue ? ' has-value' : ''}`}
-                  >
-                    {hasValue && (
-                      <span className="growth-value">{value}</span>
-                    )}
-                    <div
-                      className={`growth-bar${hasValue ? '' : ' empty'}`}
-                      style={{ height: hasValue ? `${heightPercent}%` : undefined }}
-                      title={`${insights.growth.labels[index]}: ${value}`}
-                    />
-                    <span className="growth-label">{showLabel ? insights.growth.labels[index].slice(5) : ''}</span>
-                  </div>
-                );
-              })}
-            </div>
+            <GrowthHeatmap
+              data={insights.growth.data}
+              labels={insights.growth.labels}
+            />
           )}
         </section>
 

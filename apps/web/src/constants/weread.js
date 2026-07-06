@@ -287,11 +287,6 @@ const WEREAD_WEB_ORIGIN = 'https://weread.qq.com';
 const WEREAD_WEB_READER_PATH = '/web/reader/';
 
 /**
- * 微信读书 Web 端搜索路径前缀。
- */
-const WEREAD_WEB_SEARCH_PATH = '/#search/';
-
-/**
  * 微信读书设置接口路径。
  */
 const WEREAD_SETTINGS_PATH = '/api/weread/settings';
@@ -337,6 +332,11 @@ const WEREAD_QUADRANT_PATH = '/api/weread/quadrant';
  * 主题演变谱查询路径（NS-2）：POST 提交划线文本，返回聚类堆叠面积图数据。
  */
 const TOPIC_SPECTRUM_PATH = '/api/statistics/topic-spectrum';
+
+/**
+ * 全局主题演变谱查询路径：聚合已导入到知径的微信读书笔记，返回全书架主题聚类数据。
+ */
+const WEREAD_GLOBAL_TOPIC_SPECTRUM_PATH = '/api/weread/topic-spectrum/global';
 
 /**
  * 主题演变谱 SVG viewBox 宽度（NS-2）。
@@ -592,7 +592,6 @@ export {
   SCROLL_ROOT_MARGIN,
   WEREAD_WEB_ORIGIN,
   WEREAD_WEB_READER_PATH,
-  WEREAD_WEB_SEARCH_PATH,
   WEREAD_SETTINGS_PATH,
   WEREAD_META_PATH,
   WEREAD_SYNC_PATH,
@@ -602,6 +601,7 @@ export {
   STATISTICS_QUADRANT_PATH,
   WEREAD_QUADRANT_PATH,
   TOPIC_SPECTRUM_PATH,
+  WEREAD_GLOBAL_TOPIC_SPECTRUM_PATH,
   TOPIC_SPECTRUM_VIEW_WIDTH,
   TOPIC_SPECTRUM_VIEW_HEIGHT,
   TOPIC_SPECTRUM_PADDING_LEFT,
