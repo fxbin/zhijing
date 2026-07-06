@@ -1788,6 +1788,7 @@ export interface OrchestratorDecision {
  * - reasoning 以 delta 增量传输（reasoning_delta），前端折叠展示
  * - tool 保留 id/name/args/isError + result 文本摘要，前端可展开查看
  * - mode_update 在 agent_start 后立即下发，前端显示当前编排模式与理由
+ * - role_update 在 agent_start 后立即下发，前端按角色显示能力边界 badge（如圆桌=单 Agent 模拟）
  * - aux_* 系列承载辅 Agent（probe）输出，前端渲染为「可能还想知道」折叠区
  * - proposal_batch 承载 Agent 提议的结构化操作（create/edit/archive 等），
  *   前端渲染为 apply diff 卡片，用户确认后调用既有原子端点落库
@@ -1807,6 +1808,7 @@ export type AgentStreamEvent =
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_end'; toolCallId: string; toolName: string; isError: boolean; result: string; details?: unknown }
   | { type: 'mode_update'; mode: string; reason: string; suggestedAction: string }
+  | { type: 'role_update'; role: string }
   | { type: 'aux_start' }
   | { type: 'aux_delta'; delta: string }
   | { type: 'aux_end'; text: string }

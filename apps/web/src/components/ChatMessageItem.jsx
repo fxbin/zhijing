@@ -16,6 +16,7 @@
 import { useEffect, useState } from 'react';
 import {
   CheckCircle2,
+  Info,
   Loader2,
   RotateCcw,
   Sparkles,
@@ -25,6 +26,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useCardTypeLabel } from '../utils/i18nLabels';
 import { renderMarkdown } from '../utils/markdown';
+import { BADGE_CAPABILITY_IDS } from '../constants/capabilities';
 import SourceCitation from './SourceCitation';
 
 /**
@@ -341,11 +343,19 @@ export default function ChatMessageItem({
   const hasError = Boolean(item.error);
   const hasAuxContent = Boolean(item.auxContent);
   const isWaiting = item.isStreaming && !hasText && !hasToolCalls && !hasReasoning;
+  const showCapabilityBadge = Boolean(item.agentRole) && BADGE_CAPABILITY_IDS.has(item.agentRole);
 
   return (
     <div className="chat-message-item chat-message-assistant">
       <Sparkles size={19} />
       <div className="chat-message-content">
+        {showCapabilityBadge && (
+          <div className="chat-message-capability-badge" role="status">
+            <Info size={13} />
+            <span>{t('chat.capabilityBadge.simulation')}</span>
+          </div>
+        )}
+
         {hasReasoning && (
           <details className="chat-message-reasoning">
             <summary>{t('chat.reasoning')}</summary>

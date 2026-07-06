@@ -357,6 +357,8 @@ export function startOrchestratorSession(
       ? createOrchestratedWorkspaceAgent(workspaceId, { ...agentOptions, decision, role })
       : createWorkspaceAgent(workspaceId, agentOptions);
 
+    callbacks.onEvent({ type: 'role_update', role: selectedRole });
+
     let currentDecision: OrchestratorDecision | null = decision;
     let turnToolCalls: ToolCallSummary[] = [];
 

@@ -79,6 +79,7 @@ const STREAM_EVENT = Object.freeze({
   TOOL_START: 'tool_start',
   TOOL_END: 'tool_end',
   MODE_UPDATE: 'mode_update',
+  ROLE_UPDATE: 'role_update',
   AUX_START: 'aux_start',
   AUX_DELTA: 'aux_delta',
   AUX_END: 'aux_end',
@@ -307,6 +308,7 @@ function agentMessagesToChatMessages(agentMessages) {
         reasoning: extractAgentMessageReasoning(msg),
         toolCalls: [],
         auxContent: '',
+        agentRole: '',
         isStreaming: false,
       });
     }
@@ -465,6 +467,7 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
       reasoning: '',
       toolCalls: [],
       auxContent: '',
+      agentRole: '',
       isStreaming: true,
     };
 
@@ -604,6 +607,13 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
               if (typeof event.mode === 'string' && event.mode.length > 0) {
                 setOrchestratorMode(event.mode);
                 setOrchestratorReason(typeof event.reason === 'string' ? event.reason : '');
+              }
+              break;
+            case STREAM_EVENT.ROLE_UPDATE:
+              if (typeof event.role === 'string' && event.role.length > 0 && isStreamActive()) {
+                setChatMessages((prev) => prev.map((message) => (message.id === assistantId
+                  ? { ...message, agentRole: event.role }
+                  : message)));
               }
               break;
             case STREAM_EVENT.REASONING_DELTA:

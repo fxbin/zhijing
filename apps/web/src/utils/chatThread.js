@@ -74,6 +74,8 @@ export const EMPTY_PROPOSED_CARDS = [];
  * @param {object|null} [fields.proposalBatch=null] - 流式 proposal_batch 事件下发的提议操作集合，
  *                                                    结构为 { batchId: string, proposals: ProposedOperation[] }；
  *                                                    仅流式路径会写入，由 ChatMessageItem 渲染为 apply diff 面板
+ * @param {string} [fields.agentRole=''] - Agent 角色标识（stream 独有，如 roundtable/research/probe），
+ *                                         由 role_update 事件下发，用于 ChatMessageItem 渲染能力边界 badge
  * @returns {object} 规范化的 ChatThreadItem
  * @author fxbin
  */
@@ -96,6 +98,7 @@ export function createChatThreadItem(fields) {
     cardIds = [],
     timestamp = 0,
     proposalBatch = null,
+    agentRole = '',
   } = fields;
 
   if (!id || !role || !source) {
@@ -120,6 +123,7 @@ export function createChatThreadItem(fields) {
     cardIds,
     timestamp,
     proposalBatch,
+    agentRole,
   };
 }
 
@@ -156,6 +160,7 @@ export function fromStreamMessage(message) {
     auxContent: message.auxContent ?? '',
     error: message.error ?? '',
     proposalBatch: message.proposalBatch ?? null,
+    agentRole: message.agentRole ?? '',
     timestamp: extractTimestampFromId(message.id),
   });
 }

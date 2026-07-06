@@ -16,7 +16,9 @@ import {
   Download,
   ExternalLink,
   FolderOpen,
+  Info,
   KeyRound,
+  Layers,
   PlugZap,
   Plus,
   ShieldCheck,
@@ -29,6 +31,7 @@ import { useTranslation } from 'react-i18next';
 import { useTaskStatusLabel, useTaskWorkflowLabel } from '../utils/i18nLabels';
 import { formatDateTime } from '../utils/material';
 import AgentUsageDashboard from '../components/AgentUsageDashboard';
+import { CAPABILITIES } from '../constants/capabilities';
 import {
   useSettingsProfile,
   KEY_SOURCE_KEYS,
@@ -165,6 +168,7 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
     { key: 'weread', label: t('settings.weread.title'), icon: BookOpen, group: 'integration' },
     { key: 'transparency', label: t('settings.systemTransparency'), icon: BarChart3, group: 'system' },
     { key: 'agentUsage', label: t('agentUsage.title'), icon: Cpu, group: 'system' },
+    { key: 'capabilities', label: t('capabilities.title'), icon: Layers, group: 'system' },
     { key: 'dataControls', label: t('settings.dataControls'), icon: Database, group: 'system' },
     { key: 'kits', label: t('kit.title'), icon: Sparkles, group: 'extension' },
   ];
@@ -232,6 +236,22 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
               <span>{t('kit.title')}</span>
               <strong>{t('kit.subtitle')}</strong>
               <p>{t('kit.selectWorkspaceHint')}</p>
+            </div>
+          </div>
+          <p className="settings-note">{status}</p>
+        </>
+      );
+    }
+
+    if (activeSection === 'capabilities') {
+      return (
+        <>
+          <div className="status-card">
+            <Layers size={22} />
+            <div>
+              <span>{t('capabilities.title')}</span>
+              <strong>{t('capabilities.sidebarLabel')}</strong>
+              <p>{t('capabilities.sidebarHint')}</p>
             </div>
           </div>
           <p className="settings-note">{status}</p>
@@ -722,6 +742,47 @@ export default function SettingsView({ initialSection = null, onSectionConsumed,
               </div>
             </div>
             <AgentUsageDashboard />
+          </section>
+        )}
+
+        {activeSection === 'capabilities' && (
+          <section className="settings-panel">
+            <div className="settings-panel-head">
+              <Layers size={24} />
+              <div>
+                <h3>{t('capabilities.title')}</h3>
+                <p>{t('capabilities.subtitle')}</p>
+              </div>
+            </div>
+            <div className="settings-capabilities-list">
+              {CAPABILITIES.map((capability) => (
+                <div key={capability.id} className="settings-capability-card">
+                  <div className="settings-capability-head">
+                    <strong>{t(capability.labelKey)}</strong>
+                    <span className={`settings-capability-mode settings-capability-mode--${capability.executionMode}`}>
+                      {t(capability.executionModeLabelKey)}
+                    </span>
+                  </div>
+                  <p className="settings-capability-desc">{t(capability.descriptionKey)}</p>
+                  <div className="settings-capability-block">
+                    <span className="settings-capability-block-label">{t('capabilities.boundariesLabel')}</span>
+                    <ul>
+                      {capability.boundariesKeys.map((key) => (
+                        <li key={key}>{t(key)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="settings-capability-block">
+                    <span className="settings-capability-block-label">{t('capabilities.triggerLabel')}</span>
+                    <p>{t(capability.triggerKey)}</p>
+                  </div>
+                  <div className="settings-capability-future">
+                    <Info size={14} />
+                    <span>{t(capability.futurePlanKey)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </section>
         )}
 
