@@ -41,6 +41,8 @@ export const TOOL_STRATEGY_SEGMENT = [
   '- 当 get_workspace_summary 返回 materialCount > 0 时，不得回答"工作区尚处于骨架阶段"或"无实质内容"；应基于 search_materials 检索到的资料原文回答。',
   '- 当 cardCount = 0 但 materialCount > 0 时，说明资料已导入但卡片尚未生成，应直接基于资料原文回答，并提示用户卡片生成可能仍在进行或已失败可重试。',
   '- 当用户消息中包含「=== 系统预检索结果 ===」段时，说明系统已基于用户原始输入做过一次 search_cards + search_materials；应优先基于该预检索结果作答，无需重复调用相同关键词的检索工具。仅当预检索结果不足以回答问题时，再用不同关键词补充检索。',
+  '- get_workspace_summary 返回的是工作区概览（标题+摘要+计数），不含原始资料片段；具体问题（如「XX 是什么」「XX 出现在哪里」）即使 summary 命中也必须再调 search_cards 或 search_materials 获取原文证据，不得仅凭 summary 作答。',
+  '- pre-fetch 注入的检索结果优先级高于 get_workspace_summary：当 pre-fetch 已包含命中资料时，基于该原文片段作答，不要因 summary 命中而跳过原文。',
   '- 调用 search_cards / search_materials 时，query 必须直接取自用户原始输入中的原词，禁止自行改写、扩写、补全或拼接多个关键词；若用户输入是「命运赠送」，query 就传「命运赠送」，不要改写成「命运赠送 礼物 价格」等长句。',
   '- 当 search_materials 命中资料但 preview 未覆盖用户关心的段落时，调用 fetch_material 获取该资料的完整正文，从原文中定位相关段落再回答；不要在未尝试获取原文的情况下说"预览未展示具体段落"。',
 ].join('\n');
@@ -66,14 +68,16 @@ export const OUTPUT_STYLE_SEGMENT = [
 export const PROPOSAL_BATCH_SEGMENT = [
   '',
   '提议变更（apply diff）：',
-  '- 当回答中明确建议新建/编辑/归档卡片或资料时，在回答末尾追加一个 ```proposal-batch 代码块，输出 JSON。',
-  '- JSON 结构：{"batchId": "可选字符串", "proposals": [...]};proposals 是数组，每项形如：',
+  '- 当回答中涉及「建议创建卡片」「可以提炼为」「建议补充」等结构化变更建议时，必须用 ```proposal-batch 代码块输出 JSON，禁止在正文中用文字描述「建议一：创建XX卡片」「建议二：编辑XX卡片」等。用户在前端可一键采纳，无需手动创建。',
+  '- 正例：回答正文讲完知识点后，末尾追加 ```proposal-batch 块，包含 create_card proposal。',
+  '- 反例：正文中写「建议一：创建一张 concept 卡片《XX》，正文为...」——这样用户无法一键采纳，必须手动创建，体验差。',
+  '- JSON 结构：{"batchId": "可选字符串", "proposals": [...]}；proposals 是数组，每项形如：',
   '  - {"op":"create_card","type":"concept|method|case|question|step|viewpoint","title":"卡片标题","body":"卡片正文","materialId":"可选，关联资料 id","rationale":"可选，提议理由"}',
   '  - {"op":"edit_card","cardId":"必填","title":"可选","body":"可选","type":"可选","rationale":"可选"}',
   '  - {"op":"archive_card","cardId":"必填","rationale":"可选"}',
   '  - {"op":"unarchive_card","cardId":"必填","rationale":"可选"}',
   '  - {"op":"archive_material","materialId":"必填","rationale":"可选"}',
-  '- 仅在用户问题确实涉及结构化变更时才产出 proposal；常规问答不要附带 proposal-batch 块。',
+  '- 仅在回答确实涉及知识结构化建议时才产出 proposal；纯事实查询、闲聊、概念解释不需要附带 proposal-batch 块。',
   '- 提议必须基于已检索到的真实卡片/资料 id；不要编造不存在的 id。',
   '- 用户在前端可逐条选择采纳或拒绝，未采纳的提议不会落库。',
 ].join('\n');
