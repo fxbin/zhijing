@@ -8624,6 +8624,46 @@ function buildQuestionCitations(context: ReturnType<typeof buildQuestionContext>
 
 const PREVIEW_DEFAULT_MAX_LENGTH = 160;
 
+/**
+ * 命中位置周围 snippet 提取的上下文填充字符数（前后各 padding 字符）。
+ */
+const SNIPPET_CONTEXT_PADDING = 60;
+
+/**
+ * 从资料正文中提取命中关键词周围的上下文片段。
+ *
+ * 行为：
+ * - 若 query 在 contentText 中能找到（大小写不敏感），从首次命中位置向前取 padding 字符、
+ *   向后取 maxLength-padding 字符，确保片段包含命中词并展示上下文。
+ * - 若 query 不在正文中（如分词后命中），回退到 compactPreview 从头截取。
+ * - 多命中时取第一个命中位置，避免片段跳动。
+ *
+ * @param contentText - 资料完整正文
+ * @param query - 用户检索词
+ * @param maxLength - 片段最大字符数，默认 160
+ * @returns 包含命中词的上下文片段；未命中时回退到开头截取
+ * @author fxbin
+ */
+function buildSnippetAroundQuery(contentText: string, query: string, maxLength: number = PREVIEW_DEFAULT_MAX_LENGTH): string {
+  const cleaned = contentText.replace(/\s+/g, ' ').trim();
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) {
+    return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength)}...` : cleaned;
+  }
+  const lowerCleaned = cleaned.toLowerCase();
+  const lowerQuery = trimmedQuery.toLowerCase();
+  const hitIndex = lowerCleaned.indexOf(lowerQuery);
+  if (hitIndex < 0) {
+    return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength)}...` : cleaned;
+  }
+  const start = Math.max(0, hitIndex - SNIPPET_CONTEXT_PADDING);
+  const end = Math.min(cleaned.length, start + maxLength);
+  const snippet = cleaned.slice(start, end);
+  const prefix = start > 0 ? '...' : '';
+  const suffix = end < cleaned.length ? '...' : '';
+  return `${prefix}${snippet}${suffix}`;
+}
+
 function compactPreview(input: string, maxLength: number = PREVIEW_DEFAULT_MAX_LENGTH) {
   const cleaned = input.replace(/\s+/g, ' ').trim();
   return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength)}...` : cleaned;
@@ -10479,8 +10519,50 @@ export function searchWorkspaceMaterials(workspaceId: string, query: string, lim
     platform: material.platform,
     parseStatus: material.parseStatus,
     sourceUrl: material.sourceUrl,
-    preview: compactPreview(material.contentText ?? material.rawInput ?? material.title),
+    preview: buildSnippetAroundQuery(material.contentText ?? material.rawInput ?? material.title, query),
   }));
+}
+
+/**
+ * 工作区资料完整内容（供 Agent fetch_material 工具消费）。
+ *
+ * 与 WorkspaceMaterialSearchResult 的区别：包含完整 contentText，
+ * 用于 search_materials 返回的 preview 不足以作答时获取原文。
+ */
+export interface WorkspaceMaterialDetail {
+  id: string;
+  type: string;
+  title: string;
+  platform?: string;
+  parseStatus?: string;
+  sourceUrl?: string;
+  contentText: string;
+}
+
+/**
+ * 按资料 ID 获取工作区内资料的完整正文。
+ *
+ * 用于 Agent 在 search_materials 返回的 preview 不足以作答时，
+ * 主动拉取完整原文以定位命中段落。仅返回未归档资料。
+ *
+ * @param workspaceId - 工作区 ID（校验资料是否属于该工作区）
+ * @param materialId - 资料 ID
+ * @returns 资料完整内容；不存在或不属于该工作区时返回 null
+ * @author fxbin
+ */
+export function getWorkspaceMaterial(workspaceId: string, materialId: string): WorkspaceMaterialDetail | null {
+  if (!workspaceId || !materialId) return null;
+  const material = repository.findMaterial(materialId);
+  if (!material || material.workspaceId !== workspaceId || material.archived) return null;
+  return {
+    id: material.id,
+    type: material.type,
+    title: material.title,
+    platform: material.platform,
+    parseStatus: material.parseStatus,
+    sourceUrl: material.sourceUrl,
+    contentText: material.contentText ?? material.rawInput ?? '',
+  };
 }
 
 /**

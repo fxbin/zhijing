@@ -94,6 +94,8 @@ function formatCost(value) {
  * @param {() => void} [props.onAbortStream] - 中断当前流式对话回调
  * @param {string} [props.orchestratorMode=''] - 当前编排模式英文标识（mirror/catalyst/navigator）
  * @param {(artifact: object, meta?: object) => void} props.onOpenArtifact - 打开产物回调
+ * @param {(material: object) => void} [props.onOpenMaterial] - 打开资料详情回调
+ * @param {(card: object) => void} [props.onOpenCard] - 打开卡片详情回调
  * @param {(workspaceId: string) => void} [props.onSelectWorkspace] - 选择工作区回调
  * @param {(newCards: object[], updatedMessage: object) => void} [props.onCardsAccepted] - 提议卡片采纳成功回调
  * @param {string} props.selectedWorkspaceId - 当前选中工作区 ID
@@ -122,6 +124,8 @@ export default function GlobalChatDock({
   proposalBatchState,
   onAbortStream,
   onOpenArtifact,
+  onOpenMaterial,
+  onOpenCard,
   onSelectWorkspace,
   onCardsAccepted,
   selectedWorkspaceId,
@@ -325,6 +329,8 @@ export default function GlobalChatDock({
                 proposedCardsState={proposedCardsState}
                 proposalBatchState={proposalBatchState}
                 onOpenArtifact={onOpenArtifact}
+                onOpenMaterial={onOpenMaterial}
+                onOpenCard={onOpenCard}
                 onRetry={onRetryMessage}
                 isStreaming={isStreaming}
               />

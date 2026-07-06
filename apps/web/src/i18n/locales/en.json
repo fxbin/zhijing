@@ -1071,6 +1071,7 @@
   "sourceCitation.kind.card": "Card",
   "sourceCitation.kind.material": "Material",
   "sourceCitation.openSource": "Open Source",
+  "sourceCitation.openDetail": "View Detail",
   "sourceCitation.sourceSnippet": "Source Snippet",
   "system.apiDisconnected": "API not connected",
   "system.apiDisconnectedHint": "Cannot connect to API. Start the backend service to load real data.",

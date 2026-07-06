@@ -1,6 +1,7 @@
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { createSearchCardsTool } from './search-cards.js';
 import { createSearchMaterialsTool } from './search-materials.js';
+import { createFetchMaterialTool } from './fetch-material.js';
 import { createGetWorkspaceSummaryTool } from './get-workspace-summary.js';
 import { createWebSearchTool } from './web-search.js';
 import { createFetchWebPageTool } from './fetch-web-page.js';
@@ -10,6 +11,7 @@ import type { ToolCapabilityDeclaration } from '../capability-guard.js';
 export {
   createSearchCardsTool,
   createSearchMaterialsTool,
+  createFetchMaterialTool,
   createGetWorkspaceSummaryTool,
   createWebSearchTool,
   createFetchWebPageTool,
@@ -32,6 +34,13 @@ const TOOL_NAME_SEARCH_CARDS = 'search_cards';
  * @author fxbin
  */
 const TOOL_NAME_SEARCH_MATERIALS = 'search_materials';
+
+/**
+ * 工具名常量：fetch_material。
+ *
+ * @author fxbin
+ */
+const TOOL_NAME_FETCH_MATERIAL = 'fetch_material';
 
 /**
  * 工具名常量：get_workspace_summary。
@@ -83,6 +92,7 @@ const TOOL_NAME_DEEP_SEARCH = 'deep_search';
 const TOOL_CAPABILITY_DECLARATIONS: Record<string, ToolCapabilityDeclaration> = {
   [TOOL_NAME_SEARCH_CARDS]: { capability: 'read', workspaceScoped: true },
   [TOOL_NAME_SEARCH_MATERIALS]: { capability: 'read', workspaceScoped: true },
+  [TOOL_NAME_FETCH_MATERIAL]: { capability: 'read', workspaceScoped: true },
   [TOOL_NAME_GET_WORKSPACE_SUMMARY]: { capability: 'read', workspaceScoped: true },
   [TOOL_NAME_WEB_SEARCH]: { capability: 'network', workspaceScoped: false },
   [TOOL_NAME_FETCH_WEB_PAGE]: { capability: 'network', workspaceScoped: false },
@@ -122,6 +132,7 @@ export function createWorkspaceTools(workspaceId: string): AgentTool[] {
   return [
     createSearchCardsTool(workspaceId),
     createSearchMaterialsTool(workspaceId),
+    createFetchMaterialTool(workspaceId),
     createGetWorkspaceSummaryTool(workspaceId),
     createWebSearchTool(),
     createFetchWebPageTool(),

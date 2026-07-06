@@ -294,6 +294,8 @@ function ToolResultDetails({ toolName, details, t }) {
  * @param {object} [props.proposedCardsState] - 提议卡片交互状态（useProposedCards 返回值）
  * @param {object} [props.proposalBatchState] - 流式 apply diff 交互状态（useProposalBatch 返回值）
  * @param {(artifact: object, meta?: object) => void} [props.onOpenArtifact] - 打开产物回调
+ * @param {(material: object) => void} [props.onOpenMaterial] - 打开资料详情回调
+ * @param {(card: object) => void} [props.onOpenCard] - 打开卡片详情回调
  * @param {(userId: string) => void} [props.onRetry] - 重试该 user 消息回调
  * @param {boolean} [props.isStreaming=false] - 当前流式对话运行态；运行中隐藏重试按钮
  * @returns {JSX.Element} 消息渲染节点
@@ -306,6 +308,8 @@ export default function ChatMessageItem({
   proposedCardsState,
   proposalBatchState,
   onOpenArtifact,
+  onOpenMaterial,
+  onOpenCard,
   onRetry,
   isStreaming = false,
 }) {
@@ -484,6 +488,8 @@ export default function ChatMessageItem({
                   citation={citation}
                   cards={cards}
                   materials={materials}
+                  onOpenMaterial={onOpenMaterial}
+                  onOpenCard={onOpenCard}
                 />
               ))
             )}

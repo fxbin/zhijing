@@ -53,7 +53,7 @@ function formatCardLine(card: WorkspaceCardSearchResult): string {
     ? `${safeBody.slice(0, CARD_BODY_PREVIEW_MAX_LENGTH)}…`
     : safeBody;
   const claimSuffix = card.claimStatus ? `[${card.claimStatus}]` : '';
-  return `- (${card.type}) ${safeTitle} ${claimSuffix}\n  ${trimmedBody} (id=${card.id})`;
+  return `- (${card.type}) ${safeTitle} ${claimSuffix}\n  ${trimmedBody} (cardId=${card.id})`;
 }
 
 /**

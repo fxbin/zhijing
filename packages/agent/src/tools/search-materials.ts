@@ -54,7 +54,7 @@ function formatMaterialLine(material: WorkspaceMaterialSearchResult): string {
     : safePreview;
   const platformSuffix = material.platform ? `[${material.platform}]` : '';
   const parseSuffix = material.parseStatus ? `[${material.parseStatus}]` : '';
-  return `- ${safeTitle} ${platformSuffix}${parseSuffix} (id=${material.id})\n  ${trimmedPreview}`;
+  return `- ${safeTitle} ${platformSuffix}${parseSuffix} (materialId=${material.id})\n  ${trimmedPreview}`;
 }
 
 /**
@@ -91,7 +91,7 @@ export function createSearchMaterialsTool(workspaceId: string): AgentTool<typeof
             '(2) 若用户输入较长，可拆分为多个短关键词，通过多次并行调用分别检索；',
             '(3) 若原词检索仍无结果，再判断工作区是否缺少相关内容，不要仅凭单次检索 0 命中就断言"无实质内容"。',
           ].join('\n')
-        : `已检索到 ${items.length} 条与「${params.query}」相关的来源资料：\n${items.map(formatMaterialLine).join('\n')}`;
+        : `已检索到 ${items.length} 条与「${params.query}」相关的来源资料（如需完整正文，用 fetch_material 工具按 materialId 获取）：\n${items.map(formatMaterialLine).join('\n')}`;
       return {
         content: [{ type: 'text', text: summary }],
         details: { count: items.length, items },

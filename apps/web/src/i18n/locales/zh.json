@@ -1072,6 +1072,7 @@
   "sourceCitation.kind.card": "卡片",
   "sourceCitation.kind.material": "资料",
   "sourceCitation.openSource": "打开来源",
+  "sourceCitation.openDetail": "查看详情",
   "sourceCitation.sourceSnippet": "来源片段",
   "system.apiDisconnected": "API 未连接",
   "system.apiDisconnectedHint": "当前无法连接 API；启动后端服务后会自动加载真实数据。",

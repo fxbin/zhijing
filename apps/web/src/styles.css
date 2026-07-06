@@ -5774,6 +5774,38 @@ button { cursor: pointer; }
   box-shadow: 0 0 0 3px var(--scholar-soft);
 }
 
+.citation-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.citation-header .citation-toggle {
+  flex: 1;
+  min-width: 0;
+}
+
+.citation-open-detail-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.citation-open-detail-btn:hover {
+  color: var(--scholar);
+  border-color: var(--scholar);
+  background: var(--scholar-soft);
+}
+
 .citation-toggle {
   display: flex;
   align-items: center;
