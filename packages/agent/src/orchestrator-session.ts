@@ -332,19 +332,13 @@ export function startOrchestratorSession(
   async function runMainAgent() {
     const supportsRoleOverride = credentials.provider === getDefaultPiProvider();
     const selectedRole = selectAgentRole(intent);
-    const agentOptions: WorkspaceAgentOptions = supportsRoleOverride
-      ? {
-        apiKey: credentials.apiKey,
-        baseUrl: credentials.baseUrl,
-        messages: priorMessages,
-      }
-      : {
-        provider: credentials.provider,
-        modelId: credentials.model,
-        apiKey: credentials.apiKey,
-        baseUrl: credentials.baseUrl,
-        messages: priorMessages,
-      };
+    const agentOptions: WorkspaceAgentOptions = {
+      provider: credentials.provider,
+      modelId: credentials.model,
+      apiKey: credentials.apiKey,
+      baseUrl: credentials.baseUrl,
+      messages: priorMessages,
+    };
     const role = selectedRole;
     if (selectedRole && !supportsRoleOverride) {
       callbacks.onWarn(
@@ -470,17 +464,14 @@ export function startOrchestratorSession(
     if (!shouldRunProbe) return;
 
     try {
-      const supportsProbeRoleOverride = credentials.provider === getDefaultPiProvider();
       const probeOptions: Parameters<typeof createRoleBasedAgent>[1] = {
         role: 'probe',
+        provider: credentials.provider,
+        modelId: credentials.model,
         apiKey: credentials.apiKey,
+        baseUrl: credentials.baseUrl,
         systemPromptOverride: AUXILIARY_PROBE_SYSTEM_PROMPT,
       };
-      if (!supportsProbeRoleOverride) {
-        probeOptions.provider = credentials.provider;
-        probeOptions.modelId = credentials.model;
-        probeOptions.baseUrl = credentials.baseUrl;
-      }
       probeAgent = createRoleBasedAgent(workspaceId, probeOptions);
       const probePrompt = buildAuxiliaryProbePrompt(message, mainAssistantText);
       let probeText = '';

@@ -6185,6 +6185,7 @@ type RuntimeModelProviderConfig = {
 
 let modelProviderConfig: RuntimeModelProviderConfig = initialModelProviderConfig();
 let piRuntime: PiRuntime = createRuntimeFromModelProviderConfig(modelProviderConfig);
+applyModelProviderConfig();
 
 export function configureKnowledgeRepository(nextRepository: KnowledgeRepository) {
   repository = nextRepository;
@@ -6285,17 +6286,24 @@ function applyActiveProfileToRuntime(profile: ModelProviderProfileRecord) {
 /**
  * 归一化 provider 标识。
  *
- * 已知 provider（KnownProvider）原样返回；
- * 未知但非空的 provider 字符串原样透传，支持自定义 OpenAI 兼容端点（如商汤 SenseNova）；
- * 空或 undefined 回退到默认 provider（DeepSeek）。
+ * 规则：
+ * - 空或 undefined 回退到默认 provider（DeepSeek）；
+ * - 已知 provider（大小写不敏感匹配 KnownProvider）归一化为 SDK 注册的小写形式，
+ *   避免数据库中存储的 'DeepSeek' 等大小写变体与 router 路由逻辑分叉（参见 401 偶现根因）；
+ * - 未知但非空的 provider 字符串仅 trim，支持自定义 OpenAI 兼容端点（如商汤 SenseNova）。
  *
  * @param provider - 原始 provider 字符串
  * @returns 归一化后的 provider 字符串
  * @author fxbin
  */
 function normalizeProvider(provider: string | undefined): string {
-  if (provider && provider.trim().length > 0) return provider.trim();
-  return getDefaultPiProvider();
+  if (!provider || provider.trim().length === 0) return getDefaultPiProvider();
+  const trimmed = provider.trim();
+  const lower = trimmed.toLowerCase();
+  if (getKnownPiProviders().some((known) => known.toLowerCase() === lower)) {
+    return lower;
+  }
+  return trimmed;
 }
 
 function defaultModelForProvider(provider: string) {
