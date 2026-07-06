@@ -78,6 +78,8 @@ function safeFormatJson(value) {
  * - search_materials：列表展示返回的资料（platform/parseStatus 徽章 + 标题 + 预览）
  * - get_workspace_summary：紧凑展示工作区概览（标题 / 摘要 / 来源·卡片·资料数）
  * - web_search：列表展示联网搜索结果（标题 + URL + 摘要）
+ * - fetch_web_page：展示单页抓取结果（标题 + URL + 正文预览）
+ * - deep_search：展示深度搜索结果（来源 + 候选主张 + 缺口/冲突）
  * - 其他：回退到 JSON.stringify 折叠展示
  *
  * @param {object} props - 组件属性
@@ -186,6 +188,85 @@ function ToolResultDetails({ toolName, details, t }) {
               </li>
             ))}
           </ul>
+        )}
+      </details>
+    );
+  }
+
+  if (toolName === 'fetch_web_page') {
+    const casted = details;
+    return (
+      <details className="chat-message-tool-structured">
+        <summary>
+          {casted.ok
+            ? t('chat.toolResultFetchWebPage', { defaultValue: '网页正文' })
+            : t('chat.toolResultFetchWebPageFailed', { defaultValue: '网页抓取失败' })}
+        </summary>
+        {casted.errorMessage && (
+          <p className="chat-tool-search-error">{casted.errorMessage}</p>
+        )}
+        <div className="chat-tool-overview">
+          {casted.title && <strong>{casted.title}</strong>}
+          {casted.url && (
+            <a className="chat-tool-search-url" href={casted.url} target="_blank" rel="noreferrer">
+              {casted.url}
+            </a>
+          )}
+          {casted.text && <p className="chat-tool-material-preview">{casted.text}</p>}
+        </div>
+      </details>
+    );
+  }
+
+  if (toolName === 'deep_search') {
+    const casted = details;
+    const sources = Array.isArray(casted.sources) ? casted.sources : [];
+    const claims = Array.isArray(casted.claims) ? casted.claims : [];
+    const conflicts = Array.isArray(casted.conflicts) ? casted.conflicts : [];
+    const gaps = Array.isArray(casted.gaps) ? casted.gaps : [];
+    return (
+      <details className="chat-message-tool-structured">
+        <summary>
+          {t('chat.toolResultDeepSearch', {
+            count: sources.length,
+            defaultValue: `深度搜索返回 ${sources.length} 个来源`,
+          })}
+        </summary>
+        {casted.errorMessage && (
+          <p className="chat-tool-search-error">{casted.errorMessage}</p>
+        )}
+        {sources.length > 0 && (
+          <ul className="chat-tool-search-list">
+            {sources.map((source, index) => (
+              <li key={source.url || index}>
+                <a className="chat-tool-search-title" href={source.url} target="_blank" rel="noreferrer">
+                  {source.title || source.url}
+                </a>
+                {source.url && <span className="chat-tool-search-url">{source.url}</span>}
+                {source.snippet && <p className="chat-tool-search-snippet">{source.snippet}</p>}
+                {source.textPreview && <p className="chat-tool-search-snippet">{source.textPreview}</p>}
+                {source.errorMessage && <p className="chat-tool-search-error">{source.errorMessage}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+        {claims.length > 0 && (
+          <div className="chat-tool-overview">
+            <strong>{t('chat.toolResultDeepSearchClaims', { defaultValue: '候选主张' })}</strong>
+            {claims.slice(0, 5).map((claim, index) => (
+              <p key={`${claim.sourceUrl || index}-${index}`}>{claim.claim}</p>
+            ))}
+          </div>
+        )}
+        {(conflicts.length > 0 || gaps.length > 0) && (
+          <div className="chat-tool-overview">
+            {conflicts.map((conflict, index) => (
+              <p key={`conflict-${index}`}>{conflict}</p>
+            ))}
+            {gaps.map((gap, index) => (
+              <p key={`gap-${index}`}>{gap}</p>
+            ))}
+          </div>
         )}
       </details>
     );

@@ -3,9 +3,18 @@ import { createSearchCardsTool } from './search-cards.js';
 import { createSearchMaterialsTool } from './search-materials.js';
 import { createGetWorkspaceSummaryTool } from './get-workspace-summary.js';
 import { createWebSearchTool } from './web-search.js';
+import { createFetchWebPageTool } from './fetch-web-page.js';
+import { createDeepSearchTool } from './deep-search.js';
 import type { ToolCapabilityDeclaration } from '../capability-guard.js';
 
-export { createSearchCardsTool, createSearchMaterialsTool, createGetWorkspaceSummaryTool, createWebSearchTool };
+export {
+  createSearchCardsTool,
+  createSearchMaterialsTool,
+  createGetWorkspaceSummaryTool,
+  createWebSearchTool,
+  createFetchWebPageTool,
+  createDeepSearchTool,
+};
 
 /**
  * 工具名常量：search_cards。
@@ -39,6 +48,20 @@ const TOOL_NAME_GET_WORKSPACE_SUMMARY = 'get_workspace_summary';
 const TOOL_NAME_WEB_SEARCH = 'web_search';
 
 /**
+ * 工具名常量：fetch_web_page。
+ *
+ * @author fxbin
+ */
+const TOOL_NAME_FETCH_WEB_PAGE = 'fetch_web_page';
+
+/**
+ * 工具名常量：deep_search。
+ *
+ * @author fxbin
+ */
+const TOOL_NAME_DEEP_SEARCH = 'deep_search';
+
+/**
  * 工具能力声明映射表。
  *
  * 每个挂载到知径 Agent 的工具都必须在此声明其 capability 与 workspaceScoped，
@@ -49,6 +72,8 @@ const TOOL_NAME_WEB_SEARCH = 'web_search';
  * - search_materials：检索当前工作区资料
  * - get_workspace_summary：返回当前工作区概览
  * - web_search：通过受控搜索端点检索外部网页摘要，不读取或修改工作区
+ * - fetch_web_page：通过受控抓取端点读取单个外部网页正文
+ * - deep_search：编排多查询搜索、来源去重、正文抓取和轻量证据整理
  *
  * 未来若引入 mutate 工具（如写入卡片），
  * 必须在此声明并显式放开 ALLOWED_TOOL_CAPABILITIES 白名单后方可挂载。
@@ -60,6 +85,8 @@ const TOOL_CAPABILITY_DECLARATIONS: Record<string, ToolCapabilityDeclaration> = 
   [TOOL_NAME_SEARCH_MATERIALS]: { capability: 'read', workspaceScoped: true },
   [TOOL_NAME_GET_WORKSPACE_SUMMARY]: { capability: 'read', workspaceScoped: true },
   [TOOL_NAME_WEB_SEARCH]: { capability: 'network', workspaceScoped: false },
+  [TOOL_NAME_FETCH_WEB_PAGE]: { capability: 'network', workspaceScoped: false },
+  [TOOL_NAME_DEEP_SEARCH]: { capability: 'network', workspaceScoped: false },
 };
 
 /**
@@ -81,6 +108,8 @@ export function getToolCapabilityDeclaration(toolName: string): ToolCapabilityDe
  * - search_materials：检索已导入的来源资料
  * - get_workspace_summary：返回工作区整体概览
  * - web_search：联网搜索外部资料摘要
+ * - fetch_web_page：抓取单个外部网页正文
+ * - deep_search：多查询深度搜索与轻量证据整理
  *
  * 工具按「先局部后整体、先卡片后资料」的检索策略排序，
  * 由 systemPrompt 引导模型按需调用。
@@ -95,5 +124,7 @@ export function createWorkspaceTools(workspaceId: string): AgentTool[] {
     createSearchMaterialsTool(workspaceId),
     createGetWorkspaceSummaryTool(workspaceId),
     createWebSearchTool(),
+    createFetchWebPageTool(),
+    createDeepSearchTool(),
   ];
 }

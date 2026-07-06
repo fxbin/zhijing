@@ -76,7 +76,7 @@ export interface WebSearchDetails {
   errorMessage?: string;
 }
 
-function clampLimit(limit: number | undefined): number {
+export function clampWebSearchLimit(limit: number | undefined): number {
   if (typeof limit !== 'number' || !Number.isFinite(limit)) return DEFAULT_RESULT_LIMIT;
   return Math.max(1, Math.min(MAX_RESULT_LIMIT, Math.floor(limit)));
 }
@@ -193,7 +193,7 @@ function parseTextResults(text: string, limit: number): WebSearchResultItem[] {
   return normalized ? [normalized] : [];
 }
 
-async function fetchSearchResults(query: string, limit: number): Promise<WebSearchResultItem[]> {
+export async function searchWeb(query: string, limit: number): Promise<WebSearchResultItem[]> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), WEB_SEARCH_TIMEOUT_MS);
   try {
@@ -258,7 +258,7 @@ export function createWebSearchTool(): AgentTool<typeof WebSearchParameters, Web
     async execute(_toolCallId, params): Promise<AgentToolResult<WebSearchDetails>> {
       const startedAt = Date.now();
       const query = truncateText(params.query, QUERY_MAX_LENGTH);
-      const limit = clampLimit(params.limit);
+      const limit = clampWebSearchLimit(params.limit);
       if (!query) {
         const details: WebSearchDetails = {
           ok: false,
@@ -276,7 +276,7 @@ export function createWebSearchTool(): AgentTool<typeof WebSearchParameters, Web
       }
 
       try {
-        const results = await fetchSearchResults(query, limit);
+        const results = await searchWeb(query, limit);
         const summary = results.length === 0
           ? `联网搜索未找到与「${query}」直接相关的结果。`
           : `联网搜索到 ${results.length} 条与「${query}」相关的结果：\n${results.map(formatResultLine).join('\n')}`;

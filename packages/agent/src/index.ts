@@ -31,6 +31,8 @@ export {
   createSearchMaterialsTool,
   createGetWorkspaceSummaryTool,
   createWebSearchTool,
+  createFetchWebPageTool,
+  createDeepSearchTool,
   getToolCapabilityDeclaration,
 } from './tools/index.js';
 
@@ -44,6 +46,14 @@ export type {
   WebSearchDetails,
   WebSearchResultItem,
 } from './tools/web-search.js';
+export type {
+  FetchWebPageDetails,
+} from './tools/fetch-web-page.js';
+export type {
+  DeepSearchDetails,
+  DeepSearchSource,
+  DeepSearchClaim,
+} from './tools/deep-search.js';
 
 export {
   selectOrchestratorSystemPrompt,
