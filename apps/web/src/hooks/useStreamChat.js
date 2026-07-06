@@ -728,9 +728,14 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
       if (isStreamActive()) {
         runStatsRef.current.endedAt = Date.now();
         runStatsRef.current.outputChars = assistantText.length;
-        setChatMessages((prev) => prev.map((message) => (message.id === assistantId
-          ? { ...message, isStreaming: false }
-          : message)));
+        setChatMessages((prev) => prev.map((message) => {
+          if (message.id !== assistantId) return message;
+          const updated = { ...message, isStreaming: false };
+          if (assistantText.length === 0 && !message.error) {
+            updated.error = t('chat.emptyResponse');
+          }
+          return updated;
+        }));
         setIsStreaming(false);
         setRunStats({ ...runStatsRef.current });
       }

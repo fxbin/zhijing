@@ -252,6 +252,7 @@
   "chat.copy": "Copy",
   "chat.copyAnswer": "Copy answer",
   "chat.copied": "Copied",
+  "chat.emptyResponse": "Model returned no content. Please retry or check model configuration.",
   "chat.loadingAnswer": "Organizing materials and cards in the current workspace...",
   "chat.metric.cards": "cards",
   "chat.metric.sources": "sources",
