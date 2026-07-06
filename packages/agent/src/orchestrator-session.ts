@@ -870,6 +870,7 @@ const HORIZONTAL_RULE_PATTERN = /^(?:-{3,}|\*{3,}|_{3,})$/;
  */
 function hasCardTypeSignal(text: string): boolean {
   if (/(?:概念|方法|案例|问题|观点|步骤|事实|通用)卡/.test(text)) return true;
+  if (/(?:概念|方法|案例|问题|观点|步骤|事实|通用)[：:]/.test(text)) return true;
   const lower = text.toLowerCase();
   for (const candidate of PLAIN_SUGGESTION_TYPE_KEYWORDS) {
     const hit = candidate.keywords.some((kw) => {
@@ -914,10 +915,12 @@ function isSuggestionHeadingLine(rawLine: string): boolean {
  * 从建议 heading 行中提取卡片标题。
  *
  * 提取优先级：
- * 1. 引号包裹内容（「」『』""''）——最可靠
- * 2. 「卡片」/「资料」后面的文本
- * 3. 冒号后面的文本
- * 4. 去掉前缀后的整行余文
+ * 1. 粗体 `**...**` 包裹的标题（LLM 常用 `**「标题」——副标题**` 或 `**标题——副标题**`）：
+ *    取首个粗体段，按破折号（——/—/--）切前半作为标题，并去除引号与星号；
+ * 2. 引号包裹内容（「」『』""''）——适用于无粗体的 `概念卡：「标题」`；
+ * 3. 「卡片」/「资料」后面的文本；
+ * 4. 冒号后面的文本（去除星号）；
+ * 5. 去掉前缀编号/动词后的整行余文（去除星号）。
  *
  * @param rawLine - heading 行原始文本
  * @returns 提取出的标题（2-80 字）；提取失败返回空串
@@ -925,13 +928,20 @@ function isSuggestionHeadingLine(rawLine: string): boolean {
  */
 function extractTitleFromHeading(rawLine: string): string {
   const stripped = stripMarkdownDecorations(rawLine);
-  const quoted = stripped.match(/[「『""'']([^「」『』""''\n]{2,80})[」』""'']/);
+  const bold = stripped.match(/\*\*([\s\S]+?)\*\*/);
+  if (bold && bold[1]) {
+    const inner = bold[1];
+    const headPart = inner.split(/——|—|--/)[0] ?? inner;
+    const cleaned = headPart.replace(/[「」『』“”‘’""'']/g, '').replace(/\*/g, '').trim();
+    if (cleaned.length >= 2) return cleaned.slice(0, 80);
+  }
+  const quoted = stripped.match(/[「『“”‘’""'']([^「」『』“”‘’""''\n]{2,80})[」’”’""'']/);
   if (quoted && quoted[1]) return quoted[1].trim();
   const afterCard = stripped.match(/(?:卡片|资料)[：:是为]?\s*(.+)/);
-  if (afterCard && afterCard[1]) return afterCard[1].trim().slice(0, 80);
+  if (afterCard && afterCard[1]) return afterCard[1].replace(/\*/g, '').trim().slice(0, 80);
   const afterColon = stripped.match(/[：:]\s*(.+)/);
-  if (afterColon && afterColon[1]) return afterColon[1].trim().slice(0, 80);
-  const cleaned = stripped.replace(/^(?:建议|推荐|提议)[\d一二三四五六七八九十①②③④⑤⑥⑦⑧⑨⑩\s.,:：、)）\-—–]+/, '').trim();
+  if (afterColon && afterColon[1]) return afterColon[1].replace(/\*/g, '').trim().slice(0, 80);
+  const cleaned = stripped.replace(/^(?:建议|推荐|提议)[\d一二三四五六七八九十①②③④⑤⑥⑦⑧⑨⑩\s.,:：、)）\-—–]+/, '').replace(/\*/g, '').trim();
   return cleaned.slice(0, 80);
 }
 
