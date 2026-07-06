@@ -912,6 +912,57 @@ function isSuggestionHeadingLine(rawLine: string): boolean {
 }
 
 /**
+ * 方括号类型标签正则：匹配行内的 `[concept]` / `[方法]` / `[method卡]` 等类型标记。
+ *
+ * LLM 常在 heading 里用方括号标注卡片类型（如 `① [concept] 命运礼物的价格`），
+ * 提取标题时需要剥离这类标记，避免污染最终卡片标题。
+ */
+const BRACKET_TYPE_TAG_PATTERN = /\[[A-Za-z\u4e00-\u9fff]{1,12}卡?\]/g;
+
+/**
+ * 剥离标题行首的噪声前缀：编号标记、建议动词、方括号类型标签、残余分隔符。
+ *
+ * 采用循环剥离策略（直到文本稳定），可一次性清理多种前缀的组合，例如：
+ * - `① [concept] 命运礼物的价格` → `命运礼物的价格`
+ * - `1. 建议新建卡片「标题」` → `「标题」`（引号由上层处理）
+ * - `### 2️⃣ [method] 时间管理` → `时间管理`
+ *
+ * @param text - 已去除 markdown 装饰的 heading 文本
+ * @returns 剥离行首噪声后的文本
+ * @author fxbin
+ */
+function stripLeadingNoise(text: string): string {
+  let prev = '';
+  let cur = text;
+  let guard = 0;
+  while (cur !== prev && guard < 8) {
+    prev = cur;
+    cur = cur.replace(/^\s*[①②③④⑤⑥⑦⑧⑨⑩\u2460-\u2473]\s*/, '');
+    cur = cur.replace(/^\s*\d\uFE0F?\u20E3\s*/, '');
+    cur = cur.replace(/^\s*\d[.、)）：:]\s*/, '');
+    cur = cur.replace(/^\s*[一二三四五六七八九十]+[、.：）)]\s*/, '');
+    cur = cur.replace(/^\s*(?:建议|推荐|提议|新建|建卡)\s*/, '');
+    cur = cur.replace(/^\s*(?:concept|method|case|viewpoint|step|question|fact|general)\b\s*/i, '');
+    cur = cur.replace(BRACKET_TYPE_TAG_PATTERN, '');
+    cur = cur.replace(/^\s*[：:、\-—–.)）]\s*/, '');
+    guard += 1;
+  }
+  return cur.trim();
+}
+
+/**
+ * 标题收尾清理：剥离行首噪声、去除星号与残余引号、截断到 80 字。
+ *
+ * @param text - 待清理的标题片段
+ * @returns 清理后的标题（最多 80 字）
+ * @author fxbin
+ */
+function finalizeTitle(text: string): string {
+  const withoutStars = text.replace(/\*/g, '');
+  return stripLeadingNoise(withoutStars).slice(0, 80);
+}
+
+/**
  * 从建议 heading 行中提取卡片标题。
  *
  * 提取优先级：
@@ -920,7 +971,9 @@ function isSuggestionHeadingLine(rawLine: string): boolean {
  * 2. 引号包裹内容（「」『』""''）——适用于无粗体的 `概念卡：「标题」`；
  * 3. 「卡片」/「资料」后面的文本；
  * 4. 冒号后面的文本（去除星号）；
- * 5. 去掉前缀编号/动词后的整行余文（去除星号）。
+ * 5. 上述均未命中时，剥离行首编号/建议动词/方括号类型标签后的整行余文。
+ *
+ * 所有返回值统一经 finalizeTitle 收尾，确保标题不含 `①`、`[concept]`、`*` 等噪声。
  *
  * @param rawLine - heading 行原始文本
  * @returns 提取出的标题（2-80 字）；提取失败返回空串
@@ -932,17 +985,16 @@ function extractTitleFromHeading(rawLine: string): string {
   if (bold && bold[1]) {
     const inner = bold[1];
     const headPart = inner.split(/——|—|--/)[0] ?? inner;
-    const cleaned = headPart.replace(/[「」『』“”‘’""'']/g, '').replace(/\*/g, '').trim();
+    const cleaned = headPart.replace(/[「」『』“”‘’""'']/g, '').trim();
     if (cleaned.length >= 2) return cleaned.slice(0, 80);
   }
   const quoted = stripped.match(/[「『“”‘’""'']([^「」『』“”‘’""''\n]{2,80})[」’”’""'']/);
   if (quoted && quoted[1]) return quoted[1].trim();
   const afterCard = stripped.match(/(?:卡片|资料)[：:是为]?\s*(.+)/);
-  if (afterCard && afterCard[1]) return afterCard[1].replace(/\*/g, '').trim().slice(0, 80);
+  if (afterCard && afterCard[1]) return finalizeTitle(afterCard[1]);
   const afterColon = stripped.match(/[：:]\s*(.+)/);
-  if (afterColon && afterColon[1]) return afterColon[1].replace(/\*/g, '').trim().slice(0, 80);
-  const cleaned = stripped.replace(/^(?:建议|推荐|提议)[\d一二三四五六七八九十①②③④⑤⑥⑦⑧⑨⑩\s.,:：、)）\-—–]+/, '').replace(/\*/g, '').trim();
-  return cleaned.slice(0, 80);
+  if (afterColon && afterColon[1]) return finalizeTitle(afterColon[1]);
+  return finalizeTitle(stripped);
 }
 
 /**
