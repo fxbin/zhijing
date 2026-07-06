@@ -381,11 +381,12 @@ export function buildOrchestratorDecisionFromData(
  * - request_advice：用户主动请求建议或下一步行动
  * - request_probe：用户主动请求追问或盲区识别
  * - request_research：用户主动请求深度研究、调研、查证或竞品分析
+ * - request_roundtable：用户主动请求圆桌讨论、多专家评审或多视角辩论
  * - neutral：无明确意图信号，沿用 baseDecision
  *
  * @author fxbin
  */
-export type UserIntent = 'skeptic' | 'request_advice' | 'request_probe' | 'request_research' | 'neutral';
+export type UserIntent = 'skeptic' | 'request_advice' | 'request_probe' | 'request_research' | 'request_roundtable' | 'neutral';
 
 /**
  * 质疑/拒绝信号关键词。
@@ -433,12 +434,24 @@ const REQUEST_RESEARCH_KEYWORDS: readonly string[] = [
 ];
 
 /**
+ * 请求圆桌讨论关键词。
+ *
+ * 命中时不改变编排模式，只由 agent 层选择 roundtable 角色：
+ * 这类请求需要多视角评审与分歧收敛，而不是主动提议模式切换。
+ */
+const REQUEST_ROUNDTABLE_KEYWORDS: readonly string[] = [
+  '圆桌', '圆桌讨论', '圆桌研讨', '多专家', '专家评审', '多角色讨论',
+  '多视角', '几个角度', '不同视角', '辩论一下', '一起讨论', '评估一下',
+  '反方意见', '正反双方', '产品视角', '技术视角', '风险视角',
+];
+
+/**
  * 对用户消息做规则意图识别。
  *
  * P0.4 前置拦截器的核心：基于关键词匹配识别用户意图，
  * 不引入 LLM（KISS 原则，避免成本与延迟）。
  *
- * 识别优先级：skeptic > request_research > request_probe > request_advice > neutral
+ * 识别优先级：skeptic > request_roundtable > request_research > request_probe > request_advice > neutral
  * （质疑信号优先级最高，确保用户拒绝时立即回到被动响应）。
  *
  * @param message - 用户当前消息文本
@@ -451,6 +464,9 @@ export function classifyUserIntent(message: string): UserIntent {
 
   for (const keyword of SKEPTIC_KEYWORDS) {
     if (text.includes(keyword)) return 'skeptic';
+  }
+  for (const keyword of REQUEST_ROUNDTABLE_KEYWORDS) {
+    if (text.includes(keyword)) return 'request_roundtable';
   }
   for (const keyword of REQUEST_RESEARCH_KEYWORDS) {
     if (text.includes(keyword)) return 'request_research';
@@ -496,7 +512,7 @@ export function preInterceptUserMessage(
 ): OrchestratorDecision {
   const intent = classifyUserIntent(message);
 
-  if (intent === 'neutral' || intent === 'request_research') {
+  if (intent === 'neutral' || intent === 'request_research' || intent === 'request_roundtable') {
     return baseDecision;
   }
 

@@ -1830,6 +1830,7 @@ export type AgentTaskType =
   | 'entity_extraction'
   | 'socratic_questioning'
   | 'deep_research'
+  | 'roundtable'
   | 'conversation'
   | 'auxiliary_probe'
   | 'recall_deep';
@@ -1850,6 +1851,7 @@ export const AGENT_TASK_TYPE_VALUES: readonly AgentTaskType[] = [
   'entity_extraction',
   'socratic_questioning',
   'deep_research',
+  'roundtable',
   'conversation',
   'auxiliary_probe',
   'recall_deep',

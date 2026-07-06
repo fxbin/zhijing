@@ -1,7 +1,7 @@
 /**
  * P1.0 PoC 验证脚本：pi-agent-core 多 Agent 角色承载能力验证。
  *
- * 验证三专用 Agent（结构化/对话/追问）能否：
+ * 验证专用 Agent（结构化/对话/追问/研究/圆桌）能否：
  * 1. 独立定义不同 systemPrompt 和推荐 model
  * 2. 按用户意图选择对应角色
  * 3. 选定角色可装配为 Agent 实例（不实际调用 LLM，仅验证装配）
@@ -20,6 +20,7 @@ import {
   CONVERSATION_AGENT_PROMPT,
   PROBE_AGENT_PROMPT,
   RESEARCH_AGENT_PROMPT,
+  ROUNDTABLE_AGENT_PROMPT,
 } from '../packages/agent/src/index.ts';
 
 const TEST_WORKSPACE_ID = 'poc-test-workspace';
@@ -41,11 +42,12 @@ function assert(condition, message) {
 console.log('P1.0 PoC: pi-agent-core 多 Agent 角色承载能力验证\n');
 
 console.log('验证点 1: 专用角色配置独立定义');
-assert(Object.keys(AGENT_ROLE_CONFIGS).length === 4, '角色配置表包含 4 个角色');
+assert(Object.keys(AGENT_ROLE_CONFIGS).length === 5, '角色配置表包含 5 个角色');
 assert(AGENT_ROLE_CONFIGS.structured.role === 'structured', 'structured 角色标识正确');
 assert(AGENT_ROLE_CONFIGS.conversation.role === 'conversation', 'conversation 角色标识正确');
 assert(AGENT_ROLE_CONFIGS.probe.role === 'probe', 'probe 角色标识正确');
 assert(AGENT_ROLE_CONFIGS.research.role === 'research', 'research 角色标识正确');
+assert(AGENT_ROLE_CONFIGS.roundtable.role === 'roundtable', 'roundtable 角色标识正确');
 
 console.log('\n验证点 2: 角色 systemPrompt 各不相同');
 assert(STRUCTURED_AGENT_PROMPT !== CONVERSATION_AGENT_PROMPT, 'structured 与 conversation 提示词不同');
@@ -53,27 +55,34 @@ assert(STRUCTURED_AGENT_PROMPT !== PROBE_AGENT_PROMPT, 'structured 与 probe 提
 assert(CONVERSATION_AGENT_PROMPT !== PROBE_AGENT_PROMPT, 'conversation 与 probe 提示词不同');
 assert(RESEARCH_AGENT_PROMPT !== CONVERSATION_AGENT_PROMPT, 'research 与 conversation 提示词不同');
 assert(RESEARCH_AGENT_PROMPT !== PROBE_AGENT_PROMPT, 'research 与 probe 提示词不同');
+assert(ROUNDTABLE_AGENT_PROMPT !== CONVERSATION_AGENT_PROMPT, 'roundtable 与 conversation 提示词不同');
+assert(ROUNDTABLE_AGENT_PROMPT !== RESEARCH_AGENT_PROMPT, 'roundtable 与 research 提示词不同');
 assert(STRUCTURED_AGENT_PROMPT.includes('结构化处理'), 'structured 提示词包含角色标识');
 assert(CONVERSATION_AGENT_PROMPT.includes('对话'), 'conversation 提示词包含角色标识');
 assert(PROBE_AGENT_PROMPT.includes('追问'), 'probe 提示词包含角色标识');
 assert(RESEARCH_AGENT_PROMPT.includes('深度研究'), 'research 提示词包含深度研究标识');
 assert(RESEARCH_AGENT_PROMPT.includes('deep_search'), 'research 提示词要求优先使用 deep_search');
+assert(ROUNDTABLE_AGENT_PROMPT.includes('圆桌'), 'roundtable 提示词包含圆桌标识');
+assert(ROUNDTABLE_AGENT_PROMPT.includes('不要声称你实际启动了多个独立专家'), 'roundtable 提示词明确单 Agent 边界');
 
 console.log('\n验证点 3: 角色推荐 model 与 taskType 配置');
 assert(AGENT_ROLE_CONFIGS.structured.recommendedModelId === 'deepseek-v4-flash', 'structured 推荐 V3');
 assert(AGENT_ROLE_CONFIGS.conversation.recommendedModelId === 'deepseek-v4-flash', 'conversation 推荐 V3');
 assert(AGENT_ROLE_CONFIGS.probe.recommendedModelId === 'deepseek-v4-flash', 'probe 推荐 V3');
 assert(AGENT_ROLE_CONFIGS.research.recommendedModelId === 'deepseek-v4-flash', 'research 推荐 V3');
+assert(AGENT_ROLE_CONFIGS.roundtable.recommendedModelId === 'deepseek-v4-flash', 'roundtable 推荐 V3');
 assert(AGENT_ROLE_CONFIGS.probe.supportsFallback === false, 'probe 不依赖未注册 fallback 模型');
 assert(AGENT_ROLE_CONFIGS.structured.taskType === 'knowledge_cards', 'structured taskType 为 knowledge_cards');
 assert(AGENT_ROLE_CONFIGS.conversation.taskType === 'conversation', 'conversation taskType 为 conversation');
 assert(AGENT_ROLE_CONFIGS.probe.taskType === 'socratic_questioning', 'probe taskType 为 socratic_questioning');
 assert(AGENT_ROLE_CONFIGS.research.taskType === 'deep_research', 'research taskType 为 deep_research');
+assert(AGENT_ROLE_CONFIGS.roundtable.taskType === 'roundtable', 'roundtable taskType 为 roundtable');
 
 console.log('\n验证点 4: 按用户意图选择 Agent 角色');
 assert(selectAgentRole('request_advice') === 'conversation', 'request_advice → conversation');
 assert(selectAgentRole('request_probe') === 'probe', 'request_probe → probe');
 assert(selectAgentRole('request_research') === 'research', 'request_research → research');
+assert(selectAgentRole('request_roundtable') === 'roundtable', 'request_roundtable → roundtable');
 assert(selectAgentRole('skeptic') === 'conversation', 'skeptic → conversation');
 assert(selectAgentRole('neutral') === 'conversation', 'neutral → conversation');
 assert(selectAgentRole('unknown_intent') === 'conversation', '未知意图 → conversation (默认)');
@@ -111,6 +120,13 @@ try {
   assert(false, `research 角色装配失败: ${error.message}`);
 }
 
+try {
+  const agent = createRoleBasedAgent(TEST_WORKSPACE_ID, { role: 'roundtable' });
+  assert(agent !== null && agent !== undefined, 'roundtable 角色可装配为 Agent 实例');
+} catch (error) {
+  assert(false, `roundtable 角色装配失败: ${error.message}`);
+}
+
 console.log('\n验证点 6: 省略 role 时回退到 conversation');
 try {
   const agent = createRoleBasedAgent(TEST_WORKSPACE_ID);
@@ -135,10 +151,10 @@ console.log(`PoC 结果: ${passCount} 通过, ${failCount} 失败`);
 console.log('=========================================');
 
 if (failCount > 0) {
-  console.error('\n❌ PoC 失败：pi-agent-core 无法完整承载三专用 Agent 角色');
+  console.error('\n❌ PoC 失败：pi-agent-core 无法完整承载专用 Agent 角色');
   process.exit(1);
 } else {
-  console.log('\n✅ PoC 通过：pi-agent-core 可承载三专用 Agent 角色的独立定义与按意图选择');
+  console.log('\n✅ PoC 通过：pi-agent-core 可承载专用 Agent 角色的独立定义与按意图选择');
   console.log('决策：GO — 可进入 P1.1 正式实现');
   process.exit(0);
 }

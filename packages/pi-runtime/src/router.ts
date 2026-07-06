@@ -27,6 +27,7 @@ const DEFAULT_ROUTES: ProviderRoute[] = [
       'entity_extraction',
       'conversation',
       'deep_research',
+      'roundtable',
       'auxiliary_probe',
     ],
     reason: '中文最优，成本极低，结构化输出可靠',

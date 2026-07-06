@@ -40,6 +40,7 @@ const TASK_TYPE_LABELS = {
   entity_extraction: '实体提取',
   socratic_questioning: '苏格拉底追问',
   deep_research: '深度研究',
+  roundtable: '圆桌研讨',
   conversation: '对话',
   auxiliary_probe: '辅助探查',
 };

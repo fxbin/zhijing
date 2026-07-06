@@ -1,15 +1,16 @@
 /**
  * 多 Agent 编排层 PoC（P1.0）。
  *
- * 验证 pi-agent-core 能否承载三专用 Agent 角色的独立定义与按意图选择。
+ * 验证 pi-agent-core 能否承载多个专用 Agent 角色的独立定义与按意图选择。
  * 角色对应 v1.1 §3.2 的设计：
  * - 结构化 Agent：知识卡片生成、实体提取、骨架构建（DeepSeek-V3 主力）
  * - 对话 Agent：知识库问答、聊天、产物生成（DeepSeek-V3 主力）
  * - 追问 Agent：苏格拉底追问、盲区检测、假设检验（DeepSeek-V3 主力）
  * - 研究 Agent：深度研究、外部查证、竞品分析、证据账本（DeepSeek-V3 主力）
+ * - 圆桌 Agent：单 Agent 多视角研讨、分歧识别、决策收敛（DeepSeek-V3 主力）
  *
  * PoC 验证点：
- * 1. 三角色配置可独立定义（不同 systemPrompt + 推荐 model）
+ * 1. 多角色配置可独立定义（不同 systemPrompt + 推荐 model）
  * 2. 按用户意图可选择对应角色
  * 3. 选定角色可装配为 Agent 实例（复用 createWorkspaceAgent）
  *
@@ -25,7 +26,7 @@ import { createWorkspaceAgent, type WorkspaceAgentOptions } from './agent-factor
 /**
  * Agent 角色标识枚举。
  */
-export type AgentRole = 'structured' | 'conversation' | 'probe' | 'research';
+export type AgentRole = 'structured' | 'conversation' | 'probe' | 'research' | 'roundtable';
 
 /**
  * 结构化 Agent 系统提示词。
@@ -120,6 +121,35 @@ const RESEARCH_AGENT_PROMPT = [
 ].join('\n');
 
 /**
+ * 圆桌 Agent 系统提示词。
+ *
+ * 职责：以单 Agent 多视角协议模拟圆桌研讨，输出可执行的综合判断。
+ * 注意：这是单 Agent 的结构化多视角分析，不声称真实并行专家执行。
+ */
+const ROUNDTABLE_AGENT_PROMPT = [
+  '你是「知径」工作台的圆桌 Agent，负责用单 Agent 多视角协议组织研讨、评审和决策收敛。',
+  '',
+  '能力边界：',
+  '- 只能通过提供的工具获取信息：search_cards、search_materials、get_workspace_summary、web_search、fetch_web_page、deep_search。',
+  '- 只能通过 web_search / fetch_web_page / deep_search 联网；不能访问其他工作区、不能直接修改任何数据。',
+  '- 不要声称你实际启动了多个独立专家或并行子 Agent；只能表述为「从多个视角评估」。',
+  '',
+  '研讨流程：',
+  '- 先调 get_workspace_summary 理解当前工作区背景。',
+  '- 若问题涉及外部事实、竞品、最新信息或证据不足，优先调用 deep_search。',
+  '- 至少覆盖 3 个视角：产品价值、技术可行性、风险/反方意见。必要时增加用户体验或商业化视角。',
+  '- 每个视角必须给出：判断、依据、最大不确定性。',
+  '',
+  '输出结构：',
+  '- 先给「圆桌结论」：一句话说明建议推进、暂缓、缩小范围或继续调研。',
+  '- 再给「分视角意见」：每个视角 2-4 条，附工作区 id 或 URL 证据；没有证据时标注为推断。',
+  '- 再给「关键分歧」：列出各视角互相冲突的地方，不要强行和稀泥。',
+  '- 最后给「收敛方案」：3 步以内，必须是下一步可执行动作。',
+  '- 如适合沉淀为卡片，可在末尾输出 proposal-batch；提议必须基于真实证据，不要编造 id。',
+  '- 中文回答；避免空泛的专家腔和没有证据的判断。',
+].join('\n');
+
+/**
  * Agent 角色配置。
  */
 export interface AgentRoleConfig {
@@ -149,6 +179,7 @@ export interface AgentRoleConfig {
  * - conversation：DeepSeek-V3 主力（中文对话流畅）
  * - probe：DeepSeek-V3 主力（沿用当前已注册模型，避免未配置 reasoner 时运行失败）
  * - research：DeepSeek-V3 主力（联网研究与中文证据整理稳定，走 deep_research taskType 便于成本统计）
+ * - roundtable：DeepSeek-V3 主力（多视角研讨与中文决策收敛稳定，走 roundtable taskType 便于成本统计）
  */
 export const AGENT_ROLE_CONFIGS: Record<AgentRole, AgentRoleConfig> = {
   structured: {
@@ -187,6 +218,15 @@ export const AGENT_ROLE_CONFIGS: Record<AgentRole, AgentRoleConfig> = {
     supportsFallback: false,
     taskType: 'deep_research',
   },
+  roundtable: {
+    role: 'roundtable',
+    label: '圆桌 Agent',
+    systemPrompt: ROUNDTABLE_AGENT_PROMPT,
+    recommendedProvider: 'deepseek',
+    recommendedModelId: 'deepseek-v4-flash',
+    supportsFallback: false,
+    taskType: 'roundtable',
+  },
 };
 
 /**
@@ -196,6 +236,7 @@ export const AGENT_ROLE_CONFIGS: Record<AgentRole, AgentRoleConfig> = {
  * - request_advice → conversation（用户请求建议/下一步，对话 Agent 主回答）
  * - request_probe → probe（用户请求追问/盲区识别，追问 Agent 接管）
  * - request_research → research（用户请求深度研究、调研、竞品分析或多来源查证）
+ * - request_roundtable → roundtable（用户请求圆桌研讨、多专家评审或多视角辩论）
  * - skeptic → conversation（用户质疑，回到对话 Agent 直接回答）
  * - neutral → conversation（默认对话 Agent）
  *
@@ -206,6 +247,7 @@ const INTENT_TO_ROLE_MAP: Record<string, AgentRole> = {
   request_advice: 'conversation',
   request_probe: 'probe',
   request_research: 'research',
+  request_roundtable: 'roundtable',
   skeptic: 'conversation',
   neutral: 'conversation',
 };
@@ -267,13 +309,14 @@ export function createRoleBasedAgent(
 }
 
 /**
- * 导出三角色系统提示词，便于调用方在其基础上做定制拼接或测试断言。
+ * 导出角色系统提示词，便于调用方在其基础上做定制拼接或测试断言。
  */
 export {
   STRUCTURED_AGENT_PROMPT,
   CONVERSATION_AGENT_PROMPT,
   PROBE_AGENT_PROMPT,
   RESEARCH_AGENT_PROMPT,
+  ROUNDTABLE_AGENT_PROMPT,
 };
 
 /**
