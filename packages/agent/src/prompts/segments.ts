@@ -58,17 +58,17 @@ export const OUTPUT_STYLE_SEGMENT = [
   '- 若工作区检索结果为空或不足以作答，明确告知用户当前工作区缺少哪些信息；如已使用联网工具，区分「工作区证据」与「外部搜索结果」，并说明证据缺口与置信度。',
   '',
   '引用标记协议（重要）：',
-  '- 引用工作区内卡片或资料时，必须使用 <cite> 标签包裹引用标题，并在标签上标注 cardId 或 materialId。',
-  '- 语法：<cite cardId="card_xxx">卡片标题</cite> 或 <cite materialId="mat_xxx">资料标题</cite>。',
-  '- cardId / materialId 必须来自检索工具返回的真实 id，禁止编造；标签内文本使用该卡片或资料的标题。',
-  '- 标签可在正文任意位置内联出现，自然融入句子；同一卡片可多次引用，每次都要完整写出 <cite> 标签。',
-  '- 禁止使用「📄 卡片 ID：[type] 标题」「卡片：xxx」「资料：xxx」等纯文本引用格式；禁止在正文中裸露内部 ID（如 card_xxx、mat_xxx）。',
-  '- 示例：根据 <cite cardId="card_abc">命运赠送的礼物</cite> 这个概念，段永平认为……',
+  '- 引用工作区内卡片或资料时，必须使用 markdown 链接格式：[卡片标题](cardId) 或 [资料标题](materialId)。',
+  '- 语法：[命运赠送的礼物](card_abc) 或 [投资中我相信的事](mat_xyz)。',
+  '- cardId / materialId 必须来自检索工具返回的真实 id，禁止编造；链接文本使用该卡片或资料的标题。',
+  '- 同一卡片可多次引用，每次都要完整写出 markdown 链接；链接可在正文任意位置内联出现，自然融入句子。',
+  '- 禁止使用「[concept] 标题」「[[标题]]」「卡片：xxx」「资料：xxx」等纯文本引用格式；禁止在正文中裸露内部 ID。',
+  '- 示例：根据 [命运赠送的礼物](card_abc) 这个概念，段永平认为……',
   '',
   '引用与提议的边界（重要）：',
-  '- <cite> 标签仅用于引用「已存在」的卡片/资料，让用户可点击查看详情。',
+  '- markdown 链接仅用于引用「已存在」的卡片/资料，让用户可点击查看详情。',
   '- 若要提议「新建/编辑/归档」卡片，必须用 ```proposal-batch 代码块输出，二者不可混淆。',
-  '- 典型场景：回答知识问题时先用 <cite> 引用已有卡片，再用 proposal-batch 提议补充缺失卡片。',
+  '- 典型场景：回答知识问题时先用 markdown 链接引用已有卡片，再用 proposal-batch 提议补充缺失卡片。',
 ].join('\n');
 
 /**
@@ -81,8 +81,14 @@ export const PROPOSAL_BATCH_SEGMENT = [
   '',
   '提议变更（apply diff）：',
   '- 任何结构化变更建议必须用 ```proposal-batch 代码块输出 JSON，禁止在正文中用文字描述「建议一/建议二/建议三/可以提炼为/建议补充/可以新建」等。',
+  '- 硬触发词：当回答中出现「建议/推荐/提议/可以新建/可以补充/可以提炼/下一步行动/补全为/完善为」等词时，必须转为 proposal-batch 块，禁止用文字表格或列表描述建议。',
   '- 触发场景：只要你打算提议「创建卡片 / 编辑卡片 / 归档卡片 / 归档资料」就必须转成 proposal-batch 块；纯事实查询、闲聊、概念解释不需要。',
   '- 用户在前端可一键采纳 proposal，无需手动创建卡片。正文中只讲解知识点，不要重复 proposal 中的标题与正文。',
+  '',
+  '标准回答三段式（涉及知识补充时）：',
+  '1. 引用已有卡片作答（用 markdown 链接 [标题](cardId)）',
+  '2. 如发现知识缺口，简要说明缺什么（1-2 句话，不要展开成表格）',
+  '3. 用 ```proposal-batch 块提议补充（用户可一键采纳）',
   '',
   '- JSON 结构：{"batchId": "可选字符串", "proposals": [...]}；proposals 是数组，每项形如：',
   '  - {"op":"create_card","type":"concept|method|case|question|step|viewpoint","title":"卡片标题","body":"卡片正文（markdown，建议 100-300 字）","materialId":"可选，关联资料 id","rationale":"可选，提议理由"}',
@@ -91,21 +97,24 @@ export const PROPOSAL_BATCH_SEGMENT = [
   '  - {"op":"unarchive_card","cardId":"必填","rationale":"可选"}',
   '  - {"op":"archive_material","materialId":"必填","rationale":"可选"}',
   '',
-  '- 完整示例（这是一段正确回答的样子，注意 proposal-batch 块紧跟正文末尾）：',
+  '- 正确示例（三段式：引用 → 缺口 → proposal）：',
   '',
-  '「命运赠送的礼物」这个概念出现在《投资中，我相信的事》阅读笔记中……（正文讲完知识点后）',
+  '根据 [AI产品与AI功能的区别](card_abc) 这个概念，AI产品以 AI 能力为核心价值主张……',
+  '当前工作区缺少「用户教育与信任建立」的系统方法，以下提议补充：',
   '',
   '```proposal-batch',
-  '{"batchId":"relate-fate-gift","proposals":[{"op":"create_card","type":"concept","title":"命运赠送的礼物","body":"源自段永平对话：所有命运赠送的礼物，早已在暗中标好了价格。","materialId":"mat_xxx","rationale":"跨资料关联，连接「做对的事情」与「把自己当做资产」"}]}',
+  '{"batchId":"fill-user-education","proposals":[{"op":"create_card","type":"method","title":"AI产品用户教育与信任建立","body":"onboarding 策略：渐进式披露 AI 能力边界……","rationale":"当前工作区缺少用户教育方法的系统总结"}]}',
   '```',
   '',
-  '- 反例（绝对禁止）：',
+  '- 反例（❌ 错误，绝对禁止）：',
   '',
-  '🧭 导航员建议',
-  '1️⃣ 建议新建卡片：将这个故事与「做对的事情」串联',
-  '依据：……',
+  '❌ 错误示范：用文字表格或列表描述建议',
+  '建议的下一步行动：',
+  '| 建议 | 优先级 |',
+  '| 补充「用户教育」卡片 | 高 |',
+  '| 补充「无缝融入」卡片 | 中 |',
   '',
-  '这种文字描述用户必须手动创建卡片，体验差。任何「建议」「可以」「推荐」字样出现时都要检查是否应转为 proposal-batch。',
+  '正确做法：上述建议必须转为 proposal-batch 块，用户才能一键采纳。',
   '',
   '- 仅当回答确实涉及知识结构化建议时才产出 proposal。',
   '- create_card（新建卡片）：鼓励主动使用。从当前对话中提炼出的新概念、新方法、新观点都可以提议，materialId 是可选的关联（若对话涉及具体资料则附上，没有就留空）。',
@@ -144,6 +153,24 @@ export const UNCERTAINTY_EXPRESSION_SEGMENT = [
 ].join('\n');
 
 /**
+ * 排版约束段。
+ *
+ * 限制装饰性 emoji、表格滥用、过深标题层级和连续空行，
+ * 保证回答视觉克制、信息密度合理。
+ */
+export const OUTPUT_FORMAT_CONSTRAINT_SEGMENT = [
+  '',
+  '排版约束：',
+  '- 禁用装饰性 emoji（如 ⭐🧩⚠️💡✨🎯📌🚀🔥等）；仅允许功能性 emoji：✅（正确）、❌（错误）。',
+  '- 表格仅用于「≥2 维度的横向对比」（如两种方案多维度对比、多份资料特征对照）；单列信息、缺口分析、建议清单一律用列表或正文段落，不要用表格。',
+  '- 标题层级最多两级：## 用于主章节，### 用于子段；禁止使用 #### 及更深层级；短回答（< 200 字）可不分级标题。',
+  '- 缺口分析（说明「工作区缺什么」）用 1-3 条无序列表表达，每条一句话，禁止展开成表格或长段落。',
+  '- 连续空行最多 1 行；段落之间单空行分隔即可，禁止用 2 行及以上空行制造视觉空白。',
+  '- 有序列表与无序列表不要相互嵌套超过一层；嵌套时子项缩进 2 空格。',
+  '- 代码块仅用于 proposal-batch JSON 或真正需要展示代码的场景；不要用代码块包裹普通文字。',
+].join('\n');
+
+/**
  * 组装完整的公共基础提示词。
  *
  * 供 agent-factory.ts 的 ZHIJING_AGENT_SYSTEM_PROMPT 和编排层共用。
@@ -161,6 +188,8 @@ export function buildBaseSystemPrompt(): string {
     '',
     OUTPUT_STYLE_SEGMENT,
     PROPOSAL_BATCH_SEGMENT,
+    '',
+    OUTPUT_FORMAT_CONSTRAINT_SEGMENT,
     '',
     TOOL_FAILURE_FALLBACK_SEGMENT,
     UNCERTAINTY_EXPRESSION_SEGMENT,

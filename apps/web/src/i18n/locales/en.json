@@ -237,6 +237,7 @@
   "chat.proposalTitle": "Proposed Changes",
   "chat.proposalHint": "Select changes to accept; unselected ones will not be applied.",
   "chat.proposalHintCard": "Click Create to apply instantly; skipped ones won't take effect.",
+  "chat.proposalFallbackHint": "AI did not follow the structured protocol. The proposals below were parsed from plain text and may be rough. Please review carefully before accepting.",
   "chat.proposalAcceptSelected": "Accept Selected",
   "chat.proposalAccepting": "Accepting…",
   "chat.proposalReject": "Dismiss",

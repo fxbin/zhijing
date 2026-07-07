@@ -777,6 +777,11 @@ function ProposalBatchBlock({ item, state, cardTypeLabel, t }) {
         <strong>{t('chat.proposalTitle')}</strong>
         <span className="chat-proposal-hint">{t('chat.proposalHintCard')}</span>
       </div>
+      {batch.fallback === true && (
+        <p className="chat-proposal-fallback-hint" role="note">
+          {t('chat.proposalFallbackHint')}
+        </p>
+      )}
       <ul className="chat-proposal-list">
         {batch.proposals.map((proposal, index) => {
           const opLabelKey = PROPOSAL_OP_LABEL_KEYS[proposal.op] ?? PROPOSAL_OP_FALLBACK_KEY;

@@ -237,6 +237,7 @@
   "chat.proposalTitle": "提议变更",
   "chat.proposalHint": "选择要采纳的变更，未采纳的不会落库",
   "chat.proposalHintCard": "点击「创建」即可一键落库，跳过的不会生效",
+  "chat.proposalFallbackHint": "AI 未按结构化协议输出，以下提议由文字描述自动解析，内容可能粗糙，请仔细确认后再采纳。",
   "chat.proposalAcceptSelected": "采纳选中",
   "chat.proposalAccepting": "采纳中…",
   "chat.proposalReject": "拒绝",

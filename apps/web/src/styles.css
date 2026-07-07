@@ -5543,6 +5543,17 @@ button { cursor: pointer; }
   font-size: var(--text-xs);
 }
 
+.chat-proposal-fallback-hint {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(212, 148, 74, 0.12);
+  border-left: 3px solid #D4944A;
+  color: var(--text-muted, #888);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
 .chat-proposal-list {
   display: grid;
   gap: 8px;

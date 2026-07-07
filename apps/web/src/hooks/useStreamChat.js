@@ -90,22 +90,27 @@ const STREAM_EVENT = Object.freeze({
 /**
  * <cite> 标签正则：流式增量期间用于剥离标签但保留标题文本。
  *
- * 后端 message_end 会把 <cite> 替换为 [n] 占位符并下发 citations 数组，
- * 但流式增量期间 <cite> 标签会原样显示，造成闪烁。本函数在 syncAssistantContent
- * 时调用，把 <cite cardId="xxx">标题</cite> 替换为「标题」纯文本，保证流式
- * 过程中文本干净；message_end 后由后端清理后的文本（含 [n] 占位符）覆盖。
+ * 后端 message_end 会把引用标记替换为 [n] 占位符并下发 citations 数组，
+ * 但流式增量期间引用标记会原样显示，造成闪烁。本函数在 syncAssistantContent
+ * 时调用，把 <cite cardId="xxx">标题</cite> 和 [标题](card_xxx) 替换为「标题」
+ * 纯文本，保证流式过程中文本干净；message_end 后由后端清理后的文本（含 [n]
+ * 占位符）覆盖。
  */
 const CITE_TAG_STREAMING_PATTERN = /<cite\s+(?:cardId="[^"]*"|materialId="[^"]*")\s*>([^<]*)<\/cite>/g;
+const CITE_MARKDOWN_STREAMING_PATTERN = /\[([^\]]+)\]\((?:card_[a-f0-9]{8,}|mat_[a-f0-9]{8,})\)/g;
 
 /**
- * 流式增量期间剥离 <cite> 标签但保留标题文本，避免标签原样显示造成闪烁。
- * @param {string} text - 流式累积的原始文本（可能含 <cite> 标签）
- * @returns {string} 剥离标签后的文本（保留标题）
+ * 流式增量期间剥离引用标记但保留标题文本，避免标记原样显示造成闪烁。
+ * 支持两种格式：<cite> 标签（旧）和 markdown 链接（新）。
+ * @param {string} text - 流式累积的原始文本（可能含引用标记）
+ * @returns {string} 剥离标记后的文本（保留标题）
  * @author fxbin
  */
 function stripCiteTagsForStreaming(text) {
   if (typeof text !== 'string' || text.length === 0) return text;
-  return text.replace(CITE_TAG_STREAMING_PATTERN, (_match, title) => title || '');
+  let work = text.replace(CITE_TAG_STREAMING_PATTERN, (_match, title) => title || '');
+  work = work.replace(CITE_MARKDOWN_STREAMING_PATTERN, (_match, title) => title || '');
+  return work;
 }
 
 /**
@@ -723,8 +728,9 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
               const proposals = Array.isArray(event.proposals) ? event.proposals : [];
               if (proposals.length > 0) {
                 const batchId = typeof event.batchId === 'string' ? event.batchId : '';
+                const fallback = event.fallback === true;
                 setChatMessages((prev) => prev.map((message) => (message.id === assistantId
-                  ? { ...message, proposalBatch: { batchId, proposals } }
+                  ? { ...message, proposalBatch: { batchId, proposals, ...(fallback ? { fallback: true } : {}) } }
                   : message)));
               }
               break;

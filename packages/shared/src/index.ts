@@ -570,11 +570,14 @@ export type ProposedOperation =
  * 一批 Agent 提议操作，承载于流式 proposal_batch 事件下发到前端。
  * batchId 仅作为审计标识使用，服务端不持久化 batch 状态，
  * 前端在 accept 请求中需重新提交 operations 原文。
+ * fallback=true 表示该 batch 来自兜底解析（LLM 未按 proposal-batch 协议输出），
+ * 前端应展示降级提示条告知用户内容可能粗糙。
  * @author fxbin
  */
 export interface ProposalBatch {
   batchId: string;
   proposals: ProposedOperation[];
+  fallback?: boolean;
 }
 
 /**
@@ -1812,7 +1815,7 @@ export type AgentStreamEvent =
   | { type: 'aux_start' }
   | { type: 'aux_delta'; delta: string }
   | { type: 'aux_end'; text: string }
-  | { type: 'proposal_batch'; batchId: string; proposals: ProposedOperation[] }
+  | { type: 'proposal_batch'; batchId: string; proposals: ProposedOperation[]; fallback?: boolean }
   | { type: 'error'; message: string };
 
 /**
