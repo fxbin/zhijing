@@ -88,6 +88,27 @@ const STREAM_EVENT = Object.freeze({
 });
 
 /**
+ * <cite> 标签正则：流式增量期间用于剥离标签但保留标题文本。
+ *
+ * 后端 message_end 会把 <cite> 替换为 [n] 占位符并下发 citations 数组，
+ * 但流式增量期间 <cite> 标签会原样显示，造成闪烁。本函数在 syncAssistantContent
+ * 时调用，把 <cite cardId="xxx">标题</cite> 替换为「标题」纯文本，保证流式
+ * 过程中文本干净；message_end 后由后端清理后的文本（含 [n] 占位符）覆盖。
+ */
+const CITE_TAG_STREAMING_PATTERN = /<cite\s+(?:cardId="[^"]*"|materialId="[^"]*")\s*>([^<]*)<\/cite>/g;
+
+/**
+ * 流式增量期间剥离 <cite> 标签但保留标题文本，避免标签原样显示造成闪烁。
+ * @param {string} text - 流式累积的原始文本（可能含 <cite> 标签）
+ * @returns {string} 剥离标签后的文本（保留标题）
+ * @author fxbin
+ */
+function stripCiteTagsForStreaming(text) {
+  if (typeof text !== 'string' || text.length === 0) return text;
+  return text.replace(CITE_TAG_STREAMING_PATTERN, (_match, title) => title || '');
+}
+
+/**
  * 编排模式中文标签映射，供 ChatDock 头部展示。
  */
 const ORCHESTRATOR_MODE_LABELS = Object.freeze({
@@ -553,13 +574,15 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
 
     /**
      * 把累积文本写回 assistant 占位消息。
+     * 流式增量期间剥离 <cite> 标签但保留标题文本，避免标签原样显示造成闪烁。
      * @param {string} nextText - 最新文本快照
      * @param {string} [nextReasoning] - 最新推理快照
      */
     function syncAssistantContent(nextText, nextReasoning) {
       if (!isStreamActive()) return;
+      const displayText = stripCiteTagsForStreaming(nextText);
       setChatMessages((prev) => prev.map((message) => (message.id === assistantId
-        ? { ...message, text: nextText, reasoning: nextReasoning ?? assistantReasoning }
+        ? { ...message, text: displayText, reasoning: nextReasoning ?? assistantReasoning }
         : message)));
     }
 
@@ -630,10 +653,13 @@ export function useStreamChat({ selectedWorkspaceId, apiStatus, setActivity, t }
               break;
             case STREAM_EVENT.MESSAGE_END:
               if (typeof event.text === 'string' && event.text.length > 0) {
-                if (assistantText.length === 0) {
-                  assistantText = event.text;
-                  syncAssistantContent(assistantText);
-                }
+                assistantText = event.text;
+                syncAssistantContent(assistantText);
+              }
+              if (Array.isArray(event.citations) && event.citations.length > 0) {
+                setChatMessages((prev) => prev.map((message) => (message.id === assistantId
+                  ? { ...message, citations: event.citations }
+                  : message)));
               }
               if (event.usage && typeof event.usage === 'object') {
                 if (typeof event.usage.inputTokens === 'number') {

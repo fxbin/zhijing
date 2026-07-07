@@ -868,6 +868,7 @@ function App() {
         currentSessionId={currentSessionId}
         proposalBatchState={proposalBatchState}
         onOpenArtifact={openArtifact}
+        onOpenCard={openCardDrawer}
         onOpenMaterial={openMaterialDrawer}
         onSelectWorkspace={(id) => {
           if (id) {

@@ -15,7 +15,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
-import type { AgentStreamEvent, CardType, OrchestratorDecision, ProposedOperation } from '@zhijing/shared';
+import type { AgentStreamEvent, CardType, KnowledgeCitation, OrchestratorDecision, ProposedOperation } from '@zhijing/shared';
 import type { ToolCallSummary } from '@zhijing/core';
 import { getDefaultPiProvider } from '@zhijing/pi-runtime';
 import { interceptInStream } from '@zhijing/core';
@@ -362,8 +362,13 @@ export function startOrchestratorSession(
         if (wire.type === 'message_end' && typeof wire.text === 'string') {
           mainAssistantText = wire.text;
           const batch = extractProposalBatchFromText(wire.text) ?? extractPlainTextSuggestions(wire.text);
-          const cleanText = stripProposalBatchBlock(wire.text);
-          callbacks.onEvent({ ...wire, text: cleanText });
+          const proposalStripped = stripProposalBatchBlock(wire.text);
+          const { citations, text: citeStripped } = extractCitationsFromText(proposalStripped);
+          callbacks.onEvent({
+            ...wire,
+            text: citeStripped,
+            ...(citations.length > 0 ? { citations } : {}),
+          });
           if (batch) {
             callbacks.onEvent({
               type: 'proposal_batch',
@@ -489,7 +494,8 @@ export function startOrchestratorSession(
             callbacks.onEvent({ type: 'aux_delta', delta: wire.delta });
           }
           if (wire.type === 'message_end' && typeof wire.text === 'string') {
-            probeText = wire.text;
+            const { text: probeCleanText } = extractCitationsFromText(wire.text);
+            probeText = probeCleanText;
           }
         }
       });
@@ -728,6 +734,65 @@ function stripProposalBatchBlock(text: string): string {
   if (typeof text !== 'string' || text.length === 0) return text;
   const stripped = text.replace(PROPOSAL_BATCH_BLOCK_GLOBAL_PATTERN, '');
   return stripped.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/**
+ * <cite> 标签全局正则：匹配所有 cardId 或 materialId 引用标记。
+ *
+ * 捕获组：
+ * - group(1): cardId 属性值（可能为 undefined）
+ * - group(2): materialId 属性值（可能为 undefined）
+ * - group(3): 标签内标题文本
+ */
+const CITE_TAG_GLOBAL_PATTERN = /<cite\s+(?:cardId="([^"]*)"|materialId="([^"]*)")\s*>([^<]*)<\/cite>/g;
+
+/**
+ * 从展示文本中提取所有 <cite> 引用标记，生成 KnowledgeCitation 数组，
+ * 并将正文中的 <cite> 标签替换为 [n] 占位符（前端渲染为可点击锚点）。
+ *
+ * 用途：Agent 在 systemPrompt 指示下用 <cite cardId="xxx">标题</cite> 标记
+ * 引用的卡片/资料；本函数在转发 message_end 事件前调用，把结构化引用
+ * 从正文中剥离为独立 citations 数组，前端用 SourceCitation 组件渲染为
+ * 可交互卡片，正文中的 [n] 作为可点击锚点。
+ *
+ * 同一卡片多次引用时，每次出现都生成一条独立的 citation（id 加序号后缀），
+ * 保证 [n] 锚点与 citations 数组一一对应。
+ *
+ * 容错策略：
+ * - 无 <cite> 标签时返回 { citations: [], text }（原文本不变）
+ * - cardId/materialId 都缺失时保留原文不做替换（降级为纯文本显示）
+ *
+ * @param text - Agent 原始响应文本
+ * @returns 提取出的 citations 数组（可能为空）和剥离标记后的文本
+ * @author fxbin
+ */
+function extractCitationsFromText(text: string): { citations: KnowledgeCitation[]; text: string } {
+  if (typeof text !== 'string' || text.length === 0) {
+  return { citations: [], text };
+  }
+  const citations: KnowledgeCitation[] = [];
+  let citeIndex = 0;
+  const replaced = text.replace(CITE_TAG_GLOBAL_PATTERN, (match, cardId, materialId, title) => {
+  const trimmedTitle = typeof title === 'string' ? title.trim() : '';
+  const hasCardId = typeof cardId === 'string' && cardId.length > 0;
+  const hasMaterialId = typeof materialId === 'string' && materialId.length > 0;
+  if (!hasCardId && !hasMaterialId) {
+  return match;
+  }
+  citeIndex += 1;
+  const kind: 'card' | 'material' = hasCardId ? 'card' : 'material';
+  const idValue = hasCardId ? cardId : materialId;
+  citations.push({
+  id: `citation:${kind}:${idValue}:${citeIndex}`,
+  kind,
+  title: trimmedTitle || idValue,
+  preview: '',
+  ...(hasCardId ? { cardId } : {}),
+  ...(hasMaterialId ? { materialId } : {}),
+  });
+  return `[${citeIndex}]`;
+  });
+  return { citations, text: replaced };
 }
 
 /**

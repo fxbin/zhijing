@@ -159,6 +159,7 @@ export function fromStreamMessage(message) {
     isStreaming: Boolean(message.isStreaming),
     auxContent: message.auxContent ?? '',
     error: message.error ?? '',
+    citations: message.citations ?? EMPTY_CITATIONS,
     proposalBatch: message.proposalBatch ?? null,
     agentRole: message.agentRole ?? '',
     timestamp: extractTimestampFromId(message.id),
