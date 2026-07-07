@@ -5860,6 +5860,31 @@ button { cursor: pointer; }
   box-shadow: 0 0 0 3px var(--scholar-soft);
 }
 
+.cite-anchor {
+  color: var(--scholar);
+  text-decoration: none;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.875em;
+  vertical-align: baseline;
+  margin: 0 1px;
+}
+
+.cite-anchor:hover {
+  text-decoration: underline;
+}
+
+@keyframes citation-flash-pulse {
+  0% { box-shadow: 0 0 0 0 var(--scholar-soft); }
+  50% { box-shadow: 0 0 0 4px var(--scholar-soft); }
+  100% { box-shadow: 0 0 0 0 var(--scholar-soft); }
+}
+
+.citation-flash {
+  animation: citation-flash-pulse 1.5s ease-out;
+  border-radius: 9px;
+}
+
 .citation-header {
   display: flex;
   align-items: center;

@@ -332,6 +332,8 @@ export function startOrchestratorSession(
   async function runMainAgent() {
     const supportsRoleOverride = credentials.provider === getDefaultPiProvider();
     const selectedRole = selectAgentRole(intent);
+    const knownCards = new Map<string, string>();
+    const knownMaterials = new Map<string, string>();
     const agentOptions: WorkspaceAgentOptions = {
       provider: credentials.provider,
       modelId: credentials.model,
@@ -363,7 +365,8 @@ export function startOrchestratorSession(
           mainAssistantText = wire.text;
           const batch = extractProposalBatchFromText(wire.text) ?? extractPlainTextSuggestions(wire.text);
           const proposalStripped = stripProposalBatchBlock(wire.text);
-          const { citations, text: citeStripped } = extractCitationsFromText(proposalStripped);
+          const normalized = normalizeBareCardIds(proposalStripped, knownCards, knownMaterials);
+          const { citations, text: citeStripped } = extractCitationsFromText(normalized);
           callbacks.onEvent({
             ...wire,
             text: citeStripped,
@@ -388,6 +391,9 @@ export function startOrchestratorSession(
             resultText: wire.result,
           });
           mainToolCallCount += 1;
+          if (!wire.isError && typeof wire.result === 'string') {
+            populateKnownIdsFromToolResult(wire.toolName, wire.result, knownCards, knownMaterials);
+          }
         }
 
         if (wire.type === 'turn_end' && currentDecision && turnToolCalls.length > 0) {
@@ -737,6 +743,118 @@ function stripProposalBatchBlock(text: string): string {
 }
 
 /**
+ * 裸 ID 正则：匹配 card_ 或 mat_ 前缀 + 8 位以上十六进制的 ID。
+ *
+ * 用于兜底识别 LLM 未用 <cite> 标签包裹、直接在正文中输出的裸 ID（如 card_d2bfca15）。
+ * card_ / mat_ 前缀 + 8 位以上十六进制在自然中文/英文正文里几乎不会自然出现，
+ * 误判风险极低。
+ */
+const BARE_ID_PATTERN = /(?:card|mat)_[a-f0-9]{8,}/g;
+
+/**
+ * 卡片 ID 提取正则：从 search_cards 工具结果文本中提取 cardId 与标题。
+ *
+ * 工具输出格式：`- (type) title claim\n  body (cardId=card_xxx)`
+ * 本正则匹配行尾的 (cardId=xxx) 并回溯提取行首标题。
+ */
+const CARD_LINE_PATTERN = /^- \((\w+)\) (.+?)(?:\s\[[^\]]*\])*\n\s+.+?\(cardId=(card_[a-f0-9]+)\)$/gm;
+
+/**
+ * 资料 ID 提取正则：从 search_materials 工具结果文本中提取 materialId 与标题。
+ *
+ * 工具输出格式：`- title [platform][parseStatus] (materialId=mat_xxx)\n  preview`
+ */
+const MATERIAL_LINE_PATTERN = /^- (.+?)(?:\s\[[^\]]*\])*\s\(materialId=(mat_[a-f0-9]+)\)$/gm;
+
+/**
+ * 从工具返回结果中提取已知的卡片/资料 ID 与标题，写入会话级缓存。
+ *
+ * 当 LLM 调用 search_cards / search_materials 工具后，工具结果文本中包含
+ * 所有检索到的卡片/资料 ID 与标题。本函数解析这些信息，填充到 knownCards /
+ * knownMaterials Map 中，供 normalizeBareCardIds 做裸 ID 兜底转换时查标题。
+ *
+ * @param toolName - 工具名称（search_cards / search_materials）
+ * @param resultText - 工具返回的文本结果
+ * @param knownCards - 会话级卡片缓存（id → title）
+ * @param knownMaterials - 会话级资料缓存（id → title）
+ * @author fxbin
+ */
+function populateKnownIdsFromToolResult(
+  toolName: string,
+  resultText: string,
+  knownCards: Map<string, string>,
+  knownMaterials: Map<string, string>,
+): void {
+  if (toolName === 'search_cards') {
+  let match = CARD_LINE_PATTERN.exec(resultText);
+  while (match !== null) {
+  const title = match[2]?.trim();
+  const id = match[3];
+  if (id && title) {
+  knownCards.set(id, title);
+  }
+  match = CARD_LINE_PATTERN.exec(resultText);
+  }
+  CARD_LINE_PATTERN.lastIndex = 0;
+  return;
+  }
+  if (toolName === 'search_materials') {
+  let match = MATERIAL_LINE_PATTERN.exec(resultText);
+  while (match !== null) {
+  const title = match[1]?.trim();
+  const id = match[2];
+  if (id && title) {
+  knownMaterials.set(id, title);
+  }
+  match = MATERIAL_LINE_PATTERN.exec(resultText);
+  }
+  MATERIAL_LINE_PATTERN.lastIndex = 0;
+  return;
+  }
+}
+
+/**
+ * 将正文中裸露的 card_xxx / mat_xxx ID 归一化为 <cite> 标签。
+ *
+ * 当 LLM 不遵守 <cite> 语法、直接在正文中输出 `卡片 card_d2bfca15` 时，
+ * 本函数用 BARE_ID_PATTERN 匹配裸 ID，查 knownCards / knownMaterials 获取标题，
+ * 命中则替换为 <cite cardId="xxx">真实标题</cite>，未命中则保留原文不转换。
+ *
+ * 白名单策略：只转换会话内 search_cards / search_materials 工具返回过的合法 ID，
+ * 避免误判 LLM 编造的 ID。死链接比纯文本更伤信任，因此宁可不转换。
+ *
+ * @param text - 待处理的文本
+ * @param knownCards - 会话级卡片缓存（id → title）
+ * @param knownMaterials - 会话级资料缓存（id → title）
+ * @returns 归一化后的文本（裸 ID 已尽可能替换为 <cite> 标签）
+ * @author fxbin
+ */
+function normalizeBareCardIds(
+  text: string,
+  knownCards: Map<string, string>,
+  knownMaterials: Map<string, string>,
+): string {
+  if (typeof text !== 'string' || text.length === 0) return text;
+  return text.replace(BARE_ID_PATTERN, (match) => {
+  if (match.startsWith('card_')) {
+  const title = knownCards.get(match);
+  if (title) {
+  return `<cite cardId="${match}">${title}</cite>`;
+  }
+  return match;
+  }
+  if (match.startsWith('mat_')) {
+  const title = knownMaterials.get(match);
+  if (title) {
+  return `<cite materialId="${match}">${title}</cite>`;
+  }
+  return match;
+  }
+  return match;
+  });
+}
+
+/**
  * <cite> 标签全局正则：匹配所有 cardId 或 materialId 引用标记。
  *
  * 捕获组：
@@ -772,6 +890,7 @@ function extractCitationsFromText(text: string): { citations: KnowledgeCitation[
   }
   const citations: KnowledgeCitation[] = [];
   let citeIndex = 0;
+  const idToIndex = new Map<string, number>();
   const replaced = text.replace(CITE_TAG_GLOBAL_PATTERN, (match, cardId, materialId, title) => {
   const trimmedTitle = typeof title === 'string' ? title.trim() : '';
   const hasCardId = typeof cardId === 'string' && cardId.length > 0;
@@ -779,9 +898,15 @@ function extractCitationsFromText(text: string): { citations: KnowledgeCitation[
   if (!hasCardId && !hasMaterialId) {
   return match;
   }
-  citeIndex += 1;
   const kind: 'card' | 'material' = hasCardId ? 'card' : 'material';
   const idValue = hasCardId ? cardId : materialId;
+  const idKey = `${kind}:${idValue}`;
+  const existing = idToIndex.get(idKey);
+  if (existing !== undefined) {
+  return `[${existing}]`;
+  }
+  citeIndex += 1;
+  idToIndex.set(idKey, citeIndex);
   citations.push({
   id: `citation:${kind}:${idValue}:${citeIndex}`,
   kind,

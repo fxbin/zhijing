@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCardTypeLabel } from '../utils/i18nLabels';
-import { renderMarkdown } from '../utils/markdown';
+import { linkifyCiteAnchors, renderMarkdown } from '../utils/markdown';
 import { copyTextToClipboard } from '../utils/clipboard';
 import { BADGE_CAPABILITY_IDS } from '../constants/capabilities';
 import SourceCitation from './SourceCitation';
@@ -320,6 +320,36 @@ export default function ChatMessageItem({
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const copyResetTimerRef = useRef(null);
+  const [expandedCitations, setExpandedCitations] = useState(() => new Set());
+
+  /**
+   * 处理正文 [n] 锚点点击：滚动到对应 SourceCitation + 高亮 + 自动展开。
+   *
+   * 通过事件委托捕获 .cite-anchor 点击，取出 data-cite-index，
+   * 滚动到 id=citation-{index} 的元素，添加临时高亮 class，
+   * 并将该编号加入 expandedCitations 触发 SourceCitation 展开。
+   *
+   * @param {Event} event - 点击事件
+   * @author fxbin
+   */
+  const handleCiteAnchorClick = (event) => {
+    const anchor = event.target.closest('.cite-anchor');
+    if (!anchor) return;
+    event.preventDefault();
+    const index = Number(anchor.getAttribute('data-cite-index'));
+    if (!Number.isFinite(index) || index < 1) return;
+    setExpandedCitations((prev) => {
+      const next = new Set(prev);
+      next.add(index);
+      return next;
+    });
+    const target = document.getElementById(`citation-${index}`);
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.classList.add('citation-flash');
+      setTimeout(() => target.classList.remove('citation-flash'), 1500);
+    }
+  };
 
   /**
    * 流式态变化时自动控制工具调用区块的展开/折叠：
@@ -467,7 +497,8 @@ export default function ChatMessageItem({
           <div className="chat-message-text-wrapper">
             <div
               className="chat-message-text"
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(item.text) }}
+              onClick={handleCiteAnchorClick}
+              dangerouslySetInnerHTML={{ __html: linkifyCiteAnchors(renderMarkdown(item.text)) }}
             />
             {!item.isStreaming && (
               <div className="chat-message-actions">
@@ -494,16 +525,30 @@ export default function ChatMessageItem({
             {item.citations.length === 0 ? (
               <p>{t('chat.noCitations')}</p>
             ) : (
-              item.citations.slice(0, 6).map((citation) => (
-                <SourceCitation
-                  key={citation.id}
-                  citation={citation}
-                  cards={cards}
-                  materials={materials}
-                  onOpenMaterial={onOpenMaterial}
-                  onOpenCard={onOpenCard}
-                />
-              ))
+              item.citations.slice(0, 6).map((citation, displayIndex) => {
+                const citeIndex = displayIndex + 1;
+                return (
+                  <div id={`citation-${citeIndex}`} key={citation.id}>
+                    <SourceCitation
+                      citation={citation}
+                      cards={cards}
+                      materials={materials}
+                      onOpenMaterial={onOpenMaterial}
+                      onOpenCard={onOpenCard}
+                      expanded={expandedCitations.has(citeIndex)}
+                      onExpandedChange={(value) => setExpandedCitations((prev) => {
+                        const next = new Set(prev);
+                        if (value) {
+                          next.add(citeIndex);
+                        } else {
+                          next.delete(citeIndex);
+                        }
+                        return next;
+                      })}
+                    />
+                  </div>
+                );
+              })
             )}
           </div>
         )}

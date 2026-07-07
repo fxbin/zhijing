@@ -3,7 +3,7 @@
  * @module components/SourceCitation
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { ChevronDown, ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -11,17 +11,22 @@ import { CITATION_SNIPPET_LIMIT } from '../constants/options';
 
 /**
  * 来源引用卡片，支持展开查看来源片段。
+ *
+ * expanded 状态由父组件管理（受控模式），便于父组件在用户点击正文 [n] 锚点时
+ * 自动展开对应的 SourceCitation。
+ *
  * @param {object} props - 组件属性
  * @param {object} props.citation - 引用对象（kind/cardId/materialId/title/preview/sourceUrl）
  * @param {Array<object>} props.cards - 卡片数组（用于查找引用源）
  * @param {Array<object>} props.materials - 材料数组（用于查找引用源）
  * @param {(material: object) => void} [props.onOpenMaterial] - 打开资料详情回调
  * @param {(card: object) => void} [props.onOpenCard] - 打开卡片详情回调
+ * @param {boolean} [props.expanded=false] - 是否展开（受控）
+ * @param {(value: boolean) => void} [props.onExpandedChange] - 展开/收起回调
  * @returns {JSX.Element} 引用卡片
  */
-export default function SourceCitation({ citation, cards, materials, onOpenMaterial, onOpenCard }) {
+export default function SourceCitation({ citation, cards, materials, onOpenMaterial, onOpenCard, expanded = false, onExpandedChange }) {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
   const fullBody = useMemo(() => {
     if (citation.kind === 'card' && citation.cardId) {
       const card = cards.find((item) => item.id === citation.cardId);
@@ -62,18 +67,26 @@ export default function SourceCitation({ citation, cards, materials, onOpenMater
     }
   };
 
+  const handleToggle = () => {
+    if (hasBody && typeof onExpandedChange === 'function') {
+      onExpandedChange(!expanded);
+    }
+  };
+
+  const displayTitle = linkedCard?.title || linkedMaterial?.title || citation.title;
+
   return (
     <article className={`citation-item${expanded ? ' expanded' : ''}`}>
       <div className="citation-header">
         <button
           className="citation-toggle"
           type="button"
-          onClick={() => hasBody && setExpanded((value) => !value)}
+          onClick={handleToggle}
           aria-expanded={expanded}
           disabled={!hasBody}
         >
           <span className="citation-kind">{t(`sourceCitation.kind.${citation.kind}`, { defaultValue: citation.kind })}</span>
-          <strong>{citation.title}</strong>
+          <strong>{displayTitle}</strong>
           {hasBody && <ChevronDown size={15} className="citation-chevron" />}
         </button>
         {canOpenDetail && (
