@@ -12627,6 +12627,7 @@ export function archiveCard(id: string): ArchiveItemResult {
   const card = repository.findCard(id);
   if (!card) throw new KnowledgeCoreError('Card not found.', 404);
   repository.archiveCard(id);
+  reconcileWorkspaceStats(card.workspaceId);
   return { id, workspaceId: card.workspaceId, kind: 'card', archived: true };
 }
 
@@ -12640,6 +12641,7 @@ export function unarchiveCard(id: string): ArchiveItemResult {
   const card = repository.findCard(id);
   if (!card) throw new KnowledgeCoreError('Card not found.', 404);
   repository.unarchiveCard(id);
+  reconcileWorkspaceStats(card.workspaceId);
   return { id, workspaceId: card.workspaceId, kind: 'card', archived: false };
 }
 
