@@ -23,7 +23,9 @@ COPY packages/agent/package.json ./packages/agent/
 # 不复制 lock 文件并在容器内重新生成：规避 npm optional dependencies bug（npm/cli#4828）
 # 该 bug 在跨平台 lock 文件场景下会漏装目标平台的 native binding（rolldown / lightningcss / esbuild 等），
 # 导致容器内 vite build 报 Cannot find native binding
-RUN npm install --no-audit --no-fund --include=optional
+# 使用 npmmirror 国内镜像源加速依赖下载
+RUN npm install --no-audit --no-fund --include=optional \
+        --registry=https://registry.npmmirror.com
 
 # 复制源码
 COPY . .
@@ -32,7 +34,8 @@ COPY . .
 RUN npm run build
 
 # 剪掉 devDependencies，仅保留生产依赖
-RUN npm prune --omit=dev
+# 保持与 install 相同的镜像源，避免 prune 时回退到官方源
+RUN npm prune --omit=dev --registry=https://registry.npmmirror.com
 
 # ============ 阶段2：运行时镜像 ============
 FROM node:22-bookworm-slim AS runner
