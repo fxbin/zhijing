@@ -40,6 +40,9 @@ RUN npm prune --omit=dev --registry=https://registry.npmmirror.com
 # ============ 阶段2：运行时镜像 ============
 FROM node:22-bookworm-slim AS runner
 
+# 替换为阿里云镜像源，加速 apt-get 下载
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
+
 ENV NODE_ENV=production
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 ENV PLAYWRIGHT_SKIP_BROWSER_GC=1
@@ -80,7 +83,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 安装 Python Playwright + Chromium 浏览器
 # 使用国内镜像加速：pip 走腾讯云，Chromium 二进制走 npmmirror
 # 服务器在腾讯云内网时腾讯云镜像最快；其他网络环境也优于官方源
-RUN python3 -m pip install --no-cache-dir --break-system-packages \
+RUN python3 -m pip install --no-cache-dir --break-system-packages --timeout 600 \
         -i https://mirrors.cloud.tencent.com/pypi/simple \
         playwright==1.49.1 \
     && PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright \
@@ -96,7 +99,7 @@ COPY --from=builder /app/apps ./apps
 COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/scripts ./scripts
 
-# 数据目录（SQLite 文件，Zeabur 持久卷挂载点）
+# 数据目录（SQLite 文件，持久卷挂载点）
 RUN mkdir -p /app/.data
 VOLUME ["/app/.data"]
 
