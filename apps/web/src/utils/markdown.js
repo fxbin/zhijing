@@ -68,7 +68,7 @@ const CITE_ANCHOR_PATTERN = /\[(\d+)\]/g;
  */
 export function linkifyCiteAnchors(html) {
   if (typeof html !== 'string' || html.length === 0) return html;
-  if (typeof document === 'undefined') return html;
+  if (typeof document === 'undefined' || typeof DOMParser === 'undefined') return html;
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const walker = document.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
   acceptNode(node) {
