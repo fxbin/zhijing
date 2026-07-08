@@ -11,7 +11,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 WORKDIR /app
 
 # 先复制 package 文件，利用 Docker 层缓存
-COPY package.json package-lock.json* ./
+COPY package.json ./
 COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
 COPY packages/core/package.json ./packages/core/
@@ -20,10 +20,10 @@ COPY packages/pi-runtime/package.json ./packages/pi-runtime/
 COPY packages/agent/package.json ./packages/agent/
 
 # 安装全量依赖（含 devDependencies，构建需要）
-# 显式安装 rolldown linux native binding，规避 npm optional dependencies bug（npm/cli#4828）
-# 该 bug 在跨平台 lock 文件场景下会漏装目标平台的 native binding，导致 vite build 报 Cannot find native binding
-RUN npm install --no-audit --no-fund --include=optional && \
-    npm install --no-audit --no-fund --no-save @rolldown/binding-linux-x64-gnu@1.0.3
+# 不复制 lock 文件并在容器内重新生成：规避 npm optional dependencies bug（npm/cli#4828）
+# 该 bug 在跨平台 lock 文件场景下会漏装目标平台的 native binding（rolldown / lightningcss / esbuild 等），
+# 导致容器内 vite build 报 Cannot find native binding
+RUN npm install --no-audit --no-fund --include=optional
 
 # 复制源码
 COPY . .
