@@ -49,6 +49,9 @@ export type {
 export type {
   FetchWebPageDetails,
 } from './tools/fetch-web-page.js';
+export {
+  fetchUrlWithFallback,
+} from './tools/web-fetch-adapter.js';
 export type {
   DeepSearchDetails,
   DeepSearchSource,

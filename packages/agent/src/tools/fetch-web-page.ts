@@ -1,7 +1,7 @@
 import { Type } from '@zhijing/pi-runtime';
-import { fetchUrlAsMarkdown } from '@zhijing/core';
 import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core';
 import { sanitizeForLlmContext } from './sanitize.js';
+import { fetchUrlWithFallback } from './web-fetch-adapter.js';
 
 const FetchWebPageParameters = Type.Object({
   url: Type.String({ description: '要抓取正文的网页 URL，必须是 http/https' }),
@@ -61,7 +61,7 @@ export function createFetchWebPageTool(): AgentTool<typeof FetchWebPageParameter
       const url = params.url.trim();
       const maxLength = clampPageTextLength(params.maxLength);
       try {
-        const fetched = await fetchUrlAsMarkdown(url);
+        const fetched = await fetchUrlWithFallback(url);
         const details: FetchWebPageDetails = {
           ok: true,
           url,

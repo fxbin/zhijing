@@ -1,8 +1,8 @@
 import { Type } from '@zhijing/pi-runtime';
-import { fetchUrlAsMarkdown } from '@zhijing/core';
 import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core';
 import { sanitizeForLlmContext } from './sanitize.js';
 import { searchWeb, type WebSearchResultItem } from './web-search.js';
+import { fetchUrlWithFallback } from './web-fetch-adapter.js';
 
 const DeepSearchParameters = Type.Object({
   question: Type.String({ description: '需要深度搜索的问题，必填' }),
@@ -177,7 +177,7 @@ function buildGaps(sources: DeepSearchSource[], fetchTopK: number): string[] {
 
 async function fetchSourcePreview(source: DeepSearchSource): Promise<DeepSearchSource> {
   try {
-    const fetched = await fetchUrlAsMarkdown(source.url);
+    const fetched = await fetchUrlWithFallback(source.url);
     return {
       ...source,
       title: normalizeText(fetched.title || source.title, 160),
@@ -246,11 +246,23 @@ export function createDeepSearchTool(): AgentTool<typeof DeepSearchParameters, D
       const fetchTopK = clampInteger(params.fetchTopK, DEFAULT_FETCH_TOP_K, 0, 4);
       try {
         const queries = buildSearchQueries(question, params.queries, maxQueries);
-        const searchResults = (await Promise.all(
-          queries.map((query) => searchWeb(query, SEARCH_LIMIT_PER_QUERY)
-            .then((outcome) => outcome.results)
-            .catch(() => [] as WebSearchResultItem[])),
-        )).flat();
+        const searchOutcomes = await Promise.all(
+          queries.map((query) => searchWeb(query, SEARCH_LIMIT_PER_QUERY).catch((error) => ({
+            results: [] as WebSearchResultItem[],
+            provider: 'none',
+            usedFallback: false,
+            errorMessage: error instanceof Error ? error.message : String(error),
+          }))),
+        );
+        const searchResults = searchOutcomes.flatMap((o) => o.results);
+        const searchErrors = searchOutcomes
+          .map((o) => o.errorMessage)
+          .filter((m): m is string => Boolean(m));
+
+        if (searchResults.length === 0 && searchErrors.length > 0) {
+          throw new Error(`所有搜索查询均失败：${searchErrors.join('；')}`);
+        }
+
         const sources = mergeSearchResults(searchResults, maxSources);
         const fetchedSources = await Promise.all(
           sources.map((source, index) => index < fetchTopK ? fetchSourcePreview(source) : source),
@@ -258,6 +270,11 @@ export function createDeepSearchTool(): AgentTool<typeof DeepSearchParameters, D
         const claims = extractClaims(fetchedSources);
         const conflicts = detectConflictHints(claims);
         const gaps = buildGaps(fetchedSources, fetchTopK);
+
+        if (searchErrors.length > 0 && searchResults.length > 0) {
+          gaps.push(`${searchErrors.length}/${queries.length} 个查询失败，结果可能不完整：${searchErrors[0]}`);
+        }
+
         const details: DeepSearchDetails = {
           ok: true,
           question,
