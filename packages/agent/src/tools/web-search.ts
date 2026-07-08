@@ -51,9 +51,25 @@ const RESULT_SNIPPET_MAX_LENGTH = 720;
 const DETAIL_SNIPPET_MAX_LENGTH = 480;
 
 /**
- * 默认使用 Jina AI Search。可通过 ZHIJING_WEB_SEARCH_BASE_URL 覆盖为兼容接口。
+ * Jina Search 默认端点。可通过 ZHIJING_WEB_SEARCH_BASE_URL 覆盖为兼容接口。
  */
 const DEFAULT_SEARCH_BASE_URL = 'https://s.jina.ai/';
+
+/**
+ * Tavily Search REST API 端点。
+ */
+const TAVILY_SEARCH_ENDPOINT = 'https://api.tavily.com/search';
+
+/**
+ * Tavily search_depth 参数：basic 快速、advanced 深度。
+ * 兜底场景用 basic 控制延迟与配额消耗。
+ */
+const TAVILY_SEARCH_DEPTH = 'basic';
+
+/**
+ * Tavily topic 参数：general 通用搜索。
+ */
+const TAVILY_TOPIC_GENERAL = 'general';
 
 /**
  * 搜索请求 UA 标识。
@@ -69,6 +85,13 @@ const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
  * 内存缓存最大条目数，避免无界增长。
  */
 const SEARCH_CACHE_MAX_SIZE = 64;
+
+/**
+ * Provider 名称枚举常量，用于 details.provider 字段与日志。
+ */
+const PROVIDER_JINA = 'jina-search';
+const PROVIDER_TAVILY = 'tavily-search';
+const PROVIDER_NONE = 'none';
 
 interface SearchCacheEntry {
   results: WebSearchResultItem[];
@@ -117,6 +140,16 @@ export interface WebSearchDetails {
   errorMessage?: string;
 }
 
+/**
+ * searchWeb 的返回类型，携带实际使用的 provider 与是否走了兜底。
+ */
+export interface WebSearchOutcome {
+  results: WebSearchResultItem[];
+  provider: string;
+  usedFallback: boolean;
+  errorMessage?: string;
+}
+
 export function clampWebSearchLimit(limit: number | undefined): number {
   if (typeof limit !== 'number' || !Number.isFinite(limit)) return DEFAULT_RESULT_LIMIT;
   return Math.max(1, Math.min(MAX_RESULT_LIMIT, Math.floor(limit)));
@@ -127,7 +160,7 @@ function truncateText(value: string, maxLength: number): string {
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}…` : normalized;
 }
 
-function buildSearchUrl(query: string): URL {
+function buildJinaSearchUrl(query: string): URL {
   const configuredBaseUrl = process.env.ZHIJING_WEB_SEARCH_BASE_URL ?? DEFAULT_SEARCH_BASE_URL;
   const url = new URL(configuredBaseUrl);
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
@@ -234,49 +267,205 @@ function parseTextResults(text: string, limit: number): WebSearchResultItem[] {
   return normalized ? [normalized] : [];
 }
 
-export async function searchWeb(query: string, limit: number): Promise<WebSearchResultItem[]> {
-  const cacheKey = `${query}::${limit}`;
-  const cached = readSearchCache(cacheKey);
-  if (cached) return cached;
+/**
+ * 将 fetch 异常分类为面向用户的明确错误提示。
+ *
+ * 区分场景：
+ * - 401/403：key 失效或未配置
+ * - 超时（abort）：响应超时
+ * - fetch failed（网络/代理）：网络不通
+ * - 其他：透传 HTTP 状态码
+ */
+function classifyFetchError(error: unknown, provider: string, httpStatus?: number): string {
+  const msg = error instanceof Error ? error.message : String(error);
+  if (error instanceof Error && error.name === 'AbortError') {
+    return `${provider} 搜索响应超时（${WEB_SEARCH_TIMEOUT_MS / 1000}秒），请稍后重试`;
+  }
+  if (httpStatus === 401 || httpStatus === 403) {
+    const envKey = provider === PROVIDER_JINA ? 'JINA_API_KEY' : 'TAVILY_API_KEY';
+    return `${provider} API key 失效或未配置，请在 .env 中检查 ${envKey}`;
+  }
+  if (/fetch failed/i.test(msg)) {
+    return `${provider} 搜索请求失败：网络不通或代理异常，请检查代理配置`;
+  }
+  if (httpStatus !== undefined) {
+    return `${provider} 搜索失败：HTTP ${httpStatus}`;
+  }
+  return `${provider} 搜索失败：${msg}`;
+}
+
+/**
+ * Jina Search 实现。走 s.jina.ai，返回 JSON 或文本格式。
+ * 失败时抛出带分类信息的 Error。
+ */
+async function searchWithJina(query: string, limit: number): Promise<WebSearchResultItem[]> {
+  const jinaKey = process.env.JINA_API_KEY;
+  if (!jinaKey) {
+    throw new Error(`${PROVIDER_JINA} API key 失效或未配置，请在 .env 中检查 JINA_API_KEY`);
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), WEB_SEARCH_TIMEOUT_MS);
   try {
     const headers: Record<string, string> = {
       accept: 'application/json,text/plain;charset=utf-8',
       'user-agent': USER_AGENT,
+      authorization: `Bearer ${jinaKey}`,
     };
-    if (process.env.JINA_API_KEY) {
-      headers.authorization = `Bearer ${process.env.JINA_API_KEY}`;
-    }
 
-    const response = await fetch(buildSearchUrl(query), {
+    const response = await fetch(buildJinaSearchUrl(query), {
       signal: controller.signal,
       redirect: 'follow',
       headers,
     });
     if (!response.ok) {
-      throw new Error(`search endpoint returned HTTP ${response.status}.`);
+      throw new Error(classifyFetchError(null, PROVIDER_JINA, response.status));
     }
 
     const text = (await response.text()).slice(0, MAX_RESPONSE_TEXT_LENGTH);
     let results: WebSearchResultItem[];
     try {
       const jsonResults = parseJsonResults(JSON.parse(text), limit);
-      if (jsonResults.length > 0) {
-        results = jsonResults;
-      } else {
-        results = parseTextResults(text, limit);
-      }
+      results = jsonResults.length > 0 ? jsonResults : parseTextResults(text, limit);
     } catch {
       results = parseTextResults(text, limit);
     }
-    if (results.length > 0) {
-      writeSearchCache(cacheKey, results);
-    }
     return results;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(classifyFetchError(error, PROVIDER_JINA));
+    }
+    if (error instanceof Error && /^(jina-search|tavily-search)/.test(error.message)) {
+      throw error;
+    }
+    throw new Error(classifyFetchError(error, PROVIDER_JINA));
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Tavily Search 实现。走 api.tavily.com/search，返回结构化 JSON。
+ * 失败时抛出带分类信息的 Error。
+ */
+async function searchWithTavily(query: string, limit: number): Promise<WebSearchResultItem[]> {
+  const tavilyKey = process.env.TAVILY_API_KEY;
+  if (!tavilyKey) {
+    throw new Error(`${PROVIDER_TAVILY} API key 失效或未配置，请在 .env 中检查 TAVILY_API_KEY`);
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), WEB_SEARCH_TIMEOUT_MS);
+  try {
+    const body = JSON.stringify({
+      api_key: tavilyKey,
+      query,
+      search_depth: TAVILY_SEARCH_DEPTH,
+      topic: TAVILY_TOPIC_GENERAL,
+      max_results: limit,
+      include_answer: false,
+      include_raw_content: false,
+    });
+
+    const response = await fetch(TAVILY_SEARCH_ENDPOINT, {
+      method: 'POST',
+      signal: controller.signal,
+      redirect: 'follow',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+        'user-agent': USER_AGENT,
+      },
+      body,
+    });
+    if (!response.ok) {
+      throw new Error(classifyFetchError(null, PROVIDER_TAVILY, response.status));
+    }
+
+    const text = (await response.text()).slice(0, MAX_RESPONSE_TEXT_LENGTH);
+    const json = JSON.parse(text);
+    const results = parseJsonResults(json, limit);
+    return results;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(classifyFetchError(error, PROVIDER_TAVILY));
+    }
+    if (error instanceof Error && /^(jina-search|tavily-search)/.test(error.message)) {
+      throw error;
+    }
+    throw new Error(classifyFetchError(error, PROVIDER_TAVILY));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * 联网搜索主入口：Jina 优先，Tavily 兜底。
+ *
+ * 编排策略：
+ * 1. 缓存命中直接返回（provider 标记为缓存来源，不区分）
+ * 2. Jina 配置且调用成功 → 返回 Jina 结果
+ * 3. Jina 失败 → 若 Tavily 已配置 → 降级到 Tavily
+ * 4. 两者均不可用 → 抛出明确错误，提示用户检查 key 与网络
+ *
+ * @returns 搜索结果 + 实际使用的 provider + 是否走了兜底
+ * @author fxbin
+ */
+export async function searchWeb(query: string, limit: number): Promise<WebSearchOutcome> {
+  const cacheKey = `${query}::${limit}`;
+  const cached = readSearchCache(cacheKey);
+  if (cached) {
+    return { results: cached, provider: PROVIDER_JINA, usedFallback: false };
+  }
+
+  const jinaConfigured = Boolean(process.env.JINA_API_KEY);
+  const tavilyConfigured = Boolean(process.env.TAVILY_API_KEY);
+
+  if (!jinaConfigured && !tavilyConfigured) {
+    return {
+      results: [],
+      provider: PROVIDER_NONE,
+      usedFallback: false,
+      errorMessage: '未配置搜索 API key，请在 .env 中设置 JINA_API_KEY 或 TAVILY_API_KEY',
+    };
+  }
+
+  const errors: string[] = [];
+
+  if (jinaConfigured) {
+    try {
+      const results = await searchWithJina(query, limit);
+      if (results.length > 0) {
+        writeSearchCache(cacheKey, results);
+      }
+      return { results, provider: PROVIDER_JINA, usedFallback: false };
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  if (tavilyConfigured) {
+    try {
+      const results = await searchWithTavily(query, limit);
+      if (results.length > 0) {
+        writeSearchCache(cacheKey, results);
+      }
+      return { results, provider: PROVIDER_TAVILY, usedFallback: true };
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  const errorMessage = errors.length > 0
+    ? `联网搜索暂不可用：${errors.join('；')}`
+    : '联网搜索暂不可用：Jina 与 Tavily 均未配置或均失败，请检查 API key 与网络';
+
+  return {
+    results: [],
+    provider: PROVIDER_NONE,
+    usedFallback: false,
+    errorMessage,
+  };
 }
 
 function formatResultLine(result: WebSearchResultItem, index: number): string {
@@ -293,6 +482,11 @@ function formatResultLine(result: WebSearchResultItem, index: number): string {
  *
  * 工具职责：在当前知识库证据不足、用户明确询问外部或实时信息时，查询外部搜索入口，
  * 返回标题、URL 与摘要。工具只访问配置好的搜索端点，不接受模型传入任意抓取 URL。
+ *
+ * 搜索 provider 采用「Jina 优先 + Tavily 兜底」策略：
+ * - Jina 配置且成功时优先使用
+ * - Jina 失败（key 失效/超时/网络异常）时自动降级到 Tavily
+ * - 两者均不可用时返回明确的分类错误提示，便于用户排查
  *
  * @returns AgentTool 实例，可直接挂载到 Agent 工具集
  * @author fxbin
@@ -315,7 +509,7 @@ export function createWebSearchTool(): AgentTool<typeof WebSearchParameters, Web
         const details: WebSearchDetails = {
           ok: false,
           query,
-          provider: 'jina-search',
+          provider: PROVIDER_NONE,
           count: 0,
           durationMs: Date.now() - startedAt,
           results: [],
@@ -327,38 +521,40 @@ export function createWebSearchTool(): AgentTool<typeof WebSearchParameters, Web
         };
       }
 
-      try {
-        const results = await searchWeb(query, limit);
-        const summary = results.length === 0
-          ? `联网搜索未找到与「${query}」直接相关的结果。`
-          : `联网搜索到 ${results.length} 条与「${query}」相关的结果：\n${results.map(formatResultLine).join('\n')}`;
-        return {
-          content: [{ type: 'text', text: summary }],
-          details: {
-            ok: true,
-            query,
-            provider: 'jina-search',
-            count: results.length,
-            durationMs: Date.now() - startedAt,
-            results,
-          },
-        };
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+      const outcome = await searchWeb(query, limit);
+      const durationMs = Date.now() - startedAt;
+
+      if (outcome.errorMessage) {
         const details: WebSearchDetails = {
           ok: false,
           query,
-          provider: 'jina-search',
+          provider: outcome.provider,
           count: 0,
-          durationMs: Date.now() - startedAt,
+          durationMs,
           results: [],
-          errorMessage,
+          errorMessage: outcome.errorMessage,
         };
         return {
-          content: [{ type: 'text', text: `联网搜索失败：${errorMessage}` }],
+          content: [{ type: 'text', text: `联网搜索失败：${outcome.errorMessage}` }],
           details,
         };
       }
+
+      const fallbackNote = outcome.usedFallback ? '（由 Tavily 兜底）' : '';
+      const summary = outcome.results.length === 0
+        ? `联网搜索未找到与「${query}」直接相关的结果。${fallbackNote}`
+        : `联网搜索到 ${outcome.results.length} 条与「${query}」相关的结果${fallbackNote}：\n${outcome.results.map(formatResultLine).join('\n')}`;
+      return {
+        content: [{ type: 'text', text: summary }],
+        details: {
+          ok: true,
+          query,
+          provider: outcome.provider,
+          count: outcome.results.length,
+          durationMs,
+          results: outcome.results,
+        },
+      };
     },
   };
 }

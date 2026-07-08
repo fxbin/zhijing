@@ -247,7 +247,9 @@ export function createDeepSearchTool(): AgentTool<typeof DeepSearchParameters, D
       try {
         const queries = buildSearchQueries(question, params.queries, maxQueries);
         const searchResults = (await Promise.all(
-          queries.map((query) => searchWeb(query, SEARCH_LIMIT_PER_QUERY).catch(() => [])),
+          queries.map((query) => searchWeb(query, SEARCH_LIMIT_PER_QUERY)
+            .then((outcome) => outcome.results)
+            .catch(() => [] as WebSearchResultItem[])),
         )).flat();
         const sources = mergeSearchResults(searchResults, maxSources);
         const fetchedSources = await Promise.all(
