@@ -75,8 +75,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装 Python Playwright + Chromium 浏览器
-RUN python3 -m pip install --no-cache-dir --break-system-packages playwright==1.49.1 \
-    && python3 -m playwright install chromium \
+# 使用国内镜像加速：pip 走腾讯云，Chromium 二进制走 npmmirror
+# 服务器在腾讯云内网时腾讯云镜像最快；其他网络环境也优于官方源
+RUN python3 -m pip install --no-cache-dir --break-system-packages \
+        -i https://mirrors.cloud.tencent.com/pypi/simple \
+        playwright==1.49.1 \
+    && PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright \
+       python3 -m playwright install chromium \
     && python3 -m playwright install-deps chromium
 
 WORKDIR /app
