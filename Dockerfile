@@ -20,7 +20,10 @@ COPY packages/pi-runtime/package.json ./packages/pi-runtime/
 COPY packages/agent/package.json ./packages/agent/
 
 # 安装全量依赖（含 devDependencies，构建需要）
-RUN npm install --no-audit --no-fund
+# 显式安装 rolldown linux native binding，规避 npm optional dependencies bug（npm/cli#4828）
+# 该 bug 在跨平台 lock 文件场景下会漏装目标平台的 native binding，导致 vite build 报 Cannot find native binding
+RUN npm install --no-audit --no-fund --include=optional && \
+    npm install --no-audit --no-fund --no-save @rolldown/binding-linux-x64-gnu@1.0.3
 
 # 复制源码
 COPY . .
