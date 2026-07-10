@@ -36,6 +36,7 @@ f2 内置 msToken / a_bogus 签名算法，无需浏览器即可发起请求；
 author: fxbin
 """
 import asyncio
+import contextlib
 import json
 import os
 import sys
@@ -232,6 +233,21 @@ async def prewarm():
     )
 
 
+@contextlib.contextmanager
+def suppress_stdout():
+    """将 stdout 临时重定向到 stderr，防止第三方库的输出污染 JSON 结果。
+
+    f2 库内部可能往 stdout 打印日志，导致 Node.js 端 JSON.parse 失败。
+    使用此上下文管理器包裹 f2 调用，确保只有最终的 JSON 输出到 stdout。
+    """
+    old_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    try:
+        yield
+    finally:
+        sys.stdout = old_stdout
+
+
 async def main():
     if len(sys.argv) < 2:
         print(json.dumps({'error': '缺少 URL 参数'}), file=sys.stderr)
@@ -242,29 +258,33 @@ async def main():
         return
 
     input_url = sys.argv[1]
+    media_info = None
 
     try:
         disable_bark_notification()
 
-        cookie_str, from_cache = await get_cookie()
-        print(
-            f'[cookie] 来源: {"缓存" if from_cache else "Playwright 新获取"}, '
-            f'长度: {len(cookie_str)} 字符',
-            file=sys.stderr,
-        )
+        with suppress_stdout():
+            cookie_str, from_cache = await get_cookie()
+            print(
+                f'[cookie] 来源: {"缓存" if from_cache else "Playwright 新获取"}, '
+                f'长度: {len(cookie_str)} 字符'
+            )
 
-        aweme_id = await resolve_aweme_id(input_url)
-        print(f'[aweme_id] {aweme_id}', file=sys.stderr)
+            aweme_id = await resolve_aweme_id(input_url)
+            print(f'[aweme_id] {aweme_id}')
 
-        raw = await fetch_video_detail(aweme_id, cookie_str)
+            raw = await fetch_video_detail(aweme_id, cookie_str)
 
-        media_info = extract_media_info(raw, aweme_id, input_url)
-        if not media_info or not media_info.get('play_addr'):
+            media_info = extract_media_info(raw, aweme_id, input_url)
+            if not media_info or not media_info.get('play_addr'):
+                save_cached_cookie('')
+                media_info = None
+
+        if media_info:
+            print(json.dumps(media_info, ensure_ascii=False))
+        else:
             print(json.dumps({'error': 'API 响应中未找到视频地址，cookie 可能已失效'}))
-            save_cached_cookie('')
             sys.exit(1)
-
-        print(json.dumps(media_info, ensure_ascii=False))
 
     except Exception as e:
         print(json.dumps({'error': str(e)}))
