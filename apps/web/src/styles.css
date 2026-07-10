@@ -1789,6 +1789,31 @@ button { cursor: pointer; }
   font-size: var(--text-sm);
 }
 
+.material-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.material-delete-btn:hover:not(:disabled) {
+  background: rgba(220, 70, 70, 0.1);
+  color: #dc4646;
+}
+
+.material-delete-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .material-card h4 {
   margin: 0;
   font-size: clamp(18px, 1.8vw, 24px);

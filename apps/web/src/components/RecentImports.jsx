@@ -5,13 +5,14 @@
  */
 
 import { useState } from 'react';
-import { Loader2, PlayCircle, Sparkles, Upload, X } from 'lucide-react';
+import { AlertTriangle, Loader2, PlayCircle, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import EmptyState from './EmptyState';
 import { useParseStatusLabel } from '../utils/i18nLabels';
 import { materialMediaUrls, isImageUrl, isVideoUrl, proxyImageUrl } from '../utils/material';
 import { renderMarkdown } from '../utils/markdown';
+import api from '../utils/api';
 
 const SUMMARY_MAX_CHARS = 300;
 
@@ -52,8 +53,13 @@ export default function RecentImports({ materials, onViewAll, onViewDetail, brow
   const parseStatusLabel = useParseStatusLabel();
   const [previewUrl, setPreviewUrl] = useState(null);
   const [aiSummaries, setAiSummaries] = useState({});
+  const [deletedIds, setDeletedIds] = useState(new Set());
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [deleteError, setDeleteError] = useState(false);
 
   const aiReady = browserAiStatus === 'ready';
+  const visibleMaterials = materials.filter((m) => !deletedIds.has(m.id));
 
   /**
    * 获取平台显示名称。
@@ -102,6 +108,24 @@ export default function RecentImports({ materials, onViewAll, onViewDetail, brow
     }
   }
 
+  /**
+   * 永久删除资料：调用后端 DELETE 接口，成功后从本地列表移除。
+   * @param {object} item - 待删除的材料对象
+   */
+  async function handleDelete(item) {
+    setDeletingId(item.id);
+    setDeleteError(false);
+    try {
+      await api.del(`/api/materials/${item.id}`);
+      setDeletedIds((prev) => new Set(prev).add(item.id));
+      setDeleteConfirmItem(null);
+    } catch {
+      setDeleteError(true);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <article className="recent-panel">
       <div className="section-title">
@@ -110,9 +134,9 @@ export default function RecentImports({ materials, onViewAll, onViewDetail, brow
         <button type="button" onClick={onViewAll}>{t('common.viewAll')}</button>
       </div>
       <div className="material-list">
-        {materials.length === 0 ? (
+        {visibleMaterials.length === 0 ? (
           <EmptyState title={t('library.empty.title')} body={t('library.empty.body')} />
-        ) : materials.map((item, index) => {
+        ) : visibleMaterials.map((item, index) => {
           const coverUrl = resolveMaterialCover(item);
           const isVideo = isMaterialVideoNote(item);
           const truncatedSummary = truncateSummary(item.summary);
@@ -137,6 +161,21 @@ export default function RecentImports({ materials, onViewAll, onViewDetail, brow
                 <span>{platformLabel(item)}</span>
                 <span>{parseStatusLabel(item.parseStatus ?? item.status)}</span>
                 <time>{item.time}</time>
+                <button
+                  type="button"
+                  className="material-delete-btn"
+                  disabled={deletingId === item.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteError(false);
+                    setDeleteConfirmItem(item);
+                  }}
+                  aria-label={t('recentImports.delete')}
+                >
+                  {deletingId === item.id
+                    ? <Loader2 size={14} className="spin" />
+                    : <Trash2 size={14} />}
+                </button>
               </div>
               <h4>{item.title}</h4>
               {coverUrl && (
@@ -232,6 +271,47 @@ export default function RecentImports({ materials, onViewAll, onViewDetail, brow
             <X size={22} />
           </button>
           <img alt={t('media.mediaPreview')} src={proxyImageUrl(previewUrl)} />
+        </div>
+      )}
+
+      {deleteConfirmItem && (
+        <div
+          className="modal-backdrop"
+          onClick={() => deletingId !== deleteConfirmItem.id && setDeleteConfirmItem(null)}
+          aria-hidden="true"
+        >
+          <div className="modal-card archive-delete-dialog" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="modal-head">
+              <AlertTriangle size={20} />
+              <h3>{t('recentImports.deleteConfirmTitle')}</h3>
+            </div>
+            <div className="modal-body">
+              <p>{t('recentImports.deleteConfirmBody', { title: deleteConfirmItem.title })}</p>
+              <p className="archive-delete-warning">{t('recentImports.deleteConfirmWarning')}</p>
+              {deleteError && (
+                <p className="archive-row-error" role="alert">{t('recentImports.deleteError')}</p>
+              )}
+            </div>
+            <div className="modal-foot">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmItem(null)}
+                disabled={deletingId === deleteConfirmItem.id}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="danger"
+                onClick={() => handleDelete(deleteConfirmItem)}
+                disabled={deletingId === deleteConfirmItem.id}
+              >
+                {deletingId === deleteConfirmItem.id
+                  ? t('recentImports.deleting')
+                  : t('recentImports.delete')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </article>
