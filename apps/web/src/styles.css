@@ -15185,7 +15185,7 @@ button { cursor: pointer; }
 
 .archive-row {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-columns: 40px minmax(0, 1fr) auto auto;
   gap: 14px;
   align-items: center;
   border: 1px solid var(--line-soft);
@@ -15262,6 +15262,81 @@ button { cursor: pointer; }
 }
 
 .archive-restore:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.archive-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(217, 83, 79, 0.35);
+  border-radius: 8px;
+  background: rgba(255, 245, 243, 0.7);
+  color: #ba1a1a;
+  padding: 8px 12px;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.archive-delete:hover:not(:disabled) {
+  border-color: #ba1a1a;
+  background: #fdecea;
+  box-shadow: 0 2px 8px rgba(186, 26, 26, 0.12);
+}
+
+.archive-delete:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.archive-delete-dialog .modal-body p:last-child {
+  margin-bottom: 0;
+}
+
+.archive-delete-warning {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(217, 83, 79, 0.35);
+  border-radius: 8px;
+  background: rgba(217, 83, 79, 0.08);
+  color: #ba1a1a;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.archive-delete-dialog .modal-foot button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--primary);
+  padding: 8px 14px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.archive-delete-dialog .modal-foot button:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--surface-low);
+}
+
+.archive-delete-dialog .modal-foot button.danger {
+  border-color: #e4c7c4;
+  color: #ba1a1a;
+  background: rgba(255, 245, 243, 0.7);
+}
+
+.archive-delete-dialog .modal-foot button.danger:hover:not(:disabled) {
+  border-color: #ba1a1a;
+  background: #fdecea;
+  box-shadow: 0 2px 8px rgba(186, 26, 26, 0.12);
+}
+
+.archive-delete-dialog .modal-foot button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }

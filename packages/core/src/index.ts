@@ -8520,6 +8520,27 @@ export function deleteMaterial(materialId: string): { materialId: string; worksp
   return { materialId, workspaceId };
 }
 
+/**
+ * 永久删除指定卡片。
+ * 与归档（软删除）不同，此操作会从 cards 主表移除记录，
+ * 并通过 ON DELETE CASCADE 级联清理卡片修订、地图自定义边等关联数据，
+ * 同时同步全文索引、zvec 向量索引与工作区统计。操作不可撤销。
+ * @author fxbin
+ * @param {string} cardId - 待删除的卡片 ID
+ * @returns {{ cardId: string; workspaceId: string }} 被删除卡片的 ID 及其所属工作区 ID
+ * @throws {KnowledgeCoreError} 卡片不存在时抛出 404
+ */
+export function deleteCard(cardId: string): { cardId: string; workspaceId: string } {
+  const card = repository.findCard(cardId);
+  if (!card) {
+    throw new KnowledgeCoreError('Card not found.', 404);
+  }
+  const workspaceId = resolveWorkspaceId(card.workspaceId);
+  repository.deleteCard(cardId);
+  reconcileWorkspaceStats(workspaceId);
+  return { cardId, workspaceId };
+}
+
 export function getMaterialDeletionImpact(materialId: string): {
   materialId: string;
   workspaceId: string;

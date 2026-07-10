@@ -15,6 +15,7 @@ import {
   createEmptyWorkspace,
   completeMaterialReview,
   createModelProviderProfile,
+  deleteCard,
   deleteMaterial,
   deleteModelProviderProfile,
   deleteWorkspace,
@@ -1891,6 +1892,18 @@ export async function buildApi() {
       }
       request.log.error({ error }, 'card unarchive failed');
       return reply.code(500).send({ error: 'Card unarchive failed.' });
+    }
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/cards/:id', async (request, reply) => {
+    try {
+      return deleteCard(request.params.id);
+    } catch (error) {
+      if (error instanceof KnowledgeCoreError) {
+        return reply.code(error.statusCode).send({ error: error.message });
+      }
+      request.log.error({ error }, 'card delete failed');
+      return reply.code(500).send({ error: 'Card delete failed.' });
     }
   });
 

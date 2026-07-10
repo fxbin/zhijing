@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Archive, CheckCircle2, FileText, RotateCcw, StickyNote } from 'lucide-react';
+import { Archive, CheckCircle2, FileText, RotateCcw, StickyNote, Trash2 } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { useCardTypeLabel } from '../utils/i18nLabels';
 import { formatDate } from '../utils/material';
@@ -31,6 +31,9 @@ export default function ArchiveView({ selectedWorkspaceId, setView }) {
   const [actionId, setActionId] = useState(null);
   const [restoreSuccessId, setRestoreSuccessId] = useState(null);
   const [restoreErrorId, setRestoreErrorId] = useState(null);
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState(null);
+  const [deleteSuccessId, setDeleteSuccessId] = useState(null);
+  const [deleteErrorId, setDeleteErrorId] = useState(null);
 
   useEffect(() => {
     setFilterBaseId(selectedWorkspaceId ?? 'all');
@@ -92,6 +95,35 @@ export default function ArchiveView({ selectedWorkspaceId, setView }) {
       }, RESTORE_FEEDBACK_MS);
     } catch {
       setRestoreErrorId(item.id);
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function permanentDelete(item) {
+    const endpoint = item.kind === 'material'
+      ? `/api/materials/${item.id}`
+      : `/api/cards/${item.id}`;
+    setActionId(item.id);
+    setDeleteErrorId((current) => (current === item.id ? null : current));
+    try {
+      await api.del(endpoint);
+      setItems((current) => ({
+        ...current,
+        materials: item.kind === 'material'
+          ? current.materials.filter((m) => m.id !== item.id)
+          : current.materials,
+        cards: item.kind === 'card'
+          ? current.cards.filter((c) => c.id !== item.id)
+          : current.cards,
+      }));
+      setDeleteConfirmItem(null);
+      setDeleteSuccessId(item.id);
+      setTimeout(() => {
+        setDeleteSuccessId((current) => (current === item.id ? null : current));
+      }, RESTORE_FEEDBACK_MS);
+    } catch {
+      setDeleteErrorId(item.id);
     } finally {
       setActionId(null);
     }
@@ -164,6 +196,13 @@ export default function ArchiveView({ selectedWorkspaceId, setView }) {
         </div>
       )}
 
+      {deleteSuccessId && (
+        <div className="archive-feedback" role="status">
+          <CheckCircle2 size={16} />
+          <span>{t('archive.deleteSuccess')}</span>
+        </div>
+      )}
+
       {allItems.length === 0 ? (
         <EmptyState
           icon={Archive}
@@ -199,6 +238,9 @@ export default function ArchiveView({ selectedWorkspaceId, setView }) {
                   {restoreErrorId === item.id && (
                     <span className="archive-row-error" role="alert">{t('archive.restoreError')}</span>
                   )}
+                  {deleteErrorId === item.id && (
+                    <span className="archive-row-error" role="alert">{t('archive.deleteError')}</span>
+                  )}
                 </div>
                 <button
                   className="archive-restore"
@@ -209,10 +251,49 @@ export default function ArchiveView({ selectedWorkspaceId, setView }) {
                   <RotateCcw size={16} />
                   {t('archive.restore')}
                 </button>
+                <button
+                  className="archive-delete"
+                  disabled={actionId === item.id}
+                  onClick={() => setDeleteConfirmItem(item)}
+                  type="button"
+                  aria-label={t('archive.permanentDelete')}
+                >
+                  <Trash2 size={16} />
+                  {t('archive.permanentDelete')}
+                </button>
               </li>
             );
           })}
         </ul>
+      )}
+
+      {deleteConfirmItem && (
+        <div className="modal-backdrop" onClick={() => setDeleteConfirmItem(null)} aria-hidden="true">
+          <div className="modal-card archive-delete-dialog" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="modal-head">
+              <h3>{t('archive.deleteConfirmTitle')}</h3>
+            </div>
+            <div className="modal-body">
+              <p>{t('archive.deleteConfirmBody', { title: deleteConfirmItem.title })}</p>
+              <p className="archive-delete-warning">{t('archive.deleteConfirmWarning')}</p>
+            </div>
+            <div className="modal-foot">
+              <button type="button" onClick={() => setDeleteConfirmItem(null)} disabled={actionId === deleteConfirmItem.id}>
+                {t('common.cancel', { defaultValue: '取消' })}
+              </button>
+              <button
+                type="button"
+                className="danger"
+                onClick={() => permanentDelete(deleteConfirmItem)}
+                disabled={actionId === deleteConfirmItem.id}
+              >
+                {actionId === deleteConfirmItem.id
+                  ? t('archive.deleting', { defaultValue: '删除中…' })
+                  : t('archive.permanentDelete')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
