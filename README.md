@@ -70,30 +70,9 @@ npm run dev:api
 
 ### LLM 配置
 
-知径支持多 LLM Provider，通过环境变量配置：
+知径支持多 LLM Provider，部署后通过 Settings 页面创建并激活 Profile 即可配置，无需设置环境变量。
 
-```bash
-export ZHIJING_PI_PROVIDER=openai          # 或 deepseek、qwen、doubao 等
-export ZHIJING_PI_MODEL=gpt-4o-mini
-export ZHIJING_PI_API_KEY=sk-your-key
-export ZHIJING_PI_ENABLED=1
-```
-
-未配置 API Key 时自动回退到 mock 模式，保证开发闭环不断。
-
-#### 接入商汤 SenseNova Token Plan（免费公测）
-
-公测期完全免费，每模型 1500 次调用 / 5 小时刷新。直接复用 `deepseek-v4-flash` 模型：
-
-```bash
-export ZHIJING_PI_PROVIDER=deepseek
-export ZHIJING_PI_MODEL=deepseek-v4-flash
-export ZHIJING_PI_BASE_URL=https://token.sensenova.cn/v1
-export ZHIJING_PI_API_KEY=你的 SenseNova API Key
-export ZHIJING_PI_ENABLED=1
-```
-
-申请地址：https://platform.sensenova.cn/console/keys
+未配置任何 Profile 时自动回退到 mock 模式，保证开发闭环不断。
 
 ### 验证门禁
 
@@ -113,7 +92,6 @@ docker build -t zhijing .
 docker run -p 8787:8787 \
   -e NODE_ENV=production \
   -e ZHIJING_ACCESS_PASSWORD=your-password \
-  -e ZHIJING_PI_API_KEY=your-llm-key \
   -e ZHIJING_ALLOWED_ORIGINS=https://your-domain \
   -v zhijing-data:/app/.data \
   zhijing
