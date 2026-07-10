@@ -89,7 +89,7 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages --timeout 600 
         playwright==1.49.1 \
         f2 \
     && PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright \
-       python3 -m playwright install chromium \
+       python3 -m playwright install --no-shell chromium \
     && python3 -m playwright install-deps chromium
 
 WORKDIR /app
