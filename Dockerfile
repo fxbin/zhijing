@@ -80,12 +80,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Python Playwright + Chromium 浏览器
+# 安装 Python Playwright + f2 + Chromium 浏览器
+# f2 提供抖音 msToken/a_bogus 签名算法，使数据请求无需常驻浏览器
+# Playwright 仅用于定期获取访客 cookie，仍需 Chromium
 # 使用国内镜像加速：pip 走腾讯云，Chromium 二进制走 npmmirror
-# 服务器在腾讯云内网时腾讯云镜像最快；其他网络环境也优于官方源
 RUN python3 -m pip install --no-cache-dir --break-system-packages --timeout 600 \
         -i https://mirrors.cloud.tencent.com/pypi/simple \
         playwright==1.49.1 \
+        f2 \
     && PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright \
        python3 -m playwright install chromium \
     && python3 -m playwright install-deps chromium

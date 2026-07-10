@@ -1,5 +1,5 @@
 import { buildApi } from './app.js';
-import { initProxyDispatcher } from '@zhijing/core';
+import { initProxyDispatcher, prewarmDouyinCookie } from '@zhijing/core';
 
 /**
  * 加载项目根目录的 .env 文件。
@@ -39,3 +39,8 @@ try {
   app.log.error(error);
   process.exit(1);
 }
+
+// 异步预热抖音访客 cookie，不阻塞服务启动
+prewarmDouyinCookie().catch(() => {
+  // 预热失败静默处理，首次实际提取时会自动获取
+});

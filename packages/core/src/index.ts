@@ -9171,11 +9171,11 @@ function extractFirstDouyinUrl(input: string | undefined): string | undefined {
 }
 
 /**
- * 解析抖音短视频资料：调用外部 Python 脚本（Playwright）拦截抖音 API，
- * 提取视频地址、封面、作者、描述等元数据。
+ * 解析抖音短视频资料：调用外部 Python 脚本（f2 + Playwright 混合方案）提取视频元数据。
+ * f2 内置 msToken/a_bogus 签名算法发起 API 请求，Playwright 仅定期获取访客 cookie 并缓存。
  *
  * 外部脚本路径：scripts/douyin_extract.py
- * 依赖：Python3 + Playwright（需安装浏览器）
+ * 依赖：Python3 + f2 + Playwright（需安装 Chromium）
  * 代理：通过 DOUYIN_PROXY / HTTP_PROXY 环境变量配置
  *
  * @param material - 抖音资料记录
@@ -9197,8 +9197,12 @@ async function parseDouyinMaterial(material: MaterialRecord): Promise<ParsedMate
     });
     stdout = result.stdout;
   } catch (error) {
+    const execError = error as { message?: string; stdout?: string; stderr?: string; code?: number | string };
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`抖音提取脚本执行失败：${message}。请确认已安装 Python3 和 Playwright（pip install playwright && playwright install chromium）。`);
+    const exitCode = execError.code ? `（退出码 ${execError.code}）` : '';
+    const stderrSnippet = execError.stderr ? `\nstderr: ${execError.stderr.slice(0, 500)}` : '';
+    const stdoutSnippet = execError.stdout ? `\nstdout: ${execError.stdout.slice(0, 500)}` : '';
+    throw new Error(`抖音提取脚本执行失败${exitCode}：${message}${stdoutSnippet}${stderrSnippet}`);
   }
 
   let data: DouyinExtractResult;
@@ -9235,6 +9239,24 @@ async function parseDouyinMaterial(material: MaterialRecord): Promise<ParsedMate
     text: cleanText(textParts.join('\n\n')).slice(0, 18_000),
     mediaUrls,
   };
+}
+
+/**
+ * 预热抖音访客 cookie：异步调用脚本获取并缓存 cookie，不阻塞服务启动。
+ * 失败时静默处理，不影响服务运行；首次实际提取时会自动重试。
+ *
+ * @author fxbin
+ */
+export async function prewarmDouyinCookie(): Promise<void> {
+  try {
+    await execFileAsync('python3', [DOUYIN_SCRIPT_PATH, '--prewarm'], {
+      timeout: DOUYIN_EXTRACT_TIMEOUT_MS,
+      maxBuffer: DOUYIN_EXTRACT_MAX_BUFFER,
+      env: { ...process.env },
+    });
+  } catch {
+    // 预热失败不阻塞服务，首次实际提取时会自动获取 cookie
+  }
 }
 
 async function parseXiaohongshuMaterial(material: MaterialRecord): Promise<ParsedMaterialContent> {
