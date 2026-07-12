@@ -112,7 +112,7 @@ describe('parse governance', () => {
 
     assert.equal(first.material.parseStatus, 'ingested');
     assert.equal(second.material.parseStatus, 'ingested');
-    assert.equal(second.task.output?.cacheHit, true);
+    assert.equal(secondMaterial.task?.output?.cacheHit, true);
     assert.equal(hits, 1);
   });
 
