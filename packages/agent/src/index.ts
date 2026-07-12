@@ -83,14 +83,14 @@ export {
 } from './multi-agent-orchestrator.js';
 export type { AgentRole, AgentRoleConfig, MultiAgentOptions } from './multi-agent-orchestrator.js';
 
+export { startOrchestratorSession } from './orchestrator-session.js';
 export {
-  startOrchestratorSession,
   listAgentSessions,
   truncateSessionForRetry,
   getAgentSessionMessages,
   renameAgentSession,
   deleteAgentSession,
-} from './orchestrator-session.js';
+} from './session-repository.js';
 export type {
   OrchestratorCredentials,
   OrchestratorRunContext,
@@ -99,4 +99,4 @@ export type {
   AgentSessionInfo,
   AgentSessionDetail,
   RetryTurnResult,
-} from './orchestrator-session.js';
+} from './session-types.js';
