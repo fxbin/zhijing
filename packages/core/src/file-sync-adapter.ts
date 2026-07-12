@@ -37,17 +37,12 @@ import type {
   WorkspaceStage,
 } from '@zhijing/shared';
 import { MarkdownFileAdapter } from './markdown-file.js';
+import { FILE_EXTENSION, FILE_NAME_SEPARATOR, BODY_TITLE_PREFIX, EMPTY_STRING, NEWLINE } from './common/constants.js';
 
 const CARDS_DIR_NAME = 'cards';
 const MATERIALS_DIR_NAME = 'materials';
 const ZHIDING_DIR_NAME = '.zhijing';
-const FILE_EXTENSION = '.md';
-const FILE_NAME_SEPARATOR = '-';
 const KNOWLEDGE_BASE_FILE_NAME = 'knowledge-base.md';
-
-const BODY_TITLE_PREFIX = '# ';
-const EMPTY_STRING = '';
-const NEWLINE = '\n';
 
 const DEFAULT_KB_STAGE: WorkspaceStage = 'ai_skeleton';
 const DEFAULT_MATERIAL_TYPE: MaterialType = 'text';

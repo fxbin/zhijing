@@ -12,21 +12,18 @@
  */
 
 import type { KnowledgeCard, MaterialRecord, WorkspaceSummary } from '@zhijing/shared';
+import { FILE_EXTENSION, FILE_NAME_SEPARATOR, BODY_TITLE_PREFIX, EMPTY_STRING, NEWLINE } from './common/constants.js';
 
 const FRONTMATTER_DELIMITER = '---';
 const FRONTMATTER_ARRAY_PREFIX = '- ';
 const FRONTMATTER_NESTED_INDENT = '  ';
 const SLUG_MAX_LENGTH = 50;
 const SLUG_REPLACE_CHAR = '-';
-const FILE_EXTENSION = '.md';
+
 const WIKILINK_PREFIX = '[[';
 const WIKILINK_SUFFIX = ']]';
 const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
-const FILE_NAME_SEPARATOR = '-';
-const EMPTY_STRING = '';
-const NEWLINE = '\n';
 const DOUBLE_NEWLINE = '\n\n';
-const BODY_TITLE_PREFIX = '# ';
 const BOOLEAN_TRUE = 'true';
 const BOOLEAN_FALSE = 'false';
 const INTEGER_PATTERN = /^-?\d+$/;
