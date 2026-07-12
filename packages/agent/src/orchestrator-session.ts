@@ -16,6 +16,7 @@
 import { randomUUID } from 'node:crypto';
 import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
 import type { AgentStreamEvent, CardType, KnowledgeCitation, OrchestratorDecision, ProposedOperation } from '@zhijing/shared';
+import { extractAgentMessageText } from '@zhijing/shared';
 import type { ToolCallSummary } from '@zhijing/core';
 import { getDefaultPiProvider } from '@zhijing/pi-runtime';
 import { interceptInStream } from '@zhijing/core';
@@ -82,31 +83,6 @@ const SESSION_TITLE_MAX_LENGTH = 40;
  * 会话默认标题（找不到 user 消息时的兜底文案）。
  */
 const SESSION_DEFAULT_TITLE = '未命名会话';
-
-/**
- * 从单条 AgentMessage 中提取纯文本内容。
- * 兼容 string content 与 TextContent[] 两种结构。
- * 用结构化类型访问绕开 AgentMessage 联合类型 narrow 限制
- * （联合中包含无 content 字段的自定义消息类型）。
- *
- * @param message - Agent 消息
- * @returns 纯文本；无法提取时返回空串
- * @author fxbin
- */
-function extractAgentMessageText(message: AgentMessage): string {
-  const msg = message as { content?: unknown };
-  if (typeof msg.content === 'string') return msg.content;
-  if (Array.isArray(msg.content)) {
-    const parts: string[] = [];
-    for (const part of msg.content) {
-      if (part && typeof part === 'object' && part.type === 'text' && typeof part.text === 'string') {
-        parts.push(part.text);
-      }
-    }
-    return parts.join('');
-  }
-  return '';
-}
 
 /**
  * 判断 AgentMessage 是否为 user 角色。

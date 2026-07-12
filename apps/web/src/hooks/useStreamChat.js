@@ -16,6 +16,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import { API_STATUS_ONLINE } from './useUiState';
 import { WORKSPACES_PATH } from '../constants/apiPaths';
+import { extractAgentMessageText } from '@zhijing/shared';
 
 /**
  * 流式对话消息列表初始为空数组。
@@ -267,25 +268,6 @@ function removeChatFromStorage(workspaceId) {
   } catch {
     // 静默降级
   }
-}
-
-/**
- * 从 AgentMessage.content 提取纯文本（兼容 string 与 TextContent[]）。
- *
- * @param {object} message - 后端 AgentMessage
- * @returns {string} 纯文本
- * @author fxbin
- */
-function extractAgentMessageText(message) {
-  const content = message?.content;
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((part) => part && typeof part === 'object' && part.type === 'text' && typeof part.text === 'string')
-      .map((part) => part.text)
-      .join('');
-  }
-  return '';
 }
 
 /**

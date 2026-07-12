@@ -3086,3 +3086,5 @@ export interface ReaderModeState {
 export const RECOMMENDATION_BUCKET_VALUES = ['control', 'treatment'] as const;
 /** 推荐实验桶类型 */
 export type RecommendationBucket = typeof RECOMMENDATION_BUCKET_VALUES[number];
+
+export { extractAgentMessageText } from './agent-utils.js';
