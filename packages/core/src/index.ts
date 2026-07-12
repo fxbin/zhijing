@@ -8536,6 +8536,25 @@ export function deleteCard(cardId: string): { cardId: string; workspaceId: strin
     throw new KnowledgeCoreError('Card not found.', 404);
   }
   const workspaceId = resolveWorkspaceId(card.workspaceId);
+  for (const entity of repository.listEntities(workspaceId)) {
+    if (!entity.sourceCardIds.includes(cardId)) continue;
+    entity.sourceCardIds = entity.sourceCardIds.filter((id) => id !== cardId);
+    if (entity.sourceCardIds.length === 0) {
+      repository.deleteEntity(entity.id);
+    } else {
+      repository.upsertEntity(entity);
+    }
+  }
+  for (const message of repository.listMessages(workspaceId)) {
+    if (!message.cardIds.includes(cardId)) continue;
+    const updatedCardIds = message.cardIds.filter((id) => id !== cardId);
+    repository.updateMessageAcceptedCards(message.id, updatedCardIds);
+  }
+  for (const record of repository.listDecisionLog({ workspaceId })) {
+    if (!record.evidenceCardIds.includes(cardId)) continue;
+    record.evidenceCardIds = record.evidenceCardIds.filter((id) => id !== cardId);
+    repository.insertDecisionLog(record);
+  }
   repository.deleteCard(cardId);
   reconcileWorkspaceStats(workspaceId);
   return { cardId, workspaceId };
