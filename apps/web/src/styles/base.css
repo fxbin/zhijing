@@ -1,0 +1,44 @@
+/**
+ * 全局基础样式：reset、focus-visible、html/body/#root、button 基础、.app-frame。
+ * @author fxbin
+ */
+
+
+* { box-sizing: border-box; }
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--scholar);
+  outline-offset: 2px;
+}
+
+html {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  max-width: 100%;
+  overflow-x: clip;
+  color: var(--primary);
+  background:
+    linear-gradient(to right, rgba(226, 232, 240, 0.62) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(226, 232, 240, 0.62) 1px, transparent 1px),
+    var(--background);
+  background-size: 40px 40px;
+}
+
+#root {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+

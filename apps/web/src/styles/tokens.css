@@ -1,0 +1,68 @@
+/**
+ * CSS 设计令牌：:root 变量定义（颜色、字体、间距、阴影等）。
+ * @author fxbin
+ */
+
+:root {
+  color-scheme: light;
+  --background: #f8f9ff;
+  --surface: #ffffff;
+  --surface-low: #eff4ff;
+  --surface-high: #dce9ff;
+  --surface-subtle: #f8fafc;
+  --primary: #091426;
+  --text: #1f2937;
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --muted: #45474c;
+  --line: #c5c6cd;
+  --line-soft: #e2e8f0;
+  --border: #e2e8f0;
+  --sage: #6B8E7F;
+  --sage-text: #007439;
+  --scholar: #2c5f8d;
+  --scholar-blue: #2C5F8D;
+  --scholar-strong: #234a72;
+  --scholar-soft: rgba(44, 95, 141, 0.18);
+  --error: #ba1a1a;
+  --error-container: #ffdad6;
+  --danger: #C44545;
+  --question: #D4944A;
+  --shadow: 0 12px 32px rgba(9, 20, 38, 0.08);
+  --card-concept: #2C5F8D;
+  --card-method: #6B8E7F;
+  --card-fact: #8B6FB0;
+  --card-question: #D4944A;
+  --card-case: #7D8CC4;
+  --card-step: #5D8A66;
+  --card-viewpoint: #9A8C98;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'PingFang SC', 'Microsoft YaHei', 'Source Han Sans SC',
+    'Noto Sans CJK SC', 'Hiragino Sans GB', system-ui, sans-serif;
+  --font-serif: 'Source Han Serif SC', 'Noto Serif CJK SC',
+    'Songti SC', 'SimSun', serif;
+  --font-mono: 'JetBrains Mono', 'Sarasa Mono SC', 'Source Han Mono',
+    'SF Mono', Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-md: 1.125rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 1.875rem;
+  --text-3xl: 2.25rem;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --leading-tight: 1.15;
+  --leading-snug: 1.3;
+  --leading-normal: 1.5;
+  --leading-prose: 1.6;
+  --leading-relaxed: 1.7;
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.02em;
+  font-family: var(--font-sans);
+}
