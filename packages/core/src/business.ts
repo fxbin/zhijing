@@ -174,7 +174,8 @@ import {
   type WorkspaceStage,
   type RecommendationBucket,
 } from '@zhijing/shared';
-import { fetchUrlAsMarkdown, parseRawHtml } from './web-fetch.js';
+import { fetchUrlAsMarkdown, parseRawHtml, WebContentTooShortError } from './web-fetch.js';
+import { tryRenderWithBrowser } from './web-render.js';
 import * as ssrfGuard from './ssrf-guard.js';
 import { createSsrfSafeFetch as createSafeFetch } from './ssrf-guard.js';
 import {
@@ -1296,63 +1297,49 @@ export async function intakeKnowledge(request: IntakeRequest): Promise<IntakeRes
     }
 
     if (kind === 'link' && base && material) {
-      if (material.platform === 'xiaohongshu' || material.platform === 'douyin') {
-        try {
-          const parseResult = await requestMaterialParsing(material.id);
-          finishTask(task, {
-            kind,
-            workspaceId: base.id,
-            materialId: parseResult.material.id,
-            parseStatus: parseResult.material.parseStatus,
-            platform: parseResult.material.platform,
-            sourceUrl: parseResult.material.sourceUrl,
-          });
-          return {
-            kind,
-            workspace: parseResult.workspace ?? base,
-            material: parseResult.material,
-            cards: parseResult.cards ?? [],
-            task: parseResult.task ?? task,
-            artifact: parseResult.artifact,
-            message: parseResult.message ?? '链接已自动解析。',
-          };
-        } catch {
-          finishTask(task, {
-            kind,
-            workspaceId: base.id,
-            materialId: material.id,
-            parseStatus: material.parseStatus,
-            platform: material.platform,
-            sourceUrl: material.sourceUrl,
-          });
-          return {
-            kind,
-            workspace: base,
-            material,
-            cards: [],
-            task,
-            message: '链接已保存，自动解析失败，可稍后手动重试。',
-          };
-        }
+      try {
+        const parseResult = await requestMaterialParsing(material.id);
+        finishTask(task, {
+          kind,
+          workspaceId: base.id,
+          materialId: parseResult.material.id,
+          parseStatus: parseResult.material.parseStatus,
+          platform: parseResult.material.platform,
+          sourceUrl: parseResult.material.sourceUrl,
+        });
+        return {
+          kind,
+          workspace: parseResult.workspace ?? base,
+          material: parseResult.material,
+          cards: parseResult.cards ?? [],
+          task: parseResult.task ?? task,
+          artifact: parseResult.artifact,
+          message: parseResult.message ?? '链接已自动解析。',
+        };
+      } catch (error) {
+        console.error('[intakeKnowledge] 链接自动解析失败', {
+          materialId: material.id,
+          platform: material.platform,
+          sourceUrl: material.sourceUrl,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        finishTask(task, {
+          kind,
+          workspaceId: base.id,
+          materialId: material.id,
+          parseStatus: material.parseStatus,
+          platform: material.platform,
+          sourceUrl: material.sourceUrl,
+        });
+        return {
+          kind,
+          workspace: base,
+          material,
+          cards: [],
+          task,
+          message: '链接已保存，自动解析失败，可稍后手动重试。',
+        };
       }
-
-      finishTask(task, {
-        kind,
-        workspaceId: base.id,
-        materialId: material.id,
-        parseStatus: material.parseStatus,
-        platform: material.platform,
-        sourceUrl: material.sourceUrl,
-      });
-
-      return {
-        kind,
-        workspace: base,
-        material,
-        cards: [],
-        task,
-        message: '链接已保存，等待正文补充或后续解析。',
-      };
     }
 
     const generation = await generateKnowledge(
@@ -2827,12 +2814,30 @@ export async function parseOrdinaryWebMaterial(material: MaterialRecord): Promis
   const jinaParsed = await tryParseWithJinaReader(sourceUrl);
   if (jinaParsed) return jinaParsed;
 
-  const fetched = await fetchUrlAsMarkdown(sourceUrl);
-  return {
-    title: fetched.title,
-    text: fetched.text,
-    mediaUrls: fetched.mediaUrls,
-  };
+  try {
+    const fetched = await fetchUrlAsMarkdown(sourceUrl);
+    return {
+      title: fetched.title,
+      text: fetched.text,
+      mediaUrls: fetched.mediaUrls,
+    };
+  } catch (error) {
+    if (error instanceof WebContentTooShortError) {
+      console.warn('[parseOrdinaryWebMaterial] 静态抓取内容过短，尝试 Playwright 渲染回退', {
+        sourceUrl,
+        contentLength: error.contentLength,
+      });
+      const rendered = await tryRenderWithBrowser(sourceUrl);
+      if (rendered) {
+        return {
+          title: rendered.title,
+          text: rendered.text,
+          mediaUrls: rendered.mediaUrls,
+        };
+      }
+    }
+    throw error;
+  }
 }
 
 export const DOUYIN_SCRIPT_PATH = join(PROJECT_ROOT, 'scripts', 'douyin_extract.py');
@@ -3440,19 +3445,35 @@ export async function tryParseWithJinaReader(sourceUrl: string) {
       redirect: 'follow',
       headers,
     });
-    if (!response.ok) return undefined;
+    if (!response.ok) {
+      console.warn('[tryParseWithJinaReader] Jina 返回非 2xx', {
+        sourceUrl,
+        status: response.status,
+      });
+      return undefined;
+    }
 
     const markdown = cleanText(await response.text());
     const title = extractJinaMarkdownTitle(markdown) || titleFromLink(sourceUrl);
     const text = stripJinaMarkdownMetadata(markdown);
-    if (text.length < 120) return undefined;
+    if (text.length < 120) {
+      console.warn('[tryParseWithJinaReader] Jina 返回内容过短', {
+        sourceUrl,
+        textLength: text.length,
+      });
+      return undefined;
+    }
 
     return {
       title,
       text: text.slice(0, 18_000),
       mediaUrls: [],
     };
-  } catch {
+  } catch (error) {
+    console.error('[tryParseWithJinaReader] Jina Reader 抓取异常', {
+      sourceUrl,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return undefined;
   } finally {
     clearTimeout(timer);
