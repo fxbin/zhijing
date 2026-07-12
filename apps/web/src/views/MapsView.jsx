@@ -4,22 +4,26 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, CircleX, Link2, MessageCircle, PencilLine, RefreshCw, Search, X } from 'lucide-react';
+import { CircleX, Search, X } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
-import { formatTime } from '../utils/material';
 import api from '../utils/api';
+import { mapNodeMatches, buildMapLayout, describeNodeStatus, describeNodeMetadata } from '../utils/map';
 import {
-  mapNodeMatches,
-  buildMapLayout,
-  truncateNodeLabel,
-  mapKindLabel,
-  describeNodeStatus,
-  describeNodeMetadata,
-  describeEdgeClass,
-  getClaimStatusLegend,
-} from '../utils/map';
+  MAP_BASE_WIDTH,
+  MAP_BASE_HEIGHT,
+  MAP_MIN_ZOOM,
+  MAP_MAX_ZOOM,
+  MAP_CLICK_DRAG_THRESHOLD,
+  MAP_RELATION_TARGET_PADDING,
+  STORAGE_KEY_FILTER,
+  buildFilterOptions,
+  buildRelationTypeLabelMap,
+  buildEditableRelationOptions,
+} from './maps/constants';
+import MapCanvas from './maps/MapCanvas';
+import MapBatchPanel from './maps/MapBatchPanel';
+import MapNodeDetail from './maps/MapNodeDetail';
 
 /**
  * 知识地图视图组件
@@ -32,19 +36,12 @@ import {
  */
 export default function MapsView({ apiStatus, selectedWorkspaceId, setView, onOpenChat }) {
   const { t } = useTranslation();
-  const STORAGE_KEY_FILTER = 'zhijing_map_filter';
-  const MAP_BASE_WIDTH = 1000;
-  const MAP_BASE_HEIGHT = 800;
-  const MAP_MIN_ZOOM = 0.3;
-  const MAP_MAX_ZOOM = 3;
-  const MAP_CLICK_DRAG_THRESHOLD = 6;
-  const MAP_RELATION_TARGET_PADDING = 14;
   const [map, setMap] = useState(null);
   const [status, setStatus] = useState(t('maps.status.selectWorkspace'));
   const [query, setQuery] = useState('');
   const [nodeFilter, setNodeFilter] = useState(() => {
     try {
-      return localStorage.getItem('zhijing_map_filter') || 'all';
+      return localStorage.getItem(STORAGE_KEY_FILTER) || 'all';
     } catch {
       return 'all';
     }
@@ -68,7 +65,7 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView, onOp
 
   useEffect(() => {
     try {
-      localStorage.setItem('zhijing_map_filter', nodeFilter);
+      localStorage.setItem(STORAGE_KEY_FILTER, nodeFilter);
     } catch {
       // localStorage 不可用时静默忽略
     }
@@ -207,24 +204,9 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView, onOp
       return a.relation.localeCompare(b.relation);
     });
   const typeCounts = nodes.reduce((acc, node) => ({ ...acc, [node.kind]: (acc[node.kind] ?? 0) + 1 }), {});
-  const filterOptions = [
-    { key: 'all', label: t('maps.filter.allNodes'), count: nodes.length },
-    { key: 'workspace', label: t('maps.filter.workspace'), count: typeCounts.workspace ?? 0 },
-    { key: 'material', label: t('maps.filter.materials'), count: typeCounts.material ?? 0 },
-    { key: 'card', label: t('maps.filter.cards'), count: typeCounts.card ?? 0 },
-  ];
-  const relationTypeLabelMap = {
-    related_to: t('maps.relationType.relatedTo'),
-    supports: t('maps.relationType.supports'),
-    contradicts: t('maps.relationType.contradicts'),
-    contains: t('maps.relationType.contains'),
-    source: t('maps.relationType.source'),
-  };
-  const editableRelationOptions = [
-    { value: 'related_to', label: t('maps.relationType.relatedTo') },
-    { value: 'supports', label: t('maps.relationType.supports') },
-    { value: 'contradicts', label: t('maps.relationType.contradicts') },
-  ];
+  const filterOptions = buildFilterOptions(typeCounts, t);
+  const relationTypeLabelMap = buildRelationTypeLabelMap(t);
+  const editableRelationOptions = buildEditableRelationOptions(t);
   const totalNodeCount = (map?.stats?.materials ?? typeCounts.material ?? 0)
     + (map?.stats?.cards ?? typeCounts.card ?? 0)
     + (typeCounts.workspace ?? 0);
@@ -587,353 +569,44 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView, onOp
         </header>
 
         <div className={`knowledge-map-board${isDetailOpen ? ' detail-open' : ''}`}>
-          <section className="knowledge-map-canvas" aria-label={t('maps.canvas')}>
-            {!map ? (
-              <div className="map-empty-state">
-                <EmptyState title={t('maps.noMap')} body={status} />
-              </div>
-            ) : (
-              <>
-                <div className="map-canvas-heading">
-                  <div>
-                    <span>{t('maps.title')}</span>
-                    <h2>{selectedNode?.label ?? t('maps.knowledgeMaps')}</h2>
-                    <p>{t('maps.updatedAt', { time: map.generatedAt ? formatTime(map.generatedAt) : t('maps.now') })}</p>
-                  </div>
-                  <div className="map-stats-strip">
-                    <span>{visibleNodeCopy}</span>
-                    <span>{edges.length} {t('maps.edges')}</span>
-                    <span>{map.stats?.sourcedCards ?? 0} {t('maps.sourced')}</span>
-                    {hiddenNodeCount > 0 && (
-                      <span className="map-stat-hidden">{t('maps.hiddenNodes', { count: hiddenNodeCount })}</span>
-                    )}
-                    {map.stats?.skeletonCards > 0 && (
-                      <span className="map-stat-skeleton">{map.stats.skeletonCards} {t('maps.skeleton')}</span>
-                    )}
-                    {map.stats?.tensionEdges > 0 && (
-                      <span className="map-stat-tension">{map.stats.tensionEdges} {t('maps.tension')}</span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="map-graph-viewport">
-                  <svg
-                    aria-label={t('maps.graph')}
-                    className="map-graph-svg"
-                    viewBox={`${viewState.x} ${viewState.y} ${MAP_BASE_WIDTH / viewState.zoom} ${MAP_BASE_HEIGHT / viewState.zoom}`}
-                    role="img"
-                    onWheel={handleWheel}
-                    onPointerDown={handleCanvasPointerDown}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={handlePointerUp}
-                    onPointerLeave={handlePointerUp}
-                    onPointerCancel={handlePointerUp}
-                    style={{ cursor: selectionBox ? 'crosshair' : panState ? 'grabbing' : dragState ? 'grabbing' : 'default', touchAction: 'none' }}
-                  >
-                    <defs>
-                      <marker
-                        id="map-arrow"
-                        markerWidth="8"
-                        markerHeight="8"
-                        refX="7"
-                        refY="3"
-                        orient="auto"
-                      >
-                        <path d="M0,0 L7,3 L0,6 Z" fill="currentColor" />
-                      </marker>
-                      <marker
-                        id="map-arrow-contradicts"
-                        markerWidth="8"
-                        markerHeight="8"
-                        refX="7"
-                        refY="3"
-                        orient="auto"
-                      >
-                        <path d="M0,0 L7,3 L0,6 Z" fill="#d4584a" />
-                      </marker>
-                    </defs>
-                    {visibleEdges.map((edge) => {
-                      const source = layoutNodes.find((node) => node.id === edge.sourceId);
-                      const target = layoutNodes.find((node) => node.id === edge.targetId);
-                      if (!source || !target) return null;
-                      const focusedId = relationDragState?.sourceId ?? hoveredNodeId ?? selectedNode?.id;
-                      const isActive = focusedId && (edge.sourceId === focusedId || edge.targetId === focusedId);
-                      const isDimmed = focusedId && !isActive;
-                      const edgeClass = describeEdgeClass(edge.relation, edge.custom);
-                      const markerId = edge.relation === 'contradicts' ? 'map-arrow-contradicts' : 'map-arrow';
-                      const dx = target.x - source.x;
-                      const dy = target.y - source.y;
-                      const dist = Math.sqrt(dx * dx + dy * dy);
-                      const offset = (target.radius ?? 18) + 4;
-                      const endX = dist > 0 ? target.x - (dx / dist) * offset : target.x;
-                      const endY = dist > 0 ? target.y - (dy / dist) * offset : target.y;
-                      return (
-                        <path
-                          className={`${edgeClass}${isActive ? ' active' : ''}${isDimmed ? ' dimmed' : ''}`}
-                          key={edge.id}
-                          d={`M ${source.x} ${source.y} L ${endX} ${endY}`}
-                          markerEnd={`url(#${markerId})`}
-                        />
-                      );
-                    })}
-                    {layoutNodes.map((node) => {
-                      const isActive = node.id === selectedNode?.id;
-                      const isMatched = searchMatches.includes(node.id);
-                      const isHovered = node.id === hoveredNodeId;
-                      const focusedId = relationDragState?.sourceId ?? hoveredNodeId ?? selectedNode?.id;
-                      const isRelated = focusedId && edges.some(
-                        (edge) =>
-                          (edge.sourceId === focusedId && edge.targetId === node.id) ||
-                          (edge.targetId === focusedId && edge.sourceId === node.id),
-                      );
-                      const isDimmed = !relationDragState && focusedId && !isActive && !isHovered && !isRelated && node.id !== focusedId;
-                      const isBatchSelected = selectedNodeIds.has(node.id);
-                      // 目标选择模式下：已选 source 节点变暗，可选目标节点高亮
-                      const isConnectSource = connectTargetMode && isBatchSelected;
-                      const isConnectCandidate = connectTargetMode && !isBatchSelected;
-                      const isRelationDragSource = relationDragState?.sourceId === node.id;
-                      const isRelationDropTarget = relationDragState?.targetId === node.id;
-                      const className = `map-svg-node ${node.kind}${isActive ? ' active' : ''}${isMatched ? ' matched' : ''}${isHovered ? ' hovered' : ''}${isDimmed ? ' dimmed' : ''}${isBatchSelected ? ' batch-selected' : ''}${isConnectSource ? ' connect-source' : ''}${isConnectCandidate ? ' connect-candidate' : ''}${isRelationDragSource ? ' relation-source' : ''}${isRelationDropTarget ? ' relation-target' : ''}`;
-                      return (
-                        <g
-                          className={className}
-                          key={node.id}
-                          onClick={() => {
-                            if (connectTargetMode) {
-                              if (selectedNodeIds.has(node.id)) return;
-                              setRelationTypePicker({ targetId: node.id, sourceIds: Array.from(selectedNodeIds) });
-                              setConnectTargetMode(false);
-                            } else {
-                              setSelectedNodeId(node.id);
-                              setIsDetailOpen(true);
-                            }
-                          }}
-                          onPointerDown={(event) => handleNodePointerDown(event, node.id)}
-                          onMouseEnter={() => setHoveredNodeId(node.id)}
-                          onMouseLeave={() => setHoveredNodeId(null)}
-                          role="button"
-                          tabIndex={0}
-                          transform={`translate(${node.x}, ${node.y})`}
-                          data-status={node.status}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              if (connectTargetMode) {
-                                if (selectedNodeIds.has(node.id)) return;
-                                setRelationTypePicker({ targetId: node.id, sourceIds: Array.from(selectedNodeIds) });
-                                setConnectTargetMode(false);
-                              } else {
-                                setSelectedNodeId(node.id);
-                                setIsDetailOpen(true);
-                              }
-                            }
-                          }}
-                          style={{ cursor: connectTargetMode ? 'pointer' : dragState?.nodeId === node.id ? 'grabbing' : 'grab' }}
-                        >
-                          <circle r={node.radius} />
-                          {node.status && node.kind === 'card' && (
-                            <circle className="map-status-ring" r={node.radius + 5} />
-                          )}
-                          <text y={node.radius + 18}>{truncateNodeLabel(node.label)}</text>
-                          <g
-                            className="map-node-connect-handle"
-                            onPointerDown={(event) => handleConnectHandlePointerDown(event, node)}
-                            transform={`translate(${node.radius + 13}, ${-node.radius - 8})`}
-                          >
-                            <circle r="9" />
-                            <path d="M-4,0 H4 M0,-4 V4" />
-                          </g>
-                        </g>
-                      );
-                    })}
-                    {relationDragState && (
-                      <g className="map-relation-drag-preview" pointerEvents="none">
-                        <path
-                          d={`M ${relationDragState.sourceX} ${relationDragState.sourceY} L ${relationDragState.currentX} ${relationDragState.currentY}`}
-                        />
-                        <circle cx={relationDragState.currentX} cy={relationDragState.currentY} r="7" />
-                      </g>
-                    )}
-                    {hoveredNodeId && (() => {
-                      const hoveredNode = layoutNodes.find((item) => item.id === hoveredNodeId);
-                      if (!hoveredNode) return null;
-                      const tooltipWidth = 240;
-                      const tooltipHeight = 76;
-                      const viewLeft = viewState.x;
-                      const viewRight = viewState.x + MAP_BASE_WIDTH / viewState.zoom;
-                      const viewTop = viewState.y;
-                      const viewBottom = viewState.y + MAP_BASE_HEIGHT / viewState.zoom;
-                      const nodeRadius = hoveredNode.radius ?? 18;
-                      let tooltipX = hoveredNode.x - tooltipWidth / 2;
-                      tooltipX = Math.max(viewLeft + 8, Math.min(tooltipX, viewRight - tooltipWidth - 8));
-                      let tooltipY = hoveredNode.y - nodeRadius - tooltipHeight - 12;
-                      const flipBelow = tooltipY < viewTop + 8;
-                      if (flipBelow) {
-                        tooltipY = hoveredNode.y + nodeRadius + 12;
-                      }
-                      tooltipY = Math.max(viewTop + 8, Math.min(tooltipY, viewBottom - tooltipHeight - 8));
-                      const arrowX = hoveredNode.x;
-                      const arrowPoints = flipBelow
-                        ? `${arrowX - 6},${tooltipY} ${arrowX + 6},${tooltipY} ${arrowX},${tooltipY - 6}`
-                        : `${arrowX - 6},${tooltipY + tooltipHeight} ${arrowX + 6},${tooltipY + tooltipHeight} ${arrowX},${tooltipY + tooltipHeight + 6}`;
-                      const connectionCount = edges.filter(
-                        (edge) => edge.sourceId === hoveredNode.id || edge.targetId === hoveredNode.id,
-                      ).length;
-                      const hoveredStatus = describeNodeStatus(hoveredNode.status, t);
-                      return (
-                        <g className="map-tooltip" pointerEvents="none">
-                          <rect
-                            height={tooltipHeight}
-                            rx="8"
-                            width={tooltipWidth}
-                            x={tooltipX}
-                            y={tooltipY}
-                          />
-                          <polygon className="map-tooltip-arrow" points={arrowPoints} />
-                          <text className="map-tooltip-title" x={tooltipX + 14} y={tooltipY + 24}>
-                            {truncateNodeLabel(hoveredNode.label)}
-                          </text>
-                          <text className="map-tooltip-meta" x={tooltipX + 14} y={tooltipY + 44}>
-                            {mapKindLabel(hoveredNode.kind)} · {hoveredStatus.label}
-                          </text>
-                          <text className="map-tooltip-meta" x={tooltipX + 14} y={tooltipY + 62}>
-                            {t('maps.tooltip.connections')}: {connectionCount} · {t('maps.tooltip.hint')}
-                          </text>
-                        </g>
-                      );
-                    })()}
-                    {selectionBox && (() => {
-                      const left = Math.min(selectionBox.startX, selectionBox.endX);
-                      const top = Math.min(selectionBox.startY, selectionBox.endY);
-                      const width = Math.abs(selectionBox.endX - selectionBox.startX);
-                      const height = Math.abs(selectionBox.endY - selectionBox.startY);
-                      return (
-                        <rect
-                          className="map-selection-box"
-                          x={left}
-                          y={top}
-                          width={width}
-                          height={height}
-                          pointerEvents="none"
-                        />
-                      );
-                    })()}
-                  </svg>
-                  {layoutNodes.length === 0 && (
-                    <div className="map-no-match">
-                      <EmptyState title={t('maps.noMatchingNodes')} body={t('maps.noMatchingNodesHint')} />
-                    </div>
-                  )}
-                  <div className={`map-legend${isLegendOpen ? ' open' : ''}`}>
-                    <button
-                      className="map-legend-toggle"
-                      onClick={() => setIsLegendOpen((current) => !current)}
-                      type="button"
-                      aria-expanded={isLegendOpen}
-                      aria-label={t('maps.legendToggle')}
-                    >
-                      {t('maps.legendToggle')}
-                      <span className="map-legend-toggle-icon">{isLegendOpen ? '−' : '+'}</span>
-                    </button>
-                    {isLegendOpen && (
-                      <div className="map-legend-guide">
-                        <div className="map-node-kind-legend" aria-label={t('maps.nodeKindLegend')}>
-                          <span className="map-claim-legend-title">{t('maps.nodeKindLegend')}</span>
-                          <div className="map-claim-legend-items">
-                            <span className="map-claim-chip">
-                              <i className="map-kind-dot workspace" />
-                              {t('maps.nodeKind.workspace')}
-                            </span>
-                            <span className="map-claim-chip">
-                              <i className="map-kind-dot material" />
-                              {t('maps.nodeKind.material')}
-                            </span>
-                            <span className="map-claim-chip">
-                              <i className="map-kind-dot card" />
-                              {t('maps.nodeKind.card')}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="map-claim-legend" aria-label={t('maps.claimLegend')}>
-                          <span className="map-claim-legend-title">{t('maps.claimStatus')}</span>
-                          <div className="map-claim-legend-items">
-                            {getClaimStatusLegend(t).map((item) => (
-                              <span className={`map-claim-chip ${item.tone}`} key={item.key}>
-                                <i className="map-claim-dot" />
-                                {item.label}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="map-edge-legend" aria-label={t('maps.edgeLegend')}>
-                          <span className="map-claim-legend-title">{t('maps.edgeLegend')}</span>
-                          <div className="map-claim-legend-items">
-                            <span className="map-edge-chip">
-                              <svg className="map-edge-sample" height="8" width="44">
-                                <line stroke="#bcc7de" strokeWidth="1.5" x1="0" x2="44" y1="4" y2="4" />
-                              </svg>
-                              <span>{t('maps.edgeLegend.structural')}</span>
-                              <small>{t('maps.edgeLegend.structuralHint')}</small>
-                            </span>
-                            <span className="map-edge-chip">
-                              <svg className="map-edge-sample" height="8" width="44">
-                                <line stroke="#8b6fb0" strokeDasharray="3 3" strokeWidth="1.5" x1="0" x2="44" y1="4" y2="4" />
-                              </svg>
-                              <span>{t('maps.edgeLegend.relatedTo')}</span>
-                              <small>{t('maps.edgeLegend.relatedToHint')}</small>
-                            </span>
-                            <span className="map-edge-chip">
-                              <svg className="map-edge-sample" height="8" width="44">
-                                <line stroke="#d4584a" strokeDasharray="6 4" strokeWidth="2" x1="0" x2="44" y1="4" y2="4" />
-                              </svg>
-                              <span>{t('maps.edgeLegend.contradicts')}</span>
-                            </span>
-                            <span className="map-edge-chip">
-                              <svg className="map-edge-sample" height="8" width="44">
-                                <line stroke="#6b8e7f" strokeWidth="1.8" x1="0" x2="44" y1="4" y2="4" />
-                              </svg>
-                              <span>{t('maps.edgeLegend.custom')}</span>
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="map-floating-controls" aria-label={t('maps.zoomControls')}>
-                  <button aria-label={t('common.zoomIn')} onClick={() => setViewState((current) => ({ ...current, zoom: Math.min(current.zoom * 1.2, MAP_MAX_ZOOM) }))} type="button">+</button>
-                  <button aria-label={t('common.resetView')} onClick={resetView} type="button"><RefreshCw size={16} /></button>
-                  <button aria-label={t('common.zoomOut')} onClick={() => setViewState((current) => ({ ...current, zoom: Math.max(current.zoom / 1.2, MAP_MIN_ZOOM) }))} type="button">−</button>
-                </div>
-                {selectedNodeIds.size > 0 && (
-                  <div className="map-batch-toolbar" role="toolbar" aria-label={t('maps.batchActions')}>
-                    <span className="map-batch-count">{t('maps.nodesSelected', { count: selectedNodeIds.size })}</span>
-                    <button
-                      type="button"
-                      className="map-batch-btn primary"
-                      onClick={() => setConnectTargetMode(true)}
-                    >
-                      {t('maps.connectToTarget')}
-                    </button>
-                    <button
-                      type="button"
-                      className="map-batch-close"
-                      onClick={clearBatchSelection}
-                      aria-label={t('common.cancel')}
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                )}
-                {(selectionBox || selectedNodeIds.size > 0 || connectTargetMode || relationDragState) && (
-                  <div className="map-batch-hint" role="status">
-                    {relationDragState
-                      ? t(relationDragState.targetId ? 'maps.releaseToConnectHint' : 'maps.dragToConnectHint')
-                      : connectTargetMode ? t('maps.pickTargetHint') : t('maps.batchHint')}
-                  </div>
-                )}
-              </>
-            )}
-          </section>
+          <MapCanvas
+            map={map}
+            status={status}
+            viewState={viewState}
+            setViewState={setViewState}
+            dragState={dragState}
+            panState={panState}
+            selectionBox={selectionBox}
+            relationDragState={relationDragState}
+            hoveredNodeId={hoveredNodeId}
+            setHoveredNodeId={setHoveredNodeId}
+            selectedNode={selectedNode}
+            selectedNodeId={selectedNodeId}
+            setSelectedNodeId={setSelectedNodeId}
+            setIsDetailOpen={setIsDetailOpen}
+            selectedNodeIds={selectedNodeIds}
+            connectTargetMode={connectTargetMode}
+            searchMatches={searchMatches}
+            layoutNodes={layoutNodes}
+            visibleEdges={visibleEdges}
+            edges={edges}
+            nodes={nodes}
+            visibleNodeCopy={visibleNodeCopy}
+            hiddenNodeCount={hiddenNodeCount}
+            isLegendOpen={isLegendOpen}
+            setIsLegendOpen={setIsLegendOpen}
+            setRelationTypePicker={setRelationTypePicker}
+            setConnectTargetMode={setConnectTargetMode}
+            clearBatchSelection={clearBatchSelection}
+            handleWheel={handleWheel}
+            handleCanvasPointerDown={handleCanvasPointerDown}
+            handlePointerMove={handlePointerMove}
+            handlePointerUp={handlePointerUp}
+            handleNodePointerDown={handleNodePointerDown}
+            handleConnectHandlePointerDown={handleConnectHandlePointerDown}
+            resetView={resetView}
+            t={t}
+          />
 
           {map && !isDetailOpen && (
             <button className="map-detail-toggle" onClick={() => setIsDetailOpen(true)} type="button">
@@ -946,266 +619,49 @@ export default function MapsView({ apiStatus, selectedWorkspaceId, setView, onOp
             {!map ? (
               <EmptyState title={t('maps.selectNode')} body={t('maps.selectNodeHint')} />
             ) : selectedNodeIds.size > 0 ? (
-              <div className="map-batch-panel">
-                <div className="map-batch-panel-head">
-                  <div className="map-batch-panel-title">
-                    <h3>{t('maps.batchSelection')}</h3>
-                    <span className="map-batch-panel-count">
-                      {t('maps.nodesSelected', { count: selectedNodeIds.size })}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className="map-detail-close"
-                    onClick={clearBatchSelection}
-                    aria-label={t('common.close')}
-                  >
-                    ×
-                  </button>
-                </div>
-                <div className="map-batch-panel-body">
-                  <h4 className="map-batch-section-title">{t('maps.selectedItems')}</h4>
-                  <ul className="map-batch-items">
-                    {layoutNodes
-                      .filter((node) => selectedNodeIds.has(node.id))
-                      .map((node) => (
-                        <li key={node.id} className="map-batch-item">
-                          <span className={`map-batch-item-kind ${node.kind}`} />
-                          <span className="map-batch-item-label">{node.label}</span>
-                          <button
-                            type="button"
-                            className="map-batch-item-remove"
-                            onClick={() => {
-                              const next = new Set(selectedNodeIds);
-                              next.delete(node.id);
-                              setSelectedNodeIds(next);
-                            }}
-                            aria-label={t('common.remove')}
-                          >
-                            <X size={14} />
-                          </button>
-                        </li>
-                      ))}
-                  </ul>
-                  <h4 className="map-batch-section-title">{t('maps.batchActions')}</h4>
-                  <div className="map-batch-panel-actions">
-                    <button
-                      type="button"
-                      className="map-batch-action-btn primary"
-                      onClick={() => setConnectTargetMode(true)}
-                    >
-                      <span>{t('maps.connectToTarget')}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <MapBatchPanel
+                selectedNodeIds={selectedNodeIds}
+                layoutNodes={layoutNodes}
+                onRemoveNode={(nodeId) => {
+                  const next = new Set(selectedNodeIds);
+                  next.delete(nodeId);
+                  setSelectedNodeIds(next);
+                }}
+                onClear={clearBatchSelection}
+                onConnectToTarget={() => setConnectTargetMode(true)}
+                t={t}
+              />
             ) : !selectedNode ? (
               <EmptyState title={t('maps.selectNode')} body={t('maps.selectNodeHint')} />
             ) : (
-              <>
-                <div className="map-node-detail-head">
-                  <div className="map-detail-head-row">
-                    <span>{mapKindLabel(selectedNode.kind)}</span>
-                    <button
-                      className="map-detail-close"
-                      onClick={() => setIsDetailOpen(false)}
-                      type="button"
-                      aria-label={t('common.close')}
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <h3>{selectedNode.label}</h3>
-                  <p>{selectedNode.summary || t('maps.noSummary')}</p>
-                </div>
-                <div className="map-drawer-actions">
-                  <button onClick={() => setView(selectedNode.kind === 'material' ? 'library' : 'detail')} type="button">
-                    <BookOpen size={16} />
-                    {t('maps.openContext')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => startConnectTargetMode(selectedNode.id)}
-                  >
-                    <Link2 size={16} />
-                    {t('maps.addRelation')}
-                  </button>
-                  <button
-                    onClick={() => onOpenChat?.(t('maps.chatPrompt', {
-                      label: selectedNode.label,
-                      summary: selectedNode.summary || t('maps.noSummary'),
-                    }))}
-                    type="button"
-                  >
-                    <MessageCircle size={16} />
-                    {t('maps.continueConversation')}
-                  </button>
-                  <button onClick={() => setView(selectedNode.kind === 'card' ? 'recall' : 'detail')} type="button">
-                    <PencilLine size={16} />
-                    {selectedNode.kind === 'card' ? t('maps.reviewOrEdit') : t('maps.editContext')}
-                  </button>
-                </div>
-                {hasVisibleSourceMaterial && (
-                  <button
-                    className="map-source-jump"
-                    onClick={() => {
-                      setNodeFilter('all');
-                      setSelectedNodeId(sourceMaterialId);
-                      setIsDetailOpen(true);
-                    }}
-                    type="button"
-                  >
-                    <span>{t('maps.sourceEvidence')}</span>
-                    <strong>{t('maps.openSourceNode')}</strong>
-                  </button>
-                )}
-                <div className="map-node-confidence">
-                  <div>
-                    <span>{t('maps.statusLabel')}</span>
-                    <strong className={`map-status-badge ${statusMeta.tone}`}>{statusMeta.label}</strong>
-                  </div>
-                  <div>
-                    <span>{t('maps.connections')}</span>
-                    <strong>{connectedNodeCount}</strong>
-                  </div>
-                </div>
-                {nodeMetadataItems.length > 0 && (
-                  <div className="map-node-metadata">
-                    {nodeMetadataItems.map((item) => {
-                      if (item.kind === 'materialLink') {
-                        const targetNodeId = `material:${item.materialId}`;
-                        const exists = nodes.some((node) => node.id === targetNodeId);
-                        return (
-                          <div key={item.label} className={exists ? 'map-node-metadata-link' : ''}>
-                            <span>{item.label}</span>
-                            <strong
-                              role={exists ? 'button' : undefined}
-                              tabIndex={exists ? 0 : undefined}
-                              onClick={exists ? () => {
-                                setNodeFilter('all');
-                                setSelectedNodeId(targetNodeId);
-                              } : undefined}
-                              onKeyDown={exists ? (e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault();
-                                  setNodeFilter('all');
-                                  setSelectedNodeId(targetNodeId);
-                                }
-                              } : undefined}
-                            >
-                              {item.value}
-                            </strong>
-                          </div>
-                        );
-                      }
-                      return (
-                        <div key={item.label}>
-                          <span>{item.label}</span>
-                          <strong>{item.value}</strong>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                <section className="map-relation-panel">
-                  <div className="map-relation-head">
-                    <h4>{t('maps.relations')}</h4>
-                    <span className="map-relation-count">{visibleRelations.length}/{selectedRelations.length}</span>
-                  </div>
-                  {relationTypes.length > 2 && (
-                    <div className="map-relation-filters">
-                      {relationTypes.map((type) => (
-                        <button
-                          className={relationFilter === type ? 'active' : ''}
-                          key={type}
-                          onClick={() => setRelationFilter(type)}
-                          type="button"
-                        >
-                          {type === 'all' ? t('maps.all') : (relationTypeLabelMap[type] ?? type)}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <div className="relation-list">
-                    {visibleRelations.map((edge) => {
-                      const source = nodes.find((node) => node.id === edge.sourceId);
-                      const target = nodes.find((node) => node.id === edge.targetId);
-                      const other = edge.sourceId === selectedNode.id ? target : source;
-                      const isOutgoing = edge.sourceId === selectedNode.id;
-                      return (
-                        <article
-                          className={`relation-item${edge.custom ? ' custom' : ''}`}
-                          key={edge.id}
-                          onClick={() => other && setSelectedNodeId(other.id)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(event) => {
-                            if ((event.key === 'Enter' || event.key === ' ') && other) setSelectedNodeId(other.id);
-                          }}
-                        >
-                          <span>{relationTypeLabelMap[edge.relation] ?? edge.relation}</span>
-                          <strong>{other?.label ?? edge.targetId}</strong>
-                          <p>{isOutgoing ? t('maps.outgoingRelation') : t('maps.incomingRelation')}</p>
-                          {edge.custom && (
-                            <button
-                              className="relation-delete-btn"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                deleteCustomEdge(edge.id);
-                              }}
-                              type="button"
-                              aria-label={t('common.delete')}
-                            >
-                              <X size={14} />
-                            </button>
-                          )}
-                        </article>
-                      );
-                    })}
-                    {selectedRelations.length === 0 && <EmptyState title={t('maps.noRelations')} body={t('maps.noRelationsHint')} />}
-                    {selectedRelations.length > 0 && visibleRelations.length === 0 && (
-                      <EmptyState title={t('maps.noMatchingRelations')} body={t('maps.noMatchingRelationsHint')} />
-                    )}
-                  </div>
-                </section>
-                {relationTypePicker && createPortal(
-                  <div className="map-relation-editor-overlay" onClick={() => setRelationTypePicker(null)} role="presentation">
-                    <div
-                      className="map-relation-editor"
-                      onClick={(event) => event.stopPropagation()}
-                      role="dialog"
-                      aria-modal="true"
-                      aria-label={t('maps.pickRelationType')}
-                    >
-                      <h4>{t('maps.pickRelationType')}</h4>
-                      {(() => {
-                        const target = layoutNodes.find((node) => node.id === relationTypePicker.targetId);
-                        return target ? (
-                          <p className="map-relation-target">
-                            {t('maps.targetNode')}: <strong>{target.label}</strong>
-                          </p>
-                        ) : null;
-                      })()}
-                      <div className="map-relation-type-grid">
-                        {editableRelationOptions.map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            className="map-relation-type-btn"
-                            onClick={() => saveBatchRelations(relationTypePicker.targetId, option.value)}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="map-relation-editor-actions">
-                        <button type="button" onClick={() => setRelationTypePicker(null)}>{t('common.cancel')}</button>
-                      </div>
-                    </div>
-                  </div>,
-                  document.body
-                )}
-              </>
+              <MapNodeDetail
+                selectedNode={selectedNode}
+                statusMeta={statusMeta}
+                nodeMetadataItems={nodeMetadataItems}
+                connectedNodeCount={connectedNodeCount}
+                selectedRelations={selectedRelations}
+                visibleRelations={visibleRelations}
+                relationTypes={relationTypes}
+                relationFilter={relationFilter}
+                setRelationFilter={setRelationFilter}
+                hasVisibleSourceMaterial={hasVisibleSourceMaterial}
+                sourceMaterialId={sourceMaterialId}
+                nodes={nodes}
+                setNodeFilter={setNodeFilter}
+                setSelectedNodeId={setSelectedNodeId}
+                setView={setView}
+                onOpenChat={onOpenChat}
+                startConnectTargetMode={startConnectTargetMode}
+                deleteCustomEdge={deleteCustomEdge}
+                layoutNodes={layoutNodes}
+                relationTypePicker={relationTypePicker}
+                setRelationTypePicker={setRelationTypePicker}
+                saveBatchRelations={saveBatchRelations}
+                relationTypeLabelMap={relationTypeLabelMap}
+                editableRelationOptions={editableRelationOptions}
+                setIsDetailOpen={setIsDetailOpen}
+                t={t}
+              />
             )}
           </aside>
         </div>
