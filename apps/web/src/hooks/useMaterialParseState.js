@@ -71,7 +71,11 @@ export function useMaterialParseState({
 
     try {
       const result = await api.post(`${MATERIALS_PATH}/${materialId}${PARSE_PATH_SUFFIX}`, null, { timeout: 120000 });
-      setActivity(result.message);
+      if (result.material?.parseStatus === 'failed' && result.material.parseError) {
+        setActivity(`${result.message}（${result.material.parseError}）`);
+      } else {
+        setActivity(result.message);
+      }
       setLatestTaskId(result.task.id);
       setLatestTask(result.task);
       setTasks((current) => prependTask(current, result.task));
@@ -89,8 +93,9 @@ export function useMaterialParseState({
         : current));
       if (result.artifact) setSelectedArtifact(result.artifact);
       return result;
-    } catch {
-      setActivity(t('activity.parseFailed'));
+    } catch (error) {
+      const serverMessage = error?.serverMessage;
+      setActivity(serverMessage ? `${t('activity.parseFailed')}（${serverMessage}）` : t('activity.parseFailed'));
       return null;
     } finally {
       setParsingMaterialId(null);
