@@ -1,6 +1,7 @@
 /**
  * 工作区详情视图：展示卡片、来源、实体、Roadmap 与工作区分析。
  * @module views/DetailView
+ * @author fxbin
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -30,145 +31,9 @@ import TaskStatus from '../components/TaskStatus';
 import { useDetailFeedState } from '../hooks/useDetailFeedState';
 import { useDetailEntitiesState } from '../hooks/useDetailEntitiesState';
 import { startReadingSession, flushReadingSession } from '../utils/readingTracker';
-import api from '../utils/api';
 import { CHAT_OPEN_EVENT } from '../constants/options';
-
-const BYTES_PER_GB = 1024 * 1024 * 1024;
-
-/**
- * 知识卡片类型在 Feed 中的展示顺序。
- */
-const CARD_TYPE_ORDER = ['concept', 'method', 'case', 'step', 'viewpoint', 'fact', 'question', 'general'];
-
-/**
- * 主张状态在筛选器中的展示顺序。
- */
-const CLAIM_STATUS_ORDER = ['ai_skeleton', 'sourced', 'verified', 'disputed'];
-
-/**
- * 实体类型到 i18n key 的映射。
- */
-const ENTITY_TYPE_LABELS = {
-  person: 'detail.entityType.person',
-  organization: 'detail.entityType.organization',
-  concept: 'detail.entityType.concept',
-  tool: 'detail.entityType.tool',
-  place: 'detail.entityType.location',
-  event: 'detail.entityType.event',
-  other: 'detail.entityType.other',
-};
-
-/**
- * 资料视频字幕面板：展示转写状态，并在跳过时提供机器能力检测报告。
- * @param {object} props - 组件属性
- * @param {object} props.material - 资料对象
- * @returns {JSX.Element | null} 字幕面板
- */
-function MaterialTranscriptPanel({ material }) {
-  const { t } = useTranslation();
-  const [report, setReport] = useState(null);
-  const [showReport, setShowReport] = useState(false);
-  const [loadingReport, setLoadingReport] = useState(false);
-
-  useEffect(() => {
-    if (material.transcriptStatus !== 'skipped' || report) {
-      return;
-    }
-    let ignore = false;
-    setLoadingReport(true);
-    async function loadReport() {
-      try {
-        const payload = await api.get('/api/transcription/capability');
-        if (!ignore) setReport(payload);
-      } catch {
-        // 静默失败，保持无报告状态
-      } finally {
-        if (!ignore) setLoadingReport(false);
-      }
-    }
-    loadReport();
-    return () => { ignore = true; };
-  }, [material.transcriptStatus, report]);
-
-  async function handleRefreshReport() {
-    setLoadingReport(true);
-    try {
-      const payload = await api.get('/api/transcription/capability?refresh=true');
-      setReport(payload);
-    } catch {
-      // 静默失败，保持现有报告状态
-    } finally {
-      setLoadingReport(false);
-    }
-  }
-
-  if (!material.transcriptStatus) {
-    return null;
-  }
-
-  return (
-    <div className="material-transcript">
-      <strong>{t('detail.transcriptTitle')}</strong>
-      {material.transcriptStatus === 'pending' && <p className="transcript-pending">{t('detail.transcriptPending')}</p>}
-      {material.transcriptStatus === 'done' && (
-        <>
-          <p className="transcript-meta">{t('detail.transcriptFromVideo')}</p>
-          <p className="transcript-body">{material.transcript || t('detail.transcriptEmpty')}</p>
-        </>
-      )}
-      {material.transcriptStatus === 'failed' && (
-        <p className="transcript-error">{t('detail.transcriptFailed')}：{material.transcriptError}</p>
-      )}
-      {material.transcriptStatus === 'skipped' && (
-        <>
-          <p className="transcript-skipped">{t('detail.transcriptSkipped')}</p>
-          <button
-            type="button"
-            className="transcript-report-toggle"
-            onClick={() => setShowReport((prev) => !prev)}
-            disabled={loadingReport}
-          >
-            {showReport ? t('detail.hideTranscriptReport') : t('detail.showTranscriptReport')}
-          </button>
-          {showReport && report && (
-            <>
-              <ul className="transcript-report">
-                <li>{t('detail.transcriptReportPlatform')}：{report.platform}</li>
-                <li>{t('detail.transcriptReportFfmpeg')}：{report.ffmpegAvailable ? t('detail.transcriptReportDetected') : t('detail.transcriptReportMissing')}</li>
-                <li>
-                  {t('detail.transcriptReportWhisper')}：
-                  {report.whisperAvailable
-                    ? `${t('detail.transcriptReportDetected')}（${report.whisperCommand}）`
-                    : t('detail.transcriptReportMissing')}
-                </li>
-                <li>{t('detail.transcriptReportCpu')}：{report.cpuCores} {t('detail.transcriptReportCores')}</li>
-                <li>{t('detail.transcriptReportMemory')}：{(report.totalMemoryBytes / BYTES_PER_GB).toFixed(1)} GB</li>
-                {report.reasons?.length > 0 && (
-                  <li className="transcript-report-reasons">
-                    {t('detail.transcriptReportReasons')}：
-                    <ul>
-                      {report.reasons.map((reason, index) => (
-                        <li key={index}>{reason}</li>
-                      ))}
-                    </ul>
-                  </li>
-                )}
-              </ul>
-              <button
-                type="button"
-                className="transcript-report-refresh"
-                onClick={handleRefreshReport}
-                disabled={loadingReport}
-              >
-                {t('detail.transcriptReportRefresh')}
-              </button>
-            </>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
+import MaterialTranscriptPanel from './detail/MaterialTranscriptPanel';
+import { CARD_TYPE_ORDER, CLAIM_STATUS_ORDER, ENTITY_TYPE_LABELS } from './detail/constants';
 
 /**
  * 工作区详情视图。
