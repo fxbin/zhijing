@@ -10,11 +10,7 @@ import { useState } from 'react';
 import api from '../utils/api';
 import { API_STATUS_ONLINE } from './useUiState';
 import { TASKS_MAX_COUNT } from './useWorkspaceState';
-
-/**
- * 工作区接口路径前缀。
- */
-const WORKSPACES_PATH = '/api/workspaces';
+import { WORKSPACES_PATH } from '../constants/apiPaths';
 
 /**
  * Kit 运行接口路径后缀。

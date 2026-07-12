@@ -21,11 +21,7 @@
 
 import { useCallback, useState } from 'react';
 import api from '../utils/api';
-
-/**
- * 工作区接口路径前缀。
- */
-const WORKSPACES_PATH = '/api/workspaces';
+import { WORKSPACES_PATH } from '../constants/apiPaths';
 
 /**
  * proposal-batches accept 端点路径后缀。

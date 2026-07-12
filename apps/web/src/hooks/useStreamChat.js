@@ -15,11 +15,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import { API_STATUS_ONLINE } from './useUiState';
-
-/**
- * 工作区接口路径前缀。
- */
-const WORKSPACES_PATH = '/api/workspaces';
+import { WORKSPACES_PATH } from '../constants/apiPaths';
 
 /**
  * 流式对话消息列表初始为空数组。

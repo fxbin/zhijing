@@ -9,11 +9,7 @@
 import { useState } from 'react';
 import api from '../utils/api';
 import { TASKS_MAX_COUNT } from './useWorkspaceState';
-
-/**
- * 资料接口路径前缀。
- */
-const MATERIALS_PATH = '/api/materials';
+import { MATERIALS_PATH } from '../constants/apiPaths';
 
 /**
  * 资料解析接口路径后缀。

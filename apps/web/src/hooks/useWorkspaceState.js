@@ -13,16 +13,7 @@ import api from '../utils/api';
 import { materialFromApi } from '../utils/material';
 import { emptyDetail } from '../utils/knowledge';
 import { API_STATUS_ONLINE, API_STATUS_OFFLINE } from './useUiState';
-
-/**
- * 仪表盘接口路径。
- */
-const DASHBOARD_PATH = '/api/dashboard';
-
-/**
- * 工作区接口路径前缀。
- */
-const WORKSPACES_PATH = '/api/workspaces';
+import { DASHBOARD_PATH, WORKSPACES_PATH } from '../constants/apiPaths';
 
 /**
  * 任务接口路径前缀。

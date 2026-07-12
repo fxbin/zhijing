@@ -60,16 +60,7 @@ const SettingsView = lazy(() => import('./views/SettingsView'));
 const WeReadView = lazy(() => import('./views/WeReadView'));
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from './components/LanguageSwitcher';
-
-/**
- * 归集接口路径。
- */
-const INTAKE_PATH = '/api/intake';
-
-/**
- * 工作区接口路径前缀（用于 CreateKbModal 的 onCreateEmpty 直接调用）。
- */
-const WORKSPACES_PATH = '/api/workspaces';
+import { INTAKE_PATH, WORKSPACES_PATH } from './constants/apiPaths';
 
 /**
  * 失败任务客户端兜底 ID 前缀。

@@ -8,11 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import api from '../utils/api';
-
-/**
- * 仪表盘接口路径。
- */
-const DASHBOARD_PATH = '/api/dashboard';
+import { DASHBOARD_PATH } from '../constants/apiPaths';
 
 /**
  * 打开本地数据目录接口路径。

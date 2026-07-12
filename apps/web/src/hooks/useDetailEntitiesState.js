@@ -11,11 +11,7 @@
 
 import { useEffect, useState } from 'react';
 import api, { ApiError } from '../utils/api';
-
-/**
- * 工作区接口路径前缀。
- */
-const WORKSPACES_PATH = '/api/workspaces';
+import { WORKSPACES_PATH } from '../constants/apiPaths';
 
 /**
  * 实体列表接口路径后缀。

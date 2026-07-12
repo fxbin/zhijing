@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../utils/api';
 import { materialMediaUrls } from '../utils/material';
+import { MATERIALS_PATH } from '../constants/apiPaths';
 
 /**
  * 资料库搜索防抖时长（毫秒），避免用户每输入一个字符就触发一次请求。
@@ -41,11 +42,6 @@ const DEFAULT_SEARCH_VALUE = '';
  * 默认状态文案 i18n key。
  */
 const DEFAULT_STATUS_KEY = 'library.status.loadingMaterials';
-
-/**
- * 资料接口路径。
- */
-const MATERIALS_PATH = '/api/materials';
 
 /**
  * parseStatus 枚举值集合：filter 命中这些值时按 parseStatus 过滤，其余按 type 过滤。

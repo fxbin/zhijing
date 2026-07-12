@@ -13,11 +13,7 @@ import { API_STATUS_ONLINE } from './useUiState';
 import { TASKS_MAX_COUNT } from './useWorkspaceState';
 import { useStreamChat } from './useStreamChat';
 import { useProposalBatch } from './useProposalBatch';
-
-/**
- * 工作区接口路径前缀。
- */
-const WORKSPACES_PATH = '/api/workspaces';
+import { WORKSPACES_PATH } from '../constants/apiPaths';
 
 /**
  * 工作区消息接口查询参数：拉取条数上限。

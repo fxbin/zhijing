@@ -22,6 +22,7 @@ import {
   supportedImportExtensions,
 } from '../constants/options';
 import useModalA11y from './useModalA11y';
+import { INTAKE_PATH, MATERIALS_PATH } from '../constants/apiPaths';
 
 /**
  * 新建工作区标记值：归属下拉框中选择新建工作区时使用。
@@ -51,16 +52,6 @@ const INITIAL_REVIEW_DRAFT = { title: '', contentText: '', mediaUrls: '' };
 function createEmptySelectedSet() {
   return new Set();
 }
-
-/**
- * 资料接口路径前缀。
- */
-const MATERIALS_PATH = '/api/materials';
-
-/**
- * 归集接口路径。
- */
-const INTAKE_PATH = '/api/intake';
 
 /**
  * 本地文档导入时拼接的前缀文案。

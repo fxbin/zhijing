@@ -19,11 +19,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Check, Loader2, MessageSquareText, Pencil, Plus, Trash2, X } from 'lucide-react';
 import api from '../utils/api';
-
-/**
- * 工作区接口路径前缀。
- */
-const WORKSPACES_PATH = '/api/workspaces';
+import { WORKSPACES_PATH } from '../constants/apiPaths';
 
 /**
  * 会话历史面板组件。
