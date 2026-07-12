@@ -22,9 +22,19 @@ import { extractText, getDocumentProxy } from 'unpdf';
 import { assertUrlSafeForSsrf, createSsrfSafeFetch } from './ssrf-guard.js';
 
 /**
- * 抓取超时时间（毫秒），与 parseOrdinaryWebMaterial 保持一致。
+ * 抓取超时时间（毫秒），与 Jina Reader 抓取超时保持一致。
  */
-const FETCH_TIMEOUT_MS = 10_000;
+const FETCH_TIMEOUT_MS = 15_000;
+
+/**
+ * 抓取最大尝试次数（首次 + 1 次重试），覆盖慢站偶发 5xx 与网络抖动。
+ */
+const FETCH_MAX_ATTEMPTS = 2;
+
+/**
+ * 重试前等待时间（毫秒），避免对目标站点瞬时二次压测。
+ */
+const FETCH_RETRY_DELAY_MS = 500;
 
 /**
  * 原始响应体最大字节数，防止超大页面拖垮进程。
@@ -72,6 +82,28 @@ const turndownService = new TurndownService({
 turndownService.escape = (input: string): string => input;
 
 /**
+ * 内容过短错误。
+ *
+ * 当 fetch 成功但提取到的正文低于 MIN_VALID_LENGTH 时抛出。
+ * 典型场景：SPA 页面（React/Vue 单页应用）的 HTML 是空壳，
+ * 需要执行 JavaScript 才能渲染出正文内容。
+ *
+ * 调用方可捕获此错误后触发 Playwright 渲染回退。
+ *
+ * @author fxbin
+ */
+export class WebContentTooShortError extends Error {
+  /**
+   * @param message - 错误详情
+   * @param contentLength - 实际提取到的文本长度
+   */
+  constructor(message: string, public readonly contentLength: number = 0) {
+    super(message);
+    this.name = 'WebContentTooShortError';
+  }
+}
+
+/**
  * 抓取结果。
  */
 export interface FetchedContent {
@@ -83,6 +115,75 @@ export interface FetchedContent {
   mediaUrls: string[];
   /** 内容类型：html / pdf / text */
   contentType: 'html' | 'pdf' | 'text';
+}
+
+/**
+ * 判断抓取错误是否值得重试。
+ * 超时、5xx 服务端错误、网络层错误均视为可重试；4xx 客户端错误不重试。
+ * @param error - fetch 阶段抛出的错误
+ * @returns 可重试返回 true
+ * @author fxbin
+ */
+function isRetryableFetchError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  if (/abort|timeout|timed out/.test(message)) return true;
+  if (/http 5\d\d/.test(message)) return true;
+  if (/network|fetch failed|econnreset|enetunreach|econnrefused/.test(message)) return true;
+  return false;
+}
+
+/**
+ * 延迟工具函数，用于重试前的退避等待。
+ * @param ms - 等待毫秒数
+ * @author fxbin
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 带 SSRF 防护与超时控制的 fetch，对可重试错误自动重试一次。
+ * @param url - 已校验协议的目标 URL 对象
+ * @returns 成功的 Response 对象（已通过 response.ok 检查）
+ * @throws {Error} 重试耗尽后仍失败时抛出最后一次错误
+ * @author fxbin
+ */
+async function fetchWithRetry(url: URL): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < FETCH_MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const response = await safeFetch(url, {
+        signal: controller.signal,
+        redirect: 'follow',
+        headers: {
+          accept: 'text/html,application/xhtml+xml,application/pdf,text/plain;q=0.9,*/*;q=0.8',
+          'user-agent': USER_AGENT,
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`Web fetch received HTTP ${response.status}.`);
+      }
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt < FETCH_MAX_ATTEMPTS - 1 && isRetryableFetchError(error)) {
+        console.warn('[fetchWithRetry] 抓取失败，准备重试', {
+          url: url.href,
+          attempt: attempt + 1,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        await sleep(FETCH_RETRY_DELAY_MS);
+        continue;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastError;
 }
 
 /**
@@ -115,36 +216,20 @@ export async function fetchUrlAsMarkdown(sourceUrl: string): Promise<FetchedCont
   }
   assertUrlSafeForSsrf(sourceUrl);
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const response = await safeFetch(url, {
-      signal: controller.signal,
-      redirect: 'follow',
-      headers: {
-        accept: 'text/html,application/xhtml+xml,application/pdf,text/plain;q=0.9,*/*;q=0.8',
-        'user-agent': USER_AGENT,
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`Web fetch received HTTP ${response.status}.`);
-    }
+  const response = await fetchWithRetry(url);
 
-    const contentType = (response.headers.get('content-type') ?? '').toLowerCase();
-    const fallbackTitle = titleFromUrl(sourceUrl);
+  const contentType = (response.headers.get('content-type') ?? '').toLowerCase();
+  const fallbackTitle = titleFromUrl(sourceUrl);
 
-    if (contentType.includes('application/pdf')) {
-      return await parsePdfContent(await response.arrayBuffer(), fallbackTitle);
-    }
-
-    if (contentType.includes('text/plain')) {
-      return parsePlainTextContent(await response.text(), fallbackTitle);
-    }
-
-    return parseHtmlContent(await response.text(), fallbackTitle);
-  } finally {
-    clearTimeout(timer);
+  if (contentType.includes('application/pdf')) {
+    return await parsePdfContent(await response.arrayBuffer(), fallbackTitle);
   }
+
+  if (contentType.includes('text/plain')) {
+    return parsePlainTextContent(await response.text(), fallbackTitle);
+  }
+
+  return parseHtmlContent(await response.text(), fallbackTitle);
 }
 
 /**
@@ -191,7 +276,10 @@ function parseHtmlContent(html: string, fallbackTitle: string): FetchedContent {
   if (!article || !article.content) {
     const plainText = stripHtmlTags(limited);
     if (plainText.length < MIN_VALID_LENGTH) {
-      throw new Error('Parsed web content is too short for a reliable summary.');
+      throw new WebContentTooShortError(
+        'Parsed web content is too short for a reliable summary.',
+        plainText.length,
+      );
     }
     return {
       title: article?.title ?? fallbackTitle,
@@ -207,7 +295,10 @@ function parseHtmlContent(html: string, fallbackTitle: string): FetchedContent {
     : markdown;
 
   if (finalText.length < MIN_VALID_LENGTH) {
-    throw new Error('Parsed web content is too short for a reliable summary.');
+    throw new WebContentTooShortError(
+      'Parsed web content is too short for a reliable summary.',
+      finalText.length,
+    );
   }
 
   return {
@@ -237,7 +328,10 @@ async function parsePdfContent(buffer: ArrayBuffer, fallbackTitle: string): Prom
     : rawText;
 
   if (text.length < MIN_VALID_LENGTH) {
-    throw new Error('Parsed PDF content is too short for a reliable summary.');
+    throw new WebContentTooShortError(
+      'Parsed PDF content is too short for a reliable summary.',
+      text.length,
+    );
   }
 
   return {
@@ -263,7 +357,10 @@ function parsePlainTextContent(raw: string, fallbackTitle: string): FetchedConte
     : limited;
 
   if (text.length < MIN_VALID_LENGTH) {
-    throw new Error('Parsed web content is too short for a reliable summary.');
+    throw new WebContentTooShortError(
+      'Parsed web content is too short for a reliable summary.',
+      text.length,
+    );
   }
 
   return {
@@ -306,7 +403,7 @@ function stripHtmlTags(html: string): string {
  * @returns 回退标题
  * @author fxbin
  */
-function titleFromUrl(sourceUrl: string): string {
+export function titleFromUrl(sourceUrl: string): string {
   try {
     const path = new URL(sourceUrl).pathname;
     const segments = path.split('/').filter(Boolean);
